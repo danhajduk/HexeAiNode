@@ -41,19 +41,6 @@ Do not stop early.
 Do not edit above this line:
 #######################################################################
 
-[TODO] Task 052: Phase 1C — Implement operational MQTT credential handoff preparation
-  - Store and prepare the Core-issued operational MQTT identity/token and connection info.
-  - Define the handoff boundary between:
-    - anonymous bootstrap MQTT
-    - trusted operational MQTT
-  - Ensure the node is ready to use trusted MQTT in later phases.
-
-  * Comments, descriptions, rules:
-    - Bootstrap and operational MQTT must remain strictly separate.
-    - Phase 1 only needs readiness and storage, not full trusted MQTT feature implementation.
-    - Do not let bootstrap become the operational bus.
-
-
 [STOP HERE]
 
 

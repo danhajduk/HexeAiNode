@@ -80,3 +80,10 @@ Step objective: Implement trusted startup path using persisted trust-state check
 Chosen fix: Added startup-path resolver that branches to trusted resume when trust-state is valid, otherwise starts bootstrap onboarding.
 What changed: Added src/ai_node/trust/trusted_startup.py, updated lifecycle transitions for startup trusted restore, and added tests/test_trusted_startup.py.
 Verification: Unit tests confirm valid trust-state resumes to capability_setup_pending and missing/invalid state starts bootstrap_connecting.
+
+###########
+Task #052
+Step objective: Prepare operational MQTT credential handoff context.
+Chosen fix: Added a dedicated handoff-preparation helper with strict channel separation between anonymous bootstrap and trusted operational MQTT contexts.
+What changed: Added src/ai_node/trust/operational_handoff.py and tests/test_operational_handoff.py.
+Verification: Unit tests confirm bootstrap publish remains disabled, operational credentials are prepared, and same-endpoint boundary violations are rejected.
