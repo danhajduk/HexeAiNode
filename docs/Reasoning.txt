@@ -16,3 +16,141 @@ What changed: Added a Bootstrap Flow (Phase 1) section to docs/ai-node-architect
 Verification: Section explicitly enforces read-only bootstrap behavior and excludes secrets, telemetry, and control traffic as required.
 
 ###########
+Task #004
+Step objective: Define the Core bootstrap discovery message contract.
+What changed: Added bootstrap contract fields and node-side validation rules in docs/ai-node-architecture.md.
+Verification: Contract is explicitly minimal, non-sensitive, and discovery-only.
+
+###########
+Task #005
+Step objective: Define API-based node registration handshake.
+What changed: Added registration payload structure and Core pending-registration semantics in docs/ai-node-architecture.md.
+Verification: Registration path is API-only and identifies node class as ai-node.
+
+###########
+Task #006
+Step objective: Define operator approval flow in Core UI.
+What changed: Added pending approval lifecycle, approval token/session flow, and headless-node behavior.
+Verification: Document enforces no auto-join and no credentials for rejected nodes.
+
+###########
+Task #007
+Step objective: Define initial trust activation payload.
+What changed: Added trust response fields including node identity, trust token, initial baseline policy, and operational MQTT details.
+Verification: Section explicitly labels this as trust activation, not full capability policy.
+
+###########
+Task #008
+Step objective: Define required local persisted node state.
+What changed: Added persisted field list and restart/upgrade expectations in docs/ai-node-architecture.md.
+Verification: Durable reconnect data and sensitive-token handling are explicitly specified.
+
+###########
+Task #009
+Step objective: Define node lifecycle model.
+What changed: Added lifecycle state list and transition notes across onboarding/trust/operational states.
+Verification: States are human-readable and scoped to bootstrap/trust lifecycle.
+
+###########
+Task #010
+Step objective: Define post-bootstrap channel separation.
+What changed: Added explicit channel-role mapping for bootstrap, trusted MQTT, API control path, and telemetry.
+Verification: Section explains mandatory separation of anonymous discovery and trusted operations.
+
+###########
+Task #011
+Step objective: Define capability declaration model for Phase 2.2.
+What changed: Added docs/node-capability-declaration.md with formal manifest-based declaration model after trust activation.
+Verification: Document separates capability declaration from prompt registration/governance and execution.
+
+###########
+Task #012
+Step objective: Define user-driven provider/service enablement in 2.2.
+What changed: Added operator-selection UX intent and OpenAI-first provider scope in docs/node-capability-declaration.md.
+Verification: Supported vs enabled separation and local-secret preference are explicit.
+
+###########
+Task #013
+Step objective: Define stable capability groups for declaration manifest.
+What changed: Added grouped manifest structure: functional families, provider support, node features, environment/resource hints.
+Verification: Grouping is explicit and scoped for future policy refinement.
+
+###########
+Task #014
+Step objective: Define initial functional task families.
+What changed: Added text/email/image classification and image generation families as declared capability targets.
+Verification: Section marks these as declaration targets, not immediate implementation guarantees.
+
+###########
+Task #015
+Step objective: Define provider capability and enabled-provider model.
+What changed: Documented supported vs enabled provider semantics with OpenAI as current implementation path and future placeholders.
+Verification: Rules clearly state supported != approved and enabled != unlimited use.
+
+###########
+Task #016
+Step objective: Define node feature manifest model.
+What changed: Added node-level feature examples and representation guidance independent from task families.
+Verification: Execution and management feature separation is explicit.
+
+###########
+Task #017
+Step objective: Define baseline environment/resource hints.
+What changed: Added lightweight hint examples and explicit limits to avoid full inventory/telemetry claims.
+Verification: Scope is constrained for early-phase policy/routing context only.
+
+###########
+Task #018
+Step objective: Define capability submission and Core acceptance flow.
+What changed: Added deterministic API submission flow, validation/storage/ack steps, and acceptance-vs-enablement distinction.
+Verification: Structure validation and policy separation are explicitly documented.
+
+###########
+Task #019
+Step objective: Define initial baseline policy structure.
+What changed: Added baseline policy fields, expected metadata, and exclusions in docs/ai-node-architecture.md.
+Verification: Baseline policy is defined as minimum governance independent of undeclared capabilities.
+
+###########
+Task #020
+Step objective: Define trusted MQTT operational identity model.
+What changed: Added post-approval MQTT identity/token provisioning fields and scoped-topic expectations.
+Verification: Clear separation from anonymous bootstrap transport is preserved.
+
+###########
+Task #021
+Step objective: Define node reconnect and resync behavior.
+What changed: Added deterministic reboot/outage behavior and fallback-to-bootstrap conditions.
+Verification: Preferred paired-Core reconnect path and degraded/policy-stale concepts are defined.
+
+###########
+Task #022
+Step objective: Define baseline status telemetry architecture.
+What changed: Added pre-execution operational status signals and trusted transport guidance.
+Verification: Telemetry is explicitly excluded from anonymous bootstrap channels.
+
+###########
+Task #023
+Step objective: Define security boundaries across bootstrap/trust/operations.
+What changed: Added dedicated security boundary section and explicit must-not unsafe shortcuts.
+Verification: No-secrets bootstrap, no bootstrap publish, and operator approval requirements are explicit.
+
+###########
+Task #024
+Step objective: Define future execution gateway placeholder.
+What changed: Added normalized future API placeholder with task-family targets and non-implementation caveat.
+Verification: Placeholder keeps architecture aligned without claiming active execution.
+
+###########
+Task #025
+Step objective: Define future local runtime manager placeholder.
+What changed: Added future runtime concepts (controller, desired/observed state, managed providers) as placeholder.
+Verification: Section is clearly marked as future work, not current design implementation.
+
+###########
+Task #026
+Step objective: Create phased architecture roadmap.
+What changed: Added ordered roadmap from bootstrap/registration through trust/capabilities and future governance/provider/runtime phases.
+Verification: Phase sequencing is high-level, coherent, and avoids premature implementation detail.
+
+###########

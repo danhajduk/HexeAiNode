@@ -1,3 +1,26 @@
 Task 001: Define the AI Node architecture document - Completed on 03/11/2026 07:10
 Task 002: Define Node/Core responsibility boundaries - Completed on 03/11/2026 07:12
 Task 003: Define the bootstrap flow (Phase 1) - Completed on 03/11/2026 07:13
+Task 004: Define bootstrap message contract - Completed on 03/11/2026 07:21
+Task 005: Define node registration handshake - Completed on 03/11/2026 07:21
+Task 006: Define operator approval through Core UI - Completed on 03/11/2026 07:21
+Task 007: Define 2.1 initial trust activation payload - Completed on 03/11/2026 07:21
+Task 008: Define local persisted node state - Completed on 03/11/2026 07:21
+Task 009: Define node lifecycle states - Completed on 03/11/2026 07:21
+Task 010: Define post-bootstrap operational channel separation - Completed on 03/11/2026 07:21
+Task 011: Define node capability declaration model (Phase 2.2) - Completed on 03/11/2026 07:21
+Task 012: Define user-driven provider/service selection in 2.2 - Completed on 03/11/2026 07:21
+Task 013: Define capability groups for the declaration manifest - Completed on 03/11/2026 07:21
+Task 014: Define initial functional task families - Completed on 03/11/2026 07:21
+Task 015: Define provider capability and enabled-provider model - Completed on 03/11/2026 07:21
+Task 016: Define node feature flags/features manifest - Completed on 03/11/2026 07:21
+Task 017: Define baseline environment/resource hints - Completed on 03/11/2026 07:21
+Task 018: Define capability submission and Core acceptance flow - Completed on 03/11/2026 07:21
+Task 019: Define initial baseline policy structure - Completed on 03/11/2026 07:21
+Task 020: Define trusted MQTT operational identity model - Completed on 03/11/2026 07:21
+Task 021: Define node reconnect and resync behavior - Completed on 03/11/2026 07:21
+Task 022: Define baseline status telemetry architecture - Completed on 03/11/2026 07:21
+Task 023: Define security boundaries for bootstrap, trust, and operations - Completed on 03/11/2026 07:21
+Task 024: Define the future execution gateway placeholder - Completed on 03/11/2026 07:21
+Task 025: Define future local runtime manager placeholder - Completed on 03/11/2026 07:21
+Task 026: Create a phased architecture roadmap section - Completed on 03/11/2026 07:21

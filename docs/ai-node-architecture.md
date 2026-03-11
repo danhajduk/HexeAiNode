@@ -118,6 +118,287 @@ Reserved layer for future normalized AI execution APIs. Included now to prevent 
 - No telemetry/status traffic on bootstrap topics
 - No control/command traffic on bootstrap topics
 
+## Bootstrap Message Contract (Discovery Only)
+
+Core bootstrap advertisements are minimal discovery payloads. They are not trust artifacts, policy packages, or operational credentials.
+
+### Required Bootstrap Fields
+
+- `core_id`
+- `core_api_url`
+- `registration_path` (or full registration endpoint)
+- `protocol_version`
+- `registration_open` (boolean)
+
+### Validation Expectations
+
+Node-side bootstrap processing must:
+
+- Ignore malformed payloads (invalid JSON/schema mismatch)
+- Ignore incomplete payloads (missing required fields)
+- Ignore stale payloads (older than local freshness threshold)
+- Ignore payloads with unsupported `protocol_version`
+- Treat `registration_open=false` as discovery-only with no registration attempt
+
+## Registration Handshake (Phase 2.0)
+
+After valid bootstrap discovery, registration occurs over Core API only.
+
+### Registration Request Payload
+
+- `node_name`
+- `node_type`: `ai-node`
+- `node_software_version`
+- `protocol_version`
+- `hostname` (optional)
+
+### Core Registration State
+
+- Core records a pending registration entry for the discovered node identity request.
+- Pending registration does not imply trust activation.
+- Core is expected to recognize the `ai-node` class before approval.
+
+## Operator Approval Via Core UI
+
+Node admission requires authenticated operator approval in Core UI.
+
+### Approval Flow
+
+1. Core creates approval session material (token/link/session ID).
+2. Operator authenticates in Core UI.
+3. Operator reviews pending node request and approves or rejects.
+4. Core records the final decision and only approved nodes proceed to trust activation.
+
+### Headless Node Behavior
+
+- Headless node remains in `pending_approval` until Core decision is available.
+- Node should present clear local status/instructions indicating approval must be completed in Core UI.
+- Rejected nodes must not receive trust tokens or operational credentials.
+
+## Initial Trust Activation Payload (Phase 2.1)
+
+After approval, Core returns trust activation material to the node.
+
+### Trust Activation Response
+
+- `node_id`
+- `accepted_node_name`
+- `node_type`
+- `paired_core_id`
+- `node_trust_token`
+- `initial_baseline_policy`
+- `operational_mqtt_identity` / token
+- `operational_mqtt_endpoint` details
+
+### Trust Package Persistence
+
+- Node must persist the trust package as sensitive local state.
+- Persisted trust package must survive reboot and upgrade.
+- Trust activation establishes node/Core pairing but does not yet represent full capability-aware policy.
+
+## Local Persisted Node State
+
+After trust activation, the node stores the minimum durable state required for deterministic reconnect and local baseline enforcement.
+
+### Required Persisted Fields
+
+- `node_id`
+- `node_name`
+- `node_type`
+- `paired_core_id`
+- `core_api_endpoint`
+- `trust_token`
+- `baseline_policy_version`
+- `operational_mqtt_identity` / token
+- `bootstrap_mqtt_host`
+- `registration_timestamp`
+
+### Persistence Expectations
+
+- State persists across restart and software upgrade.
+- Secrets/tokens are treated as sensitive local state.
+- Normal reboot does not require full re-onboarding.
+
+## Node Lifecycle State Model
+
+### States
+
+- `unconfigured`
+- `bootstrap_connecting`
+- `bootstrap_connected`
+- `core_discovered`
+- `registration_pending`
+- `pending_approval`
+- `trusted`
+- `capability_setup_pending`
+- `operational`
+- `degraded`
+
+### Transition Notes
+
+- `unconfigured -> bootstrap_connecting`: operator provides bootstrap host/name.
+- `bootstrap_connecting -> bootstrap_connected`: anonymous broker connection established.
+- `bootstrap_connected -> core_discovered`: valid Core bootstrap advertisement received.
+- `core_discovered -> registration_pending`: API registration request sent.
+- `registration_pending -> pending_approval`: Core records pending node.
+- `pending_approval -> trusted`: operator approves and trust package issued.
+- `trusted -> capability_setup_pending`: node begins post-trust capability declaration.
+- `capability_setup_pending -> operational`: Core accepts capability profile and baseline operations are active.
+- Any active state -> `degraded`: policy stale, connectivity loss, or trust-channel impairment.
+
+## Post-Bootstrap Operational Channel Separation
+
+### Channel Roles
+
+- Bootstrap discovery: anonymous MQTT on port `1884`, subscribe-only node behavior, discovery payloads only.
+- Trusted MQTT operations: authenticated/scoped MQTT using Core-issued operational identity/token.
+- Control/API operations: deterministic Core API path for registration, approval status, capability submission, and policy interactions.
+- Telemetry: trusted channel(s) only, not anonymous bootstrap.
+
+### Why Separation Is Mandatory
+
+- Prevents anonymous discovery transport from becoming a general-purpose control plane.
+- Keeps trust material and operational commands off discovery channels.
+- Preserves clear audit and governance boundaries between discovery and trusted operations.
+
+## Initial Baseline Policy Structure
+
+Initial baseline policy is the minimum viable governance package delivered at trust activation, before capability-aware policy refinement.
+
+### Baseline Policy Includes
+
+- `policy_version`
+- `issued_at` timestamp
+- refresh expectations (`refresh_after`, `expires_at`, or equivalent)
+- generic `ai-node` class rules
+- telemetry expectations
+- feature gating defaults
+
+### Intentionally Excluded At This Stage
+
+- Fine-grained capability-shaped policy
+- workload-specific execution policy
+- provider/runtime scheduling directives
+
+## Trusted MQTT Operational Identity Model
+
+After approval/trust activation, Core provisions operational MQTT credentials scoped for the paired node.
+
+### Provisioned To Node
+
+- MQTT username/identity
+- MQTT token/password
+- trusted MQTT host/port
+- allowed topic namespace/scope
+
+### Separation From Bootstrap MQTT
+
+- Bootstrap MQTT is anonymous, read-only discovery.
+- Trusted operational MQTT is authenticated, scoped, and policy-governed.
+- Anonymous bootstrap is never reused as general operational messaging.
+
+## Reconnect And Resync Behavior
+
+On reboot/restart/outage, node behavior must be deterministic and safety-first.
+
+### Expected Behavior
+
+- Restore persisted local identity/trust state
+- Reconnect to paired Core and trusted MQTT first
+- Reuse stored initial baseline policy until refreshed/replaced
+- Fall back to bootstrap discovery only when pairing context is unavailable or explicitly invalid
+
+### Degraded/Stale Concepts
+
+- `degraded`: temporary inability to reach trusted control/telemetry channels
+- `policy_stale`: baseline policy refresh window exceeded while still operating under last-known constraints
+
+## Baseline Status Telemetry Architecture
+
+Before AI execution workloads exist, telemetry focuses on node operational status.
+
+### Baseline Status Signals
+
+- `bootstrap_connected`
+- `pending_approval`
+- `trusted`
+- `capability_declared`
+- `degraded`
+- `disconnected`
+- `policy_stale`
+
+### Transport Guidance
+
+- Emit status on trusted channels (trusted MQTT and/or API-backed status endpoints).
+- Do not send telemetry on anonymous bootstrap transport.
+
+## Security Boundaries: Bootstrap, Trust, Operations
+
+### Security Boundary Rules
+
+- Anonymous bootstrap has strict discovery-only limits.
+- Operator approval in Core UI is mandatory before trust activation.
+- Token issuance authority remains in Core.
+- Node stores issued secrets/tokens as sensitive local state.
+- API and MQTT trust boundaries remain explicit and non-interchangeable.
+
+### Must Not (Unsafe Shortcuts)
+
+- No secrets in bootstrap payloads.
+- No node publish traffic on bootstrap channel.
+- No automatic trust activation without authenticated operator approval.
+- No use of bootstrap channel for control, policy, or telemetry.
+
+## Future Execution Gateway Placeholder
+
+Future phases will introduce a normalized execution gateway API for:
+
+- text classification
+- email classification
+- image classification
+- image generation
+
+This placeholder exists now to keep Phase 1/2 architecture aligned with future execution direction without implying that execution workloads are currently implemented.
+
+## Future Local Runtime Manager Placeholder
+
+Future architecture may add a local runtime manager with concepts such as:
+
+- local runtime controller
+- desired state
+- observed state
+- managed local providers
+
+This is intentionally a placeholder and not a full runtime-controller design in current phases.
+
+## Phased Architecture Roadmap
+
+### Phase 001: Bootstrap And Registration
+
+- Node discovers Core over anonymous bootstrap and performs API registration.
+- Unlocks deterministic onboarding entrypoint without pre-shared trust.
+
+### Phase 002: Trust Activation And Capability Declaration
+
+- Operator approval, trust package issuance, and capability declaration/acceptance.
+- Unlocks trusted operations and capability-aware platform understanding.
+
+### Future: Prompt Governance
+
+- Adds prompt-level governance surfaces and policy controls.
+
+### Future: OpenAI Execution
+
+- Adds initial real execution path for OpenAI-backed task families.
+
+### Future: Multi-Provider Support
+
+- Expands provider model beyond OpenAI with governed enablement.
+
+### Future: Local Runtime Support
+
+- Adds managed local runtime lifecycle and desired/observed reconciliation patterns.
+
 ## Out Of Scope For Now
 
 - Full AI workload execution implementation
@@ -131,3 +412,4 @@ Reserved layer for future normalized AI execution APIs. Included now to prevent 
 - Keep bootstrap and trust activation concerns isolated from execution concerns.
 - Preserve Core-governs / Node-executes boundary as capabilities expand.
 - Extend capability and policy layers without collapsing authority boundaries.
+- Capability declaration details are specified in `docs/node-capability-declaration.md`.
