@@ -192,3 +192,10 @@ Step objective: Update Phase 1 docs/contracts for unique node_id operational exp
 Chosen fix: Updated identity, registration, trust-state, and Phase 1 plan/overview docs to reflect implemented node_id generation, migration, and consistency rules.
 What changed: Updated docs/ai-node/node-identity.md, docs/ai-node/registration-flow.md, docs/ai-node/trust-state.md, docs/ai-node/phase1-overview.md, docs/ai-node/phase1-implementation-plan.md.
 Verification: Documentation aligns with implemented payload fields and startup/runtime behavior.
+
+###########
+Task #058 (Phase 2)
+Step objective: Create Phase 2 implementation plan and module/file map aligned to architecture docs.
+Chosen fix: Added a dedicated Phase 2 planning document with strict scope boundaries and a concrete Python module map, then linked it from architecture/capability docs.
+What changed: Added docs/ai-node/phase2-implementation-plan.md and updated docs/ai-node-architecture.md, docs/node-capability-declaration.md, docs/ai-node/phase1-overview.md.
+Verification: Links resolve and scope explicitly excludes prompt governance and execution/runtime-manager implementation for this phase.

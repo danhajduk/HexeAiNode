@@ -145,6 +145,7 @@ Acceptance semantics:
 ## See Also
 
 - [Phase 1 Overview](./phase1-overview.md)
+- [AI Node Phase 2 Implementation Plan](./ai-node/phase2-implementation-plan.md)
 - [AI Node Architecture](./ai-node-architecture.md)
 - [Synthia Platform Architecture](../../Synthia/docs/platform-architecture.md)
 - [Synthia MQTT Platform](../../Synthia/docs/mqtt-platform.md)

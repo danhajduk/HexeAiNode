@@ -40,3 +40,530 @@ Do not stop early.
 
 Do not edit above this line:
 #######################################################################
+[TODO] Task 059: Phase 2A — Implement post-trust startup handoff
+  - Extend startup flow so a trusted node enters the post-onboarding activation path.
+  - After valid trust-state load:
+    - restore node identity
+    - restore Core relationship
+    - restore operational MQTT/API readiness
+    - transition to `trusted`
+    - transition to `capability_setup_pending`
+  - Ensure this path is distinct from Phase 1 bootstrap onboarding.
+
+  * Comments, descriptions, rules:
+    - A trusted node must not fall back into bootstrap unless trust state is invalid.
+    - This task sets up the handoff from onboarding to node activation.
+    - Do not yet declare capabilities in this task; just reach the correct handoff state.
+
+
+[TODO] Task 060: Phase 2A — Implement provider/service setup configuration model
+  - Create the local configuration model for selecting which providers/services are enabled on this node.
+  - For Phase 2, support configuration for:
+    - OpenAI enabled/disabled
+  - Reserve structure for future providers/services:
+    - local providers
+    - additional cloud providers
+    - future node services
+  - Add storage and validation for this configuration.
+
+  * Comments, descriptions, rules:
+    - This task defines what is enabled on the node, not what is used at runtime yet.
+    - Keep provider secrets local to the node where possible.
+    - Separate “supported by software” from “enabled by operator”.
+
+
+[TODO] Task 061: Phase 2A — Implement user/provider selection step on the node
+  - Add the node-side setup flow that asks the operator which providers/services to enable on this node.
+  - For now, allow selection of:
+    - OpenAI
+  - Capture required provider settings for enabled services.
+  - Persist the selection in local node configuration.
+
+  * Comments, descriptions, rules:
+    - The question is “what should be enabled on this node,” not merely “what could this node theoretically support.”
+    - Keep the UX simple and deterministic.
+    - Do not turn this into full prompt/provider policy yet.
+
+
+[TODO] Task 062: Phase 2A — Define capability declaration manifest model
+  - Create the internal manifest/schema used by the node to declare its capabilities to Core.
+  - Split the manifest into clear groups:
+    - functional task families
+    - supported providers
+    - enabled providers
+    - node features
+    - environment/resource hints
+    - manifest metadata/version
+  - Add validation helpers for the manifest before submission.
+
+  * Comments, descriptions, rules:
+    - Capability declaration is a formal contract, not ad-hoc JSON.
+    - Keep the schema future-safe for later local/runtime features.
+    - Do not include prompt contracts in this manifest.
+
+
+[TODO] Task 063: Phase 2A — Implement functional task-family declaration
+  - Add support for declaring the initial AI task families this node is intended to support.
+  - Include:
+    - text classification
+    - email classification
+    - image classification
+    - image generation
+  - Mark them as declared node task-family capabilities.
+
+  * Comments, descriptions, rules:
+    - These are capability declarations, not proof that execution is implemented yet.
+    - Keep naming consistent with the architecture docs.
+    - Do not let task-family names drift between docs and code.
+
+
+[TODO] Task 064: Phase 2A — Implement provider capability and enabled-provider declaration
+  - Add support for declaring:
+    - providers supported by the node software
+    - providers enabled by the operator on this node
+  - For Phase 2, define OpenAI as:
+    - supported
+    - optionally enabled
+  - Keep internal representation ready for future providers.
+
+  * Comments, descriptions, rules:
+    - Supported != enabled.
+    - Enabled != approved for all future use.
+    - This distinction must remain explicit in the manifest and code.
+
+
+[TODO] Task 065: Phase 2A — Implement node feature declaration
+  - Add support for declaring node-level features separate from task families.
+  - Initial features may include:
+    - policy enforcement support
+    - telemetry support
+    - operational MQTT support
+    - capability declaration support
+    - future prompt-governance-ready flag if appropriate
+  - Represent these cleanly in the capability manifest.
+
+  * Comments, descriptions, rules:
+    - Separate node-management features from AI task capabilities.
+    - Keep the feature list extensible without becoming vague.
+    - Do not declare unimplemented features as active unless clearly marked.
+
+
+[TODO] Task 066: Phase 2A — Implement environment/resource hint declaration
+  - Add support for light node environment hints in the capability manifest.
+  - Include simple traits such as:
+    - hostname
+    - OS/platform
+    - memory/resource class
+    - GPU present yes/no
+  - Keep this intentionally lightweight.
+
+  * Comments, descriptions, rules:
+    - This is not full monitoring or scheduling metadata.
+    - Hints are for later policy/routing context only.
+    - Do not overbuild hardware inventory in this phase.
+
+
+[STOP HERE]
+
+
+[TODO] Task 067: Phase 2B — Implement capability declaration API client
+  - Build the client/API flow used by the node to submit its capability declaration to Core.
+  - Send the validated capability manifest over the trusted API path.
+  - Handle Core responses for:
+    - accepted
+    - rejected/invalid
+    - retryable failure
+  - Add lifecycle transition support around the submission process.
+
+  * Comments, descriptions, rules:
+    - Capability declaration must happen only after trust activation.
+    - Use trusted identity and tokens from Phase 1.
+    - Do not use bootstrap MQTT for capability declaration.
+
+
+[TODO] Task 068: Phase 2B — Implement capability declaration submission state handling
+  - Add state handling around capability declaration.
+  - Ensure node behavior cleanly covers:
+    - capability setup pending
+    - declaration in progress
+    - declaration accepted
+    - declaration failed/retry pending
+  - Transition toward `operational` only after successful capability declaration.
+
+  * Comments, descriptions, rules:
+    - This task is why `capability_setup_pending` exists in the lifecycle model.
+    - Do not jump directly from `trusted` to `operational`.
+    - Make retries visible and deterministic.
+
+
+[TODO] Task 069: Phase 2B — Implement Core response processing for accepted capability profile
+  - Parse and persist Core’s accepted capability-profile response.
+  - Store:
+    - accepted capability declaration version
+    - acceptance timestamp
+    - any returned capability/profile identifiers
+    - any Core-side restrictions or notes tied to the accepted declaration
+  - Make this information available to later policy/gateway layers.
+
+  * Comments, descriptions, rules:
+    - Capability acceptance is not the same as full runtime authorization for future tasks.
+    - Preserve enough accepted-profile metadata for later debugging.
+    - Keep the stored model versioned.
+
+
+[TODO] Task 070: Phase 2B — Implement baseline governance sync after capability acceptance
+  - After Core accepts the capability declaration, fetch/sync the baseline governance bundle for the node.
+  - Support:
+    - policy version
+    - issued timestamp
+    - refresh expectations
+    - generic node-class rules
+    - feature gating defaults
+    - telemetry expectations
+  - Persist the synced governance bundle locally.
+
+  * Comments, descriptions, rules:
+    - This is baseline governance, not full task/prompt execution policy yet.
+    - Governance must be stored separately from bootstrap metadata.
+    - Keep the sync deterministic and restart-safe.
+
+
+[TODO] Task 071: Phase 2B — Implement governance versioning and freshness tracking
+  - Track:
+    - active governance version
+    - issued timestamp
+    - last sync time
+    - freshness/expiry state
+  - Define node behavior for:
+    - fresh governance
+    - stale governance
+    - temporarily unavailable Core during refresh
+  - Expose internal status for later telemetry.
+
+  * Comments, descriptions, rules:
+    - Governance freshness must be explicit.
+    - Node should not silently run forever on unknown stale state.
+    - Do not overcomplicate with full policy engine logic yet.
+
+
+[STOP HERE]
+
+
+[TODO] Task 072: Phase 2C — Implement trusted operational MQTT connection readiness
+  - Build the post-trust operational MQTT readiness path using the Core-issued operational identity/token.
+  - Validate that the node can prepare/use:
+    - operational MQTT host
+    - operational MQTT port
+    - operational identity
+    - operational token
+  - Keep this separate from bootstrap MQTT logic.
+
+  * Comments, descriptions, rules:
+    - Bootstrap MQTT and trusted operational MQTT must remain separate code paths.
+    - This task is readiness/connection behavior, not full message-feature implementation.
+    - Do not leak operational credentials to logs.
+
+
+[TODO] Task 073: Phase 2C — Implement baseline trusted status telemetry
+  - Emit trusted node telemetry/status after capability acceptance and governance sync.
+  - Include state/status such as:
+    - trusted
+    - capability setup pending
+    - capability declared
+    - governance active
+    - governance stale
+    - degraded
+    - operational
+  - Route via trusted operational channels.
+
+  * Comments, descriptions, rules:
+    - This remains node-operational telemetry, not AI workload telemetry.
+    - Keep payloads small, useful, and free of secrets.
+    - Do not use bootstrap MQTT for any telemetry.
+
+
+[TODO] Task 074: Phase 2C — Implement degraded handling for capability/governance path
+  - Handle temporary failures in:
+    - capability declaration submission
+    - governance sync
+    - trusted operational communication
+  - Move node to `degraded` when appropriate.
+  - Allow recovery back to:
+    - capability setup pending
+    - operational
+    depending on where the failure occurred
+
+  * Comments, descriptions, rules:
+    - Degraded must preserve trust unless trust itself is revoked/corrupted.
+    - Recovery behavior should be deterministic and logged.
+    - Avoid bootstrapping again unless trust state is invalid.
+
+
+[TODO] Task 075: Phase 2C — Implement secure storage updates for Phase 2 state
+  - Extend local persisted state to include Phase 2 metadata such as:
+    - enabled provider/service selection
+    - accepted capability declaration metadata
+    - active governance version
+    - governance sync timestamp
+    - capability declaration timestamp
+  - Add validation and migration-safe load behavior.
+
+  * Comments, descriptions, rules:
+    - Keep persisted state organized and versionable.
+    - Do not overwrite trust-state semantics from Phase 1.
+    - Maintain separation between identity/trust data and capability/governance data where practical.
+
+
+[STOP HERE]
+
+
+[TODO] Task 076: Phase 2D — Implement logging and diagnostics for capability activation flow
+  - Add structured logging for:
+    - post-trust activation path
+    - provider/service selection
+    - capability manifest creation
+    - capability submission
+    - governance sync
+    - governance freshness changes
+    - degraded/recovery transitions
+  - Make logs useful for debugging Phase 2 activation failures.
+
+  * Comments, descriptions, rules:
+    - Logs must redact secrets and tokens.
+    - Prefer stateful, compact logs over noisy chatter.
+    - This task exists to keep later phases debuggable.
+
+
+[TODO] Task 077: Phase 2D — Create Phase 2 validation and test checklist
+  - Create a test checklist covering:
+    - trusted restart path
+    - provider/service selection persisted
+    - capability manifest built correctly
+    - capability declaration accepted
+    - governance synced and stored
+    - stale governance handling
+    - trusted operational channel readiness
+    - degraded and recovery behavior
+  - Validate lifecycle state transitions for each scenario.
+
+  * Comments, descriptions, rules:
+    - This can begin as a manual/integration checklist.
+    - Keep it aligned with the architecture docs and corrected contracts.
+    - The goal is to stabilize node activation before prompt/provider execution phases begin.
+
+
+[TODO] Task 078: Phase 2D — Finalize Phase 2 implementation review and handoff note
+  - Review implemented Phase 2 behavior against the architecture/docs.
+  - Document any deviations, follow-up fixes, or deferred edge cases.
+  - Prepare a short handoff summary for the next phase:
+    - prompt/service registration
+    - prompt probation
+    - execution gateway preparation
+
+  * Comments, descriptions, rules:
+    - Phase 2 is complete only when the node is trusted, capability-known, governance-synced, and operationally ready.
+    - Do not begin prompt registration work inside this task.
+    - This task cleanly closes Phase 2.
+
+[TODO] Task 079: Define the UI state model for the AI Node dashboard
+  - Create a canonical UI state model representing the node lifecycle and operational status.
+  - The UI must support displaying:
+    - lifecycle state
+    - onboarding progress
+    - runtime health
+    - core connection info
+    - capability summary
+    - service status
+  - Map UI states to backend lifecycle states:
+    - unconfigured
+    - bootstrap_connecting
+    - registration_pending
+    - pending_approval
+    - trusted
+    - capability_setup_pending
+    - operational
+    - degraded
+
+  * Comments, descriptions, rules:
+    - The UI must treat lifecycle state as the primary indicator of node status.
+    - The dashboard should be able to render meaningful information even if some backend endpoints are temporarily unavailable.
+    - Keep the state model aligned with the architecture documentation.
+
+
+[TODO] Task 080: Add lifecycle status card to the dashboard
+  - Implement a new "Lifecycle" card in the dashboard.
+  - Display:
+    - current lifecycle state
+    - trust status
+    - paired Core ID
+    - pairing timestamp
+    - governance status
+  - Add visual state indicators (color-coded):
+    - green: operational
+    - yellow: pending states
+    - orange: degraded
+    - red: error
+
+  * Comments, descriptions, rules:
+    - This card becomes the main diagnostic surface for node state.
+    - Lifecycle state should always be visible without navigating to other pages.
+    - The lifecycle card must update dynamically if the backend state changes.
+
+
+[TODO] Task 081: Enhance onboarding card with progress visualization
+  - Replace the current static onboarding description with real progress indicators.
+  - Show steps:
+    - bootstrap discovery
+    - registration
+    - approval
+    - trust activation
+  - Each step should show one of:
+    - pending
+    - in progress
+    - completed
+    - failed
+  - Add icons or badges to visualize progress.
+
+  * Comments, descriptions, rules:
+    - Operators must be able to see exactly where onboarding stopped if it fails.
+    - Steps should map directly to Phase 1 onboarding states.
+    - Avoid hardcoding; read onboarding state from backend.
+
+
+[TODO] Task 082: Improve runtime health card with operational signals
+  - Expand the Runtime card to show real operational status.
+  - Include:
+    - Core API connectivity
+    - operational MQTT connectivity
+    - governance freshness
+    - last telemetry timestamp
+    - node health state
+  - Display connectivity indicators (connected / disconnected / degraded).
+
+  * Comments, descriptions, rules:
+    - Runtime health must reflect the current node condition.
+    - Avoid exposing sensitive credentials.
+    - Health indicators should refresh periodically.
+
+
+[TODO] Task 083: Add Core connection information panel
+  - Display current Core connection metadata:
+    - Core ID
+    - Core API endpoint
+    - operational MQTT host and port
+  - Show whether the node is currently connected to the Core.
+  - Add a link or reference to Core onboarding/registration status.
+
+  * Comments, descriptions, rules:
+    - Operators often debug connection issues; this card must clearly show the Core endpoint.
+    - Never display tokens or secrets.
+    - This panel should appear only once the node is trusted.
+
+
+[TODO] Task 084: Add capability summary card (Phase 2 readiness)
+  - Create a new dashboard card showing node capabilities.
+  - Display:
+    - declared task families
+    - enabled providers
+    - capability declaration timestamp
+    - governance policy version
+  - Provide placeholders for future provider expansion.
+
+  * Comments, descriptions, rules:
+    - This card becomes active once Phase 2 capability declaration is complete.
+    - The UI should gracefully handle cases where capability data is not yet available.
+    - Do not include prompt-level data here.
+
+
+[TODO] Task 085: Improve service management card with control actions
+  - Expand the Service card to display:
+    - backend service status
+    - frontend service status
+  - Add service control buttons:
+    - restart backend
+    - restart frontend
+    - restart entire node
+  - Display service state:
+    - running
+    - stopped
+    - failed
+
+  * Comments, descriptions, rules:
+    - Service actions should call backend endpoints that interact with systemd.
+    - Prevent accidental repeated restart actions.
+    - Clearly show confirmation feedback after service operations.
+
+
+[TODO] Task 086: Implement status refresh and live updates
+  - Add periodic polling or websocket updates for:
+    - lifecycle state
+    - runtime health
+    - onboarding progress
+    - service status
+  - Update UI components dynamically when state changes.
+
+  * Comments, descriptions, rules:
+    - Refresh interval should be reasonable (e.g., 5–10 seconds).
+    - Avoid heavy polling that could overload the node.
+    - UI should degrade gracefully if backend endpoints temporarily fail.
+
+
+[TODO] Task 087: Implement responsive layout improvements
+  - Ensure the dashboard layout works on:
+    - laptop screens
+    - tablet-sized displays
+    - narrow browser windows
+  - Adjust card layout to stack vertically when screen width is limited.
+
+  * Comments, descriptions, rules:
+    - Avoid fixed widths that break on smaller displays.
+    - Maintain visual hierarchy even when stacked.
+    - Keep the design consistent with the existing theme.
+
+
+[TODO] Task 088: Improve visual consistency with shared theme styles
+  - Standardize colors, badges, and typography across all cards.
+  - Define reusable UI components:
+    - status badge
+    - health indicator
+    - card header layout
+  - Align the UI with the Synthia visual design.
+
+  * Comments, descriptions, rules:
+    - Avoid inline styling; use shared CSS variables or theme definitions.
+    - Maintain dark-mode compatibility.
+    - Keep UI minimal and readable.
+
+
+[TODO] Task 089: Add UI diagnostics section for debugging
+  - Create a hidden or expandable diagnostics panel.
+  - Show:
+    - current lifecycle state
+    - API endpoints in use
+    - last backend update timestamp
+    - UI version
+  - Allow copying diagnostic info.
+
+  * Comments, descriptions, rules:
+    - This helps debugging during development and support.
+    - Diagnostics must never expose secrets or tokens.
+    - Panel can be collapsible to avoid cluttering the main UI.
+
+
+[TODO] Task 090: Create UI validation checklist for the dashboard
+  - Verify that the dashboard correctly reflects:
+    - unconfigured node
+    - onboarding in progress
+    - pending approval
+    - trusted node
+    - operational node
+    - degraded node
+  - Confirm that:
+    - lifecycle colors update correctly
+    - cards update after state transitions
+    - service controls work as expected
+
+  * Comments, descriptions, rules:
+    - This checklist ensures UI accuracy during lifecycle transitions.
+    - Validate behavior across browser refreshes and restarts.
+    - This task finalizes the UI enhancement phase.

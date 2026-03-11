@@ -440,6 +440,7 @@ This is intentionally a placeholder and not a full runtime-controller design in 
 ## See Also
 
 - [Phase 1 Overview](./phase1-overview.md)
+- [AI Node Phase 2 Implementation Plan](./ai-node/phase2-implementation-plan.md)
 - [AI Node Capability Declaration](./node-capability-declaration.md)
 - [Synthia Platform Architecture](../../Synthia/docs/platform-architecture.md)
 - [Synthia MQTT Platform](../../Synthia/docs/mqtt-platform.md)
