@@ -1,7 +1,7 @@
 # Synthia AI Node - Phase 1A Implementation Plan and Module Map
 
 Status: Active
-Implementation status: Partially implemented (Tasks 041-045)
+Implementation status: Partially implemented (Tasks 041-046)
 Last updated: 2026-03-11
 
 ## Scope
@@ -77,11 +77,13 @@ src/ai-node/
 
 Current implementation files:
 
-- `src/ai-node/config/bootstrapConfig.js`
-- `src/ai-node/lifecycle/nodeLifecycle.js`
-- `src/ai-node/bootstrap/bootstrapClient.js`
-- `src/ai-node/bootstrap/bootstrapParser.js`
-- `tests/phase1a-bootstrap.test.js`
+- `src/ai_node/config/bootstrap_config.py`
+- `src/ai_node/lifecycle/node_lifecycle.py`
+- `src/ai_node/bootstrap/bootstrap_client.py`
+- `src/ai_node/bootstrap/bootstrap_parser.py`
+- `src/ai_node/registration/registration_client.py`
+- `tests/test_phase1a_bootstrap.py`
+- `tests/test_registration_client.py`
 
 ## State and Security Guardrails
 

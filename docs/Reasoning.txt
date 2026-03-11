@@ -7,34 +7,41 @@ Verification: Scope and module map align to bootstrap->registration->approval->t
 ###########
 Task #041
 Step objective: Implement first-time bootstrap configuration handling.
-Chosen fix: Added a strict config factory with required host/node name validation and fixed defaults.
-What changed: Added src/ai-node/config/bootstrapConfig.js with fixed bootstrap port 1884, anonymous=true, and canonical topic.
+Chosen fix: Added a strict Python config factory with required host/node name validation and fixed defaults.
+What changed: Added src/ai_node/config/bootstrap_config.py with fixed bootstrap port 1884, anonymous=true, and canonical topic.
 Verification: Unit test confirms required input checks and deterministic defaults.
 
 ###########
 Task #042
 Step objective: Implement canonical node lifecycle state model.
-Chosen fix: Added explicit state constants, transition checks, and transition logging hook.
-What changed: Added src/ai-node/lifecycle/nodeLifecycle.js with canonical states and guarded transitions.
+Chosen fix: Added explicit Python state enum, transition checks, and transition logging hook.
+What changed: Added src/ai_node/lifecycle/node_lifecycle.py with canonical states and guarded transitions.
 Verification: Unit test confirms valid/invalid transition behavior and canonical state coverage.
 
 ###########
 Task #043
 Step objective: Implement bootstrap MQTT connection client with bounded retries.
-Chosen fix: Added client abstraction using injected MQTT adapter and exponential backoff bounds.
-What changed: Added src/ai-node/bootstrap/bootstrapClient.js connect/retry logic with lifecycle transitions.
+Chosen fix: Added Python async client abstraction with injected MQTT adapter and exponential backoff bounds.
+What changed: Added src/ai_node/bootstrap/bootstrap_client.py connect/retry logic with lifecycle transitions.
 Verification: Unit test confirms connect->subscribe flow and successful discovery callback path.
 
 ###########
 Task #044
 Step objective: Enforce exact bootstrap topic subscription and payload parsing behavior.
 Chosen fix: Reject wildcard topics and parse payload only from exact configured topic.
-What changed: Added exact-topic guard and message handling in bootstrapClient plus parser entrypoint in bootstrapParser.
-Verification: Unit test confirms exact-topic processing and ignores unrelated topics implicitly.
+What changed: Added exact-topic guard and message handling in bootstrap_client plus parser entrypoint in bootstrap_parser.
+Verification: Unit test confirms exact-topic processing and valid payload discovery behavior.
 
 ###########
 Task #045
 Step objective: Validate canonical bootstrap payload contract and constraints.
 Chosen fix: Added schema-like validation with required fields and hard constraints for topic/version/mode.
-What changed: Added src/ai-node/bootstrap/bootstrapParser.js validation and safe registration URL builder.
+What changed: Added src/ai_node/bootstrap/bootstrap_parser.py validation and safe registration URL builder.
 Verification: Unit tests confirm canonical payload acceptance, invalid mode rejection, and URL composition behavior.
+
+###########
+Task #046
+Step objective: Implement Core registration request client.
+Chosen fix: Added Python async registration client that builds URL from bootstrap metadata and submits API-only request payload.
+What changed: Added src/ai_node/registration/registration_client.py and tests/test_registration_client.py.
+Verification: Unit test confirms node_type=ai-node payload, URL composition, and lifecycle transition to registration_pending.

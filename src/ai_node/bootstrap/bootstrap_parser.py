@@ -1,0 +1,117 @@
+import json
+from typing import Iterable, Tuple
+from urllib.parse import urljoin, urlparse
+
+
+REQUIRED_FIELDS = (
+    "topic",
+    "bootstrap_version",
+    "core_id",
+    "core_name",
+    "core_version",
+    "api_base",
+    "mqtt_host",
+    "mqtt_port",
+    "onboarding_endpoints",
+    "onboarding_mode",
+    "emitted_at",
+)
+
+
+def _is_non_empty_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def parse_bootstrap_payload(raw_payload: object) -> Tuple[bool, object]:
+    try:
+        if isinstance(raw_payload, bytes):
+            text = raw_payload.decode("utf-8")
+        elif isinstance(raw_payload, str):
+            text = raw_payload
+        else:
+            text = str(raw_payload)
+        return True, json.loads(text)
+    except Exception:
+        return False, "invalid_json"
+
+
+def build_registration_url(api_base: str, register_path: str) -> str:
+    api = str(api_base or "").strip()
+    path = str(register_path or "").strip()
+    if not _is_non_empty_string(api):
+        raise ValueError("api_base is required")
+    if not _is_non_empty_string(path):
+        raise ValueError("onboarding_endpoints.register is required")
+
+    parsed = urlparse(api)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError("invalid api_base URL")
+
+    base = f"{api.rstrip('/')}/"
+    relative_path = path[1:] if path.startswith("/") else path
+    return urljoin(base, relative_path)
+
+
+def validate_bootstrap_payload(
+    payload: object,
+    *,
+    supported_versions: Iterable[int] = (1,),
+    expected_topic: str = "synthia/bootstrap/core",
+) -> Tuple[bool, object]:
+    if not isinstance(payload, dict):
+        return False, "invalid_payload"
+    if any(field not in payload for field in REQUIRED_FIELDS):
+        return False, "missing_required_fields"
+
+    register = payload.get("onboarding_endpoints", {}).get("register")
+    if not _is_non_empty_string(register):
+        return False, "missing_register_endpoint"
+
+    topic = str(payload["topic"]).strip()
+    bootstrap_version = int(payload["bootstrap_version"])
+    core_id = str(payload["core_id"]).strip()
+    core_name = str(payload["core_name"]).strip()
+    core_version = str(payload["core_version"]).strip()
+    api_base = str(payload["api_base"]).strip()
+    mqtt_host = str(payload["mqtt_host"]).strip()
+    mqtt_port = int(payload["mqtt_port"])
+    onboarding_mode = str(payload["onboarding_mode"]).strip()
+    emitted_at = str(payload["emitted_at"]).strip()
+    register_endpoint = str(register).strip()
+
+    if topic != expected_topic:
+        return False, "invalid_topic"
+    if bootstrap_version not in tuple(supported_versions):
+        return False, "unsupported_bootstrap_version"
+    if onboarding_mode != "api":
+        return False, "unsupported_onboarding_mode"
+    if not _is_non_empty_string(api_base):
+        return False, "invalid_api_base"
+    if not _is_non_empty_string(core_id) or not _is_non_empty_string(core_name):
+        return False, "invalid_core_identity"
+    if not _is_non_empty_string(core_version):
+        return False, "invalid_core_version"
+    if not _is_non_empty_string(mqtt_host) or mqtt_port <= 0:
+        return False, "invalid_mqtt_target"
+    if not _is_non_empty_string(emitted_at):
+        return False, "invalid_emitted_at"
+
+    try:
+        registration_url = build_registration_url(api_base, register_endpoint)
+    except ValueError:
+        return False, "invalid_registration_url"
+
+    return True, {
+        "topic": topic,
+        "bootstrap_version": bootstrap_version,
+        "core_id": core_id,
+        "core_name": core_name,
+        "core_version": core_version,
+        "api_base": api_base,
+        "mqtt_host": mqtt_host,
+        "mqtt_port": mqtt_port,
+        "onboarding_endpoints": {"register": register_endpoint},
+        "onboarding_mode": onboarding_mode,
+        "emitted_at": emitted_at,
+        "registration_url": registration_url,
+    }

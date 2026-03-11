@@ -44,25 +44,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 046: Phase 1B — Implement registration request client
-  - Build the Core registration API client using the validated bootstrap payload.
-  - Construct the registration URL using:
-    - `api_base`
-    - `onboarding_endpoints.register`
-  - Send registration request with:
-    - `node_name`
-    - `node_type = "ai-node"`
-    - `node_software_version`
-    - `protocol_version`
-    - optional `hostname`
-  - Transition state to `registration_pending`.
-
-  * Comments, descriptions, rules:
-    - Registration must be HTTP API only.
-    - Avoid double-prefixing `/api` when building the final URL.
-    - Core must already understand the `ai-node` class.
-
-
 [TODO] Task 047: Phase 1B — Implement pending approval handling
   - Handle the Core response when registration enters pending approval.
   - Read and display/store:
