@@ -47,25 +47,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 049: Phase 1C — Implement trust activation payload parsing
-  - Parse the approved trust activation payload.
-  - Require and validate:
-    - `node_id`
-    - `paired_core_id`
-    - `node_trust_token`
-    - `initial_baseline_policy`
-    - `operational_mqtt_identity`
-    - `operational_mqtt_token`
-    - `operational_mqtt_host`
-    - `operational_mqtt_port`
-  - Reject incomplete or malformed trusted payloads.
-
-  * Comments, descriptions, rules:
-    - This is the first trusted payload.
-    - Treat tokens and identities as sensitive immediately.
-    - Use the exact canonical schema from the aligned docs.
-
-
 [TODO] Task 050: Phase 1C — Implement trust-state persistence layer
   - Persist the canonical trust-state fields locally:
     - `node_id`

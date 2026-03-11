@@ -59,3 +59,10 @@ Step objective: Implement final approval result handling with explicit approved/
 Chosen fix: Added a final-decision handler returning approval handoff payload for approved status and raising a clear rejection error for rejected status.
 What changed: Updated src/ai_node/registration/approval_waiter.py and tests/test_approval_waiter.py with handle_final_decision and rejection error path.
 Verification: Unit tests confirm approved handoff payload behavior and rejection hard-stop behavior.
+
+###########
+Task #049
+Step objective: Implement trust activation payload parsing and validation.
+Chosen fix: Added a dedicated trust-activation parser enforcing canonical required fields and approved-status gating.
+What changed: Added src/ai_node/trust/trust_activation_parser.py and tests/test_trust_activation_parser.py.
+Verification: Unit tests confirm valid trusted payload acceptance and malformed/incomplete payload rejection.
