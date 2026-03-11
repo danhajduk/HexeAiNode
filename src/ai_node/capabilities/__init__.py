@@ -16,6 +16,11 @@ from ai_node.capabilities.providers import (
     create_provider_capabilities_from_selection_config,
     validate_provider_capabilities,
 )
+from ai_node.capabilities.node_features import (
+    CANONICAL_NODE_FEATURES,
+    create_node_feature_declarations,
+    validate_node_feature_declarations,
+)
 
 __all__ = [
     "CAPABILITY_MANIFEST_SCHEMA_VERSION",
@@ -28,4 +33,7 @@ __all__ = [
     "create_provider_capabilities",
     "create_provider_capabilities_from_selection_config",
     "validate_provider_capabilities",
+    "CANONICAL_NODE_FEATURES",
+    "create_node_feature_declarations",
+    "validate_node_feature_declarations",
 ]

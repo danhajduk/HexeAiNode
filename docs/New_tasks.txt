@@ -40,22 +40,6 @@ Do not stop early.
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 065: Phase 2A — Implement node feature declaration
-  - Add support for declaring node-level features separate from task families.
-  - Initial features may include:
-    - policy enforcement support
-    - telemetry support
-    - operational MQTT support
-    - capability declaration support
-    - future prompt-governance-ready flag if appropriate
-  - Represent these cleanly in the capability manifest.
-
-  * Comments, descriptions, rules:
-    - Separate node-management features from AI task capabilities.
-    - Keep the feature list extensible without becoming vague.
-    - Do not declare unimplemented features as active unless clearly marked.
-
-
 [TODO] Task 066: Phase 2A — Implement environment/resource hint declaration
   - Add support for light node environment hints in the capability manifest.
   - Include simple traits such as:

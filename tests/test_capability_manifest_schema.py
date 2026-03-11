@@ -28,7 +28,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
             task_families=[],
             supported_providers=["openai"],
             enabled_providers=[],
-            node_features=[],
+            node_features=["telemetry_support"],
             environment_hints={},
         )
         manifest["capabilities"]["providers"]["enabled"] = ["anthropic"]
@@ -56,7 +56,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
             task_families=[],
             supported_providers=["openai"],
             enabled_providers=[],
-            node_features=[],
+            node_features=["telemetry_support"],
             environment_hints={},
         )
         manifest["capabilities"]["task_families"] = ["audio_transcription"]

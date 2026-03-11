@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
+from ai_node.capabilities.node_features import (
+    create_node_feature_declarations,
+    validate_node_feature_declarations,
+)
 from ai_node.capabilities.providers import validate_provider_capabilities
 from ai_node.capabilities.task_families import validate_task_family_capabilities
 
@@ -44,7 +48,7 @@ def create_capability_manifest(
                 "supported": _normalize_string_list(supported_providers or []),
                 "enabled": _normalize_string_list(enabled_providers or []),
             },
-            "node_features": _normalize_string_list(node_features or []),
+            "node_features": create_node_feature_declarations(node_features),
             "environment_hints": environment_hints if isinstance(environment_hints, dict) else {},
         },
         "metadata": {
@@ -91,6 +95,9 @@ def validate_capability_manifest(data: object) -> Tuple[bool, Optional[str]]:
         return False, providers_error
     if not isinstance(node_features, list):
         return False, "invalid_node_features"
+    features_valid, features_error = validate_node_feature_declarations(node_features)
+    if not features_valid:
+        return False, features_error
     if not isinstance(environment_hints, dict):
         return False, "invalid_environment_hints"
 

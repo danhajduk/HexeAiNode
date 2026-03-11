@@ -1,7 +1,7 @@
 # Synthia AI Node - Phase 2 Implementation Plan and Module Map
 
 Status: Active
-Implementation status: In progress (Tasks 059-064 implemented)
+Implementation status: In progress (Tasks 059-065 implemented)
 Last updated: 2026-03-11
 
 ## Scope
@@ -57,6 +57,9 @@ Out of scope in Phase 2:
 - Task 064:
   - provider capability declaration module added with explicit `supported` and `enabled` sets
   - OpenAI remains supported by default, while enablement stays operator-controlled
+- Task 065:
+  - node feature declarations moved to explicit name+enabled representation
+  - future prompt-governance readiness is carried as a clearly disabled declaration
 
 ## Phase 2 Module Map (Python)
 
