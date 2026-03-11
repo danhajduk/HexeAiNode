@@ -206,3 +206,10 @@ Step objective: Implement trusted startup handoff path distinct from bootstrap o
 Chosen fix: Startup now enters `trusted -> capability_setup_pending` when trust-state is valid and skips persisted bootstrap config flow in trusted resume mode.
 What changed: Updated src/ai_node/main.py and src/ai_node/runtime/node_control_api.py; added/updated tests in tests/test_main_entrypoint.py, tests/test_node_control_api.py, tests/test_node_control_fastapi.py; updated docs/ai-node/phase2-implementation-plan.md.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_main_entrypoint tests.test_node_control_api tests.test_node_control_fastapi tests.test_trusted_startup -v` passes (14 tests).
+
+###########
+Task #060 (Phase 2)
+Step objective: Implement local provider/service setup configuration model with storage and validation.
+Chosen fix: Added a provider selection config schema separating supported providers from operator-enabled providers, with OpenAI support and file persistence helpers.
+What changed: Added src/ai_node/config/provider_selection_config.py and tests/test_provider_selection_config.py; updated docs/ai-node/phase2-implementation-plan.md.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_provider_selection_config tests.test_main_entrypoint tests.test_node_control_api -v` passes (17 tests).

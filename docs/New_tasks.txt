@@ -40,22 +40,6 @@ Do not stop early.
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 060: Phase 2A — Implement provider/service setup configuration model
-  - Create the local configuration model for selecting which providers/services are enabled on this node.
-  - For Phase 2, support configuration for:
-    - OpenAI enabled/disabled
-  - Reserve structure for future providers/services:
-    - local providers
-    - additional cloud providers
-    - future node services
-  - Add storage and validation for this configuration.
-
-  * Comments, descriptions, rules:
-    - This task defines what is enabled on the node, not what is used at runtime yet.
-    - Keep provider secrets local to the node where possible.
-    - Separate “supported by software” from “enabled by operator”.
-
-
 [TODO] Task 061: Phase 2A — Implement user/provider selection step on the node
   - Add the node-side setup flow that asks the operator which providers/services to enable on this node.
   - For now, allow selection of:

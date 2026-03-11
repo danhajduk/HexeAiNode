@@ -1,7 +1,7 @@
 # Synthia AI Node - Phase 2 Implementation Plan and Module Map
 
 Status: Active
-Implementation status: In progress (Task 059 implemented)
+Implementation status: In progress (Tasks 059-060 implemented)
 Last updated: 2026-03-11
 
 ## Scope
@@ -40,6 +40,10 @@ Out of scope in Phase 2:
   - lifecycle transitions to `trusted -> capability_setup_pending`
   - persisted bootstrap config path is skipped in trusted resume mode
   - startup status exposes trusted runtime context for node/core relationship visibility
+- Task 060:
+  - local provider/service selection config model added with validation
+  - OpenAI is always software-supported and can be operator-enabled/disabled
+  - configuration persists to file storage with load/save/create behavior
 
 ## Phase 2 Module Map (Python)
 
