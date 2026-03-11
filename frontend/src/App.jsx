@@ -120,16 +120,14 @@ export default function App() {
           ) : null}
         </div>
         <p className="muted tiny">API: {getApiBase()}</p>
-        {nodeId ? (
-          <div className="row">
-            <span className="muted tiny">
-              Node ID: <code>{nodeId}</code>
-            </span>
-            <button className="btn" onClick={onCopyNodeId}>
-              {copied ? "Copied" : "Copy Node ID"}
-            </button>
-          </div>
-        ) : null}
+        <div className="row">
+          <span className="muted tiny">
+            Unique ID: <code>{nodeId || "unavailable"}</code>
+          </span>
+          <button className="btn" onClick={onCopyNodeId} disabled={!nodeId}>
+            {copied ? "Copied" : "Copy Unique ID"}
+          </button>
+        </div>
         {error ? <p className="error">{error}</p> : null}
       </section>
 

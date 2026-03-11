@@ -118,15 +118,26 @@ class OnboardingRuntime:
         except Exception as exc:
             if not self._is_run_active(run_id):
                 return
+            error_message = str(exc).strip() or repr(exc)
             if hasattr(self._logger, "error"):
-                self._logger.error("[registration-failed] %s", {"message": str(exc)})
+                self._logger.error(
+                    "[registration-failed] %s",
+                    {"error_type": type(exc).__name__, "message": error_message},
+                )
             current = self._lifecycle.get_state()
             if current in {
                 NodeLifecycleState.CORE_DISCOVERED,
                 NodeLifecycleState.REGISTRATION_PENDING,
                 NodeLifecycleState.PENDING_APPROVAL,
             }:
-                self._lifecycle.transition_to(NodeLifecycleState.DEGRADED, {"stage": "registration", "error": str(exc)})
+                self._lifecycle.transition_to(
+                    NodeLifecycleState.DEGRADED,
+                    {
+                        "stage": "registration",
+                        "error_type": type(exc).__name__,
+                        "error": error_message,
+                    },
+                )
         finally:
             with self._lock:
                 if run_id == self._run_id:
@@ -213,10 +224,38 @@ class OnboardingRuntime:
         run_id: int,
         node_nonce: str,
     ) -> None:
+        consecutive_poll_errors = 0
+        max_consecutive_poll_errors = 30
         while True:
             if not self._is_run_active(run_id):
                 return
-            decision = await self._http_adapter.get_json(finalize_url)
+            try:
+                decision = await self._http_adapter.get_json(finalize_url)
+                consecutive_poll_errors = 0
+            except Exception as exc:
+                consecutive_poll_errors += 1
+                error_message = str(exc).strip() or repr(exc)
+                if hasattr(self._logger, "warning"):
+                    self._logger.warning(
+                        "[finalize-poll-error] %s",
+                        {
+                            "error_type": type(exc).__name__,
+                            "message": error_message,
+                            "attempt": consecutive_poll_errors,
+                            "max_attempts": max_consecutive_poll_errors,
+                        },
+                    )
+                if consecutive_poll_errors >= max_consecutive_poll_errors:
+                    raise RuntimeError(
+                        f"finalize polling failed after {max_consecutive_poll_errors} attempts: "
+                        f"{type(exc).__name__}: {error_message}"
+                    ) from exc
+                backoff_seconds = min(
+                    self._finalize_poll_interval_seconds * max(consecutive_poll_errors, 1),
+                    10.0,
+                )
+                await asyncio.sleep(backoff_seconds)
+                continue
             onboarding_status = str(decision.get("onboarding_status") or decision.get("status") or "").strip()
             if onboarding_status in {"pending", "pending_approval"}:
                 await asyncio.sleep(self._finalize_poll_interval_seconds)
