@@ -154,3 +154,13 @@ What changed: Added ordered roadmap from bootstrap/registration through trust/ca
 Verification: Phase sequencing is high-level, coherent, and avoids premature implementation detail.
 
 ###########
+
+###########
+Task #030-039
+Step objective: Align split AI Node docs with canonical bootstrap, registration, trust-state, lifecycle, and documentation conventions.
+What changed: Updated all files in docs/ai-node/ with canonical contracts, restored lifecycle handoff state, added required status metadata and See also sections, fixed markdown fence consistency, and regenerated docs/ai-node-golden-mismatch-report.md with zero contradictory findings.
+Verification: Searched split docs for deprecated contract keys and confirmed canonical keys/topic/state presence via repository grep checks.
+
+###########
+
+###########

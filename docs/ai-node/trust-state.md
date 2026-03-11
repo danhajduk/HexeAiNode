@@ -1,57 +1,45 @@
 # Synthia AI Node — Trust State
 
+Status: Planned
+Implementation status: Not developed
+Last updated: 2026-03-11
+
 ## Purpose
 
-After an AI Node is approved by Synthia Core, the node must store a **local trust state**.
+After approval, AI Node must persist local trust state to support deterministic restart and reconnect behavior.
 
-This trust state allows the node to:
+Without persisted trust state, onboarding would repeat on every start.
 
-- authenticate with Core
-- reconnect after reboot
-- avoid repeating the bootstrap process
-- operate as a trusted Synthia infrastructure node
+## Trust State Storage Requirements
 
-Without stored trust state the node would need to repeat onboarding every time it starts.
-
----
-
-# Trust State Storage Requirements
-
-Trust state must be stored in **persistent local storage**.
-
-The storage must survive:
+Trust state must be persistent across:
 
 - node restarts
 - container restarts
 - system reboots
 
-Trust state must **not be lost between runs**.
+## Required Stored Fields
 
----
-
-# Required Stored Fields
-
-The node must persist the following fields.
+Canonical persisted keys:
 
 | Field | Description |
-|------|-------------|
-| node_id | unique system identifier issued by Core |
-| node_name | human-readable node name |
-| node_type | must be `ai-node` |
-| paired_core_id | identifier of the Core instance |
-| core_api_url | Core API base URL |
-| node_token | authentication token issued by Core |
-| mqtt_username | operational MQTT username |
-| mqtt_password | operational MQTT password |
-| baseline_policy | initial policy configuration |
-| bootstrap_host | MQTT host used during discovery |
-| registration_timestamp | time the node was approved |
+| --- | --- |
+| `node_id` | Unique system identifier issued by Core |
+| `node_name` | Human-readable node name |
+| `node_type` | Must be `ai-node` |
+| `paired_core_id` | Paired Core identifier |
+| `core_api_endpoint` | Core API endpoint used post-trust |
+| `node_trust_token` | Trusted node auth token |
+| `initial_baseline_policy` | Initial baseline policy object |
+| `baseline_policy_version` | Baseline policy version marker |
+| `operational_mqtt_identity` | Trusted MQTT identity |
+| `operational_mqtt_token` | Trusted MQTT token |
+| `operational_mqtt_host` | Trusted MQTT host |
+| `operational_mqtt_port` | Trusted MQTT port |
+| `bootstrap_mqtt_host` | Bootstrap host used during onboarding |
+| `registration_timestamp` | Time trust activation was accepted |
 
----
-
-# Example Stored Trust State
-
-Example JSON representation:
+## Example Stored Trust State
 
 ```json
 {
@@ -59,123 +47,59 @@ Example JSON representation:
   "node_name": "main-ai-node",
   "node_type": "ai-node",
   "paired_core_id": "core-main",
-  "core_api_url": "http://192.168.1.50:9001",
-  "node_token": "REDACTED",
-  "mqtt_username": "main-ai-node",
-  "mqtt_password": "REDACTED",
-  "baseline_policy": {},
-  "bootstrap_host": "192.168.1.10",
+  "core_api_endpoint": "http://192.168.1.50:9001",
+  "node_trust_token": "REDACTED",
+  "initial_baseline_policy": {
+    "policy_version": "v1"
+  },
+  "baseline_policy_version": "v1",
+  "operational_mqtt_identity": "main-ai-node",
+  "operational_mqtt_token": "REDACTED",
+  "operational_mqtt_host": "192.168.1.50",
+  "operational_mqtt_port": 1883,
+  "bootstrap_mqtt_host": "192.168.1.10",
   "registration_timestamp": "2026-03-11T18:21:00Z"
 }
-````
-
-The exact storage format may vary, but the required fields must be preserved.
-
----
-
-# Sensitive Data Handling
-
-The following fields are **sensitive credentials**:
-
-* `node_token`
-* `mqtt_password`
-
-These values must never:
-
-* be printed in logs
-* appear in telemetry
-* appear in error messages
-* be exposed through debug APIs
-
-Nodes should treat these values as secrets.
-
----
-
-# Restart Behavior
-
-When the AI Node starts, it must check whether a trust state exists.
-
-## If trust state exists
-
-The node must:
-
-1. skip bootstrap discovery
-2. load stored configuration
-3. authenticate with Core using the stored token
-4. reconnect to operational MQTT
-5. transition lifecycle state to **operational**
-
-Bootstrap must **not** be repeated.
-
----
-
-## If trust state does not exist
-
-The node must begin the onboarding process:
-
-```
-bootstrap discovery → registration → approval → trust activation
 ```
 
----
+## Sensitive Data Handling
 
-# Trust State Corruption
+Sensitive fields include:
 
-If the trust state is missing required fields or fails validation:
+- `node_trust_token`
+- `operational_mqtt_token`
 
-The node must treat it as **invalid**.
+These values must never be logged, emitted in telemetry, or exposed in debug output.
 
-Behavior:
+## Restart Behavior
 
-1. discard corrupted trust state
-2. log error
-3. restart onboarding process
+If trust state exists:
 
-Nodes must not attempt partial trust recovery.
+1. Skip bootstrap discovery.
+2. Load stored trust data.
+3. Reconnect via trusted API/MQTT context.
+4. Transition from `trusted` to `capability_setup_pending` and then `operational` when readiness criteria are met.
 
----
+If trust state is missing:
 
-# Trust State Location
+- run onboarding: bootstrap -> registration -> approval -> trust activation
 
-The trust state file should be stored in a predictable location.
+## Trust State Corruption
 
-Example:
+If required fields are missing/invalid:
 
-```
-/var/lib/synthia/ai-node/trust.json
-```
+1. Treat state as invalid.
+2. Log non-sensitive validation error.
+3. Restart onboarding from unconfigured bootstrap flow.
 
-or
+## Trust Reset
 
-```
-data/ai-node/trust.json
-```
+If trust state is deleted, node becomes untrusted and must onboard again.
 
-The exact location may vary depending on the runtime environment.
+## See Also
 
----
-
-# Trust Reset
-
-If the trust state file is deleted, the node becomes **untrusted** again.
-
-The node must return to bootstrap discovery.
-
-This allows operators to force a node to re-register.
-
----
-
-# Security Principles
-
-Trust state establishes the node as a **trusted system component**.
-
-Therefore:
-
-* trust state must persist securely
-* secrets must never leak
-* only approved nodes may obtain credentials
-
-Trust state is the foundation of the node's identity within Synthia.
-
-Loss of trust state means loss of identity.
-
+- [AI Node Architecture](../ai-node-architecture.md)
+- [Phase 1 Overview](../phase1-overview.md)
+- [Registration Flow](./registration-flow.md)
+- [Lifecycle States](./lifecycle-states.md)
+- [Security Boundaries](./security-boundaries.md)

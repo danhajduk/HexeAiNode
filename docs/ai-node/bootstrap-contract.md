@@ -1,5 +1,9 @@
 # Synthia AI Node — Bootstrap Contract
 
+Status: Planned
+Implementation status: Not developed
+Last updated: 2026-03-11
+
 ## Purpose
 
 The bootstrap contract defines how an untrusted AI Node discovers Synthia Core.
@@ -9,7 +13,7 @@ Bootstrap exists only for:
 - Core discovery
 - registration metadata delivery
 
-Bootstrap does **not** exist for:
+Bootstrap does not exist for:
 
 - control messages
 - telemetry
@@ -20,217 +24,155 @@ Bootstrap does **not** exist for:
 
 Bootstrap is intentionally narrow.
 
----
+## Bootstrap Connection Rules
 
-# Bootstrap Connection Rules
+An unregistered AI Node connects to the bootstrap broker using fixed rules:
 
-An unregistered AI Node connects to the bootstrap broker using the following fixed rules:
+- `host`: operator provided
+- `port`: `1884`
+- `authentication`: anonymous
+- `client identity`: node name
 
-- **host**: user provided
-- **port**: `1884`
-- **authentication**: anonymous
-- **client identity**: node name
+Node name is bootstrap identity only. It is not a trusted credential.
 
-The node name is used only as the node’s bootstrap identity.
-
-It is **not** a trusted credential.
-
----
-
-# Bootstrap Topic
+## Bootstrap Topic
 
 The node must subscribe to this exact topic:
 
 ```text
-synthia/bootstrap
-````
+synthia/bootstrap/core
+```
 
 Rules:
 
-* exact topic only
-* wildcard subscribe is not allowed
-* nodes must not publish to bootstrap
-* nodes must treat bootstrap as read-only
+- exact topic only
+- wildcard subscribe is not allowed
+- nodes must not publish to bootstrap
+- nodes must treat bootstrap as read-only
 
----
+## Core Bootstrap Publisher Role
 
-# Core Bootstrap Publisher Role
+Core publishes the bootstrap advertisement. Only Core should publish on the bootstrap topic.
 
-Core is responsible for publishing the bootstrap advertisement.
+Core should publish periodically so newly started nodes can discover Core without restart coupling.
 
-Only Core should publish on the bootstrap topic.
+## Bootstrap Payload
 
-Core should publish the bootstrap payload periodically so newly started nodes can discover the system without requiring a Core restart.
-
-Bootstrap publication should be treated as a standing discovery beacon.
-
----
-
-# Bootstrap Payload
-
-The bootstrap payload must contain only the information needed for a node to begin registration.
+The bootstrap payload must contain only data required to begin API onboarding.
 
 Required fields:
 
-* `core_id`
-* `core_api_url`
-* `registration_endpoint`
-* `protocol_version`
-* `registration_open`
+- `topic`
+- `bootstrap_version`
+- `core_id`
+- `core_name`
+- `core_version`
+- `api_base`
+- `mqtt_host`
+- `mqtt_port`
+- `onboarding_endpoints.register`
+- `onboarding_mode`
+- `emitted_at`
 
 Example payload:
 
 ```json
 {
+  "topic": "synthia/bootstrap/core",
+  "bootstrap_version": 1,
   "core_id": "core-main",
-  "core_api_url": "http://192.168.1.50:9001",
-  "registration_endpoint": "/api/nodes/register",
-  "protocol_version": 1,
-  "registration_open": true
+  "core_name": "Synthia Core",
+  "core_version": "1.0.0",
+  "api_base": "http://192.168.1.50:9001",
+  "mqtt_host": "192.168.1.50",
+  "mqtt_port": 1884,
+  "onboarding_endpoints": {
+    "register": "/api/nodes/register"
+  },
+  "onboarding_mode": "api",
+  "emitted_at": "2026-03-11T18:21:00Z"
 }
 ```
 
----
-
-# Payload Requirements
+## Payload Requirements
 
 Bootstrap payloads must be:
 
-* minimal
-* non-sensitive
-* easy to validate
-* stable enough for first-time onboarding
+- minimal
+- non-sensitive
+- easy to validate
+- stable enough for first-time onboarding
 
-Bootstrap payloads must **not** include:
+Bootstrap payloads must not include:
 
-* node tokens
-* MQTT passwords
-* API secrets
-* baseline policy
-* prompt rules
-* telemetry credentials
-* any trusted operational identity material
+- node tokens
+- MQTT passwords
+- API secrets
+- baseline policy
+- prompt rules
+- telemetry credentials
+- trusted operational identity material
 
-If any such data appears in bootstrap, that is a design violation.
+## Node Validation Rules
 
----
+When a node receives bootstrap payload it must validate:
 
-# Node Validation Rules
+- payload is valid JSON
+- all required fields are present
+- `topic == "synthia/bootstrap/core"`
+- `bootstrap_version` is supported
+- `onboarding_mode == "api"`
+- `api_base` is non-empty
+- `onboarding_endpoints.register` is non-empty
 
-When a node receives a bootstrap payload, it must validate:
+If validation fails, node must ignore the message and continue listening.
 
-* payload is valid JSON or valid expected message format
-* all required fields are present
-* `registration_open` is true
-* `protocol_version` is supported
-* `core_api_url` is non-empty
-* `registration_endpoint` is non-empty
+## Bootstrap Freshness
 
-If validation fails, the node must ignore the message and continue listening.
+Bootstrap messages are ephemeral discovery signals.
 
-The node must not partially trust malformed bootstrap data.
+Node must not treat bootstrap as durable trust state. Durable trust begins only after successful registration, approval, and trust activation.
 
----
+## Node Behavior Summary
 
-# Protocol Version Handling
+An untrusted node sequence:
 
-The bootstrap payload must include a protocol version so the node can determine whether it understands the advertised registration flow.
-
-If the protocol version is unsupported, the node must:
-
-* reject that bootstrap message
-* log the mismatch
-* remain in bootstrap listening state
-
----
-
-# Registration Closed Behavior
-
-If the payload indicates:
-
-```text
-registration_open = false
-```
-
-the node must not attempt registration.
-
-It may:
-
-* remain subscribed
-* wait for a later valid message
-* surface status that registration is currently closed
-
----
-
-# Bootstrap Freshness
-
-Bootstrap messages should be treated as ephemeral discovery signals.
-
-The node should not permanently trust bootstrap data without successful API registration.
-
-Bootstrap data may be cached briefly for convenience during onboarding, but it must not be treated as durable trust state.
-
-Durable trust begins only after successful registration and approval.
-
----
-
-# Node Behavior Summary
-
-An untrusted node must perform the following sequence:
-
-1. connect anonymously to the user-provided MQTT host on port `1884`
-2. subscribe to `synthia/bootstrap`
-3. wait for a valid Core bootstrap payload
-4. validate payload contents
-5. begin registration over API
+1. Connect anonymously to operator-provided MQTT host on port `1884`.
+2. Subscribe to `synthia/bootstrap/core`.
+3. Wait for valid Core bootstrap payload.
+4. Validate payload fields and constraints.
+5. Build registration URL from `api_base` + `onboarding_endpoints.register`.
+6. Begin registration over API.
 
 The node must never:
 
-* publish on bootstrap
-* send telemetry on bootstrap
-* use bootstrap as an operational message bus
-* accept secrets from bootstrap
+- publish on bootstrap
+- send telemetry on bootstrap
+- use bootstrap as operational message bus
+- accept secrets from bootstrap
 
----
+## Security Boundary
 
-# Security Boundary
+Bootstrap is discovery-only and must remain separate from trusted operational channels.
 
-Bootstrap is a **discovery-only lane**.
+Allowed on bootstrap:
 
-This boundary must remain strict:
+- Core identity and version context
+- API base and onboarding endpoint metadata
+- onboarding mode and compatibility metadata
 
-## Allowed on bootstrap
+Not allowed on bootstrap:
 
-* Core presence
-* Core API location
-* registration endpoint
-* protocol version
-* registration-open state
+- secrets
+- node auth material
+- operational credentials
+- telemetry
+- control actions
+- policy bundles
 
-## Not allowed on bootstrap
+## See Also
 
-* secrets
-* node-auth material
-* operational credentials
-* telemetry
-* control actions
-* policy bundles
-
-This separation is mandatory for Phase 1.
-
----
-
-# Phase 1 Implementation Notes
-
-For Phase 1, bootstrap should remain as simple as possible.
-
-Do not add:
-
-* bidirectional bootstrap messaging
-* bootstrap publish acknowledgements from node
-* secret exchange
-* control commands
-* remote procedure calls
-
-Bootstrap must remain a one-way Core-to-node discovery mechanism.
-
+- [AI Node Architecture](../ai-node-architecture.md)
+- [Phase 1 Overview](../phase1-overview.md)
+- [Registration Flow](./registration-flow.md)
+- [Security Boundaries](./security-boundaries.md)

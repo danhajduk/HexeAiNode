@@ -1,0 +1,358 @@
+Workflow skill: $synthia-workflow 
+(/home/dan/.codex/skills/synthia-workflow/SKILL.md)
+
+## Codex Execution Directive
+
+You are acting as the Synthia development agent.
+
+Your job is to implement tasks listed in this file sequentially.
+
+Rules:
+
+1. Work through tasks in numerical order.
+2. Continue executing tasks until ALL tasks are completed.
+3. Do not stop after partial implementation.
+4. Do not return summaries unless every task is finished.
+5. If a task cannot be completed:
+   - document the blocker
+   - implement everything else that is possible
+   - continue to the next task.
+
+Execution behavior:
+
+- Read the repository before modifying code.
+- Follow existing architecture and coding conventions.
+- Update or create files as required.
+- Run tests or validation where possible.
+- Commit after each completed task.
+
+Completion criteria:
+
+A task is considered complete only when:
+- implementation exists in the codebase
+- it compiles or runs without breaking existing features
+- any required documentation is updated
+
+Persistence rule:
+
+Continue working autonomously until all tasks in this document are completed.
+Do not stop early.
+
+Do not edit above this line:
+#######################################################################
+
+[TODO] Task 040: Phase 1A — Create implementation plan and module/file map
+  - Define the exact Phase 1 implementation scope:
+    - bootstrap discovery
+    - registration
+    - operator approval wait
+    - trust activation
+    - local trust persistence
+    - lifecycle states
+    - basic status telemetry
+  - Create a short implementation note and initial file/module map for the AI Node.
+  - Link implementation planning to the aligned docs in `docs/ai-node/`.
+
+  * Comments, descriptions, rules:
+    - Phase 1 implementation begins only after mismatch resolution is complete.
+    - Do not include provider config, prompt handling, capability declaration, or AI execution here.
+    - This task is the implementation anchor for Codex.
+
+
+[TODO] Task 041: Phase 1A — Implement bootstrap configuration handling
+  - Implement first-time setup configuration for:
+    - bootstrap MQTT host
+    - node name
+  - Hardcode bootstrap defaults:
+    - port `1884`
+    - anonymous access
+    - topic `synthia/bootstrap/core`
+  - Add validation for required inputs.
+
+  * Comments, descriptions, rules:
+    - No username/password config for bootstrap.
+    - Node name is the bootstrap identity, not a trusted credential.
+    - Keep configuration minimal and deterministic.
+
+
+[TODO] Task 042: Phase 1A — Implement node lifecycle state model
+  - Implement the lifecycle state enum/model using the canonical architecture states.
+  - Include state transition helpers and state logging hooks.
+  - Ensure the node can represent at minimum:
+    - `unconfigured`
+    - `bootstrap_connecting`
+    - `bootstrap_connected`
+    - `core_discovered`
+    - `registration_pending`
+    - `pending_approval`
+    - `trusted`
+    - `capability_setup_pending`
+    - `operational`
+    - `degraded`
+
+  * Comments, descriptions, rules:
+    - Use the aligned canonical state names.
+    - Every transition should be observable in logs.
+    - Do not add future provider/runtime-specific states yet.
+
+
+[TODO] Task 043: Phase 1A — Implement bootstrap MQTT connection client
+  - Connect to bootstrap MQTT using:
+    - host = user input
+    - port = `1884`
+    - anonymous access
+    - client ID = node name
+  - Add reconnect behavior with bounded retry/backoff.
+  - Transition state appropriately on success/failure.
+
+  * Comments, descriptions, rules:
+    - Bootstrap connection is node-read-only.
+    - Do not publish any message on bootstrap.
+    - Do not mix trusted operational MQTT behavior into this module.
+
+
+[TODO] Task 044: Phase 1A — Implement bootstrap topic subscription and payload parsing
+  - Subscribe to the exact topic:
+    - `synthia/bootstrap/core`
+  - Parse the bootstrap payload emitted by Core.
+  - Reject wildcard usage and ignore malformed payloads.
+
+  * Comments, descriptions, rules:
+    - Topic match must be exact.
+    - Core publishes; node only subscribes.
+    - Payload parsing must align exactly with the documented bootstrap contract.
+
+
+[TODO] Task 045: Phase 1A — Implement bootstrap payload validation
+  - Validate required bootstrap fields:
+    - `topic`
+    - `bootstrap_version`
+    - `core_id`
+    - `core_name`
+    - `core_version`
+    - `api_base`
+    - `mqtt_host`
+    - `mqtt_port`
+    - `onboarding_endpoints.register`
+    - `onboarding_mode`
+    - `emitted_at`
+  - Require:
+    - `topic == "synthia/bootstrap/core"`
+    - supported `bootstrap_version`
+    - `onboarding_mode == "api"`
+
+  * Comments, descriptions, rules:
+    - Invalid bootstrap payloads must be ignored, not partially trusted.
+    - Bootstrap data is discovery-only, never durable trust state.
+    - Be careful with URL composition from `api_base` and `onboarding_endpoints.register`.
+
+
+[STOP HERE]
+
+
+[TODO] Task 046: Phase 1B — Implement registration request client
+  - Build the Core registration API client using the validated bootstrap payload.
+  - Construct the registration URL using:
+    - `api_base`
+    - `onboarding_endpoints.register`
+  - Send registration request with:
+    - `node_name`
+    - `node_type = "ai-node"`
+    - `node_software_version`
+    - `protocol_version`
+    - optional `hostname`
+  - Transition state to `registration_pending`.
+
+  * Comments, descriptions, rules:
+    - Registration must be HTTP API only.
+    - Avoid double-prefixing `/api` when building the final URL.
+    - Core must already understand the `ai-node` class.
+
+
+[TODO] Task 047: Phase 1B — Implement pending approval handling
+  - Handle the Core response when registration enters pending approval.
+  - Read and display/store:
+    - approval URL or equivalent approval metadata
+    - pending status
+  - Implement approval wait logic via polling or status-check flow.
+  - Transition state to `pending_approval`.
+
+  * Comments, descriptions, rules:
+    - Do not repeatedly resubmit registration while waiting.
+    - Approval occurs in Core UI after operator authentication.
+    - This is a normal waiting state, not an error state.
+
+
+[TODO] Task 048: Phase 1B — Implement approval result handling
+  - Handle final approval or rejection response from Core.
+  - Support:
+    - approved
+    - rejected
+  - On rejection:
+    - stop onboarding
+    - surface clear status/error
+  - On approval:
+    - continue to trust activation parsing
+
+  * Comments, descriptions, rules:
+    - No trust material is valid before explicit approval.
+    - Rejected nodes must not continue onboarding.
+    - Keep success and rejection flows sharply separated.
+
+
+[STOP HERE]
+
+
+[TODO] Task 049: Phase 1C — Implement trust activation payload parsing
+  - Parse the approved trust activation payload.
+  - Require and validate:
+    - `node_id`
+    - `paired_core_id`
+    - `node_trust_token`
+    - `initial_baseline_policy`
+    - `operational_mqtt_identity`
+    - `operational_mqtt_token`
+    - `operational_mqtt_host`
+    - `operational_mqtt_port`
+  - Reject incomplete or malformed trusted payloads.
+
+  * Comments, descriptions, rules:
+    - This is the first trusted payload.
+    - Treat tokens and identities as sensitive immediately.
+    - Use the exact canonical schema from the aligned docs.
+
+
+[TODO] Task 050: Phase 1C — Implement trust-state persistence layer
+  - Persist the canonical trust-state fields locally:
+    - `node_id`
+    - `node_name`
+    - `node_type`
+    - `paired_core_id`
+    - `core_api_endpoint`
+    - `node_trust_token`
+    - `initial_baseline_policy`
+    - `baseline_policy_version`
+    - `operational_mqtt_identity`
+    - `operational_mqtt_token`
+    - `operational_mqtt_host`
+    - `operational_mqtt_port`
+    - `bootstrap_mqtt_host`
+    - `registration_timestamp`
+  - Add load/save/validate helpers.
+
+  * Comments, descriptions, rules:
+    - Persisted trust state must survive restart.
+    - Tokens/secrets must never be logged.
+    - Corrupted trust state must force a fresh onboarding path.
+
+
+[TODO] Task 051: Phase 1C — Implement trusted startup path
+  - On startup, check for valid persisted trust state.
+  - If valid trust state exists:
+    - skip bootstrap
+    - restore trusted identity
+    - move to `trusted` / `capability_setup_pending`
+  - If trust state is missing or invalid:
+    - begin bootstrap onboarding again
+
+  * Comments, descriptions, rules:
+    - Previously paired node should not re-onboard on every restart.
+    - Bootstrap is for untrusted nodes only.
+    - Do not implement capability declaration yet; just stop at the proper handoff state.
+
+
+[TODO] Task 052: Phase 1C — Implement operational MQTT credential handoff preparation
+  - Store and prepare the Core-issued operational MQTT identity/token and connection info.
+  - Define the handoff boundary between:
+    - anonymous bootstrap MQTT
+    - trusted operational MQTT
+  - Ensure the node is ready to use trusted MQTT in later phases.
+
+  * Comments, descriptions, rules:
+    - Bootstrap and operational MQTT must remain strictly separate.
+    - Phase 1 only needs readiness and storage, not full trusted MQTT feature implementation.
+    - Do not let bootstrap become the operational bus.
+
+
+[STOP HERE]
+
+
+[TODO] Task 053: Phase 1D — Implement basic node status telemetry/events
+  - Emit minimal Phase 1 node status events for:
+    - bootstrap connected
+    - core discovered
+    - registration pending
+    - pending approval
+    - trusted
+    - capability setup pending
+    - degraded
+  - Route these over the proper trusted channel or internal status surface.
+
+  * Comments, descriptions, rules:
+    - Do not send telemetry over bootstrap MQTT.
+    - Phase 1 telemetry is operational-status only, not AI workload telemetry.
+    - Keep status payloads small and safe.
+
+
+[TODO] Task 054: Phase 1D — Implement reconnect and degraded behavior
+  - Add reconnect logic for:
+    - bootstrap connection failures
+    - temporary Core/API outage after trust
+  - Move node to `degraded` when appropriate.
+  - Restore to the proper state when connectivity returns.
+
+  * Comments, descriptions, rules:
+    - Degraded does not mean untrusted.
+    - Node should prefer its previously paired Core after trust.
+    - Keep retry logic bounded and observable.
+
+
+[TODO] Task 055: Phase 1D — Enforce Phase 1 security boundaries in code
+  - Enforce the documented rules:
+    - node never publishes on bootstrap
+    - bootstrap payload cannot inject trusted secrets into persistent state
+    - approval is mandatory before trust activation
+    - secrets are redacted in logs/errors
+  - Add explicit guardrails around malformed or dangerous flows.
+
+  * Comments, descriptions, rules:
+    - This task prevents architectural drift during implementation.
+    - Bootstrap must remain discovery-only.
+    - No secret leakage in logs, telemetry, or debug output.
+
+
+[TODO] Task 056: Phase 1D — Add logging and diagnostics for onboarding flow
+  - Add structured logs for:
+    - state transitions
+    - bootstrap connect/disconnect
+    - payload validation
+    - registration attempts
+    - approval waiting
+    - trust persistence load/save
+  - Make logs useful for troubleshooting onboarding failures.
+
+  * Comments, descriptions, rules:
+    - Logs must redact sensitive values.
+    - Prefer concise state-based logs over noisy chatter.
+    - This task exists to make Phase 1 supportable.
+
+
+[TODO] Task 057: Phase 1D — Create Phase 1 test checklist and validation pass
+  - Create a manual/integration test checklist covering:
+    - first-time bootstrap success
+    - malformed bootstrap ignored
+    - registration pending approval
+    - approval accepted
+    - approval rejected
+    - trust state persisted
+    - reboot with valid trust state
+    - Core/API temporary outage after trust
+  - Verify expected lifecycle transitions for each case.
+
+  * Comments, descriptions, rules:
+    - This is the final validation gate for Phase 1.
+    - Keep tests aligned with the corrected docs.
+    - Do not begin Phase 2 until Phase 1 onboarding is stable and repeatable.
+
+
+[STOP HERE]

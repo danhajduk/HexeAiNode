@@ -1,218 +1,119 @@
 # Synthia AI Node — Security Boundaries (Phase 1)
 
+Status: Planned
+Implementation status: Not developed
+Last updated: 2026-03-11
+
 ## Purpose
 
-This document defines the security boundaries for AI Node onboarding during Phase 1.
+This document defines Phase 1 security boundaries for AI Node onboarding.
 
-The goal is to ensure that:
+## Trust Model
 
-- untrusted nodes cannot gain access without approval
-- secrets are never exposed through bootstrap
-- Core remains the authority for trust decisions
-- onboarding remains secure and predictable
-
-These boundaries must be respected by both the AI Node implementation and Synthia Core.
-
----
-
-# Trust Model
-
-The AI Node begins with **zero trust**.
+AI Node starts with zero trust.
 
 Trust is granted only after:
 
 1. bootstrap discovery
-2. successful registration request
-3. explicit operator approval
-4. trust activation payload from Core
+2. registration request
+3. explicit operator approval in Core UI
+4. trust activation payload acceptance
 
-Until approval occurs, the node must remain untrusted.
+## Bootstrap Security Boundary
 
----
+Bootstrap MQTT on port `1884` is discovery-only.
 
-# Bootstrap Security Boundary
+Allowed function:
 
-Bootstrap MQTT (port `1884`) is a **discovery-only channel**.
+- discover Core and onboarding metadata
 
-Bootstrap exists only so a node can discover where Core is located.
-
-Bootstrap must never be used for:
+Not allowed:
 
 - control commands
-- authentication
-- policy distribution
-- credential exchange
 - telemetry
-- operational communication
-
-Bootstrap is intentionally limited.
-
----
-
-# Bootstrap Allowed Data
-
-Bootstrap messages may contain:
-
-| Field | Description |
-|------|-------------|
-| core_id | identifier of the Core instance |
-| core_api_url | API endpoint location |
-| registration_endpoint | endpoint for node registration |
-| protocol_version | bootstrap protocol version |
-| registration_open | indicates whether Core is accepting registrations |
-
-These values are considered safe discovery metadata.
-
----
-
-# Bootstrap Forbidden Data
-
-Bootstrap messages must **never contain**:
-
-- API tokens
-- node tokens
-- MQTT passwords
 - authentication credentials
-- baseline policies
-- prompt definitions
-- budget rules
+- policy distribution
+- operational messaging
+
+## Bootstrap Topic and Allowed Contract
+
+Exact topic:
+
+```text
+synthia/bootstrap/core
+```
+
+Allowed payload fields:
+
+- `topic`
+- `bootstrap_version`
+- `core_id`
+- `core_name`
+- `core_version`
+- `api_base`
+- `mqtt_host`
+- `mqtt_port`
+- `onboarding_endpoints.register`
+- `onboarding_mode`
+- `emitted_at`
+
+Validation constraints:
+
+- `topic == "synthia/bootstrap/core"`
+- `bootstrap_version` is supported
+- `onboarding_mode == "api"`
+
+## Bootstrap Forbidden Data
+
+Bootstrap must never include:
+
+- `node_trust_token`
+- `operational_mqtt_token`
+- operational credential bundles
+- baseline policy payloads
+- telemetry payloads
 - control-plane commands
-- telemetry endpoints
 
-If secrets appear on bootstrap, the design is considered broken.
+## Anonymous MQTT Restrictions
 
----
+Because bootstrap is anonymous:
 
-# Anonymous MQTT Restrictions
+- node may connect anonymously
+- node may subscribe to exact bootstrap topic
+- node must not publish to bootstrap
+- node must not subscribe wildcard bootstrap topics
 
-Bootstrap MQTT allows **anonymous connections**.
+## Credential Issuance Boundary
 
-Because of this, strict rules apply:
+Credentials are issued only after approval via trusted API response.
 
-Nodes may:
+Canonical trust material:
 
-- connect anonymously
-- subscribe to the bootstrap topic
+- `node_trust_token`
+- `operational_mqtt_identity`
+- `operational_mqtt_token`
+- `operational_mqtt_host`
+- `operational_mqtt_port`
+- `initial_baseline_policy`
 
-Nodes must not:
-
-- publish to bootstrap topics
-- subscribe to wildcard topics
-- send telemetry
-- send registration data
-
-Bootstrap is strictly **Core → Node discovery**.
-
----
-
-# Operator Approval Requirement
-
-Every AI Node must be explicitly approved by an operator.
-
-Nodes must not automatically become trusted.
-
-Approval must occur in the Core UI.
-
-Example approval screen:
-
-```
-
-New AI Node Registration
-
-Node Name: main-ai-node
-Node Type: ai-node
-Hostname: ai-server
-
-[Approve]   [Reject]
-
-```
-
-This step prevents rogue infrastructure nodes.
-
----
-
-# Credential Issuance
-
-Credentials must only be issued **after approval**.
-
-Credentials include:
-
-- node_token
-- MQTT operational credentials
-- baseline policy
-
-These credentials must never appear in bootstrap messages.
-
-They must only be delivered via secure API response.
-
----
-
-# Channel Separation
-
-Synthia must maintain strict separation between communication channels.
+## Channel Separation
 
 | Channel | Purpose |
-|------|------|
-| bootstrap MQTT | discovery only |
-| HTTP API | registration and control plane |
-| operational MQTT | trusted system communication |
+| --- | --- |
+| bootstrap MQTT | anonymous discovery only |
+| HTTP API | registration/approval/trust control plane |
+| operational MQTT | trusted runtime communication |
 
-Bootstrap must never evolve into a control channel.
+## Logging Safety
 
----
+Never log sensitive trusted fields.
 
-# Logging Safety
+Use redaction in logs and diagnostics.
 
-Nodes must never log sensitive credentials.
+## See Also
 
-Sensitive fields include:
-
-- node_token
-- mqtt_password
-- policy contents
-- authentication headers
-
-Logs must redact sensitive values.
-
-Example:
-
-```
-
-node_token=REDACTED
-mqtt_password=REDACTED
-
-```
-
----
-
-# Trust Revocation (Future)
-
-Future phases will introduce trust revocation.
-
-Core may eventually be able to:
-
-- revoke node credentials
-- disable compromised nodes
-- rotate authentication tokens
-
-Phase 1 does not implement revocation yet.
-
----
-
-# Phase 1 Security Principles
-
-Phase 1 follows four core principles:
-
-### Minimal Trust
-Nodes start with zero trust.
-
-### Explicit Approval
-Operators must approve every node.
-
-### Discovery Isolation
-Bootstrap remains discovery-only.
-
-### Secret Containment
-Secrets are delivered only after approval through secure channels.
-
-These rules protect the Synthia infrastructure from unauthorized nodes.
+- [AI Node Architecture](../ai-node-architecture.md)
+- [Phase 1 Overview](../phase1-overview.md)
+- [Bootstrap Contract](./bootstrap-contract.md)
+- [Registration Flow](./registration-flow.md)
+- [Trust State](./trust-state.md)

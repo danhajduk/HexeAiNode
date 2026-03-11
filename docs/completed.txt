@@ -27,3 +27,13 @@ Task 026: Create a phased architecture roadmap section - Completed on 03/11/2026
 Task 027: Normalize AI Node task queue filename to `docs/New_tasks.txt` - Completed on 03/11/2026 08:50
 Task 028: Convert AI Node task queue file to task-entries-only format - Completed on 03/11/2026 08:50
 Task 029: Complete Phase 1 system diagram and add status/cross-link updates across AI Node docs - Completed on 03/11/2026 08:50
+Task 030: Audit AI Node split docs against the golden baseline and actual bootstrap payload - Completed on 03/11/2026 09:29
+Task 031: Fix bootstrap topic and payload contract in split docs - Completed on 03/11/2026 09:29
+Task 032: Fix registration request schema mismatch in split docs - Completed on 03/11/2026 09:29
+Task 033: Fix trust activation payload schema mismatch in split docs - Completed on 03/11/2026 09:29
+Task 034: Fix persisted trust-state schema mismatch in split docs - Completed on 03/11/2026 09:29
+Task 035: Fix lifecycle state drift and restore canonical state model - Completed on 03/11/2026 09:29
+Task 036: Add required document status metadata to all split docs - Completed on 03/11/2026 09:29
+Task 037: Add cross-links and “See also” navigation to all split docs - Completed on 03/11/2026 09:29
+Task 038: Fix markdown fence and formatting defects in split docs - Completed on 03/11/2026 09:29
+Task 039: Regenerate mismatch report and verify zero contradictory findings - Completed on 03/11/2026 09:29

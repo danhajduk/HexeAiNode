@@ -1,148 +1,78 @@
 # Synthia AI Node — Phase 1 Overview
 
+Status: Planned
+Implementation status: Not developed
+Last updated: 2026-03-11
+
 ## Purpose
 
-Phase 1 establishes **AI Node onboarding into the Synthia system**.
+Phase 1 establishes AI Node onboarding into Synthia.
 
-This phase focuses only on:
+Phase 1 covers:
 
-- discovering Synthia Core
-- registering the AI Node
+- bootstrap discovery
+- node registration with Core
 - operator approval
 - trust activation
-- storing node identity and credentials
+- local trust-state persistence
+- lifecycle status publication
 
-Phase 1 **does not implement any AI functionality**.
+Phase 1 excludes AI execution and provider runtime features.
 
-No providers, prompts, or AI execution exist in this phase.
+## Phase 1 Responsibilities
 
----
+1. Node bootstrap discovery via MQTT.
+2. Node registration with Core API.
+3. Operator approval in Core UI.
+4. Trust activation payload acceptance.
+5. Canonical trust-state persistence.
+6. Lifecycle progression through trusted-to-operational handoff.
 
-# Phase 1 Responsibilities
+## Bootstrap Contract Snapshot
 
-Phase 1 must implement the following:
+- Topic: `synthia/bootstrap/core`
+- Port: `1884`
+- Access: anonymous, subscribe-only
+- Required payload fields:
+  - `topic`
+  - `bootstrap_version`
+  - `core_id`
+  - `core_name`
+  - `core_version`
+  - `api_base`
+  - `mqtt_host`
+  - `mqtt_port`
+  - `onboarding_endpoints.register`
+  - `onboarding_mode`
+  - `emitted_at`
 
-1. Node bootstrap discovery via MQTT
-2. Node registration with Core
-3. Operator approval through Core UI
-4. Trust activation
-5. Local storage of node trust state
-6. Node lifecycle states
-7. Basic node status telemetry
+## Canonical Lifecycle Path
 
----
+```text
+unconfigured
+-> bootstrap_connecting
+-> bootstrap_connected
+-> core_discovered
+-> registration_pending
+-> pending_approval
+-> trusted
+-> capability_setup_pending
+-> operational
+```
 
-# Out of Scope (Future Phases)
-
-The following features **must NOT be implemented in Phase 1**:
+## Out of Scope
 
 - AI execution
-- OpenAI integration
-- prompt registration
-- provider configuration
-- capability declaration
-- runtime manager
-- model management
-- cost/budget enforcement
-- task routing
-- provider routing
-- prompt governance
-- AI budgeting
+- provider orchestration/runtime
+- prompt governance/registration
+- budget/routing features
 
-These features will be introduced in later phases.
+## See Also
 
----
-
-# Phase 1 System Flow
-
-The following sequence describes the onboarding flow.
-
-```
-
-AI Node starts
-│
-│ connect MQTT bootstrap
-▼
-Bootstrap Broker (1884)
-│
-│ receive Core bootstrap message
-▼
-Synthia Core discovered
-│
-│ send registration request
-▼
-Core creates pending node
-│
-│ operator approval required
-▼
-Operator approves node
-│
-│ trust activation payload
-▼
-Node stores trust state
-│
-▼
-Node becomes trusted
-
-```
-
----
-
-# Phase 1 Outcome
-
-After Phase 1 completes successfully the AI Node will:
-
-- be registered in Core
-- be approved by an operator
-- possess a unique node identity
-- receive a node authentication token
-- receive operational MQTT credentials
-- store trust state locally
-
-At this point the node becomes **trusted infrastructure** inside the Synthia system.
-
-The node is **not yet capable of executing AI workloads**.
-
----
-
-# Phase 1 Design Principles
-
-The following rules govern the Phase 1 implementation.
-
-### Minimal Trust
-
-The node begins with **no trust** and gains trust only after operator approval.
-
-### Explicit Operator Approval
-
-Nodes must never automatically join the system.
-
-### Bootstrap Discovery Only
-
-Bootstrap MQTT is used **only for discovery**, never for control or secrets.
-
-### Deterministic State
-
-Node lifecycle states must be explicit and logged.
-
-### Restart Persistence
-
-Trust state must survive restarts so nodes do not need to re-register every time.
-
----
-
-# Phase 1 Success Criteria
-
-Phase 1 is complete when the following behavior works:
-
-1. Node connects to bootstrap MQTT
-2. Node discovers Core
-3. Node registers through API
-4. Core marks node as pending approval
-5. Operator approves node
-6. Node receives trust activation
-7. Node stores trust state
-8. Node transitions to operational state
-
-No AI functionality should exist at this stage.
-
+- [AI Node Architecture](../ai-node-architecture.md)
+- [Phase 1 Overview (Canonical)](../phase1-overview.md)
+- [Bootstrap Contract](./bootstrap-contract.md)
+- [Registration Flow](./registration-flow.md)
+- [Trust State](./trust-state.md)
+- [Lifecycle States](./lifecycle-states.md)
+- [Security Boundaries](./security-boundaries.md)

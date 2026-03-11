@@ -1,85 +1,52 @@
 # Synthia AI Node — Registration Flow
 
+Status: Planned
+Implementation status: Not developed
+Last updated: 2026-03-11
+
 ## Purpose
 
-After discovering Synthia Core through the bootstrap mechanism, an AI Node must register itself with Core.
+After bootstrap discovery, an AI Node registers with Core through HTTP API.
 
 Registration establishes:
 
-- node identity
+- node identity request
 - operator approval workflow
-- trust activation
-- issuance of node credentials
-- baseline policy delivery
+- trust activation handoff
 
-Registration occurs **exclusively through the Core HTTP API**.
+Registration is API-only. MQTT is not used for registration transactions.
 
-MQTT must **not** be used for registration transactions.
+## Registration Sequence
 
----
-
-# Registration Sequence
-
-The node must follow this sequence:
-
-```
-
+```text
 AI Node
-│
-│ bootstrap discovery
-▼
-Receive Core bootstrap payload
-│
-│ send registration request
-▼
-Core creates pending node
-│
-│ operator approval required
-▼
-Operator approves node
-│
-│ trust activation response
-▼
-Node stores trust state
-│
-▼
-Node becomes trusted
-
+  -> receives valid bootstrap payload
+  -> calls register endpoint over HTTP API
+Core
+  -> creates pending node entry
+Operator
+  -> approves or rejects in Core UI
+Core
+  -> returns approval result and trust activation payload (if approved)
+AI Node
+  -> persists trust state and advances lifecycle
 ```
 
----
+## Registration Endpoint
 
-# Registration Endpoint
+The endpoint URL is composed from validated bootstrap fields:
 
-The node sends a registration request to the Core API.
-
-```
-
-POST /api/nodes/register
-
-```
-
-The endpoint URL is constructed from the bootstrap payload:
-
-```
-
-{core_api_url}{registration_endpoint}
-
+```text
+{api_base}{onboarding_endpoints.register}
 ```
 
 Example:
 
+```text
+http://192.168.1.50:9001/api/nodes/register
 ```
 
-[http://192.168.1.50:9001/api/nodes/register](http://192.168.1.50:9001/api/nodes/register)
-
-````
-
----
-
-# Registration Request Payload
-
-The node must send the following payload.
+## Registration Request Payload
 
 Example:
 
@@ -87,39 +54,33 @@ Example:
 {
   "node_name": "main-ai-node",
   "node_type": "ai-node",
-  "node_version": "0.1.0",
+  "node_software_version": "0.1.0",
   "protocol_version": 1,
   "hostname": "ai-server"
 }
-````
+```
 
 Fields:
 
-| Field            | Description                      |
-| ---------------- | -------------------------------- |
-| node_name        | human readable node identifier   |
-| node_type        | must be `"ai-node"`              |
-| node_version     | node software version            |
-| protocol_version | bootstrap protocol compatibility |
-| hostname         | optional host identifier         |
+| Field | Description |
+| --- | --- |
+| `node_name` | Human-readable node identifier |
+| `node_type` | Must be `"ai-node"` |
+| `node_software_version` | Node software version |
+| `protocol_version` | Registration protocol compatibility |
+| `hostname` | Optional host identifier |
 
----
+## Core Registration Handling
 
-# Core Registration Handling
+When Core receives registration request it should:
 
-When Core receives the registration request it must:
+1. Create a pending node record.
+2. Store request metadata.
+3. Require operator approval.
 
-1. create a **pending node record**
-2. store metadata
-3. require **operator approval**
+Pending registration does not imply trust.
 
-The node must not become trusted automatically.
-
----
-
-# Pending Approval Response
-
-Core should respond with a **pending approval state**.
+## Pending Approval Response
 
 Example:
 
@@ -130,53 +91,33 @@ Example:
 }
 ```
 
-Fields:
+## Node Behavior During Pending Approval
 
-| Field        | Description                    |
-| ------------ | ------------------------------ |
-| status       | registration state             |
-| approval_url | location for operator approval |
+When node receives `pending_approval` it must:
 
----
+- log/surface approval metadata
+- remain in pending approval state
+- check status via approval/status flow
+- avoid repeated registration re-submit
 
-# Node Behavior During Pending Approval
+## Operator Approval
 
-When a node receives `pending_approval`, it must:
+Operator approval is a required Core UI security control.
 
-* log the approval URL
-* remain in **pending approval state**
-* periodically check approval status
+Approved nodes continue to trust activation parsing. Rejected nodes stop onboarding.
 
-The node must **not retry registration repeatedly**.
+## Approval Trust Activation Payload
 
-Instead it should poll a status endpoint or wait for approval confirmation.
+Canonical approved payload fields:
 
----
-
-# Operator Approval
-
-An operator must approve the node in the Core UI.
-
-Example UI information:
-
-```
-Node requesting access
-
-Name: main-ai-node
-Type: ai-node
-Host: ai-server
-Version: 0.1.0
-
-[Approve]   [Reject]
-```
-
-Approval is a manual security control.
-
----
-
-# Approval Response
-
-When approved, Core returns the trust activation payload.
+- `node_id`
+- `paired_core_id`
+- `node_trust_token`
+- `initial_baseline_policy`
+- `operational_mqtt_identity`
+- `operational_mqtt_token`
+- `operational_mqtt_host`
+- `operational_mqtt_port`
 
 Example:
 
@@ -184,29 +125,19 @@ Example:
 {
   "status": "approved",
   "node_id": "node-ai-001",
-  "node_token": "REDACTED_TOKEN",
-  "baseline_policy": {},
-  "mqtt_credentials": {
-    "username": "main-ai-node",
-    "password": "REDACTED"
-  }
+  "paired_core_id": "core-main",
+  "node_trust_token": "REDACTED",
+  "initial_baseline_policy": {
+    "policy_version": "v1"
+  },
+  "operational_mqtt_identity": "main-ai-node",
+  "operational_mqtt_token": "REDACTED",
+  "operational_mqtt_host": "192.168.1.50",
+  "operational_mqtt_port": 1883
 }
 ```
 
-Fields:
-
-| Field            | Description                   |
-| ---------------- | ----------------------------- |
-| node_id          | unique system node identifier |
-| node_token       | authentication token          |
-| baseline_policy  | initial policy configuration  |
-| mqtt_credentials | operational MQTT credentials  |
-
----
-
-# Rejection Response
-
-If the operator rejects the node, Core should return:
+## Rejection Response
 
 ```json
 {
@@ -214,53 +145,19 @@ If the operator rejects the node, Core should return:
 }
 ```
 
-The node must terminate the onboarding process.
+Rejected nodes must terminate onboarding.
 
----
+## Security Principles
 
-# Node Responsibilities After Approval
+- registration is API-only
+- approval is operator-controlled
+- no trust material is valid before approval
+- bootstrap discovery alone never grants trust
 
-Once approved, the node must:
+## See Also
 
-1. store trust data locally
-2. transition lifecycle state to **trusted**
-3. connect using operational credentials
-4. begin trusted communication with Core
-
-The node must never discard or expose credentials.
-
----
-
-# Retry and Failure Handling
-
-Registration should include basic failure handling.
-
-Examples:
-
-### Core unavailable
-
-Node should retry registration after delay.
-
-### Invalid payload
-
-Node should log error and stop registration attempt.
-
-### Rejection
-
-Node should terminate onboarding.
-
----
-
-# Security Principles
-
-Registration must follow these rules:
-
-* registration is **API only**
-* approval is **operator controlled**
-* secrets are delivered **only after approval**
-* nodes start with **zero trust**
-
-Bootstrap alone must never grant trust.
-
-Trust is granted **only after successful registration and approval**.
-
+- [AI Node Architecture](../ai-node-architecture.md)
+- [Phase 1 Overview](../phase1-overview.md)
+- [Bootstrap Contract](./bootstrap-contract.md)
+- [Trust State](./trust-state.md)
+- [Lifecycle States](./lifecycle-states.md)
