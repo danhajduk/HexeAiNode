@@ -40,21 +40,6 @@ Do not stop early.
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 064: Phase 2A — Implement provider capability and enabled-provider declaration
-  - Add support for declaring:
-    - providers supported by the node software
-    - providers enabled by the operator on this node
-  - For Phase 2, define OpenAI as:
-    - supported
-    - optionally enabled
-  - Keep internal representation ready for future providers.
-
-  * Comments, descriptions, rules:
-    - Supported != enabled.
-    - Enabled != approved for all future use.
-    - This distinction must remain explicit in the manifest and code.
-
-
 [TODO] Task 065: Phase 2A — Implement node feature declaration
   - Add support for declaring node-level features separate from task families.
   - Initial features may include:

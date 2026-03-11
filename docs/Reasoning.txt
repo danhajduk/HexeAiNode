@@ -234,3 +234,10 @@ Step objective: Implement canonical functional task-family declaration support.
 Chosen fix: Added a task-family module with explicit canonical names and validation to prevent capability-name drift.
 What changed: Added src/ai_node/capabilities/task_families.py; updated src/ai_node/capabilities/__init__.py and src/ai_node/capabilities/manifest_schema.py; added tests/test_task_families.py and expanded tests/test_capability_manifest_schema.py.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_task_families tests.test_capability_manifest_schema -v` passes (7 tests).
+
+###########
+Task #064 (Phase 2)
+Step objective: Implement explicit provider capability + enabled-provider declaration model.
+Chosen fix: Added provider declaration helpers that preserve `supported != enabled`, default OpenAI support, and mapping from provider-selection config.
+What changed: Added src/ai_node/capabilities/providers.py; updated src/ai_node/capabilities/__init__.py and src/ai_node/capabilities/manifest_schema.py; added tests/test_capability_providers.py; updated docs/ai-node/phase2-implementation-plan.md.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_providers tests.test_capability_manifest_schema -v` passes (7 tests).

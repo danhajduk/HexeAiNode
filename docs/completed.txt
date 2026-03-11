@@ -71,3 +71,4 @@ Task 060 (Phase 2): Implement provider/service setup configuration model - Compl
 Task 061 (Phase 2): Implement user/provider selection step on the node - Completed on 03/11/2026 16:38
 Task 062 (Phase 2): Define capability declaration manifest model - Completed on 03/11/2026 16:41
 Task 063 (Phase 2): Implement functional task-family declaration - Completed on 03/11/2026 16:42
+Task 064 (Phase 2): Implement provider capability and enabled-provider declaration - Completed on 03/11/2026 16:44

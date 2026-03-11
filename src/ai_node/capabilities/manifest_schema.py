@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
+from ai_node.capabilities.providers import validate_provider_capabilities
 from ai_node.capabilities.task_families import validate_task_family_capabilities
 
 CAPABILITY_MANIFEST_SCHEMA_VERSION = "1.0"
@@ -85,15 +86,13 @@ def validate_capability_manifest(data: object) -> Tuple[bool, Optional[str]]:
         return False, task_family_error
     if not isinstance(providers, dict):
         return False, "invalid_providers"
+    providers_valid, providers_error = validate_provider_capabilities(providers)
+    if not providers_valid:
+        return False, providers_error
     if not isinstance(node_features, list):
         return False, "invalid_node_features"
     if not isinstance(environment_hints, dict):
         return False, "invalid_environment_hints"
-
-    supported = _normalize_string_list(providers.get("supported"))
-    enabled = _normalize_string_list(providers.get("enabled"))
-    if any(provider not in set(supported) for provider in enabled):
-        return False, "enabled_provider_not_supported"
 
     metadata = data.get("metadata")
     if not isinstance(metadata, dict):
