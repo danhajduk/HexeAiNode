@@ -1,0 +1,3 @@
+# Runtime dependencies
+# (none required yet; current Phase 1 implementation uses stdlib + adapters)
+

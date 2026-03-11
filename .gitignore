@@ -2,3 +2,5 @@ AGENTS.md
 docs/tmp_tasks.txt
 __pycache__/
 *.pyc
+.venv/
+.pytest_cache/
