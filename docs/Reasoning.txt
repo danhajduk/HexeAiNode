@@ -52,3 +52,10 @@ Step objective: Implement pending-approval handling and wait flow.
 Chosen fix: Added a dedicated pending-approval waiter that stores approval metadata, transitions lifecycle state, and polls a status endpoint.
 What changed: Added src/ai_node/registration/approval_waiter.py and tests/test_approval_waiter.py.
 Verification: Unit tests confirm transition to pending_approval, polling until approved, no re-registration calls, and timeout behavior.
+
+###########
+Task #048
+Step objective: Implement final approval result handling with explicit approved/rejected branches.
+Chosen fix: Added a final-decision handler returning approval handoff payload for approved status and raising a clear rejection error for rejected status.
+What changed: Updated src/ai_node/registration/approval_waiter.py and tests/test_approval_waiter.py with handle_final_decision and rejection error path.
+Verification: Unit tests confirm approved handoff payload behavior and rejection hard-stop behavior.

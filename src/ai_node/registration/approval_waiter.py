@@ -12,6 +12,17 @@ class PendingApprovalInfo:
     status_url: Optional[str]
 
 
+class ApprovalRejectedError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class ApprovalDecision:
+    status: str
+    trust_activation_payload: Optional[dict]
+    rejection_reason: Optional[str]
+
+
 def _require_pending_status(response: dict) -> None:
     if not isinstance(response, dict):
         raise ValueError("pending approval response must be an object")
@@ -76,3 +87,25 @@ class PendingApprovalWaiter:
             raise ValueError(f"unexpected approval status: {status}")
 
         raise TimeoutError("approval decision timed out while waiting")
+
+    def handle_final_decision(self, decision_response: dict) -> ApprovalDecision:
+        if not isinstance(decision_response, dict):
+            raise ValueError("decision response must be an object")
+
+        status = decision_response.get("status")
+        if status == "approved":
+            if hasattr(self._logger, "info"):
+                self._logger.info("[approval-decision] %s", {"status": "approved"})
+            return ApprovalDecision(
+                status="approved",
+                trust_activation_payload=decision_response,
+                rejection_reason=None,
+            )
+
+        if status == "rejected":
+            reason = decision_response.get("reason") or "approval rejected by operator"
+            if hasattr(self._logger, "error"):
+                self._logger.error("[approval-decision] %s", {"status": "rejected", "reason": reason})
+            raise ApprovalRejectedError(reason)
+
+        raise ValueError(f"unexpected final approval status: {status}")

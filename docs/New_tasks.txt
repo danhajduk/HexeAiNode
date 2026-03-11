@@ -44,23 +44,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 048: Phase 1B — Implement approval result handling
-  - Handle final approval or rejection response from Core.
-  - Support:
-    - approved
-    - rejected
-  - On rejection:
-    - stop onboarding
-    - surface clear status/error
-  - On approval:
-    - continue to trust activation parsing
-
-  * Comments, descriptions, rules:
-    - No trust material is valid before explicit approval.
-    - Rejected nodes must not continue onboarding.
-    - Keep success and rejection flows sharply separated.
-
-
 [STOP HERE]
 
 

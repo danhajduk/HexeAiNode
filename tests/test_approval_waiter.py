@@ -2,7 +2,10 @@ import logging
 import unittest
 
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
-from ai_node.registration.approval_waiter import PendingApprovalWaiter
+from ai_node.registration.approval_waiter import (
+    ApprovalRejectedError,
+    PendingApprovalWaiter,
+)
 
 
 class _FakeHttpAdapter:
@@ -118,6 +121,58 @@ class PendingApprovalWaiterTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(TimeoutError):
             await waiter.wait_for_decision(info)
+
+    async def test_handle_final_decision_approved_returns_handoff_payload(self):
+        logger = logging.getLogger("approval-waiter-test")
+        lifecycle = NodeLifecycle(logger=logger)
+        lifecycle.transition_to(NodeLifecycleState.BOOTSTRAP_CONNECTING)
+        lifecycle.transition_to(NodeLifecycleState.BOOTSTRAP_CONNECTED)
+        lifecycle.transition_to(NodeLifecycleState.CORE_DISCOVERED)
+        lifecycle.transition_to(NodeLifecycleState.REGISTRATION_PENDING)
+        lifecycle.transition_to(NodeLifecycleState.PENDING_APPROVAL)
+
+        adapter = _FakeHttpAdapter([])
+        waiter = PendingApprovalWaiter(
+            lifecycle=lifecycle,
+            http_adapter=adapter,
+            logger=logger,
+        )
+
+        decision = waiter.handle_final_decision(
+            {
+                "status": "approved",
+                "node_id": "node-ai-001",
+                "node_trust_token": "redacted-token",
+            }
+        )
+
+        self.assertEqual(decision.status, "approved")
+        self.assertIsNotNone(decision.trust_activation_payload)
+        self.assertEqual(decision.trust_activation_payload["node_id"], "node-ai-001")
+
+    async def test_handle_final_decision_rejected_stops_with_clear_error(self):
+        logger = logging.getLogger("approval-waiter-test")
+        lifecycle = NodeLifecycle(logger=logger)
+        lifecycle.transition_to(NodeLifecycleState.BOOTSTRAP_CONNECTING)
+        lifecycle.transition_to(NodeLifecycleState.BOOTSTRAP_CONNECTED)
+        lifecycle.transition_to(NodeLifecycleState.CORE_DISCOVERED)
+        lifecycle.transition_to(NodeLifecycleState.REGISTRATION_PENDING)
+        lifecycle.transition_to(NodeLifecycleState.PENDING_APPROVAL)
+
+        adapter = _FakeHttpAdapter([])
+        waiter = PendingApprovalWaiter(
+            lifecycle=lifecycle,
+            http_adapter=adapter,
+            logger=logger,
+        )
+
+        with self.assertRaisesRegex(ApprovalRejectedError, "operator denied request"):
+            waiter.handle_final_decision(
+                {
+                    "status": "rejected",
+                    "reason": "operator denied request",
+                }
+            )
 
 
 if __name__ == "__main__":
