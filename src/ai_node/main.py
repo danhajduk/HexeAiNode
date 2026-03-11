@@ -9,6 +9,7 @@ from pathlib import Path
 import uvicorn
 
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle
+from ai_node.runtime.bootstrap_mqtt_runner import BootstrapMqttRunner
 from ai_node.runtime.bootstrap_timeout import BootstrapConnectTimeoutMonitor
 from ai_node.runtime.node_control_api import NodeControlState, create_node_control_app
 
@@ -110,15 +111,18 @@ def run(
     )
     monitor_ref["monitor"] = timeout_monitor
     timeout_monitor.start()
+    bootstrap_runner = BootstrapMqttRunner(lifecycle=lifecycle, logger=LOGGER)
     control_state = NodeControlState(
         lifecycle=lifecycle,
         config_path=bootstrap_config_path,
         logger=LOGGER,
+        bootstrap_runner=bootstrap_runner,
     )
     app = create_node_control_app(state=control_state, logger=LOGGER)
     LOGGER.info("phase1 modules loaded; control API active")
 
     if once:
+        bootstrap_runner.stop()
         timeout_monitor.stop()
         LOGGER.info("run-once mode complete")
         return 0
@@ -126,6 +130,7 @@ def run(
     try:
         uvicorn.run(app, host=api_host, port=api_port, log_level="info", log_config=None)
     finally:
+        bootstrap_runner.stop()
         timeout_monitor.stop()
     LOGGER.info("backend stopped cleanly")
     return 0

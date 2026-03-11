@@ -10,10 +10,11 @@ from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 
 
 class NodeControlState:
-    def __init__(self, *, lifecycle: NodeLifecycle, config_path: str, logger) -> None:
+    def __init__(self, *, lifecycle: NodeLifecycle, config_path: str, logger, bootstrap_runner=None) -> None:
         self._lifecycle = lifecycle
         self._config_path = Path(config_path)
         self._logger = logger
+        self._bootstrap_runner = bootstrap_runner
         self._bootstrap_config = None
         self._load_existing_config()
 
@@ -28,6 +29,7 @@ class NodeControlState:
                     NodeLifecycleState.BOOTSTRAP_CONNECTING,
                     {"source": "persisted_bootstrap_config"},
                 )
+            self._start_bootstrap_runner_if_available()
         except Exception:
             if hasattr(self._logger, "warning"):
                 self._logger.warning(
@@ -40,6 +42,16 @@ class NodeControlState:
             "status": state.value,
             "bootstrap_configured": self._bootstrap_config is not None,
         }
+
+    def _start_bootstrap_runner_if_available(self) -> None:
+        if self._bootstrap_runner is None or self._bootstrap_config is None:
+            return
+        self._bootstrap_runner.start(
+            bootstrap_host=self._bootstrap_config.bootstrap_host,
+            port=self._bootstrap_config.port,
+            topic=self._bootstrap_config.topic,
+            node_name=self._bootstrap_config.node_name,
+        )
 
     def initiate_onboarding(self, *, mqtt_host: str, node_name: str) -> dict:
         if self._lifecycle.get_state() != NodeLifecycleState.UNCONFIGURED:
@@ -67,6 +79,7 @@ class NodeControlState:
             NodeLifecycleState.BOOTSTRAP_CONNECTING,
             {"source": "setup_ui"},
         )
+        self._start_bootstrap_runner_if_available()
         return self.status_payload()
 
 
