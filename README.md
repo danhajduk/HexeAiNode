@@ -22,6 +22,12 @@ PYTHONPATH=src python -m ai_node.main
 
 Backend control APIs are served via FastAPI (default: `0.0.0.0:9002` when using stack env service command).
 
+Backend file logs are written by code logger to:
+
+```text
+logs/backend.log
+```
+
 Smoke-check mode:
 
 ```bash

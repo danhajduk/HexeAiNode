@@ -3,6 +3,9 @@ import logging
 import os
 import signal
 import sys
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
 import uvicorn
 
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle
@@ -48,7 +51,29 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.environ.get("SYNTHIA_BOOTSTRAP_CONFIG_PATH", ".run/bootstrap_config.json"),
         help="Path for persisted bootstrap setup config",
     )
+    parser.add_argument(
+        "--log-file",
+        default=os.environ.get("SYNTHIA_BACKEND_LOG_PATH", "logs/backend.log"),
+        help="Backend log file path",
+    )
     return parser
+
+
+def configure_logging(log_file: str) -> None:
+    log_path = Path(log_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    file_handler = RotatingFileHandler(log_path, maxBytes=5_000_000, backupCount=5)
+    file_handler.setFormatter(formatter)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.handlers.clear()
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(stream_handler)
 
 
 def run(
@@ -58,7 +83,9 @@ def run(
     api_host: str = "127.0.0.1",
     api_port: int = 9002,
     bootstrap_config_path: str = ".run/bootstrap_config.json",
+    log_file: str = "logs/backend.log",
 ) -> int:
+    configure_logging(log_file)
     LOGGER.info("starting ai-node backend")
     lifecycle = NodeLifecycle(logger=LOGGER)
     control_state = NodeControlState(
@@ -73,16 +100,12 @@ def run(
         LOGGER.info("run-once mode complete")
         return 0
 
-    uvicorn.run(app, host=api_host, port=api_port, log_level="info")
+    uvicorn.run(app, host=api_host, port=api_port, log_level="info", log_config=None)
     LOGGER.info("backend stopped cleanly")
     return 0
 
 
 def main() -> int:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 
@@ -93,6 +116,7 @@ def main() -> int:
         api_host=args.api_host,
         api_port=args.api_port,
         bootstrap_config_path=args.bootstrap_config_path,
+        log_file=args.log_file,
     )
 
 

@@ -12,6 +12,7 @@ class MainEntrypointTests(unittest.TestCase):
                 interval_seconds=0.01,
                 api_port=0,
                 bootstrap_config_path=f"{tmp}/bootstrap_config.json",
+                log_file=f"{tmp}/backend.log",
             )
             self.assertEqual(rc, 0)
 
