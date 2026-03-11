@@ -94,3 +94,10 @@ Step objective: Implement minimal Phase 1 status telemetry events.
 Chosen fix: Added a status emitter with allowlisted lifecycle events and channel guardrails that reject bootstrap telemetry routing.
 What changed: Added src/ai_node/telemetry/status_emitter.py and tests/test_status_emitter.py.
 Verification: Unit tests confirm supported status emission, bootstrap-channel rejection, and unsupported-event rejection.
+
+###########
+Task #054
+Step objective: Add bounded reconnect and degraded recovery behavior.
+Chosen fix: Added a connectivity manager with bounded bootstrap reconnect attempts and trusted-connectivity degraded/recovery handling.
+What changed: Added src/ai_node/runtime/connectivity_manager.py and tests/test_connectivity_manager.py.
+Verification: Unit tests confirm retry/backoff-like reconnect behavior, degraded transition on trusted outage, and recovery to operational state.

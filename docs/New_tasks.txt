@@ -44,19 +44,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 054: Phase 1D — Implement reconnect and degraded behavior
-  - Add reconnect logic for:
-    - bootstrap connection failures
-    - temporary Core/API outage after trust
-  - Move node to `degraded` when appropriate.
-  - Restore to the proper state when connectivity returns.
-
-  * Comments, descriptions, rules:
-    - Degraded does not mean untrusted.
-    - Node should prefer its previously paired Core after trust.
-    - Keep retry logic bounded and observable.
-
-
 [TODO] Task 055: Phase 1D — Enforce Phase 1 security boundaries in code
   - Enforce the documented rules:
     - node never publishes on bootstrap

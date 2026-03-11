@@ -1,7 +1,7 @@
 # Synthia AI Node - Phase 1A Implementation Plan and Module Map
 
 Status: Active
-Implementation status: Partially implemented (Tasks 041-053)
+Implementation status: Partially implemented (Tasks 041-054)
 Last updated: 2026-03-11
 
 ## Scope
@@ -88,6 +88,7 @@ Current implementation files:
 - `src/ai_node/trust/trusted_startup.py`
 - `src/ai_node/trust/operational_handoff.py`
 - `src/ai_node/telemetry/status_emitter.py`
+- `src/ai_node/runtime/connectivity_manager.py`
 - `tests/test_phase1a_bootstrap.py`
 - `tests/test_registration_client.py`
 - `tests/test_approval_waiter.py`
@@ -96,6 +97,7 @@ Current implementation files:
 - `tests/test_trusted_startup.py`
 - `tests/test_operational_handoff.py`
 - `tests/test_status_emitter.py`
+- `tests/test_connectivity_manager.py`
 
 ## State and Security Guardrails
 
