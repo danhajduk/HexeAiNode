@@ -220,3 +220,10 @@ Step objective: Implement node-side operator provider selection flow and persist
 Chosen fix: Added provider config API endpoints and UI form (OpenAI toggle) for capability setup pending state, backed by local provider selection config store.
 What changed: Updated src/ai_node/main.py, src/ai_node/runtime/node_control_api.py, frontend/src/App.jsx, tests/test_node_control_api.py, tests/test_node_control_fastapi.py, and docs/ai-node/phase2-implementation-plan.md.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_node_control_api tests.test_node_control_fastapi tests.test_provider_selection_config -v` passes (13 tests); `cd frontend && npm run build` passes.
+
+###########
+Task #062 (Phase 2)
+Step objective: Define the formal capability declaration manifest model and validation helpers.
+Chosen fix: Added a dedicated manifest schema module with grouped capabilities structure and strict validation (including enabled-provider subset checks).
+What changed: Added src/ai_node/capabilities/manifest_schema.py, src/ai_node/capabilities/__init__.py, tests/test_capability_manifest_schema.py; updated docs/ai-node/phase2-implementation-plan.md.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_manifest_schema -v` passes (3 tests).

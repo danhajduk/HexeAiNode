@@ -40,23 +40,6 @@ Do not stop early.
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 062: Phase 2A — Define capability declaration manifest model
-  - Create the internal manifest/schema used by the node to declare its capabilities to Core.
-  - Split the manifest into clear groups:
-    - functional task families
-    - supported providers
-    - enabled providers
-    - node features
-    - environment/resource hints
-    - manifest metadata/version
-  - Add validation helpers for the manifest before submission.
-
-  * Comments, descriptions, rules:
-    - Capability declaration is a formal contract, not ad-hoc JSON.
-    - Keep the schema future-safe for later local/runtime features.
-    - Do not include prompt contracts in this manifest.
-
-
 [TODO] Task 063: Phase 2A — Implement functional task-family declaration
   - Add support for declaring the initial AI task families this node is intended to support.
   - Include:

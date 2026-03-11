@@ -1,7 +1,7 @@
 # Synthia AI Node - Phase 2 Implementation Plan and Module Map
 
 Status: Active
-Implementation status: In progress (Tasks 059-061 implemented)
+Implementation status: In progress (Tasks 059-062 implemented)
 Last updated: 2026-03-11
 
 ## Scope
@@ -48,6 +48,9 @@ Out of scope in Phase 2:
   - FastAPI provider selection endpoints added for load/update flows
   - UI capability-setup step now lets operator toggle OpenAI enablement
   - provider selection persists in local node configuration storage
+- Task 062:
+  - capability manifest schema model implemented with explicit grouped structure
+  - validation helpers enforce required sections and supported-vs-enabled provider consistency
 
 ## Phase 2 Module Map (Python)
 
