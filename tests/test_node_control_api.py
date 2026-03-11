@@ -22,6 +22,23 @@ class NodeControlApiTests(unittest.TestCase):
         def load(self):
             return self._payload
 
+    class _FakeProviderSelectionStore:
+        def __init__(self):
+            self.payload = {
+                "schema_version": "1.0",
+                "providers": {
+                    "supported": {"cloud": ["openai"], "local": [], "future": []},
+                    "enabled": [],
+                },
+                "services": {"enabled": [], "future": []},
+            }
+
+        def load_or_create(self, **_kwargs):
+            return self.payload
+
+        def save(self, payload):
+            self.payload = payload
+
     def test_status_is_unconfigured_without_bootstrap_config(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
@@ -36,6 +53,7 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(payload["identity_state"], "unknown")
             self.assertIsNone(payload["node_id"])
             self.assertEqual(payload["startup_mode"], "bootstrap_onboarding")
+            self.assertFalse(payload["provider_selection_configured"])
 
     def test_status_includes_node_identity(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -119,6 +137,21 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(payload["startup_mode"], "trusted_resume")
             self.assertEqual(payload["trusted_runtime_context"]["paired_core_id"], "core-main")
             self.assertEqual(len(runner.calls), 0)
+
+    def test_update_provider_selection_toggles_openai(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_selection_store=self._FakeProviderSelectionStore(),
+            )
+            enabled_payload = state.update_provider_selection(openai_enabled=True)
+            self.assertIn("openai", enabled_payload["config"]["providers"]["enabled"])
+
+            disabled_payload = state.update_provider_selection(openai_enabled=False)
+            self.assertNotIn("openai", disabled_payload["config"]["providers"]["enabled"])
 
 
 if __name__ == "__main__":

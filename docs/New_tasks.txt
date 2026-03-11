@@ -40,19 +40,6 @@ Do not stop early.
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 061: Phase 2A — Implement user/provider selection step on the node
-  - Add the node-side setup flow that asks the operator which providers/services to enable on this node.
-  - For now, allow selection of:
-    - OpenAI
-  - Capture required provider settings for enabled services.
-  - Persist the selection in local node configuration.
-
-  * Comments, descriptions, rules:
-    - The question is “what should be enabled on this node,” not merely “what could this node theoretically support.”
-    - Keep the UX simple and deterministic.
-    - Do not turn this into full prompt/provider policy yet.
-
-
 [TODO] Task 062: Phase 2A — Define capability declaration manifest model
   - Create the internal manifest/schema used by the node to declare its capabilities to Core.
   - Split the manifest into clear groups:

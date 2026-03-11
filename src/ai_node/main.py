@@ -11,6 +11,7 @@ import uvicorn
 
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.identity.node_identity_store import NodeIdentityStore
+from ai_node.config.provider_selection_config import ProviderSelectionConfigStore
 from ai_node.runtime.bootstrap_mqtt_runner import BootstrapMqttRunner
 from ai_node.runtime.bootstrap_timeout import BootstrapConnectTimeoutMonitor
 from ai_node.runtime.node_control_api import NodeControlState, create_node_control_app
@@ -94,6 +95,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to persisted node identity state",
     )
     parser.add_argument(
+        "--provider-selection-config-path",
+        default=os.environ.get("SYNTHIA_PROVIDER_SELECTION_CONFIG_PATH", ".run/provider_selection_config.json"),
+        help="Path to persisted provider selection config state",
+    )
+    parser.add_argument(
         "--finalize-poll-interval-seconds",
         type=float,
         default=float(os.environ.get("SYNTHIA_FINALIZE_POLL_INTERVAL_SECONDS", "2")),
@@ -133,6 +139,7 @@ def run(
     node_hostname: str | None = None,
     trust_state_path: str = ".run/trust_state.json",
     node_identity_path: str = ".run/node_identity.json",
+    provider_selection_config_path: str = ".run/provider_selection_config.json",
     finalize_poll_interval_seconds: float = 2.0,
 ) -> int:
     configure_logging(log_file)
@@ -145,6 +152,10 @@ def run(
 
     node_identity_store = NodeIdentityStore(path=node_identity_path, logger=LOGGER)
     node_identity = node_identity_store.load_or_create(migration_node_id=migration_node_id)
+    provider_selection_store = ProviderSelectionConfigStore(
+        path=provider_selection_config_path,
+        logger=LOGGER,
+    )
     LOGGER.info("[node-identity] %s", {"node_id": node_identity["node_id"], "path": node_identity_path})
     if isinstance(trust_state, dict):
         trust_node_id = str(trust_state.get("node_id") or "").strip()
@@ -222,6 +233,7 @@ def run(
         bootstrap_runner=bootstrap_runner,
         onboarding_runtime=onboarding_runtime,
         node_identity_store=node_identity_store,
+        provider_selection_store=provider_selection_store,
         startup_mode=startup_mode,
         trusted_runtime_context=trusted_runtime_context,
     )
@@ -261,6 +273,7 @@ def main() -> int:
         node_hostname=args.node_hostname,
         trust_state_path=args.trust_state_path,
         node_identity_path=args.node_identity_path,
+        provider_selection_config_path=args.provider_selection_config_path,
         finalize_poll_interval_seconds=args.finalize_poll_interval_seconds,
     )
 

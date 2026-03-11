@@ -29,6 +29,8 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [openaiEnabled, setOpenaiEnabled] = useState(false);
+  const [savingProvider, setSavingProvider] = useState(false);
 
   async function loadStatus() {
     try {
@@ -37,11 +39,24 @@ export default function App() {
       setPendingApprovalUrl(payload.pending_approval_url || "");
       setNodeId(payload.node_id || "");
       setError("");
+      if ((payload.status || "unknown") === "capability_setup_pending") {
+        await loadProviderConfig();
+      }
     } catch (err) {
       setBackendStatus("offline");
       setPendingApprovalUrl("");
       setNodeId("");
       setError(String(err?.message || err));
+    }
+  }
+
+  async function loadProviderConfig() {
+    try {
+      const payload = await apiGet("/api/providers/config");
+      const enabledProviders = payload?.config?.providers?.enabled || [];
+      setOpenaiEnabled(enabledProviders.includes("openai"));
+    } catch (_err) {
+      // keep provider section usable even if initial load fails
     }
   }
 
@@ -88,6 +103,7 @@ export default function App() {
 
   const isUnconfigured = backendStatus === "unconfigured";
   const isPendingApproval = backendStatus === "pending_approval";
+  const isCapabilitySetupPending = backendStatus === "capability_setup_pending";
 
   async function onCopyNodeId() {
     if (!nodeId) {
@@ -99,6 +115,20 @@ export default function App() {
       window.setTimeout(() => setCopied(false), 1200);
     } catch (_err) {
       setError("Failed to copy node ID");
+    }
+  }
+
+  async function onSaveProviderSelection(event) {
+    event.preventDefault();
+    setSavingProvider(true);
+    setError("");
+    try {
+      await apiPost("/api/providers/config", { openai_enabled: openaiEnabled });
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+    } finally {
+      setSavingProvider(false);
     }
   }
 
@@ -175,6 +205,21 @@ export default function App() {
               <p className="muted tiny">
                 Pending approval for node: <code>{nodeId}</code>
               </p>
+            ) : null}
+            {isCapabilitySetupPending ? (
+              <form className="setup-form" onSubmit={onSaveProviderSelection}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={openaiEnabled}
+                    onChange={(event) => setOpenaiEnabled(event.target.checked)}
+                  />{" "}
+                  Enable OpenAI on this node
+                </label>
+                <button className="btn btn-primary" type="submit" disabled={savingProvider}>
+                  {savingProvider ? "Saving..." : "Save Provider Selection"}
+                </button>
+              </form>
             ) : null}
           </article>
           <article className="card">

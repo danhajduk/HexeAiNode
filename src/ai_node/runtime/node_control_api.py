@@ -19,6 +19,7 @@ class NodeControlState:
         bootstrap_runner=None,
         onboarding_runtime=None,
         node_identity_store=None,
+        provider_selection_store=None,
         startup_mode: str = "bootstrap_onboarding",
         trusted_runtime_context: dict | None = None,
     ) -> None:
@@ -28,12 +29,15 @@ class NodeControlState:
         self._bootstrap_runner = bootstrap_runner
         self._onboarding_runtime = onboarding_runtime
         self._node_identity_store = node_identity_store
+        self._provider_selection_store = provider_selection_store
         self._startup_mode = startup_mode
         self._trusted_runtime_context = trusted_runtime_context or {}
         self._bootstrap_config = None
+        self._provider_selection_config = None
         self._node_id = None
         self._identity_state = "unknown"
         self._load_identity()
+        self._load_provider_selection_config()
         self._load_existing_config()
 
     def _load_identity(self) -> None:
@@ -73,6 +77,12 @@ class NodeControlState:
                     "[node-control] invalid persisted bootstrap config ignored: %s", self._config_path
                 )
 
+    def _load_provider_selection_config(self) -> None:
+        if self._provider_selection_store is None or not hasattr(self._provider_selection_store, "load_or_create"):
+            self._provider_selection_config = None
+            return
+        self._provider_selection_config = self._provider_selection_store.load_or_create(openai_enabled=False)
+
     def status_payload(self) -> dict:
         state = self._lifecycle.get_state()
         runtime_context = {}
@@ -88,7 +98,28 @@ class NodeControlState:
             "identity_state": self._identity_state,
             "startup_mode": self._startup_mode,
             "trusted_runtime_context": self._trusted_runtime_context,
+            "provider_selection_configured": self._provider_selection_config is not None,
         }
+
+    def provider_selection_payload(self) -> dict:
+        if self._provider_selection_config is None:
+            return {"configured": False, "config": None}
+        return {"configured": True, "config": self._provider_selection_config}
+
+    def update_provider_selection(self, *, openai_enabled: bool) -> dict:
+        if self._provider_selection_store is None or not hasattr(self._provider_selection_store, "save"):
+            raise ValueError("provider selection store is not configured")
+        payload = self._provider_selection_store.load_or_create(openai_enabled=False)
+        providers = payload.setdefault("providers", {})
+        enabled = set(providers.get("enabled") or [])
+        if openai_enabled:
+            enabled.add("openai")
+        else:
+            enabled.discard("openai")
+        providers["enabled"] = sorted(enabled)
+        self._provider_selection_store.save(payload)
+        self._provider_selection_config = payload
+        return self.provider_selection_payload()
 
     def _start_bootstrap_runner_if_available(self) -> None:
         if self._bootstrap_runner is None or self._bootstrap_config is None:
@@ -147,6 +178,10 @@ class OnboardingInitiateRequest(BaseModel):
     node_name: str
 
 
+class ProviderSelectionRequest(BaseModel):
+    openai_enabled: bool
+
+
 def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     app = FastAPI(title="Synthia AI Node Control API", version="0.1.0")
     app.add_middleware(
@@ -167,6 +202,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/node/status",
                 "/api/onboarding/initiate",
                 "/api/onboarding/restart",
+                "/api/providers/config",
                 "/api/health",
             ],
         }
@@ -192,6 +228,17 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.post("/api/onboarding/restart")
     def post_onboarding_restart():
         return state.restart_setup()
+
+    @app.get("/api/providers/config")
+    def get_provider_config():
+        return state.provider_selection_payload()
+
+    @app.post("/api/providers/config")
+    def post_provider_config(payload: ProviderSelectionRequest):
+        try:
+            return state.update_provider_selection(openai_enabled=payload.openai_enabled)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if hasattr(logger, "info"):
         logger.info("[node-control-api] FastAPI app initialized")
