@@ -41,6 +41,9 @@ def create_capability_manifest(
     manifest_version: str = CAPABILITY_MANIFEST_SCHEMA_VERSION,
     metadata: dict | None = None,
 ) -> dict:
+    resolved_environment_hints = (
+        environment_hints if isinstance(environment_hints, dict) else collect_environment_hints()
+    )
     manifest = {
         "manifest_version": str(manifest_version).strip(),
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -53,9 +56,7 @@ def create_capability_manifest(
                 "enabled": _normalize_string_list(enabled_providers or []),
             },
             "node_features": create_node_feature_declarations(node_features),
-            "environment_hints": collect_environment_hints(
-                **(environment_hints if isinstance(environment_hints, dict) else {})
-            ),
+            "environment_hints": resolved_environment_hints,
         },
         "metadata": {
             "schema_version": CAPABILITY_MANIFEST_SCHEMA_VERSION,

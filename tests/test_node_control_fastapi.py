@@ -27,6 +27,13 @@ class NodeControlFastApiTests(unittest.TestCase):
         def save(self, payload):
             self.payload = payload
 
+    class _FakeCapabilityRunner:
+        async def submit_once(self):
+            return {"status": "accepted"}
+
+        def status_payload(self):
+            return {"status": "idle"}
+
     def test_status_and_onboarding_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
@@ -35,6 +42,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 config_path=str(Path(tmp) / "bootstrap_config.json"),
                 logger=logging.getLogger("node-control-fastapi-test"),
                 provider_selection_store=self._FakeProviderSelectionStore(),
+                capability_runner=self._FakeCapabilityRunner(),
             )
             app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
             client = TestClient(app)
@@ -61,6 +69,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             provider_set_response = client.post("/api/providers/config", json={"openai_enabled": True})
             self.assertEqual(provider_set_response.status_code, 200)
             self.assertIn("openai", provider_set_response.json()["config"]["providers"]["enabled"])
+
+            capability_declare_response = client.post("/api/capabilities/declare")
+            self.assertEqual(capability_declare_response.status_code, 200)
+            self.assertEqual(capability_declare_response.json()["status"], "accepted")
 
 
 if __name__ == "__main__":

@@ -43,21 +43,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 068: Phase 2B — Implement capability declaration submission state handling
-  - Add state handling around capability declaration.
-  - Ensure node behavior cleanly covers:
-    - capability setup pending
-    - declaration in progress
-    - declaration accepted
-    - declaration failed/retry pending
-  - Transition toward `operational` only after successful capability declaration.
-
-  * Comments, descriptions, rules:
-    - This task is why `capability_setup_pending` exists in the lifecycle model.
-    - Do not jump directly from `trusted` to `operational`.
-    - Make retries visible and deterministic.
-
-
 [TODO] Task 069: Phase 2B — Implement Core response processing for accepted capability profile
   - Parse and persist Core’s accepted capability-profile response.
   - Store:

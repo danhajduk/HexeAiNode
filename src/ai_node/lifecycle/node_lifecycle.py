@@ -13,6 +13,9 @@ class NodeLifecycleState(str, Enum):
     PENDING_APPROVAL = "pending_approval"
     TRUSTED = "trusted"
     CAPABILITY_SETUP_PENDING = "capability_setup_pending"
+    CAPABILITY_DECLARATION_IN_PROGRESS = "capability_declaration_in_progress"
+    CAPABILITY_DECLARATION_ACCEPTED = "capability_declaration_accepted"
+    CAPABILITY_DECLARATION_FAILED_RETRY_PENDING = "capability_declaration_failed_retry_pending"
     OPERATIONAL = "operational"
     DEGRADED = "degraded"
 
@@ -31,9 +34,21 @@ ALLOWED_TRANSITIONS: Dict[NodeLifecycleState, Set[NodeLifecycleState]] = {
     NodeLifecycleState.REGISTRATION_PENDING: {NodeLifecycleState.PENDING_APPROVAL},
     NodeLifecycleState.PENDING_APPROVAL: {NodeLifecycleState.TRUSTED},
     NodeLifecycleState.TRUSTED: {NodeLifecycleState.CAPABILITY_SETUP_PENDING},
-    NodeLifecycleState.CAPABILITY_SETUP_PENDING: {NodeLifecycleState.OPERATIONAL},
+    NodeLifecycleState.CAPABILITY_SETUP_PENDING: {NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS},
+    NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS: {
+        NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED,
+        NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING,
+    },
+    NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED: {NodeLifecycleState.OPERATIONAL},
+    NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING: {
+        NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS,
+    },
     NodeLifecycleState.OPERATIONAL: set(),
-    NodeLifecycleState.DEGRADED: {NodeLifecycleState.OPERATIONAL},
+    NodeLifecycleState.DEGRADED: {
+        NodeLifecycleState.OPERATIONAL,
+        NodeLifecycleState.CAPABILITY_SETUP_PENDING,
+        NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING,
+    },
 }
 
 DEGRADABLE_STATES: Set[NodeLifecycleState] = {
@@ -44,6 +59,9 @@ DEGRADABLE_STATES: Set[NodeLifecycleState] = {
     NodeLifecycleState.PENDING_APPROVAL,
     NodeLifecycleState.TRUSTED,
     NodeLifecycleState.CAPABILITY_SETUP_PENDING,
+    NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS,
+    NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED,
+    NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING,
     NodeLifecycleState.OPERATIONAL,
 }
 

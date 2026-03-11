@@ -262,3 +262,10 @@ Step objective: Implement trusted capability declaration API client with respons
 Chosen fix: Added a dedicated core API client with strict URL/header construction and explicit response classification (`accepted`, `rejected`, `retryable_failure`).
 What changed: Added src/ai_node/core_api/capability_client.py and src/ai_node/core_api/__init__.py; added tests/test_capability_client.py; updated docs/ai-node/phase2-implementation-plan.md.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_client -v` passes (3 tests).
+
+###########
+Task #068 (Phase 2)
+Step objective: Add explicit capability declaration submission states and operational gating.
+Chosen fix: Added lifecycle declaration states and a declaration runner that transitions through in-progress/accepted/failed-retry states before allowing operational.
+What changed: Updated src/ai_node/lifecycle/node_lifecycle.py, src/ai_node/main.py, src/ai_node/runtime/node_control_api.py; added src/ai_node/runtime/capability_declaration_runner.py and tests/test_capability_declaration_runner.py; updated tests/test_connectivity_manager.py and tests/test_node_control_fastapi.py.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_manifest_schema tests.test_capability_declaration_runner tests.test_capability_client tests.test_node_control_fastapi tests.test_connectivity_manager -v` passes (12 tests).

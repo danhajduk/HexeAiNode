@@ -25,6 +25,8 @@ class ConnectivityManagerTests(unittest.IsolatedAsyncioTestCase):
         lifecycle = NodeLifecycle(logger=logging.getLogger("connectivity-test"))
         lifecycle.transition_to(NodeLifecycleState.TRUSTED)
         lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED)
         lifecycle.transition_to(NodeLifecycleState.OPERATIONAL)
         manager = ConnectivityManager(lifecycle=lifecycle, logger=logging.getLogger("connectivity-test"))
 

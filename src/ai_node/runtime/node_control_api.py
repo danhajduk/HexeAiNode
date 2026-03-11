@@ -18,6 +18,7 @@ class NodeControlState:
         logger,
         bootstrap_runner=None,
         onboarding_runtime=None,
+        capability_runner=None,
         node_identity_store=None,
         provider_selection_store=None,
         startup_mode: str = "bootstrap_onboarding",
@@ -28,6 +29,7 @@ class NodeControlState:
         self._logger = logger
         self._bootstrap_runner = bootstrap_runner
         self._onboarding_runtime = onboarding_runtime
+        self._capability_runner = capability_runner
         self._node_identity_store = node_identity_store
         self._provider_selection_store = provider_selection_store
         self._startup_mode = startup_mode
@@ -88,6 +90,11 @@ class NodeControlState:
         runtime_context = {}
         if self._onboarding_runtime is not None and hasattr(self._onboarding_runtime, "get_status_context"):
             runtime_context = self._onboarding_runtime.get_status_context()
+        capability_context = (
+            self._capability_runner.status_payload()
+            if self._capability_runner is not None and hasattr(self._capability_runner, "status_payload")
+            else {}
+        )
         return {
             "status": state.value,
             "bootstrap_configured": self._bootstrap_config is not None,
@@ -99,6 +106,7 @@ class NodeControlState:
             "startup_mode": self._startup_mode,
             "trusted_runtime_context": self._trusted_runtime_context,
             "provider_selection_configured": self._provider_selection_config is not None,
+            "capability_declaration": capability_context,
         }
 
     def provider_selection_payload(self) -> dict:
@@ -120,6 +128,11 @@ class NodeControlState:
         self._provider_selection_store.save(payload)
         self._provider_selection_config = payload
         return self.provider_selection_payload()
+
+    async def submit_capability_declaration(self) -> dict:
+        if self._capability_runner is None or not hasattr(self._capability_runner, "submit_once"):
+            raise ValueError("capability declaration runner is not configured")
+        return await self._capability_runner.submit_once()
 
     def _start_bootstrap_runner_if_available(self) -> None:
         if self._bootstrap_runner is None or self._bootstrap_config is None:
@@ -203,6 +216,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/onboarding/initiate",
                 "/api/onboarding/restart",
                 "/api/providers/config",
+                "/api/capabilities/declare",
                 "/api/health",
             ],
         }
@@ -237,6 +251,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def post_provider_config(payload: ProviderSelectionRequest):
         try:
             return state.update_provider_selection(openai_enabled=payload.openai_enabled)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/capabilities/declare")
+    async def post_capability_declare():
+        try:
+            return await state.submit_capability_declaration()
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

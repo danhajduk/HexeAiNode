@@ -1,7 +1,7 @@
 # Synthia AI Node - Phase 2 Implementation Plan and Module Map
 
 Status: Active
-Implementation status: In progress (Tasks 059-067 implemented)
+Implementation status: In progress (Tasks 059-068 implemented)
 Last updated: 2026-03-11
 
 ## Scope
@@ -66,6 +66,10 @@ Out of scope in Phase 2:
 - Task 067:
   - trusted capability declaration API client added with accepted/rejected/retryable response handling
   - declaration request includes trusted node identity and auth token headers
+- Task 068:
+  - capability declaration runner added with explicit submission lifecycle transitions
+  - node now uses `capability_declaration_in_progress` / `accepted` / `failed_retry_pending`
+  - transition to `operational` happens only after accepted declaration
 
 ## Phase 2 Module Map (Python)
 

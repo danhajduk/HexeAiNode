@@ -14,6 +14,7 @@ from ai_node.identity.node_identity_store import NodeIdentityStore
 from ai_node.config.provider_selection_config import ProviderSelectionConfigStore
 from ai_node.runtime.bootstrap_mqtt_runner import BootstrapMqttRunner
 from ai_node.runtime.bootstrap_timeout import BootstrapConnectTimeoutMonitor
+from ai_node.runtime.capability_declaration_runner import CapabilityDeclarationRunner
 from ai_node.runtime.node_control_api import NodeControlState, create_node_control_app
 from ai_node.runtime.onboarding_runtime import OnboardingRuntime
 from ai_node.trust.trust_store import TrustStateStore
@@ -226,12 +227,20 @@ def run(
         logger=LOGGER,
         on_core_discovered=onboarding_runtime.on_core_discovered,
     )
+    capability_runner = CapabilityDeclarationRunner(
+        lifecycle=lifecycle,
+        logger=LOGGER,
+        trust_store=trust_state_store,
+        provider_selection_store=provider_selection_store,
+        node_id=node_identity["node_id"],
+    )
     control_state = NodeControlState(
         lifecycle=lifecycle,
         config_path=bootstrap_config_path,
         logger=LOGGER,
         bootstrap_runner=bootstrap_runner,
         onboarding_runtime=onboarding_runtime,
+        capability_runner=capability_runner,
         node_identity_store=node_identity_store,
         provider_selection_store=provider_selection_store,
         startup_mode=startup_mode,

@@ -7,6 +7,15 @@ from ai_node.capabilities.manifest_schema import (
 
 
 class CapabilityManifestSchemaTests(unittest.TestCase):
+    @staticmethod
+    def _valid_environment_hints() -> dict:
+        return {
+            "hostname": "node-a",
+            "os_platform": "linux-test",
+            "memory_class": "standard",
+            "gpu_present": False,
+        }
+
     def test_create_manifest_with_required_groups(self):
         manifest = create_capability_manifest(
             node_id="node-001",
@@ -15,7 +24,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
             supported_providers=["openai"],
             enabled_providers=[],
             node_features=["telemetry_support"],
-            environment_hints={"hostname": "synthia-node"},
+            environment_hints=self._valid_environment_hints(),
         )
         is_valid, error = validate_capability_manifest(manifest)
         self.assertTrue(is_valid)
@@ -29,7 +38,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
             supported_providers=["openai"],
             enabled_providers=[],
             node_features=["telemetry_support"],
-            environment_hints={},
+            environment_hints=self._valid_environment_hints(),
         )
         manifest["capabilities"]["providers"]["enabled"] = ["anthropic"]
         is_valid, error = validate_capability_manifest(manifest)
@@ -57,7 +66,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
             supported_providers=["openai"],
             enabled_providers=[],
             node_features=["telemetry_support"],
-            environment_hints={},
+            environment_hints=self._valid_environment_hints(),
         )
         manifest["capabilities"]["task_families"] = ["audio_transcription"]
         is_valid, error = validate_capability_manifest(manifest)
