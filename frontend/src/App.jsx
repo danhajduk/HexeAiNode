@@ -315,7 +315,27 @@ export default function App() {
           </article>
           <article className="card">
             <h2>Runtime</h2>
-            <p className="muted">Operational handoff, degraded recovery, telemetry.</p>
+            <p className="muted">Operational signals and health indicators</p>
+            <div className="state-grid">
+              <span>Core API</span>
+              <span className={`conn-pill conn-${uiState.runtimeHealth.coreApiConnectivity}`}>
+                {uiState.runtimeHealth.coreApiConnectivity}
+              </span>
+              <span>Operational MQTT</span>
+              <span className={`conn-pill conn-${uiState.runtimeHealth.operationalMqttConnectivity}`}>
+                {uiState.runtimeHealth.operationalMqttConnectivity}
+              </span>
+              <span>Governance</span>
+              <span className={`conn-pill conn-${uiState.runtimeHealth.governanceFreshness}`}>
+                {uiState.runtimeHealth.governanceFreshness}
+              </span>
+              <span>Last Telemetry</span>
+              <code>{uiState.runtimeHealth.lastTelemetryTimestamp || "none"}</code>
+              <span>Node Health</span>
+              <span className={`conn-pill conn-${uiState.runtimeHealth.nodeHealthState}`}>
+                {uiState.runtimeHealth.nodeHealthState}
+              </span>
+            </div>
           </article>
           <article className="card">
             <h2>Service</h2>

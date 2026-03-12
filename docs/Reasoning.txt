@@ -358,3 +358,10 @@ Step objective: Replace static onboarding card text with lifecycle-driven progre
 Chosen fix: Rendered onboarding step badges using canonical UI onboarding state mapping for bootstrap discovery, registration, approval, and trust activation.
 What changed: Updated frontend/src/App.jsx onboarding card rendering and frontend/src/app.css with progress row/badge styles.
 Verification: `cd frontend && npm run build` passes.
+
+###########
+Task #082
+Step objective: Expand runtime card with live operational health signals.
+Chosen fix: Bound runtime card fields to canonical UI state model and added connectivity/health indicators for Core API, operational MQTT, governance freshness, telemetry timestamp, and node health.
+What changed: Updated frontend/src/App.jsx runtime card rendering; updated frontend/src/uiStateModel.js runtime health derivation; updated frontend/src/app.css with reusable connectivity badge styles.
+Verification: `cd frontend && npm run build` passes.

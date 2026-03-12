@@ -83,10 +83,15 @@ export function buildDashboardUiState({
     },
     runtimeHealth: {
       state: lifecycleState === "operational" ? "healthy" : lifecycleState === "degraded" ? "degraded" : "pending",
-      coreApiConnectivity: trustedContext?.core_api_endpoint ? "configured" : "unknown",
+      coreApiConnectivity: trustedContext?.core_api_endpoint
+        ? lifecycleState === "degraded"
+          ? "degraded"
+          : "connected"
+        : "unknown",
       operationalMqttConnectivity: readiness?.ready ? "connected" : readiness?.last_error ? "disconnected" : "unknown",
       governanceFreshness: governance?.state || "unknown",
       lastTelemetryTimestamp: telemetry?.last_published_at || null,
+      nodeHealthState: lifecycleState === "degraded" ? "degraded" : lifecycleState === "operational" ? "healthy" : "pending",
     },
     coreConnection: {
       pairedCoreId: trustedContext?.paired_core_id || "",

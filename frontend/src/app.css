@@ -128,3 +128,28 @@ h2 {
 .step-pending {
   color: hsl(var(--color-text-muted));
 }
+
+.conn-pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.8rem;
+  border: 1px solid hsl(var(--color-border));
+}
+
+.conn-connected,
+.conn-healthy,
+.conn-fresh {
+  color: #1f9d55;
+}
+
+.conn-pending,
+.conn-unknown {
+  color: #c7a800;
+}
+
+.conn-disconnected,
+.conn-degraded,
+.conn-stale {
+  color: #d17a00;
+}

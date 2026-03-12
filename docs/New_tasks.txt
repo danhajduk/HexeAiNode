@@ -49,22 +49,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 082: Improve runtime health card with operational signals
-  - Expand the Runtime card to show real operational status.
-  - Include:
-    - Core API connectivity
-    - operational MQTT connectivity
-    - governance freshness
-    - last telemetry timestamp
-    - node health state
-  - Display connectivity indicators (connected / disconnected / degraded).
-
-  * Comments, descriptions, rules:
-    - Runtime health must reflect the current node condition.
-    - Avoid exposing sensitive credentials.
-    - Health indicators should refresh periodically.
-
-
 [TODO] Task 083: Add Core connection information panel
   - Display current Core connection metadata:
     - Core ID
