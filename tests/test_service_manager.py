@@ -16,7 +16,7 @@ class ServiceManagerTests(unittest.TestCase):
 
         calls = {"count": 0}
 
-        def _fake_run(cmd, check, capture_output, text):
+        def _fake_run(cmd, check, capture_output, text, env):
             self.assertEqual(cmd[:3], ["systemctl", "--user", "is-active"])
             calls["count"] += 1
             return _Completed("active\n" if calls["count"] == 1 else "failed\n")
@@ -31,7 +31,7 @@ class ServiceManagerTests(unittest.TestCase):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
         invoked = []
 
-        def _fake_run(cmd, check, capture_output, text):
+        def _fake_run(cmd, check, capture_output, text, env):
             invoked.append(cmd)
             if cmd[2] == "is-active":
                 return _Completed("active\n")
@@ -42,6 +42,19 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(result["target"], "node")
         restart_calls = [cmd for cmd in invoked if cmd[2] == "restart"]
         self.assertEqual(len(restart_calls), 2)
+
+    def test_get_status_treats_activating_as_running(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+        def _fake_run(cmd, check, capture_output, text, env):
+            self.assertEqual(cmd[:3], ["systemctl", "--user", "is-active"])
+            return _Completed("activating\n")
+
+        with patch("subprocess.run", side_effect=_fake_run):
+            payload = manager.get_status()
+        self.assertEqual(payload["backend"], "running")
+        self.assertEqual(payload["frontend"], "running")
+        self.assertEqual(payload["node"], "running")
 
 
 if __name__ == "__main__":

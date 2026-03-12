@@ -69,6 +69,10 @@ export function buildDashboardUiState({
   const readiness = capability?.operational_mqtt_readiness || {};
   const telemetry = capability?.telemetry || {};
 
+  const resolvedServiceStatus =
+    serviceStatus ||
+    (nodeStatus?.services && typeof nodeStatus.services === "object" ? nodeStatus.services : null);
+
   return {
     lifecycle: {
       current: lifecycleState,
@@ -108,7 +112,7 @@ export function buildDashboardUiState({
       capabilityDeclarationTimestamp: capability?.accepted_profile?.acceptance_timestamp || null,
       governancePolicyVersion: governance?.active_governance_version || "",
     },
-    serviceStatus: serviceStatus || {
+    serviceStatus: resolvedServiceStatus || {
       backend: "unknown",
       frontend: "unknown",
       node: "unknown",

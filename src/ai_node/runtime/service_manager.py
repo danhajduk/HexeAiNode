@@ -1,3 +1,4 @@
+import os
 import subprocess
 
 
@@ -6,6 +7,9 @@ class UserSystemdServiceManager:
         self._logger = logger
         self._backend_unit = "synthia-ai-node-backend.service"
         self._frontend_unit = "synthia-ai-node-frontend.service"
+        uid = os.getuid()
+        self._runtime_dir = f"/run/user/{uid}"
+        self._bus_address = f"unix:path={self._runtime_dir}/bus"
 
     def get_status(self) -> dict:
         backend = self._query_active(self._backend_unit)
@@ -40,13 +44,22 @@ class UserSystemdServiceManager:
                 check=False,
                 capture_output=True,
                 text=True,
+                env=self._systemd_env(),
             )
             status = str((result.stdout or "").strip()).lower()
+            if not status and "failed to connect to bus" in str((result.stderr or "")).lower():
+                if hasattr(self._logger, "warning"):
+                    self._logger.warning(
+                        "[service-status-bus-unavailable] %s",
+                        {"unit": unit, "stderr": str(result.stderr).strip()},
+                    )
             if status == "active":
+                return "running"
+            if status == "activating":
                 return "running"
             if status in {"inactive", "deactivating"}:
                 return "stopped"
-            if status in {"failed", "activating"}:
+            if status in {"failed"}:
                 return "failed"
             return "unknown"
         except Exception as exc:
@@ -60,7 +73,14 @@ class UserSystemdServiceManager:
             check=True,
             capture_output=True,
             text=True,
+            env=self._systemd_env(),
         )
+
+    def _systemd_env(self) -> dict:
+        env = dict(os.environ)
+        env.setdefault("XDG_RUNTIME_DIR", self._runtime_dir)
+        env.setdefault("DBUS_SESSION_BUS_ADDRESS", self._bus_address)
+        return env
 
 
 class NullServiceManager:

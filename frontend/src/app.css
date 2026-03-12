@@ -1,6 +1,7 @@
 .page {
   box-sizing: border-box;
-  max-width: 1080px;
+  width: 90vw;
+  max-width: 90vw;
   margin: 0 auto;
   padding: 24px;
 }
@@ -18,7 +19,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -256,11 +257,13 @@ h2 {
 
 @media (max-width: 900px) {
   .page {
+    width: 94vw;
+    max-width: 94vw;
     padding: 16px;
   }
 
   .grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
