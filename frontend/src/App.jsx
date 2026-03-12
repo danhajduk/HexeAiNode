@@ -43,6 +43,8 @@ export default function App() {
   const [openaiEnabled, setOpenaiEnabled] = useState(false);
   const [savingProvider, setSavingProvider] = useState(false);
   const [declaringCapabilities, setDeclaringCapabilities] = useState(false);
+  const [showCapabilitySetupPopup, setShowCapabilitySetupPopup] = useState(false);
+  const [capabilityPopupDismissed, setCapabilityPopupDismissed] = useState(false);
   const [restartingServiceTarget, setRestartingServiceTarget] = useState("");
   const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
   const [uiState, setUiState] = useState(() =>
@@ -124,6 +126,17 @@ export default function App() {
     const id = setInterval(loadStatus, REFRESH_INTERVAL_MS);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (backendStatus === "capability_setup_pending" && !capabilityPopupDismissed) {
+      setShowCapabilitySetupPopup(true);
+      return;
+    }
+    if (backendStatus !== "capability_setup_pending") {
+      setShowCapabilitySetupPopup(false);
+      setCapabilityPopupDismissed(false);
+    }
+  }, [backendStatus, capabilityPopupDismissed]);
 
   async function onSubmit(event) {
     event.preventDefault();
@@ -263,6 +276,61 @@ export default function App() {
 
   return (
     <main className="page">
+      {showCapabilitySetupPopup ? (
+        <section className="modal-overlay" role="dialog" aria-modal="true" aria-label="Capability setup required">
+          <article className="card modal-card">
+            <CardHeader title="Capability Setup Required" subtitle="Complete required inputs to continue onboarding." />
+            <div className="state-grid">
+              <span>Node ID</span>
+              <code>{nodeId || "unavailable"}</code>
+              <span>Core ID</span>
+              <code>{uiState.coreConnection.pairedCoreId || "unavailable"}</code>
+              <span>Core API</span>
+              <code>{uiState.coreConnection.coreApiEndpoint || "unavailable"}</code>
+            </div>
+            <form className="setup-form" onSubmit={onSaveProviderSelection}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={openaiEnabled}
+                  onChange={(event) => setOpenaiEnabled(event.target.checked)}
+                />{" "}
+                Enable OpenAI on this node
+              </label>
+              <div className="row">
+                <button className="btn btn-primary" type="submit" disabled={savingProvider}>
+                  {savingProvider ? "Saving..." : "Save Provider Selection"}
+                </button>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={onDeclareCapabilities}
+                  disabled={declaringCapabilities || !capabilityDeclareAllowed}
+                >
+                  {declaringCapabilities ? "Declaring..." : "Declare Capabilities"}
+                </button>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => {
+                    setShowCapabilitySetupPopup(false);
+                    setCapabilityPopupDismissed(true);
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </form>
+            {setupBlockingReasons.length ? (
+              <p className="warning tiny">
+                Blocking: <code>{setupBlockingReasons.join(", ")}</code>
+              </p>
+            ) : (
+              <p className="muted tiny">Setup is ready. Declare capabilities to continue.</p>
+            )}
+          </article>
+        </section>
+      ) : null}
       <section className="card hero">
         <h1>Synthia AI Node</h1>
         <p className="muted">Node setup and onboarding controls</p>

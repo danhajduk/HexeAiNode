@@ -427,3 +427,10 @@ Step objective: Complete capability_setup_pending contract implementation across
 Chosen fix: Added explicit capability setup contract payload in node status, enforced structured prerequisite gating before capability declaration, advanced onboarding finalize into capability_setup_pending, exposed readiness/blocking data in UI, and documented contract/checklist.
 What changed: Updated src/ai_node/runtime/node_control_api.py, src/ai_node/runtime/onboarding_runtime.py, src/ai_node/main.py, frontend/src/App.jsx, frontend/src/uiStateModel.js, frontend/src/api.js, frontend/src/app.css; added docs/ai-node/capability-setup-pending-contract.md and docs/ai-node/capability-setup-validation-checklist.md; updated tests/test_node_control_api.py, tests/test_node_control_fastapi.py, tests/test_onboarding_runtime.py, docs/New_tasks.txt.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_onboarding_runtime.py tests/test_node_control_api.py tests/test_node_control_fastapi.py tests/test_main_entrypoint.py tests/test_capability_declaration_runner.py` passes (26 tests); `cd frontend && npm run build` passes.
+
+###########
+Task #099
+Step objective: Show required user-input popup when node reaches capability_setup_pending.
+Chosen fix: Added a modal overlay that auto-opens on capability_setup_pending, surfaces required node/core context, and provides provider-save + capability-declare actions.
+What changed: Updated frontend/src/App.jsx and frontend/src/app.css; marked Task 099 done in docs/New_tasks.txt.
+Verification: `cd frontend && npm run build` passes.
