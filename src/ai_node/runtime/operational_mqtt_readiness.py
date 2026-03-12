@@ -100,14 +100,6 @@ class OperationalMqttReadinessChecker:
         if port <= 0:
             raise ValueError("operational_mqtt_port must be positive")
 
-        bootstrap_host = str(trust_state.get("bootstrap_mqtt_host") or "").strip()
-        if bootstrap_host and bootstrap_host == host:
-            return self._update_result(
-                ready=False,
-                error="operational_mqtt_host_must_differ_from_bootstrap_host",
-                endpoint={"host": host, "port": port, "identity": identity},
-            )
-
         ready, error = await self._mqtt_adapter.connect_and_disconnect(
             host=host,
             port=port,

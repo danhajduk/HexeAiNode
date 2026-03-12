@@ -33,7 +33,7 @@ class OperationalMqttReadinessTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["ready"])
         self.assertIsNone(result["last_error"])
 
-    async def test_check_once_rejects_bootstrap_host_reuse(self):
+    async def test_check_once_allows_bootstrap_host_reuse_with_operational_endpoint(self):
         checker = OperationalMqttReadinessChecker(
             logger=logging.getLogger("operational-readiness-test"),
             mqtt_adapter=_FakeMqttAdapter(ready=True),
@@ -47,8 +47,8 @@ class OperationalMqttReadinessTests(unittest.IsolatedAsyncioTestCase):
                 "bootstrap_mqtt_host": "10.0.0.100",
             }
         )
-        self.assertFalse(result["ready"])
-        self.assertEqual(result["last_error"], "operational_mqtt_host_must_differ_from_bootstrap_host")
+        self.assertTrue(result["ready"])
+        self.assertIsNone(result["last_error"])
 
     async def test_check_once_returns_adapter_failure(self):
         checker = OperationalMqttReadinessChecker(
