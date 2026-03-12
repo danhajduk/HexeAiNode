@@ -5,6 +5,7 @@ from ai_node.capabilities.manifest_schema import create_capability_manifest
 from ai_node.capabilities.node_features import create_node_feature_declarations
 from ai_node.capabilities.providers import create_provider_capabilities_from_selection_config
 from ai_node.capabilities.task_families import create_declared_task_family_capabilities
+from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.core_api.capability_client import CapabilityDeclarationClient
 from ai_node.core_api.governance_client import GovernanceSyncClient
 from ai_node.governance.freshness import evaluate_governance_freshness
@@ -52,6 +53,7 @@ class CapabilityDeclarationRunner:
         self._governance_status = evaluate_governance_freshness(None)
         self._governance_status["refresh_state"] = "idle"
         self._governance_status["last_refresh_error"] = None
+        self._diag = Phase2DiagnosticsLogger(logger)
         self._load_accepted_profile()
         self._load_governance_bundle()
 
@@ -115,6 +117,13 @@ class CapabilityDeclarationRunner:
             else None
         )
         providers = create_provider_capabilities_from_selection_config(provider_selection)
+        self._diag.provider_selection(
+            {
+                "node_id": self._node_id,
+                "enabled_providers": sorted((providers.get("enabled") or [])),
+                "supported_providers": sorted((providers.get("supported") or [])),
+            }
+        )
         manifest = create_capability_manifest(
             node_id=self._node_id,
             node_name=str(trust_state.get("node_name") or "ai-node").strip(),
@@ -123,6 +132,14 @@ class CapabilityDeclarationRunner:
             enabled_providers=providers.get("enabled"),
             node_features=create_node_feature_declarations(),
             environment_hints=collect_environment_hints(),
+        )
+        self._diag.capability_manifest(
+            {
+                "node_id": self._node_id,
+                "task_family_count": len(manifest.get("functional_task_families") or []),
+                "enabled_provider_count": len((manifest.get("providers") or {}).get("enabled") or []),
+                "feature_count": len(manifest.get("node_features") or []),
+            }
         )
 
         self._lifecycle.transition_to(
@@ -138,6 +155,14 @@ class CapabilityDeclarationRunner:
             trust_token=str(trust_state.get("node_trust_token") or "").strip(),
             node_id=self._node_id,
             capability_manifest=manifest,
+        )
+        self._diag.capability_submission(
+            {
+                "node_id": self._node_id,
+                "result_status": result.status,
+                "retryable": result.retryable,
+                "error": result.error,
+            }
         )
 
         if result.status == "accepted":
@@ -171,6 +196,14 @@ class CapabilityDeclarationRunner:
                 trust_token=str(trust_state.get("node_trust_token") or "").strip(),
                 node_id=self._node_id,
             )
+            self._diag.governance_sync(
+                {
+                    "node_id": self._node_id,
+                    "result_status": governance_result.status,
+                    "retryable": governance_result.retryable,
+                    "error": governance_result.error,
+                }
+            )
             if governance_result.status != "synced":
                 self._lifecycle.transition_to(
                     NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING,
@@ -183,6 +216,9 @@ class CapabilityDeclarationRunner:
                 self._lifecycle.transition_to(
                     NodeLifecycleState.DEGRADED,
                     {"source": "governance_sync", "reason": governance_result.error or "governance_sync_failed"},
+                )
+                self._diag.degraded_recovery(
+                    {"node_id": self._node_id, "event": "degraded", "source": "governance_sync", "error": governance_result.error}
                 )
                 self._status = "retry_pending" if governance_result.retryable else "rejected"
                 self._last_error = governance_result.error
@@ -202,6 +238,14 @@ class CapabilityDeclarationRunner:
                 self._governance_state_store.save(governance_payload)
             self._governance_bundle = governance_payload
             self._refresh_governance_status(refresh_state="synced", last_refresh_error=None)
+            self._diag.governance_freshness(
+                {
+                    "node_id": self._node_id,
+                    "state": self._governance_status.get("state"),
+                    "active_governance_version": self._governance_status.get("active_governance_version"),
+                    "last_sync_time": self._governance_status.get("last_sync_time"),
+                }
+            )
             self._persist_phase2_state()
 
             readiness_result = await self._operational_readiness_checker.check_once(trust_state=trust_state)
@@ -220,6 +264,14 @@ class CapabilityDeclarationRunner:
                         "source": "operational_mqtt_readiness",
                         "reason": readiness_result.get("last_error") or "operational_mqtt_not_ready",
                     },
+                )
+                self._diag.degraded_recovery(
+                    {
+                        "node_id": self._node_id,
+                        "event": "degraded",
+                        "source": "operational_mqtt_readiness",
+                        "error": readiness_result.get("last_error"),
+                    }
                 )
                 self._status = "retry_pending"
                 self._last_error = str(readiness_result.get("last_error") or "operational_mqtt_not_ready")
@@ -269,6 +321,9 @@ class CapabilityDeclarationRunner:
             NodeLifecycleState.DEGRADED,
             {"source": "capability_declaration_runner", "reason": result.error or "capability_submission_failed"},
         )
+        self._diag.degraded_recovery(
+            {"node_id": self._node_id, "event": "degraded", "source": "capability_submission", "error": result.error}
+        )
         self._status = "retry_pending" if result.retryable else "rejected"
         self._last_error = result.error
         return {
@@ -297,6 +352,21 @@ class CapabilityDeclarationRunner:
                 self._governance_state_store.save(governance_payload)
             self._governance_bundle = governance_payload
             self._refresh_governance_status(refresh_state="synced", last_refresh_error=None)
+            self._diag.governance_sync(
+                {
+                    "node_id": self._node_id,
+                    "result_status": "synced",
+                    "policy_version": governance_payload.get("policy_version"),
+                }
+            )
+            self._diag.governance_freshness(
+                {
+                    "node_id": self._node_id,
+                    "state": self._governance_status.get("state"),
+                    "active_governance_version": self._governance_status.get("active_governance_version"),
+                    "last_sync_time": self._governance_status.get("last_sync_time"),
+                }
+            )
             self._persist_phase2_state()
             return {
                 "status": "synced",
@@ -307,6 +377,22 @@ class CapabilityDeclarationRunner:
         self._refresh_governance_status(
             refresh_state="core_temporarily_unavailable" if governance_result.retryable else "sync_rejected",
             last_refresh_error=governance_result.error,
+        )
+        self._diag.governance_sync(
+            {
+                "node_id": self._node_id,
+                "result_status": governance_result.status,
+                "retryable": governance_result.retryable,
+                "error": governance_result.error,
+            }
+        )
+        self._diag.governance_freshness(
+            {
+                "node_id": self._node_id,
+                "state": self._governance_status.get("state"),
+                "active_governance_version": self._governance_status.get("active_governance_version"),
+                "last_sync_time": self._governance_status.get("last_sync_time"),
+            }
         )
         if self._governance_status.get("state") == "stale":
             await self._emit_status_telemetry(
@@ -344,6 +430,15 @@ class CapabilityDeclarationRunner:
                 "governance_state": self._governance_status.get("state"),
                 "operational_mqtt_ready": operational_ready,
             },
+        )
+        self._diag.degraded_recovery(
+            {
+                "node_id": self._node_id,
+                "event": "recovered",
+                "target_state": target_state.value,
+                "governance_state": self._governance_status.get("state"),
+                "operational_mqtt_ready": operational_ready,
+            }
         )
         if target_state == NodeLifecycleState.OPERATIONAL:
             self._status = "accepted"

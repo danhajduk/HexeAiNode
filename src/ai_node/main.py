@@ -9,6 +9,7 @@ from pathlib import Path
 
 import uvicorn
 
+from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.identity.node_identity_store import NodeIdentityStore
 from ai_node.config.provider_selection_config import ProviderSelectionConfigStore
@@ -166,6 +167,7 @@ def run(
 ) -> int:
     configure_logging(log_file)
     LOGGER.info("starting ai-node backend")
+    phase2_diag = Phase2DiagnosticsLogger(LOGGER)
     trust_state_store = TrustStateStore(path=trust_state_path, logger=LOGGER)
     trust_state = trust_state_store.load()
     migration_node_id = None
@@ -235,6 +237,16 @@ def run(
                 "state": NodeLifecycleState.CAPABILITY_SETUP_PENDING.value,
                 "paired_core_id": trusted_runtime_context.get("paired_core_id"),
             },
+        )
+        phase2_diag.post_trust_activation(
+            {
+                "mode": "trusted_resume",
+                "state": NodeLifecycleState.CAPABILITY_SETUP_PENDING.value,
+                "paired_core_id": trusted_runtime_context.get("paired_core_id"),
+                "core_api_endpoint": trusted_runtime_context.get("core_api_endpoint"),
+                "operational_mqtt_host": trusted_runtime_context.get("operational_mqtt_host"),
+                "operational_mqtt_port": trusted_runtime_context.get("operational_mqtt_port"),
+            }
         )
     onboarding_runtime = OnboardingRuntime(
         lifecycle=lifecycle,

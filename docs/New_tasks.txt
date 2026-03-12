@@ -49,23 +49,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 076: Phase 2D — Implement logging and diagnostics for capability activation flow
-  - Add structured logging for:
-    - post-trust activation path
-    - provider/service selection
-    - capability manifest creation
-    - capability submission
-    - governance sync
-    - governance freshness changes
-    - degraded/recovery transitions
-  - Make logs useful for debugging Phase 2 activation failures.
-
-  * Comments, descriptions, rules:
-    - Logs must redact secrets and tokens.
-    - Prefer stateful, compact logs over noisy chatter.
-    - This task exists to keep later phases debuggable.
-
-
 [TODO] Task 077: Phase 2D — Create Phase 2 validation and test checklist
   - Create a test checklist covering:
     - trusted restart path

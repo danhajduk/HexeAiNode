@@ -83,3 +83,4 @@ Task 072 (Phase 2): Implement trusted operational MQTT connection readiness - Co
 Task 073 (Phase 2): Implement baseline trusted status telemetry - Completed on 03/11/2026 17:14
 Task 074 (Phase 2): Implement degraded handling for capability/governance path - Completed on 03/11/2026 17:17
 Task 075 (Phase 2): Implement secure storage updates for Phase 2 state - Completed on 03/11/2026 17:20
+Task 076 (Phase 2): Implement logging and diagnostics for capability activation flow - Completed on 03/11/2026 17:23

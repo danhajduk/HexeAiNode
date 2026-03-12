@@ -1,7 +1,7 @@
 # Synthia AI Node - Phase 2 Implementation Plan and Module Map
 
 Status: Active
-Implementation status: In progress (Tasks 059-075 implemented)
+Implementation status: In progress (Tasks 059-076 implemented)
 Last updated: 2026-03-11
 
 ## Scope
@@ -98,6 +98,10 @@ Out of scope in Phase 2:
   - added combined versioned Phase 2 state persistence for provider selection, accepted capability metadata, governance metadata, and timestamps
   - consolidated state loader supports migration-safe conversion from legacy field layout
   - trust-state semantics remain separate while phase-2 activation metadata is persisted for restart/debug continuity
+- Task 076:
+  - added compact structured Phase 2 diagnostics logging with token/secret redaction
+  - logs now cover post-trust activation, provider selection, manifest/submission, governance sync/freshness, and degraded/recovery transitions
+  - diagnostics improvements are intended for Phase 2 activation debugging and stability validation
 
 ## Phase 2 Module Map (Python)
 

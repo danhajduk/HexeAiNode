@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from ai_node.config.bootstrap_config import create_bootstrap_config
+from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 
 
@@ -34,6 +35,7 @@ class NodeControlState:
         self._provider_selection_store = provider_selection_store
         self._startup_mode = startup_mode
         self._trusted_runtime_context = trusted_runtime_context or {}
+        self._phase2_diag = Phase2DiagnosticsLogger(logger)
         self._bootstrap_config = None
         self._provider_selection_config = None
         self._node_id = None
@@ -127,6 +129,12 @@ class NodeControlState:
         providers["enabled"] = sorted(enabled)
         self._provider_selection_store.save(payload)
         self._provider_selection_config = payload
+        self._phase2_diag.provider_selection(
+            {
+                "source": "node_control_api",
+                "enabled_providers": providers["enabled"],
+            }
+        )
         return self.provider_selection_payload()
 
     async def submit_capability_declaration(self) -> dict:
@@ -142,7 +150,16 @@ class NodeControlState:
     def recover_from_degraded(self) -> dict:
         if self._capability_runner is None or not hasattr(self._capability_runner, "recover_from_degraded"):
             raise ValueError("degraded recovery is not configured")
-        return self._capability_runner.recover_from_degraded()
+        result = self._capability_runner.recover_from_degraded()
+        self._phase2_diag.degraded_recovery(
+            {
+                "source": "node_control_api",
+                "event": "recover_invoked",
+                "result": result.get("status"),
+                "target_state": result.get("target_state"),
+            }
+        )
+        return result
 
     def governance_status_payload(self) -> dict:
         if self._capability_runner is None or not hasattr(self._capability_runner, "status_payload"):
