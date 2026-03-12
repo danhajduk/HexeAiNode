@@ -344,3 +344,10 @@ Step objective: Define and integrate a canonical lifecycle-first UI state model 
 Chosen fix: Added a dedicated frontend state model builder that composes lifecycle, onboarding progress, runtime health, core connection, capability summary, and service status from backend payloads with partial-failure tolerance.
 What changed: Added frontend/src/uiStateModel.js; updated frontend/src/App.jsx to build UI state from `/api/node/status`, `/api/governance/status`, and `/api/providers/config`; updated frontend/src/app.css for state model rendering.
 Verification: `cd frontend && npm run build` passes.
+
+###########
+Task #080
+Step objective: Add lifecycle status card as the primary dashboard diagnostic surface.
+Chosen fix: Added a dedicated Lifecycle card driven by canonical UI state with color-coded lifecycle tones and key trust/governance/core pairing fields.
+What changed: Updated frontend/src/App.jsx and frontend/src/app.css; updated src/ai_node/main.py to expose pairing timestamp in trusted runtime context; updated frontend/src/uiStateModel.js to include pairing timestamp in core connection model.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_main_entrypoint.py tests/test_node_control_fastapi.py tests/test_node_control_api.py` passes (13 tests); `cd frontend && npm run build` passes.

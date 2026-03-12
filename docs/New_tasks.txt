@@ -49,26 +49,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 080: Add lifecycle status card to the dashboard
-  - Implement a new "Lifecycle" card in the dashboard.
-  - Display:
-    - current lifecycle state
-    - trust status
-    - paired Core ID
-    - pairing timestamp
-    - governance status
-  - Add visual state indicators (color-coded):
-    - green: operational
-    - yellow: pending states
-    - orange: degraded
-    - red: error
-
-  * Comments, descriptions, rules:
-    - This card becomes the main diagnostic surface for node state.
-    - Lifecycle state should always be visible without navigating to other pages.
-    - The lifecycle card must update dynamically if the backend state changes.
-
-
 [TODO] Task 081: Enhance onboarding card with progress visualization
   - Replace the current static onboarding description with real progress indicators.
   - Show steps:

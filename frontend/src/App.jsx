@@ -154,6 +154,7 @@ export default function App() {
   const isUnconfigured = backendStatus === "unconfigured";
   const isPendingApproval = backendStatus === "pending_approval";
   const isCapabilitySetupPending = backendStatus === "capability_setup_pending";
+  const lifecycleToneClass = `tone-${uiState.lifecycle.tone || "error"}`;
 
   async function onCopyNodeId() {
     if (!nodeId) {
@@ -248,6 +249,22 @@ export default function App() {
         </section>
       ) : (
         <section className="grid">
+          <article className={`card lifecycle-card ${lifecycleToneClass}`}>
+            <h2>Lifecycle</h2>
+            <p className="muted">Primary node diagnostic state</p>
+            <div className="state-grid">
+              <span>Current State</span>
+              <code>{uiState.lifecycle.current}</code>
+              <span>Trust Status</span>
+              <code>{uiState.lifecycle.trustStatus}</code>
+              <span>Paired Core ID</span>
+              <code>{uiState.coreConnection.pairedCoreId || "not_paired"}</code>
+              <span>Pairing Timestamp</span>
+              <code>{uiState.coreConnection.pairingTimestamp || "unavailable"}</code>
+              <span>Governance</span>
+              <code>{uiState.runtimeHealth.governanceFreshness}</code>
+            </div>
+          </article>
           <article className="card">
             <h2>Onboarding</h2>
             <p className="muted">Bootstrap, registration, approval, trust activation.</p>
@@ -275,24 +292,6 @@ export default function App() {
           <article className="card">
             <h2>Runtime</h2>
             <p className="muted">Operational handoff, degraded recovery, telemetry.</p>
-          </article>
-          <article className="card">
-            <h2>UI State Model</h2>
-            <p className="muted tiny">Lifecycle-first canonical dashboard state</p>
-            <div className="state-grid">
-              <span>Lifecycle</span>
-              <code>{uiState.lifecycle.current}</code>
-              <span>Onboarding</span>
-              <code>{JSON.stringify(uiState.onboarding.progress)}</code>
-              <span>Runtime</span>
-              <code>{uiState.runtimeHealth.state}</code>
-              <span>Core</span>
-              <code>{uiState.coreConnection.pairedCoreId || "not_paired"}</code>
-              <span>Capability</span>
-              <code>{uiState.capabilitySummary.capabilityStatus}</code>
-              <span>Service</span>
-              <code>{uiState.serviceStatus.backend}</code>
-            </div>
           </article>
           <article className="card">
             <h2>Service</h2>

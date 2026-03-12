@@ -204,6 +204,7 @@ def run(
             "core_api_endpoint": str(trust_state.get("core_api_endpoint") or "").strip(),
             "operational_mqtt_host": str(trust_state.get("operational_mqtt_host") or "").strip(),
             "operational_mqtt_port": trust_state.get("operational_mqtt_port"),
+            "pairing_timestamp": str(trust_state.get("registration_timestamp") or "").strip(),
         }
 
     monitor_ref = {"monitor": None}

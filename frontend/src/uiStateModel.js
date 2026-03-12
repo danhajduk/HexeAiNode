@@ -93,6 +93,7 @@ export function buildDashboardUiState({
       coreApiEndpoint: trustedContext?.core_api_endpoint || "",
       operationalMqttHost: trustedContext?.operational_mqtt_host || "",
       operationalMqttPort: trustedContext?.operational_mqtt_port || null,
+      pairingTimestamp: trustedContext?.pairing_timestamp || "",
       connected: Boolean(trustedContext?.paired_core_id),
     },
     capabilitySummary: {
