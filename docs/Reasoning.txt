@@ -276,3 +276,10 @@ Step objective: Persist accepted capability profile metadata and make it restart
 Chosen fix: Added versioned capability state storage with validation, saved accepted Core response metadata on successful declaration, and preload accepted profile from store at runner startup.
 What changed: Added src/ai_node/persistence/capability_state_store.py and src/ai_node/persistence/__init__.py; updated src/ai_node/runtime/capability_declaration_runner.py and src/ai_node/main.py; added tests/test_capability_state_store.py and updated tests/test_capability_declaration_runner.py.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_capability_state_store.py tests/test_capability_declaration_runner.py tests/test_capability_client.py tests/test_node_control_fastapi.py tests/test_main_entrypoint.py` passes (17 tests).
+
+###########
+Task #070 (Phase 2)
+Step objective: Sync and persist baseline governance bundle after capability acceptance.
+Chosen fix: Added a trusted governance sync client and governance state store, then wired the declaration runner to fetch/persist governance data before transitioning to operational.
+What changed: Added src/ai_node/core_api/governance_client.py and src/ai_node/persistence/governance_state_store.py; updated src/ai_node/runtime/capability_declaration_runner.py, src/ai_node/main.py, src/ai_node/core_api/__init__.py, src/ai_node/persistence/__init__.py; added tests/test_governance_client.py and tests/test_governance_state_store.py; expanded tests/test_capability_declaration_runner.py.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_governance_client.py tests/test_governance_state_store.py tests/test_capability_declaration_runner.py tests/test_capability_client.py tests/test_capability_state_store.py tests/test_node_control_fastapi.py tests/test_main_entrypoint.py` passes (25 tests).

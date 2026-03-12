@@ -1,7 +1,7 @@
 # Synthia AI Node - Phase 2 Implementation Plan and Module Map
 
 Status: Active
-Implementation status: In progress (Tasks 059-069 implemented)
+Implementation status: In progress (Tasks 059-070 implemented)
 Last updated: 2026-03-11
 
 ## Scope
@@ -74,6 +74,10 @@ Out of scope in Phase 2:
   - accepted capability declaration response metadata is now persisted in local capability state storage
   - stored metadata includes accepted declaration version, acceptance timestamp, profile id, restrictions/notes, and raw Core payload for debugging
   - runner preloads accepted profile state on startup so later governance/policy layers can consume it after restart
+- Task 070:
+  - baseline governance sync client added for trusted Core governance fetch after capability acceptance
+  - governance bundle is persisted locally in versioned state storage with deterministic fields
+  - node transitions to `operational` only after governance sync succeeds and governance state is stored
 
 ## Phase 2 Module Map (Python)
 
@@ -92,8 +96,10 @@ src/ai_node/
     environment_hints.py           # lightweight host/platform/resource hints
   core_api/
     capability_client.py           # trusted API client for capability declaration
+    governance_client.py           # trusted API client for baseline governance sync
   persistence/
     capability_state_store.py      # accepted capability profile/version persistence
+    governance_state_store.py      # baseline governance bundle/version persistence
 ```
 
 ## Initial Contracts

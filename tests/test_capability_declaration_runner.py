@@ -62,6 +62,35 @@ class _FakeClientRetry:
         return _R()
 
 
+class _FakeGovernanceClientSynced:
+    async def fetch_baseline_governance(self, **_kwargs):
+        class _R:
+            status = "synced"
+            payload = {
+                "policy_version": "1.0",
+                "issued_timestamp": "2026-03-11T00:00:00Z",
+                "refresh_expectations": {"recommended_interval_seconds": 900, "max_stale_seconds": 3600},
+                "generic_node_class_rules": {"allow_task_families": ["summarization"]},
+                "feature_gating_defaults": {"prompt_governance_ready": False},
+                "telemetry_expectations": {"heartbeat_interval_seconds": 30},
+            }
+            retryable = False
+            error = None
+
+        return _R()
+
+
+class _FakeGovernanceClientRetry:
+    async def fetch_baseline_governance(self, **_kwargs):
+        class _R:
+            status = "retryable_failure"
+            payload = {"detail": "timeout"}
+            retryable = True
+            error = "timeout"
+
+        return _R()
+
+
 class _FakeCapabilityStateStore:
     def __init__(self, existing=None):
         self.saved = None
@@ -88,6 +117,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             node_id="node-001",
             capability_state_store=state_store,
             capability_client=_FakeClientAccepted(),
+            governance_client=_FakeGovernanceClientSynced(),
         )
         result = await runner.submit_once()
         self.assertEqual(result["status"], "accepted")
@@ -95,6 +125,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(runner.status_payload()["status"], "accepted")
         self.assertIsNotNone(state_store.saved)
         self.assertEqual(state_store.saved["accepted_profile_id"], "cap-1")
+        self.assertIsNotNone(result["governance_bundle"])
 
     async def test_retryable_submission_transitions_to_retry_pending(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
@@ -107,6 +138,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             provider_selection_store=_FakeProviderSelectionStore(),
             node_id="node-001",
             capability_client=_FakeClientRetry(),
+            governance_client=_FakeGovernanceClientSynced(),
         )
         result = await runner.submit_once()
         self.assertEqual(result["status"], "retryable_failure")
@@ -136,10 +168,30 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             node_id="node-001",
             capability_state_store=state_store,
             capability_client=_FakeClientAccepted(),
+            governance_client=_FakeGovernanceClientSynced(),
         )
         status = runner.status_payload()
         self.assertEqual(status["status"], "accepted")
         self.assertEqual(status["accepted_profile"]["accepted_profile_id"], "cap-1")
+
+    async def test_governance_sync_retry_moves_to_retry_pending(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
+        lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        runner = CapabilityDeclarationRunner(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("capability-runner-test"),
+            trust_store=_FakeTrustStore(),
+            provider_selection_store=_FakeProviderSelectionStore(),
+            node_id="node-001",
+            capability_state_store=_FakeCapabilityStateStore(),
+            capability_client=_FakeClientAccepted(),
+            governance_client=_FakeGovernanceClientRetry(),
+        )
+        result = await runner.submit_once()
+        self.assertEqual(result["status"], "retryable_failure")
+        self.assertEqual(lifecycle.get_state(), NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING)
+        self.assertEqual(runner.status_payload()["status"], "retry_pending")
 
 
 if __name__ == "__main__":

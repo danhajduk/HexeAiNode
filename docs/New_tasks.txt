@@ -43,23 +43,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 070: Phase 2B — Implement baseline governance sync after capability acceptance
-  - After Core accepts the capability declaration, fetch/sync the baseline governance bundle for the node.
-  - Support:
-    - policy version
-    - issued timestamp
-    - refresh expectations
-    - generic node-class rules
-    - feature gating defaults
-    - telemetry expectations
-  - Persist the synced governance bundle locally.
-
-  * Comments, descriptions, rules:
-    - This is baseline governance, not full task/prompt execution policy yet.
-    - Governance must be stored separately from bootstrap metadata.
-    - Keep the sync deterministic and restart-safe.
-
-
 [TODO] Task 071: Phase 2B — Implement governance versioning and freshness tracking
   - Track:
     - active governance version
