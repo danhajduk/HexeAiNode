@@ -49,24 +49,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 077: Phase 2D — Create Phase 2 validation and test checklist
-  - Create a test checklist covering:
-    - trusted restart path
-    - provider/service selection persisted
-    - capability manifest built correctly
-    - capability declaration accepted
-    - governance synced and stored
-    - stale governance handling
-    - trusted operational channel readiness
-    - degraded and recovery behavior
-  - Validate lifecycle state transitions for each scenario.
-
-  * Comments, descriptions, rules:
-    - This can begin as a manual/integration checklist.
-    - Keep it aligned with the architecture docs and corrected contracts.
-    - The goal is to stabilize node activation before prompt/provider execution phases begin.
-
-
 [TODO] Task 078: Phase 2D — Finalize Phase 2 implementation review and handoff note
   - Review implemented Phase 2 behavior against the architecture/docs.
   - Document any deviations, follow-up fixes, or deferred edge cases.

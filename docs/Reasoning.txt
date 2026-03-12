@@ -325,3 +325,9 @@ Step objective: Add structured phase-2 diagnostics for activation and recovery w
 Chosen fix: Added a redaction-aware Phase 2 diagnostics logger and integrated it into post-trust activation, provider selection, capability manifest/submission, governance sync/freshness, and degraded/recovery paths.
 What changed: Added src/ai_node/diagnostics/phase2_logger.py; updated src/ai_node/main.py, src/ai_node/runtime/node_control_api.py, and src/ai_node/runtime/capability_declaration_runner.py; added tests/test_phase2_logger.py.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_phase2_logger.py tests/test_capability_declaration_runner.py tests/test_node_control_fastapi.py tests/test_node_control_api.py tests/test_main_entrypoint.py tests/test_trusted_status_telemetry.py tests/test_operational_mqtt_readiness.py tests/test_governance_freshness.py` passes (30 tests).
+
+###########
+Task #077 (Phase 2)
+Step objective: Produce a code-aligned validation checklist for Phase 2 readiness and lifecycle verification.
+What changed: Added docs/ai-node/phase2-validation-checklist.md with manual/integration scenarios for trusted restart, provider persistence, capability/gov flows, stale governance, operational readiness, degraded recovery, and lifecycle transition audit points.
+Verification: Checklist items and referenced endpoints/states were matched to existing implementation paths and diagnostics labels in src/ai_node/runtime/* and src/ai_node/diagnostics/phase2_logger.py.

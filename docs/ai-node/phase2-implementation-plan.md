@@ -1,7 +1,7 @@
 # Synthia AI Node - Phase 2 Implementation Plan and Module Map
 
 Status: Active
-Implementation status: In progress (Tasks 059-076 implemented)
+Implementation status: In progress (Tasks 059-077 implemented)
 Last updated: 2026-03-11
 
 ## Scope
@@ -102,6 +102,9 @@ Out of scope in Phase 2:
   - added compact structured Phase 2 diagnostics logging with token/secret redaction
   - logs now cover post-trust activation, provider selection, manifest/submission, governance sync/freshness, and degraded/recovery transitions
   - diagnostics improvements are intended for Phase 2 activation debugging and stability validation
+- Task 077:
+  - added a manual/integration validation checklist for trusted restart, capability/governance activation, stale handling, and degraded recovery verification
+  - checklist includes lifecycle transition audit points and focused test command baseline
 
 ## Phase 2 Module Map (Python)
 
@@ -147,3 +150,4 @@ src/ai_node/
 - [AI Node Capability Declaration](../node-capability-declaration.md)
 - [Phase 1 Overview](./phase1-overview.md)
 - [Phase 1 Implementation Plan](./phase1-implementation-plan.md)
+- [Phase 2 Validation Checklist](./phase2-validation-checklist.md)
