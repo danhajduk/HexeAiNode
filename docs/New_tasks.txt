@@ -40,11 +40,4 @@ Do not stop early.
 
 Do not edit above this line:
 #######################################################################
-[STOP HERE]
-
-
-[STOP HERE]
-
-
-[STOP HERE]
 
