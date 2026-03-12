@@ -101,3 +101,4 @@ Task 090: Create UI validation checklist for the dashboard - Completed on 03/11/
 Task 091-098: Capability setup pending contract/payload/gate/re-entry/logs/tests/UI/checklist - Completed on 03/11/2026 23:59
 Task 099: capability_setup_pending popup + required input actions - Completed on 03/11/2026 23:59
 Task 100: capability popup now shows full capability data after save provider - Completed on 03/11/2026 23:59
+Task 101: fixed capability declaration Core endpoint contract to prevent false degraded transition on declare - Completed on 03/11/2026 23:59

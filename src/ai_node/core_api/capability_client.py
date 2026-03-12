@@ -4,7 +4,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 
-DEFAULT_CAPABILITY_DECLARATION_PATH = "/api/system/nodes/capabilities/declarations"
+DEFAULT_CAPABILITY_DECLARATION_PATH = "/api/system/nodes/capabilities/declaration"
 
 
 def _require_non_empty_string(value: object, name: str) -> str:
@@ -67,6 +67,7 @@ class CapabilityDeclarationClient:
         url = _build_capability_url(core_api_endpoint=core_api_endpoint, declaration_path=declaration_path)
         headers = {
             "Authorization": f"Bearer {_require_non_empty_string(trust_token, 'trust_token')}",
+            "X-Node-Trust-Token": _require_non_empty_string(trust_token, "trust_token"),
             "X-Synthia-Node-Id": _require_non_empty_string(node_id, "node_id"),
             "Content-Type": "application/json",
         }

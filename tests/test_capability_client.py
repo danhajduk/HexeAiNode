@@ -31,8 +31,9 @@ class CapabilityClientTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result.status, "accepted")
         self.assertFalse(result.retryable)
-        self.assertEqual(adapter.last_url, "http://10.0.0.100:9001/api/system/nodes/capabilities/declarations")
+        self.assertEqual(adapter.last_url, "http://10.0.0.100:9001/api/system/nodes/capabilities/declaration")
         self.assertEqual(adapter.last_headers["X-Synthia-Node-Id"], "node-001")
+        self.assertEqual(adapter.last_headers["X-Node-Trust-Token"], "secret")
         self.assertIn("Bearer secret", adapter.last_headers["Authorization"])
 
     async def test_submit_manifest_returns_rejected_for_4xx(self):
