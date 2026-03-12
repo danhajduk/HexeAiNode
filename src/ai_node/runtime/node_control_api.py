@@ -11,6 +11,12 @@ from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.service_manager import NullServiceManager
 
 
+class CapabilityDeclarationPrerequisiteError(ValueError):
+    def __init__(self, *, payload: dict) -> None:
+        self.payload = payload
+        super().__init__(str(payload.get("message") or "capability declaration prerequisites are not satisfied"))
+
+
 class NodeControlState:
     def __init__(
         self,
@@ -23,6 +29,7 @@ class NodeControlState:
         capability_runner=None,
         node_identity_store=None,
         provider_selection_store=None,
+        trust_state_store=None,
         service_manager=None,
         startup_mode: str = "bootstrap_onboarding",
         trusted_runtime_context: dict | None = None,
@@ -35,6 +42,7 @@ class NodeControlState:
         self._capability_runner = capability_runner
         self._node_identity_store = node_identity_store
         self._provider_selection_store = provider_selection_store
+        self._trust_state_store = trust_state_store
         self._service_manager = service_manager or NullServiceManager()
         self._startup_mode = startup_mode
         self._trusted_runtime_context = trusted_runtime_context or {}
@@ -46,6 +54,97 @@ class NodeControlState:
         self._load_identity()
         self._load_provider_selection_config()
         self._load_existing_config()
+
+    @staticmethod
+    def _is_non_empty_string(value: object) -> bool:
+        return isinstance(value, str) and bool(value.strip())
+
+    def _is_provider_selection_valid(self, payload: dict | None) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        providers = payload.get("providers")
+        if not isinstance(providers, dict):
+            return False
+        supported = providers.get("supported")
+        if not isinstance(supported, dict):
+            return False
+        supported_any = bool(
+            (supported.get("cloud") or [])
+            or (supported.get("local") or [])
+            or (supported.get("future") or [])
+        )
+        return supported_any
+
+    def _build_capability_setup_contract(self) -> dict:
+        trust_state = (
+            self._trust_state_store.load()
+            if self._trust_state_store is not None and hasattr(self._trust_state_store, "load")
+            else None
+        )
+        trusted_context = self._trusted_runtime_context if isinstance(self._trusted_runtime_context, dict) else {}
+        provider_config = self._provider_selection_config if isinstance(self._provider_selection_config, dict) else None
+        enabled_providers = []
+        supported_providers = {"cloud": [], "local": [], "future": []}
+        if isinstance(provider_config, dict):
+            providers = provider_config.get("providers") if isinstance(provider_config.get("providers"), dict) else {}
+            enabled_providers = list(providers.get("enabled") or [])
+            supported = providers.get("supported") if isinstance(providers.get("supported"), dict) else {}
+            supported_providers = {
+                "cloud": list(supported.get("cloud") or []),
+                "local": list(supported.get("local") or []),
+                "future": list(supported.get("future") or []),
+            }
+
+        readiness_flags = {
+            "trust_state_valid": isinstance(trust_state, dict),
+            "node_identity_valid": self._identity_state == "valid" and self._is_non_empty_string(self._node_id),
+            "provider_selection_valid": self._is_provider_selection_valid(provider_config),
+            "core_runtime_context_valid": (
+                self._is_non_empty_string(trusted_context.get("paired_core_id"))
+                and self._is_non_empty_string(trusted_context.get("core_api_endpoint"))
+                and self._is_non_empty_string(trusted_context.get("operational_mqtt_host"))
+                and trusted_context.get("operational_mqtt_port") is not None
+            ),
+        }
+        blocking_reasons: list[str] = []
+        if not readiness_flags["trust_state_valid"]:
+            blocking_reasons.append("missing_or_invalid_trust_state")
+        if not readiness_flags["node_identity_valid"]:
+            blocking_reasons.append("missing_or_invalid_node_identity")
+        if not readiness_flags["provider_selection_valid"]:
+            blocking_reasons.append("missing_or_invalid_provider_selection")
+        if not readiness_flags["core_runtime_context_valid"]:
+            blocking_reasons.append("missing_or_invalid_trusted_runtime_context")
+
+        lifecycle_state = self._lifecycle.get_state()
+        declaration_allowed = (
+            lifecycle_state in {
+                NodeLifecycleState.CAPABILITY_SETUP_PENDING,
+                NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING,
+            }
+            and not blocking_reasons
+        )
+        return {
+            "active": lifecycle_state == NodeLifecycleState.CAPABILITY_SETUP_PENDING,
+            "readiness_flags": readiness_flags,
+            "provider_selection": {
+                "configured": provider_config is not None,
+                "enabled_count": len(enabled_providers),
+                "enabled": enabled_providers,
+                "supported": supported_providers,
+            },
+            "blocking_reasons": blocking_reasons,
+            "declaration_allowed": declaration_allowed,
+            "disallowed_transitions": [
+                NodeLifecycleState.UNCONFIGURED.value,
+                NodeLifecycleState.BOOTSTRAP_CONNECTING.value,
+                NodeLifecycleState.BOOTSTRAP_CONNECTED.value,
+                NodeLifecycleState.CORE_DISCOVERED.value,
+                NodeLifecycleState.REGISTRATION_PENDING.value,
+                NodeLifecycleState.PENDING_APPROVAL.value,
+                NodeLifecycleState.TRUSTED.value,
+            ],
+        }
 
     def _load_identity(self) -> None:
         if self._node_identity_store is None or not hasattr(self._node_identity_store, "load"):
@@ -100,6 +199,16 @@ class NodeControlState:
             if self._capability_runner is not None and hasattr(self._capability_runner, "status_payload")
             else {}
         )
+        capability_setup_contract = self._build_capability_setup_contract()
+        if state == NodeLifecycleState.CAPABILITY_SETUP_PENDING and hasattr(self._logger, "info"):
+            self._logger.info(
+                "[capability-setup-readiness] %s",
+                {
+                    "readiness_flags": capability_setup_contract.get("readiness_flags"),
+                    "blocking_reasons": capability_setup_contract.get("blocking_reasons"),
+                    "declaration_allowed": capability_setup_contract.get("declaration_allowed"),
+                },
+            )
         return {
             "status": state.value,
             "bootstrap_configured": self._bootstrap_config is not None,
@@ -111,6 +220,7 @@ class NodeControlState:
             "startup_mode": self._startup_mode,
             "trusted_runtime_context": self._trusted_runtime_context,
             "provider_selection_configured": self._provider_selection_config is not None,
+            "capability_setup": capability_setup_contract,
             "capability_declaration": capability_context,
             "services": self.service_status_payload().get("services"),
         }
@@ -155,6 +265,34 @@ class NodeControlState:
     async def submit_capability_declaration(self) -> dict:
         if self._capability_runner is None or not hasattr(self._capability_runner, "submit_once"):
             raise ValueError("capability declaration runner is not configured")
+        setup_contract = self._build_capability_setup_contract()
+        if hasattr(self._logger, "info"):
+            self._logger.info(
+                "[capability-declare-gate-check] %s",
+                {
+                    "status": self._lifecycle.get_state().value,
+                    "declaration_allowed": setup_contract.get("declaration_allowed"),
+                    "blocking_reasons": setup_contract.get("blocking_reasons"),
+                },
+            )
+        if not setup_contract.get("declaration_allowed"):
+            if hasattr(self._logger, "warning"):
+                self._logger.warning(
+                    "[capability-declare-gate-failed] %s",
+                    {
+                        "status": self._lifecycle.get_state().value,
+                        "blocking_reasons": setup_contract.get("blocking_reasons"),
+                        "readiness_flags": setup_contract.get("readiness_flags"),
+                    },
+                )
+            raise CapabilityDeclarationPrerequisiteError(
+                payload={
+                    "error_code": "capability_setup_prerequisites_unmet",
+                    "message": "capability declaration prerequisites are not satisfied",
+                    "blocking_reasons": setup_contract.get("blocking_reasons") or [],
+                    "readiness_flags": setup_contract.get("readiness_flags") or {},
+                }
+            )
         return await self._capability_runner.submit_once()
 
     async def refresh_governance(self) -> dict:
@@ -315,6 +453,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     async def post_capability_declare():
         try:
             return await state.submit_capability_declaration()
+        except CapabilityDeclarationPrerequisiteError as exc:
+            raise HTTPException(status_code=409, detail=exc.payload) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

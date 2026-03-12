@@ -39,6 +39,32 @@ class NodeControlApiTests(unittest.TestCase):
         def save(self, payload):
             self.payload = payload
 
+    class _FakeTrustStateStore:
+        def __init__(self, payload=None):
+            self.payload = payload or {
+                "node_id": "123e4567-e89b-42d3-a456-426614174000",
+                "node_name": "main-ai-node",
+                "node_type": "ai-node",
+                "paired_core_id": "core-main",
+                "core_api_endpoint": "http://10.0.0.100:9001",
+                "node_trust_token": "token",
+                "initial_baseline_policy": {"policy_version": "1.0"},
+                "baseline_policy_version": "1.0",
+                "operational_mqtt_identity": "node:123e4567-e89b-42d3-a456-426614174000",
+                "operational_mqtt_token": "mqtt-token",
+                "operational_mqtt_host": "10.0.0.100",
+                "operational_mqtt_port": 1883,
+                "bootstrap_mqtt_host": "10.0.0.100",
+                "registration_timestamp": "2026-03-11T00:00:00Z",
+            }
+
+        def load(self):
+            return self.payload
+
+    class _FakeCapabilityRunner:
+        async def submit_once(self):
+            return {"status": "accepted"}
+
     def test_status_is_unconfigured_without_bootstrap_config(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
@@ -54,6 +80,8 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertIsNone(payload["node_id"])
             self.assertEqual(payload["startup_mode"], "bootstrap_onboarding")
             self.assertFalse(payload["provider_selection_configured"])
+            self.assertIn("capability_setup", payload)
+            self.assertFalse(payload["capability_setup"]["declaration_allowed"])
 
     def test_status_includes_node_identity(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -137,6 +165,7 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(payload["startup_mode"], "trusted_resume")
             self.assertEqual(payload["trusted_runtime_context"]["paired_core_id"], "core-main")
             self.assertEqual(len(runner.calls), 0)
+            self.assertTrue(payload["capability_setup"]["active"])
 
     def test_update_provider_selection_toggles_openai(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -152,6 +181,30 @@ class NodeControlApiTests(unittest.TestCase):
 
             disabled_payload = state.update_provider_selection(openai_enabled=False)
             self.assertNotIn("openai", disabled_payload["config"]["providers"]["enabled"])
+
+    def test_capability_declaration_gate_requires_setup_prerequisites(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED, {"source": "test"})
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING, {"source": "test"})
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(),
+                node_identity_store=self._FakeNodeIdentityStore({"node_id": "node-001"}),
+                provider_selection_store=self._FakeProviderSelectionStore(),
+                trust_state_store=self._FakeTrustStateStore(),
+                startup_mode="trusted_resume",
+                trusted_runtime_context={
+                    "paired_core_id": "core-main",
+                    "core_api_endpoint": "http://10.0.0.100:9001",
+                    "operational_mqtt_host": "10.0.0.100",
+                    "operational_mqtt_port": 1883,
+                },
+            )
+            payload = state.status_payload()
+            self.assertTrue(payload["capability_setup"]["declaration_allowed"])
 
 
 if __name__ == "__main__":

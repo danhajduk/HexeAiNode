@@ -420,3 +420,10 @@ Task #090
 Step objective: Create a practical UI validation checklist covering lifecycle and dashboard behavior.
 What changed: Added docs/ai-node/ui-validation-checklist.md with scenario checks for unconfigured/onboarding/pending/trusted/operational/degraded states, color/indicator checks, dynamic refresh behavior, service controls, diagnostics panel, and regression validation.
 Verification: Checklist items align with currently implemented frontend cards/components and backend status/service endpoints.
+
+###########
+Task #091-098
+Step objective: Complete capability_setup_pending contract implementation across backend status, declaration gate, lifecycle entry, tests, and UI.
+Chosen fix: Added explicit capability setup contract payload in node status, enforced structured prerequisite gating before capability declaration, advanced onboarding finalize into capability_setup_pending, exposed readiness/blocking data in UI, and documented contract/checklist.
+What changed: Updated src/ai_node/runtime/node_control_api.py, src/ai_node/runtime/onboarding_runtime.py, src/ai_node/main.py, frontend/src/App.jsx, frontend/src/uiStateModel.js, frontend/src/api.js, frontend/src/app.css; added docs/ai-node/capability-setup-pending-contract.md and docs/ai-node/capability-setup-validation-checklist.md; updated tests/test_node_control_api.py, tests/test_node_control_fastapi.py, tests/test_onboarding_runtime.py, docs/New_tasks.txt.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_onboarding_runtime.py tests/test_node_control_api.py tests/test_node_control_fastapi.py tests/test_main_entrypoint.py tests/test_capability_declaration_runner.py` passes (26 tests); `cd frontend && npm run build` passes.

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from ai_node.lifecycle.node_lifecycle import NodeLifecycle
+from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.node_control_api import NodeControlState, create_node_control_app
 
 
@@ -27,6 +27,10 @@ class NodeControlFastApiTests(unittest.TestCase):
         def save(self, payload):
             self.payload = payload
 
+    class _FakeNodeIdentityStore:
+        def load(self):
+            return {"node_id": "node-001", "created_at": "2026-03-11T00:00:00Z"}
+
     class _FakeCapabilityRunner:
         async def submit_once(self):
             return {"status": "accepted"}
@@ -45,6 +49,25 @@ class NodeControlFastApiTests(unittest.TestCase):
                     "active_governance_version": "1.0",
                     "last_sync_time": "2026-03-11T00:00:00+00:00",
                 },
+            }
+
+    class _FakeTrustStateStore:
+        def load(self):
+            return {
+                "node_id": "node-001",
+                "node_name": "main-ai-node",
+                "node_type": "ai-node",
+                "paired_core_id": "core-main",
+                "core_api_endpoint": "http://10.0.0.100:9001",
+                "node_trust_token": "token",
+                "initial_baseline_policy": {"policy_version": "1.0"},
+                "baseline_policy_version": "1.0",
+                "operational_mqtt_identity": "node:node-001",
+                "operational_mqtt_token": "mqtt-token",
+                "operational_mqtt_host": "10.0.0.100",
+                "operational_mqtt_port": 1883,
+                "bootstrap_mqtt_host": "10.0.0.100",
+                "registration_timestamp": "2026-03-11T00:00:00Z",
             }
 
     class _FakeServiceManager:
@@ -95,8 +118,11 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertIn("openai", provider_set_response.json()["config"]["providers"]["enabled"])
 
             capability_declare_response = client.post("/api/capabilities/declare")
-            self.assertEqual(capability_declare_response.status_code, 200)
-            self.assertEqual(capability_declare_response.json()["status"], "accepted")
+            self.assertEqual(capability_declare_response.status_code, 409)
+            self.assertEqual(
+                capability_declare_response.json()["detail"]["error_code"],
+                "capability_setup_prerequisites_unmet",
+            )
 
             governance_status_response = client.get("/api/governance/status")
             self.assertEqual(governance_status_response.status_code, 200)
@@ -117,6 +143,33 @@ class NodeControlFastApiTests(unittest.TestCase):
             services_restart_response = client.post("/api/services/restart", json={"target": "backend"})
             self.assertEqual(services_restart_response.status_code, 200)
             self.assertEqual(services_restart_response.json()["target"], "backend")
+
+    def test_capability_declare_succeeds_when_capability_setup_is_ready(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED, {"source": "test"})
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING, {"source": "test"})
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                provider_selection_store=self._FakeProviderSelectionStore(),
+                capability_runner=self._FakeCapabilityRunner(),
+                node_identity_store=self._FakeNodeIdentityStore(),
+                trust_state_store=self._FakeTrustStateStore(),
+                startup_mode="trusted_resume",
+                trusted_runtime_context={
+                    "paired_core_id": "core-main",
+                    "core_api_endpoint": "http://10.0.0.100:9001",
+                    "operational_mqtt_host": "10.0.0.100",
+                    "operational_mqtt_port": 1883,
+                },
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+            response = client.post("/api/capabilities/declare")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["status"], "accepted")
 
 
 if __name__ == "__main__":

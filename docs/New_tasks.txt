@@ -40,4 +40,62 @@ Do not stop early.
 
 Do not edit above this line:
 #######################################################################
+when implementing theese task compare with golden docs. if data is missing documemet in golden docs
+use: ai-node mismatch md file.
+then stop execution
 
+
+[DONE] Task 091: Define `capability_setup_pending` contract and entry criteria
+  - Document exact triggers that move node into `capability_setup_pending`.
+  - Define required data present at this state:
+    - trusted identity
+    - provider selection config
+    - trust/core runtime context
+  - Define disallowed transitions from this state.
+
+[DONE] Task 092: Expose complete `capability_setup_pending` status payload
+  - Extend node status API payload for this state with:
+    - capability setup readiness flags
+    - provider selection completeness
+    - blocking reasons (if any)
+  - Keep payload stable for UI polling.
+
+[DONE] Task 093: Add explicit backend validation gate before capability declaration
+  - Validate prerequisites before `POST /api/capabilities/declare`:
+    - trust state valid
+    - node identity valid
+    - provider selection valid
+  - Return structured 4xx errors for unmet prerequisites.
+
+[DONE] Task 094: Implement restart-safe re-entry behavior for `capability_setup_pending`
+  - On backend restart with trusted state, always rehydrate setup context.
+  - Preserve provider selection and phase2 state continuity.
+  - Ensure no accidental fallback to bootstrap onboarding.
+
+[DONE] Task 095: Improve `capability_setup_pending` diagnostics and logs
+  - Add compact structured logs for:
+    - state entry
+    - readiness checks
+    - provider selection changes
+    - declaration gate failures
+  - Redact secrets/tokens.
+
+[DONE] Task 096: Add backend tests for `capability_setup_pending` lifecycle behavior
+  - Add/extend tests for:
+    - trusted -> capability_setup_pending transition
+    - declaration blocked when prerequisites fail
+    - restart re-entry behavior
+    - payload fields and error codes
+
+[DONE] Task 097: Align UI behavior specifically for `capability_setup_pending`
+  - Ensure UI renders setup controls only when state is `capability_setup_pending`.
+  - Display blocking reasons/readiness flags from backend.
+  - Prevent declaration actions when backend flags not ready.
+
+[DONE] Task 098: Create capability-setup validation checklist
+  - Add checklist covering:
+    - entry conditions
+    - API payload correctness
+    - restart persistence
+    - declaration gating
+    - UI behavior in ready vs blocked setup states

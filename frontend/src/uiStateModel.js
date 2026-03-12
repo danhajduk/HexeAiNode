@@ -63,6 +63,7 @@ export function buildDashboardUiState({
 } = {}) {
   const lifecycleState = nodeStatus?.status || (apiReachable ? "unknown" : "offline");
   const capability = nodeStatus?.capability_declaration || {};
+  const capabilitySetup = nodeStatus?.capability_setup || {};
   const trustedContext = nodeStatus?.trusted_runtime_context || {};
   const governance = governanceStatus?.status || capability?.governance_status || {};
   const providerEnabled = providerConfig?.config?.providers?.enabled || [];
@@ -111,6 +112,9 @@ export function buildDashboardUiState({
       declaredTaskFamilies: capability?.manifest_summary?.task_families || [],
       capabilityDeclarationTimestamp: capability?.accepted_profile?.acceptance_timestamp || null,
       governancePolicyVersion: governance?.active_governance_version || "",
+      setupReadinessFlags: capabilitySetup?.readiness_flags || {},
+      setupBlockingReasons: capabilitySetup?.blocking_reasons || [],
+      declarationAllowed: Boolean(capabilitySetup?.declaration_allowed),
     },
     serviceStatus: resolvedServiceStatus || {
       backend: "unknown",

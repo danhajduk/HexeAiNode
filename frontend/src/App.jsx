@@ -42,6 +42,7 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [openaiEnabled, setOpenaiEnabled] = useState(false);
   const [savingProvider, setSavingProvider] = useState(false);
+  const [declaringCapabilities, setDeclaringCapabilities] = useState(false);
   const [restartingServiceTarget, setRestartingServiceTarget] = useState("");
   const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
   const [uiState, setUiState] = useState(() =>
@@ -162,6 +163,9 @@ export default function App() {
   const isUnconfigured = backendStatus === "unconfigured";
   const isPendingApproval = backendStatus === "pending_approval";
   const isCapabilitySetupPending = backendStatus === "capability_setup_pending";
+  const setupReadinessFlags = uiState.capabilitySummary.setupReadinessFlags || {};
+  const setupBlockingReasons = uiState.capabilitySummary.setupBlockingReasons || [];
+  const capabilityDeclareAllowed = uiState.capabilitySummary.declarationAllowed;
   const showCorePanel = Boolean(uiState.coreConnection.connected);
   const lifecycleToneClass = `tone-${uiState.lifecycle.tone || "error"}`;
   const onboardingSteps = [
@@ -219,6 +223,24 @@ export default function App() {
       setError(message);
     } finally {
       setRestartingServiceTarget("");
+    }
+  }
+
+  async function onDeclareCapabilities() {
+    if (declaringCapabilities) {
+      return;
+    }
+    setDeclaringCapabilities(true);
+    setError("");
+    try {
+      await apiPost("/api/capabilities/declare", {});
+      await loadStatus();
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      await loadStatus();
+    } finally {
+      setDeclaringCapabilities(false);
     }
   }
 
@@ -360,6 +382,29 @@ export default function App() {
                 <button className="btn btn-primary" type="submit" disabled={savingProvider}>
                   {savingProvider ? "Saving..." : "Save Provider Selection"}
                 </button>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={onDeclareCapabilities}
+                  disabled={declaringCapabilities || !capabilityDeclareAllowed}
+                >
+                  {declaringCapabilities ? "Declaring..." : "Declare Capabilities"}
+                </button>
+                <div className="state-grid">
+                  <span>Trust Ready</span>
+                  <StatusBadge value={setupReadinessFlags.trust_state_valid ? "ready" : "blocked"} />
+                  <span>Identity Ready</span>
+                  <StatusBadge value={setupReadinessFlags.node_identity_valid ? "ready" : "blocked"} />
+                  <span>Provider Ready</span>
+                  <StatusBadge value={setupReadinessFlags.provider_selection_valid ? "ready" : "blocked"} />
+                  <span>Runtime Context</span>
+                  <StatusBadge value={setupReadinessFlags.core_runtime_context_valid ? "ready" : "blocked"} />
+                </div>
+                {setupBlockingReasons.length ? (
+                  <p className="warning tiny">
+                    Blocking: <code>{setupBlockingReasons.join(", ")}</code>
+                  </p>
+                ) : null}
               </form>
             ) : null}
           </article>

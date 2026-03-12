@@ -29,6 +29,11 @@ LOGGER = logging.getLogger("ai_node.main")
 SHOULD_STOP = False
 
 
+def _is_loopback_host(value: object) -> bool:
+    host = str(value or "").strip().lower()
+    return host in {"127.0.0.1", "localhost", "::1"}
+
+
 def _handle_signal(signum, _frame):
     global SHOULD_STOP
     LOGGER.info("received signal %s, stopping", signum)
@@ -171,6 +176,19 @@ def run(
     phase2_diag = Phase2DiagnosticsLogger(LOGGER)
     trust_state_store = TrustStateStore(path=trust_state_path, logger=LOGGER)
     trust_state = trust_state_store.load()
+    if isinstance(trust_state, dict):
+        operational_host = str(trust_state.get("operational_mqtt_host") or "").strip()
+        bootstrap_host = str(trust_state.get("bootstrap_mqtt_host") or "").strip()
+        if _is_loopback_host(operational_host) and bootstrap_host and not _is_loopback_host(bootstrap_host):
+            trust_state["operational_mqtt_host"] = bootstrap_host
+            trust_state_store.save(trust_state)
+            LOGGER.warning(
+                "[trust-state-operational-host-corrected] %s",
+                {
+                    "from": operational_host,
+                    "to": bootstrap_host,
+                },
+            )
     migration_node_id = None
     if isinstance(trust_state, dict):
         migration_node_id = str(trust_state.get("node_id") or "").strip() or None
@@ -285,6 +303,7 @@ def run(
         capability_runner=capability_runner,
         node_identity_store=node_identity_store,
         provider_selection_store=provider_selection_store,
+        trust_state_store=trust_state_store,
         service_manager=service_manager,
         startup_mode=startup_mode,
         trusted_runtime_context=trusted_runtime_context,

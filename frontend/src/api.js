@@ -11,7 +11,12 @@ export async function apiGet(path) {
   const response = await fetch(`${getApiBase()}${path}`);
   const payload = await response.json();
   if (!response.ok) {
-    throw new Error(payload.detail || payload.error || `request failed (${response.status})`);
+    const detail = payload.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : detail?.message || detail?.error_code || payload.error || `request failed (${response.status})`;
+    throw new Error(message);
   }
   return payload;
 }
@@ -24,7 +29,12 @@ export async function apiPost(path, body) {
   });
   const payload = await response.json();
   if (!response.ok) {
-    throw new Error(payload.detail || payload.error || `request failed (${response.status})`);
+    const detail = payload.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : detail?.message || detail?.error_code || payload.error || `request failed (${response.status})`;
+    throw new Error(message);
   }
   return payload;
 }

@@ -13,6 +13,11 @@ from ai_node.trust.trust_activation_parser import parse_trust_activation_payload
 from ai_node.trust.trust_store import TrustStateStore
 
 
+def _is_loopback_host(value: object) -> bool:
+    host = str(value or "").strip().lower()
+    return host in {"127.0.0.1", "localhost", "::1"}
+
+
 class HttpxJsonAdapter:
     async def post_json(self, url: str, payload: dict) -> dict:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -290,6 +295,30 @@ class OnboardingRuntime:
                 f"node_id mismatch between identity ({self._node_id}) and activation payload ({parsed['node_id']})"
             )
 
+        bootstrap_mqtt_host = str(bootstrap_payload.get("mqtt_host") or bootstrap_payload.get("bootstrap_host") or "").strip()
+        activation_mqtt_host = str(parsed["operational_mqtt_host"]).strip()
+        effective_operational_mqtt_host = activation_mqtt_host
+        if _is_loopback_host(activation_mqtt_host) and bootstrap_mqtt_host and not _is_loopback_host(bootstrap_mqtt_host):
+            effective_operational_mqtt_host = bootstrap_mqtt_host
+            if hasattr(self._logger, "warning"):
+                self._logger.warning(
+                    "[operational-mqtt-host-corrected] %s",
+                    {
+                        "activation_operational_mqtt_host": activation_mqtt_host,
+                        "bootstrap_mqtt_host": bootstrap_mqtt_host,
+                        "effective_operational_mqtt_host": effective_operational_mqtt_host,
+                    },
+                )
+        elif hasattr(self._logger, "info"):
+            self._logger.info(
+                "[operational-mqtt-host-selected] %s",
+                {
+                    "activation_operational_mqtt_host": activation_mqtt_host,
+                    "bootstrap_mqtt_host": bootstrap_mqtt_host,
+                    "effective_operational_mqtt_host": effective_operational_mqtt_host,
+                },
+            )
+
         trust_state = {
             "node_id": parsed["node_id"],
             "node_name": node_name,
@@ -301,13 +330,17 @@ class OnboardingRuntime:
             "baseline_policy_version": activation_payload.get("baseline_policy_version", "1.0"),
             "operational_mqtt_identity": parsed["operational_mqtt_identity"],
             "operational_mqtt_token": parsed["operational_mqtt_token"],
-            "operational_mqtt_host": parsed["operational_mqtt_host"],
+            "operational_mqtt_host": effective_operational_mqtt_host,
             "operational_mqtt_port": parsed["operational_mqtt_port"],
-            "bootstrap_mqtt_host": str(bootstrap_payload.get("mqtt_host") or bootstrap_payload.get("bootstrap_host") or "").strip(),
+            "bootstrap_mqtt_host": bootstrap_mqtt_host,
             "registration_timestamp": datetime.now(timezone.utc).isoformat(),
         }
         self._trust_store.save(trust_state)
         self._lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        self._lifecycle.transition_to(
+            NodeLifecycleState.CAPABILITY_SETUP_PENDING,
+            {"source": "onboarding_finalize_approved"},
+        )
         with self._lock:
             self._pending_approval_url = None
             self._pending_session_id = None

@@ -191,7 +191,8 @@ h2 {
 .status-operational,
 .status-running,
 .status-trusted,
-.status-connected {
+.status-connected,
+.status-ready {
   color: #1f9d55;
 }
 
@@ -211,7 +212,8 @@ h2 {
 }
 
 .status-offline,
-.status-error {
+.status-error,
+.status-blocked {
   color: #c0392b;
 }
 
