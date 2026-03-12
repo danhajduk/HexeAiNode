@@ -50,6 +50,7 @@ class CapabilityDeclarationRunner:
         self._last_submitted_at = None
         self._accepted_profile = None
         self._governance_bundle = None
+        self._last_manifest_summary = None
         self._governance_status = evaluate_governance_freshness(None)
         self._governance_status["refresh_state"] = "idle"
         self._governance_status["last_refresh_error"] = None
@@ -63,6 +64,7 @@ class CapabilityDeclarationRunner:
             "last_error": self._last_error,
             "last_submitted_at": self._last_submitted_at,
             "accepted_profile": self._accepted_profile,
+            "manifest_summary": self._last_manifest_summary,
             "governance_bundle": self._governance_bundle,
             "governance_status": self._governance_status,
             "operational_mqtt_readiness": (
@@ -141,6 +143,11 @@ class CapabilityDeclarationRunner:
                 "feature_count": len(manifest.get("node_features") or []),
             }
         )
+        self._last_manifest_summary = {
+            "task_families": [item.get("name") for item in (manifest.get("functional_task_families") or []) if item.get("name")],
+            "enabled_providers": list((manifest.get("providers") or {}).get("enabled") or []),
+            "manifest_version": manifest.get("manifest_version"),
+        }
 
         self._lifecycle.transition_to(
             NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS,

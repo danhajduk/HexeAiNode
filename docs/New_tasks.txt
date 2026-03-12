@@ -49,21 +49,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 084: Add capability summary card (Phase 2 readiness)
-  - Create a new dashboard card showing node capabilities.
-  - Display:
-    - declared task families
-    - enabled providers
-    - capability declaration timestamp
-    - governance policy version
-  - Provide placeholders for future provider expansion.
-
-  * Comments, descriptions, rules:
-    - This card becomes active once Phase 2 capability declaration is complete.
-    - The UI should gracefully handle cases where capability data is not yet available.
-    - Do not include prompt-level data here.
-
-
 [TODO] Task 085: Improve service management card with control actions
   - Expand the Service card to display:
     - backend service status

@@ -372,3 +372,10 @@ Step objective: Add trusted-only Core connection panel for operator diagnostics.
 Chosen fix: Added a dedicated Core Connection card shown only when paired Core context exists, with Core ID/API endpoint/operational MQTT endpoint, connection indicator, and onboarding reference.
 What changed: Updated frontend/src/App.jsx.
 Verification: `cd frontend && npm run build` passes.
+
+###########
+Task #084
+Step objective: Add a capability summary dashboard card for Phase 2 readiness visibility.
+Chosen fix: Added a compact capability manifest summary to backend status payload and rendered a UI card showing task families, enabled providers, declaration timestamp, governance policy version, and provider expansion placeholders.
+What changed: Updated src/ai_node/runtime/capability_declaration_runner.py, frontend/src/uiStateModel.js, and frontend/src/App.jsx.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_capability_declaration_runner.py tests/test_node_control_fastapi.py tests/test_node_control_api.py` passes (15 tests); `cd frontend && npm run build` passes.

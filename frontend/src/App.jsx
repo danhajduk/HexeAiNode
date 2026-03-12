@@ -362,6 +362,22 @@ export default function App() {
             </article>
           ) : null}
           <article className="card">
+            <h2>Capability Summary</h2>
+            <p className="muted">Phase 2 declaration readiness snapshot</p>
+            <div className="state-grid">
+              <span>Task Families</span>
+              <code>{uiState.capabilitySummary.declaredTaskFamilies.join(", ") || "not_declared"}</code>
+              <span>Enabled Providers</span>
+              <code>{uiState.capabilitySummary.enabledProviders.join(", ") || "none"}</code>
+              <span>Declared At</span>
+              <code>{uiState.capabilitySummary.capabilityDeclarationTimestamp || "pending"}</code>
+              <span>Governance Policy</span>
+              <code>{uiState.capabilitySummary.governancePolicyVersion || "unknown"}</code>
+              <span>Provider Expansion</span>
+              <code>openai (active), local/future (placeholder)</code>
+            </div>
+          </article>
+          <article className="card">
             <h2>Service</h2>
             <p className="muted">
               Controlled with user systemd units:

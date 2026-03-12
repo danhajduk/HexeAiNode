@@ -104,6 +104,7 @@ export function buildDashboardUiState({
     capabilitySummary: {
       capabilityStatus: capability?.status || "idle",
       enabledProviders: providerEnabled,
+      declaredTaskFamilies: capability?.manifest_summary?.task_families || [],
       capabilityDeclarationTimestamp: capability?.accepted_profile?.acceptance_timestamp || null,
       governancePolicyVersion: governance?.active_governance_version || "",
     },
