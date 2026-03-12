@@ -4,6 +4,8 @@ import { apiGet, apiPost, getApiBase } from "./api";
 import { buildDashboardUiState } from "./uiStateModel";
 import "./app.css";
 
+const REFRESH_INTERVAL_MS = 7000;
+
 function ThemeToggle() {
   const [theme, setLocalTheme] = useState(getTheme());
 
@@ -109,7 +111,7 @@ export default function App() {
 
   useEffect(() => {
     loadStatus();
-    const id = setInterval(loadStatus, 5000);
+    const id = setInterval(loadStatus, REFRESH_INTERVAL_MS);
     return () => clearInterval(id);
   }, []);
 
@@ -229,6 +231,15 @@ export default function App() {
           ) : null}
         </div>
         <p className="muted tiny">API: {getApiBase()}</p>
+        <p className="muted tiny">
+          Last update: <code>{uiState.meta.lastUpdatedAt || "never"}</code> | Refresh:{" "}
+          <code>{REFRESH_INTERVAL_MS / 1000}s</code>
+        </p>
+        {uiState.meta.partialFailures?.length ? (
+          <p className="warning tiny">
+            Partial data unavailable: <code>{uiState.meta.partialFailures.join(", ")}</code>
+          </p>
+        ) : null}
         <div className="row">
           <span className="muted tiny">
             Unique ID: <code>{nodeId || "unavailable"}</code>

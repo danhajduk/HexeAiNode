@@ -60,6 +60,10 @@ h2 {
   color: hsl(var(--color-danger));
 }
 
+.warning {
+  color: #d17a00;
+}
+
 .state-grid {
   display: grid;
   grid-template-columns: 120px 1fr;

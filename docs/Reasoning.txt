@@ -386,3 +386,10 @@ Step objective: Add service status visibility and restart controls in dashboard/
 Chosen fix: Added backend service manager integration for user systemd units with status/restart endpoints, and wired frontend service card to show running/stopped/failed state with guarded restart actions.
 What changed: Added src/ai_node/runtime/service_manager.py and tests/test_service_manager.py; updated src/ai_node/runtime/node_control_api.py and src/ai_node/main.py; updated frontend/src/App.jsx and frontend/src/app.css.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_service_manager.py tests/test_node_control_fastapi.py tests/test_node_control_api.py tests/test_main_entrypoint.py` passes (15 tests); `cd frontend && npm run build` passes.
+
+###########
+Task #086
+Step objective: Improve live dashboard updates and partial-failure visibility.
+Chosen fix: Kept periodic polling and formalized live-update metadata display (last update timestamp, refresh interval, partial-failure warnings) while preserving graceful degraded rendering with partial endpoint failures.
+What changed: Updated frontend/src/App.jsx and frontend/src/app.css.
+Verification: `cd frontend && npm run build` passes.

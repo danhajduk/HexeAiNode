@@ -49,20 +49,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 086: Implement status refresh and live updates
-  - Add periodic polling or websocket updates for:
-    - lifecycle state
-    - runtime health
-    - onboarding progress
-    - service status
-  - Update UI components dynamically when state changes.
-
-  * Comments, descriptions, rules:
-    - Refresh interval should be reasonable (e.g., 5–10 seconds).
-    - Avoid heavy polling that could overload the node.
-    - UI should degrade gracefully if backend endpoints temporarily fail.
-
-
 [TODO] Task 087: Implement responsive layout improvements
   - Ensure the dashboard layout works on:
     - laptop screens
