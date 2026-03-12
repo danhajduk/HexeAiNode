@@ -43,21 +43,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 069: Phase 2B — Implement Core response processing for accepted capability profile
-  - Parse and persist Core’s accepted capability-profile response.
-  - Store:
-    - accepted capability declaration version
-    - acceptance timestamp
-    - any returned capability/profile identifiers
-    - any Core-side restrictions or notes tied to the accepted declaration
-  - Make this information available to later policy/gateway layers.
-
-  * Comments, descriptions, rules:
-    - Capability acceptance is not the same as full runtime authorization for future tasks.
-    - Preserve enough accepted-profile metadata for later debugging.
-    - Keep the stored model versioned.
-
-
 [TODO] Task 070: Phase 2B — Implement baseline governance sync after capability acceptance
   - After Core accepts the capability declaration, fetch/sync the baseline governance bundle for the node.
   - Support:

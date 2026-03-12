@@ -1,7 +1,7 @@
 # Synthia AI Node - Phase 2 Implementation Plan and Module Map
 
 Status: Active
-Implementation status: In progress (Tasks 059-068 implemented)
+Implementation status: In progress (Tasks 059-069 implemented)
 Last updated: 2026-03-11
 
 ## Scope
@@ -70,6 +70,10 @@ Out of scope in Phase 2:
   - capability declaration runner added with explicit submission lifecycle transitions
   - node now uses `capability_declaration_in_progress` / `accepted` / `failed_retry_pending`
   - transition to `operational` happens only after accepted declaration
+- Task 069:
+  - accepted capability declaration response metadata is now persisted in local capability state storage
+  - stored metadata includes accepted declaration version, acceptance timestamp, profile id, restrictions/notes, and raw Core payload for debugging
+  - runner preloads accepted profile state on startup so later governance/policy layers can consume it after restart
 
 ## Phase 2 Module Map (Python)
 

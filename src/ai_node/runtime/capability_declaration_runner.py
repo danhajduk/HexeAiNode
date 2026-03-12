@@ -18,24 +18,38 @@ class CapabilityDeclarationRunner:
         trust_store,
         provider_selection_store,
         node_id: str,
+        capability_state_store=None,
         capability_client=None,
     ) -> None:
         self._lifecycle = lifecycle
         self._logger = logger
         self._trust_store = trust_store
         self._provider_selection_store = provider_selection_store
+        self._capability_state_store = capability_state_store
         self._node_id = str(node_id).strip()
         self._capability_client = capability_client or CapabilityDeclarationClient(logger=logger)
         self._status = "idle"
         self._last_error = None
         self._last_submitted_at = None
+        self._accepted_profile = None
+        self._load_accepted_profile()
 
     def status_payload(self) -> dict:
         return {
             "status": self._status,
             "last_error": self._last_error,
             "last_submitted_at": self._last_submitted_at,
+            "accepted_profile": self._accepted_profile,
         }
+
+    def _load_accepted_profile(self) -> None:
+        if self._capability_state_store is None or not hasattr(self._capability_state_store, "load"):
+            return
+        payload = self._capability_state_store.load()
+        if not isinstance(payload, dict):
+            return
+        self._accepted_profile = payload
+        self._status = "accepted"
 
     async def submit_once(self) -> dict:
         state = self._lifecycle.get_state()
@@ -81,6 +95,30 @@ class CapabilityDeclarationRunner:
         )
 
         if result.status == "accepted":
+            accepted_payload = {
+                "schema_version": "1.0",
+                "accepted_declaration_version": str(
+                    result.payload.get("accepted_declaration_version") or manifest.get("manifest_version") or "1.0"
+                ).strip(),
+                "acceptance_timestamp": str(
+                    result.payload.get("accepted_at")
+                    or result.payload.get("acceptance_timestamp")
+                    or datetime.now(timezone.utc).isoformat()
+                ).strip(),
+                "accepted_profile_id": str(
+                    result.payload.get("accepted_profile_id")
+                    or result.payload.get("profile_id")
+                    or result.payload.get("capability_profile_id")
+                    or ""
+                ).strip()
+                or None,
+                "core_restrictions": result.payload.get("core_restrictions") or result.payload.get("restrictions") or {},
+                "core_notes": str(result.payload.get("core_notes") or result.payload.get("notes") or "").strip() or None,
+                "raw_response": result.payload,
+            }
+            if self._capability_state_store is not None and hasattr(self._capability_state_store, "save"):
+                self._capability_state_store.save(accepted_payload)
+            self._accepted_profile = accepted_payload
             self._lifecycle.transition_to(
                 NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED,
                 {"source": "capability_declaration_runner"},
@@ -91,7 +129,7 @@ class CapabilityDeclarationRunner:
             )
             self._status = "accepted"
             self._last_error = None
-            return {"status": "accepted", "result": result.payload}
+            return {"status": "accepted", "result": result.payload, "accepted_profile": accepted_payload}
 
         self._lifecycle.transition_to(
             NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING,

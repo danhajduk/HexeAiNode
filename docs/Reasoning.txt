@@ -269,3 +269,10 @@ Step objective: Add explicit capability declaration submission states and operat
 Chosen fix: Added lifecycle declaration states and a declaration runner that transitions through in-progress/accepted/failed-retry states before allowing operational.
 What changed: Updated src/ai_node/lifecycle/node_lifecycle.py, src/ai_node/main.py, src/ai_node/runtime/node_control_api.py; added src/ai_node/runtime/capability_declaration_runner.py and tests/test_capability_declaration_runner.py; updated tests/test_connectivity_manager.py and tests/test_node_control_fastapi.py.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_manifest_schema tests.test_capability_declaration_runner tests.test_capability_client tests.test_node_control_fastapi tests.test_connectivity_manager -v` passes (12 tests).
+
+###########
+Task #069 (Phase 2)
+Step objective: Persist accepted capability profile metadata and make it restart-available.
+Chosen fix: Added versioned capability state storage with validation, saved accepted Core response metadata on successful declaration, and preload accepted profile from store at runner startup.
+What changed: Added src/ai_node/persistence/capability_state_store.py and src/ai_node/persistence/__init__.py; updated src/ai_node/runtime/capability_declaration_runner.py and src/ai_node/main.py; added tests/test_capability_state_store.py and updated tests/test_capability_declaration_runner.py.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_capability_state_store.py tests/test_capability_declaration_runner.py tests/test_capability_client.py tests/test_node_control_fastapi.py tests/test_main_entrypoint.py` passes (17 tests).
