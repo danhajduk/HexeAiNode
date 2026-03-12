@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getTheme, setTheme } from "./theme/theme";
 import { apiGet, apiPost, getApiBase } from "./api";
+import { buildDashboardUiState } from "./uiStateModel";
 import "./app.css";
 
 function ThemeToggle() {
@@ -31,23 +32,72 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [openaiEnabled, setOpenaiEnabled] = useState(false);
   const [savingProvider, setSavingProvider] = useState(false);
+  const [uiState, setUiState] = useState(() =>
+    buildDashboardUiState({
+      nodeStatus: null,
+      governanceStatus: null,
+      providerConfig: null,
+      apiReachable: false,
+      partialFailures: ["node_status_unavailable"],
+    })
+  );
 
   async function loadStatus() {
-    try {
-      const payload = await apiGet("/api/node/status");
-      setBackendStatus(payload.status || "unknown");
-      setPendingApprovalUrl(payload.pending_approval_url || "");
-      setNodeId(payload.node_id || "");
-      setError("");
-      if ((payload.status || "unknown") === "capability_setup_pending") {
-        await loadProviderConfig();
-      }
-    } catch (err) {
+    const lastUpdatedAt = new Date().toISOString();
+    const [nodeResult, governanceResult, providerResult] = await Promise.allSettled([
+      apiGet("/api/node/status"),
+      apiGet("/api/governance/status"),
+      apiGet("/api/providers/config"),
+    ]);
+
+    if (nodeResult.status !== "fulfilled") {
       setBackendStatus("offline");
       setPendingApprovalUrl("");
       setNodeId("");
-      setError(String(err?.message || err));
+      const message = String(nodeResult.reason?.message || nodeResult.reason || "backend offline");
+      setError(message);
+      setUiState(
+        buildDashboardUiState({
+          nodeStatus: null,
+          governanceStatus: null,
+          providerConfig: null,
+          apiReachable: false,
+          lastUpdatedAt,
+          partialFailures: ["node_status_unavailable"],
+        })
+      );
+      return;
     }
+
+    const payload = nodeResult.value || {};
+    const governancePayload = governanceResult.status === "fulfilled" ? governanceResult.value : null;
+    const providerPayload = providerResult.status === "fulfilled" ? providerResult.value : null;
+    const partialFailures = [];
+    if (governanceResult.status !== "fulfilled") {
+      partialFailures.push("governance_status_unavailable");
+    }
+    if (providerResult.status !== "fulfilled") {
+      partialFailures.push("provider_config_unavailable");
+    }
+
+    setBackendStatus(payload.status || "unknown");
+    setPendingApprovalUrl(payload.pending_approval_url || "");
+    setNodeId(payload.node_id || "");
+    setError("");
+    if ((payload.status || "unknown") === "capability_setup_pending" && providerPayload) {
+      const enabledProviders = providerPayload?.config?.providers?.enabled || [];
+      setOpenaiEnabled(enabledProviders.includes("openai"));
+    }
+    setUiState(
+      buildDashboardUiState({
+        nodeStatus: payload,
+        governanceStatus: governancePayload,
+        providerConfig: providerPayload,
+        apiReachable: true,
+        lastUpdatedAt,
+        partialFailures,
+      })
+    );
   }
 
   async function loadProviderConfig() {
@@ -225,6 +275,24 @@ export default function App() {
           <article className="card">
             <h2>Runtime</h2>
             <p className="muted">Operational handoff, degraded recovery, telemetry.</p>
+          </article>
+          <article className="card">
+            <h2>UI State Model</h2>
+            <p className="muted tiny">Lifecycle-first canonical dashboard state</p>
+            <div className="state-grid">
+              <span>Lifecycle</span>
+              <code>{uiState.lifecycle.current}</code>
+              <span>Onboarding</span>
+              <code>{JSON.stringify(uiState.onboarding.progress)}</code>
+              <span>Runtime</span>
+              <code>{uiState.runtimeHealth.state}</code>
+              <span>Core</span>
+              <code>{uiState.coreConnection.pairedCoreId || "not_paired"}</code>
+              <span>Capability</span>
+              <code>{uiState.capabilitySummary.capabilityStatus}</code>
+              <span>Service</span>
+              <code>{uiState.serviceStatus.backend}</code>
+            </div>
           </article>
           <article className="card">
             <h2>Service</h2>

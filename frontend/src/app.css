@@ -59,3 +59,16 @@ h2 {
 .error {
   color: hsl(var(--color-danger));
 }
+
+.state-grid {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.state-grid code {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

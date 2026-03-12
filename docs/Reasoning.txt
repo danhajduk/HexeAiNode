@@ -337,3 +337,10 @@ Task #078 (Phase 2)
 Step objective: Finalize Phase 2 review and create handoff guidance for the next phase.
 What changed: Added docs/ai-node/phase2-review-handoff.md documenting implemented Phase 2 behavior, known deviations, deferred edge cases, completion check, and handoff guidance for prompt/service registration, probation, and gateway preparation.
 Verification: Review content was cross-checked against implemented runtime modules (capability runner, governance/operational readiness, telemetry, degraded recovery, persistence) and phase2 documentation set.
+
+###########
+Task #079
+Step objective: Define and integrate a canonical lifecycle-first UI state model for the dashboard.
+Chosen fix: Added a dedicated frontend state model builder that composes lifecycle, onboarding progress, runtime health, core connection, capability summary, and service status from backend payloads with partial-failure tolerance.
+What changed: Added frontend/src/uiStateModel.js; updated frontend/src/App.jsx to build UI state from `/api/node/status`, `/api/governance/status`, and `/api/providers/config`; updated frontend/src/app.css for state model rendering.
+Verification: `cd frontend && npm run build` passes.

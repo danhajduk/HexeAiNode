@@ -49,31 +49,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 079: Define the UI state model for the AI Node dashboard
-  - Create a canonical UI state model representing the node lifecycle and operational status.
-  - The UI must support displaying:
-    - lifecycle state
-    - onboarding progress
-    - runtime health
-    - core connection info
-    - capability summary
-    - service status
-  - Map UI states to backend lifecycle states:
-    - unconfigured
-    - bootstrap_connecting
-    - registration_pending
-    - pending_approval
-    - trusted
-    - capability_setup_pending
-    - operational
-    - degraded
-
-  * Comments, descriptions, rules:
-    - The UI must treat lifecycle state as the primary indicator of node status.
-    - The dashboard should be able to render meaningful information even if some backend endpoints are temporarily unavailable.
-    - Keep the state model aligned with the architecture documentation.
-
-
 [TODO] Task 080: Add lifecycle status card to the dashboard
   - Implement a new "Lifecycle" card in the dashboard.
   - Display:
