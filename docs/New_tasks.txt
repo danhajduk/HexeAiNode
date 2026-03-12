@@ -49,20 +49,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 083: Add Core connection information panel
-  - Display current Core connection metadata:
-    - Core ID
-    - Core API endpoint
-    - operational MQTT host and port
-  - Show whether the node is currently connected to the Core.
-  - Add a link or reference to Core onboarding/registration status.
-
-  * Comments, descriptions, rules:
-    - Operators often debug connection issues; this card must clearly show the Core endpoint.
-    - Never display tokens or secrets.
-    - This panel should appear only once the node is trusted.
-
-
 [TODO] Task 084: Add capability summary card (Phase 2 readiness)
   - Create a new dashboard card showing node capabilities.
   - Display:

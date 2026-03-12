@@ -154,6 +154,7 @@ export default function App() {
   const isUnconfigured = backendStatus === "unconfigured";
   const isPendingApproval = backendStatus === "pending_approval";
   const isCapabilitySetupPending = backendStatus === "capability_setup_pending";
+  const showCorePanel = Boolean(uiState.coreConnection.connected);
   const lifecycleToneClass = `tone-${uiState.lifecycle.tone || "error"}`;
   const onboardingSteps = [
     { key: "bootstrap_discovery", label: "Bootstrap Discovery" },
@@ -337,6 +338,29 @@ export default function App() {
               </span>
             </div>
           </article>
+          {showCorePanel ? (
+            <article className="card">
+              <h2>Core Connection</h2>
+              <p className="muted">Trusted Core endpoint metadata</p>
+              <div className="state-grid">
+                <span>Core ID</span>
+                <code>{uiState.coreConnection.pairedCoreId}</code>
+                <span>Core API</span>
+                <code>{uiState.coreConnection.coreApiEndpoint || "unavailable"}</code>
+                <span>Operational MQTT</span>
+                <code>
+                  {uiState.coreConnection.operationalMqttHost || "unavailable"}
+                  {uiState.coreConnection.operationalMqttPort ? `:${uiState.coreConnection.operationalMqttPort}` : ""}
+                </code>
+                <span>Connection</span>
+                <span className={`conn-pill conn-${uiState.coreConnection.connected ? "connected" : "disconnected"}`}>
+                  {uiState.coreConnection.connected ? "connected" : "disconnected"}
+                </span>
+                <span>Onboarding Ref</span>
+                <code>{uiState.onboarding.pendingSessionId || uiState.lifecycle.current}</code>
+              </div>
+            </article>
+          ) : null}
           <article className="card">
             <h2>Service</h2>
             <p className="muted">

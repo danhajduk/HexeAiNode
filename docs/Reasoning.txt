@@ -365,3 +365,10 @@ Step objective: Expand runtime card with live operational health signals.
 Chosen fix: Bound runtime card fields to canonical UI state model and added connectivity/health indicators for Core API, operational MQTT, governance freshness, telemetry timestamp, and node health.
 What changed: Updated frontend/src/App.jsx runtime card rendering; updated frontend/src/uiStateModel.js runtime health derivation; updated frontend/src/app.css with reusable connectivity badge styles.
 Verification: `cd frontend && npm run build` passes.
+
+###########
+Task #083
+Step objective: Add trusted-only Core connection panel for operator diagnostics.
+Chosen fix: Added a dedicated Core Connection card shown only when paired Core context exists, with Core ID/API endpoint/operational MQTT endpoint, connection indicator, and onboarding reference.
+What changed: Updated frontend/src/App.jsx.
+Verification: `cd frontend && npm run build` passes.
