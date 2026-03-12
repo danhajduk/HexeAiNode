@@ -34,6 +34,7 @@ class CapabilityDeclarationRunner:
         governance_state_store=None,
         phase2_state_store=None,
         provider_capability_report_store=None,
+        prompt_service_state_store=None,
         capability_client=None,
         governance_client=None,
         provider_intelligence_service=None,
@@ -50,6 +51,7 @@ class CapabilityDeclarationRunner:
         self._governance_state_store = governance_state_store
         self._phase2_state_store = phase2_state_store
         self._provider_capability_report_store = provider_capability_report_store
+        self._prompt_service_state_store = prompt_service_state_store
         self._node_id = str(node_id).strip()
         self._node_software_version = str(node_software_version).strip() or "0.1.0"
         self._capability_client = capability_client or CapabilityDeclarationClient(logger=logger)
@@ -98,7 +100,27 @@ class CapabilityDeclarationRunner:
             "telemetry": (
                 self._telemetry_publisher.status_payload() if hasattr(self._telemetry_publisher, "status_payload") else None
             ),
+            "prompt_service_registry": self._prompt_service_summary(),
         }
+
+    def _prompt_service_summary(self) -> dict:
+        if self._prompt_service_state_store is None or not hasattr(self._prompt_service_state_store, "load_or_create"):
+            return {"registered_count": 0, "probation_count": 0}
+        payload = self._prompt_service_state_store.load_or_create()
+        entries = payload.get("prompt_services") if isinstance(payload, dict) else []
+        if not isinstance(entries, list):
+            entries = []
+        registered = 0
+        probation = 0
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            status = str(entry.get("status") or "").strip().lower()
+            if status == "registered":
+                registered += 1
+            elif status == "probation":
+                probation += 1
+        return {"registered_count": registered, "probation_count": probation}
 
     def _load_accepted_profile(self) -> None:
         if self._capability_state_store is None or not hasattr(self._capability_state_store, "load"):
@@ -722,6 +744,7 @@ class CapabilityDeclarationRunner:
                 else None
             ),
         }
+        payload.update(self._prompt_service_summary())
         result = await self._telemetry_publisher.publish_status(
             trust_state=trust_state,
             node_id=self._node_id,

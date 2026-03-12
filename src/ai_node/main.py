@@ -24,6 +24,7 @@ from ai_node.runtime.service_manager import UserSystemdServiceManager
 from ai_node.persistence.capability_state_store import CapabilityStateStore
 from ai_node.persistence.governance_state_store import GovernanceStateStore
 from ai_node.persistence.phase2_state_store import Phase2StateStore
+from ai_node.persistence.prompt_service_state_store import PromptServiceStateStore
 from ai_node.persistence.provider_capability_report_store import ProviderCapabilityReportStore
 from ai_node.trust.trust_store import TrustStateStore
 
@@ -142,6 +143,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to persisted provider capability report cache",
     )
     parser.add_argument(
+        "--prompt-service-state-path",
+        default=os.environ.get("SYNTHIA_PROMPT_SERVICE_STATE_PATH", ".run/prompt_service_state.json"),
+        help="Path to persisted prompt/service registration and probation state",
+    )
+    parser.add_argument(
         "--provider-capability-refresh-interval-seconds",
         type=int,
         default=int(os.environ.get("SYNTHIA_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS", "14400")),
@@ -193,6 +199,7 @@ def run(
     governance_state_path: str = ".run/governance_state.json",
     phase2_state_path: str = ".run/phase2_state.json",
     provider_capability_report_path: str = ".run/provider_capability_report.json",
+    prompt_service_state_path: str = ".run/prompt_service_state.json",
     provider_capability_refresh_interval_seconds: int = 14400,
     finalize_poll_interval_seconds: float = 2.0,
 ) -> int:
@@ -235,6 +242,7 @@ def run(
         path=provider_capability_report_path,
         logger=LOGGER,
     )
+    prompt_service_state_store = PromptServiceStateStore(path=prompt_service_state_path, logger=LOGGER)
     LOGGER.info("[node-identity] %s", {"node_id": node_identity["node_id"], "path": node_identity_path})
     if isinstance(trust_state, dict):
         trust_node_id = str(trust_state.get("node_id") or "").strip()
@@ -328,6 +336,7 @@ def run(
         governance_state_store=governance_state_store,
         phase2_state_store=phase2_state_store,
         provider_capability_report_store=provider_capability_report_store,
+        prompt_service_state_store=prompt_service_state_store,
         provider_capability_refresh_interval_seconds=provider_capability_refresh_interval_seconds,
     )
     if startup_mode == "trusted_resume":
@@ -348,6 +357,7 @@ def run(
         provider_selection_store=provider_selection_store,
         task_capability_selection_store=task_capability_selection_store,
         trust_state_store=trust_state_store,
+        prompt_service_state_store=prompt_service_state_store,
         service_manager=service_manager,
         startup_mode=startup_mode,
         trusted_runtime_context=trusted_runtime_context,
@@ -394,6 +404,7 @@ def main() -> int:
         governance_state_path=args.governance_state_path,
         phase2_state_path=args.phase2_state_path,
         provider_capability_report_path=args.provider_capability_report_path,
+        prompt_service_state_path=args.prompt_service_state_path,
         provider_capability_refresh_interval_seconds=args.provider_capability_refresh_interval_seconds,
         finalize_poll_interval_seconds=args.finalize_poll_interval_seconds,
     )

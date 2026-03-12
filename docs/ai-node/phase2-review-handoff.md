@@ -25,6 +25,9 @@ Reviewed implementation areas:
 ### 1) Trusted startup continuation
 
 - Trusted nodes resume into `capability_setup_pending` without re-entering bootstrap onboarding.
+- Startup now performs a readiness-based fast path check:
+  - resumes to `operational` when accepted capability + fresh governance + operational MQTT readiness are already valid
+  - otherwise remains in `capability_setup_pending`
 - Startup context is exposed in control status payload for diagnostics.
 
 ### 2) Capability activation path
@@ -68,6 +71,7 @@ Reviewed implementation areas:
 - Governance sync endpoint contract is implemented with defensive normalization; final Core contract hardening may still require schema tightening.
 - Trusted telemetry currently emits baseline status payloads for node state visibility; richer operational telemetry channels are deferred.
 - Degraded recovery is currently manual trigger (`/api/node/recover`), not yet automated policy-driven recovery orchestration.
+- Prompt/service registration and probation are now scaffolded in node-control APIs with persisted local state and execution authorization gate checks; Core-side registry integration is still pending.
 
 ### Deferred edge cases (intentionally out of Phase 2 scope)
 
@@ -114,4 +118,5 @@ Conclusion:
 
 - [Phase 2 Implementation Plan](./phase2-implementation-plan.md)
 - [Phase 2 Validation Checklist](./phase2-validation-checklist.md)
+- [Node Control API Contract](./node-control-api-contract.md)
 - [AI Node Capability Declaration](../node-capability-declaration.md)

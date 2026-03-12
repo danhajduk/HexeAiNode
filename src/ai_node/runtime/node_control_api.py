@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -7,6 +8,8 @@ from pydantic import BaseModel
 
 from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES
 from ai_node.config.bootstrap_config import create_bootstrap_config
+from ai_node.execution.gateway import ExecutionGateway
+from ai_node.prompts.registration import apply_probation_transition, create_prompt_service_registration
 from ai_node.config.task_capability_selection_config import create_task_capability_selection_config
 from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
@@ -33,6 +36,8 @@ class NodeControlState:
         provider_selection_store=None,
         task_capability_selection_store=None,
         trust_state_store=None,
+        prompt_service_state_store=None,
+        execution_gateway=None,
         service_manager=None,
         startup_mode: str = "bootstrap_onboarding",
         trusted_runtime_context: dict | None = None,
@@ -47,6 +52,8 @@ class NodeControlState:
         self._provider_selection_store = provider_selection_store
         self._task_capability_selection_store = task_capability_selection_store
         self._trust_state_store = trust_state_store
+        self._prompt_service_state_store = prompt_service_state_store
+        self._execution_gateway = execution_gateway or ExecutionGateway()
         self._service_manager = service_manager or NullServiceManager()
         self._startup_mode = startup_mode
         self._trusted_runtime_context = trusted_runtime_context or {}
@@ -54,11 +61,13 @@ class NodeControlState:
         self._bootstrap_config = None
         self._provider_selection_config = None
         self._task_capability_selection_config = None
+        self._prompt_service_state = None
         self._node_id = None
         self._identity_state = "unknown"
         self._load_identity()
         self._load_provider_selection_config()
         self._load_task_capability_selection_config()
+        self._load_prompt_service_state()
         self._load_existing_config()
 
     @staticmethod
@@ -227,6 +236,16 @@ class NodeControlState:
             return
         self._task_capability_selection_config = self._task_capability_selection_store.load_or_create()
 
+    def _load_prompt_service_state(self) -> None:
+        if self._prompt_service_state_store is None or not hasattr(self._prompt_service_state_store, "load_or_create"):
+            self._prompt_service_state = None
+            return
+        self._prompt_service_state = self._prompt_service_state_store.load_or_create()
+
+    @staticmethod
+    def _now_iso() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
     def status_payload(self) -> dict:
         state = self._lifecycle.get_state()
         runtime_context = {}
@@ -261,6 +280,7 @@ class NodeControlState:
             "task_capability_selection_configured": self._task_capability_selection_config is not None,
             "capability_setup": capability_setup_contract,
             "capability_declaration": capability_context,
+            "prompt_service_state": self.prompt_service_state_payload(),
             "services": self.service_status_payload().get("services"),
         }
 
@@ -278,6 +298,122 @@ class NodeControlState:
         if self._task_capability_selection_config is None:
             return {"configured": False, "config": None}
         return {"configured": True, "config": self._task_capability_selection_config}
+
+    def prompt_service_state_payload(self) -> dict:
+        if not isinstance(self._prompt_service_state, dict):
+            return {"configured": False, "state": None}
+        return {"configured": True, "state": self._prompt_service_state}
+
+    def register_prompt_service(
+        self,
+        *,
+        prompt_id: str,
+        service_id: str,
+        task_family: str,
+        metadata: dict | None = None,
+    ) -> dict:
+        if self._prompt_service_state_store is None or not hasattr(self._prompt_service_state_store, "save"):
+            raise ValueError("prompt service state store is not configured")
+        state = (
+            self._prompt_service_state
+            if isinstance(self._prompt_service_state, dict)
+            else self._prompt_service_state_store.load_or_create()
+        )
+        services = state.get("prompt_services")
+        if not isinstance(services, list):
+            services = []
+            state["prompt_services"] = services
+        registration = create_prompt_service_registration(
+            prompt_id=prompt_id,
+            service_id=service_id,
+            task_family=task_family,
+            metadata=metadata,
+        )
+        replaced = False
+        for index, entry in enumerate(services):
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("prompt_id") or "").strip() == registration["prompt_id"]:
+                registration["registered_at"] = entry.get("registered_at") or registration["registered_at"]
+                services[index] = registration
+                replaced = True
+                break
+        if not replaced:
+            services.append(registration)
+        state["updated_at"] = self._now_iso()
+        self._prompt_service_state_store.save(state)
+        self._prompt_service_state = state
+        return self.prompt_service_state_payload()
+
+    def update_prompt_probation(self, *, prompt_id: str, action: str, reason: str | None = None) -> dict:
+        if self._prompt_service_state_store is None or not hasattr(self._prompt_service_state_store, "save"):
+            raise ValueError("prompt service state store is not configured")
+        state = (
+            self._prompt_service_state
+            if isinstance(self._prompt_service_state, dict)
+            else self._prompt_service_state_store.load_or_create()
+        )
+        services = state.get("prompt_services")
+        if not isinstance(services, list):
+            raise ValueError("prompt_services state is invalid")
+        prompt_value = str(prompt_id or "").strip()
+        if not prompt_value:
+            raise ValueError("prompt_id is required")
+        target = None
+        for entry in services:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("prompt_id") or "").strip() == prompt_value:
+                target = entry
+                break
+        if not isinstance(target, dict):
+            raise ValueError("prompt_id is not registered")
+        apply_probation_transition(entry=target, action=action, reason=reason)
+
+        probation = state.get("probation")
+        if not isinstance(probation, dict):
+            probation = {"active_prompt_ids": [], "reasons": {}, "updated_at": self._now_iso()}
+            state["probation"] = probation
+        active_prompt_ids = probation.get("active_prompt_ids")
+        if not isinstance(active_prompt_ids, list):
+            active_prompt_ids = []
+        active_set = {str(item).strip() for item in active_prompt_ids if str(item).strip()}
+        reasons = probation.get("reasons")
+        if not isinstance(reasons, dict):
+            reasons = {}
+
+        action_value = str(action or "").strip().lower()
+        if action_value == "start":
+            active_set.add(prompt_value)
+            if reason:
+                reasons[prompt_value] = str(reason).strip()
+        elif action_value == "clear":
+            active_set.discard(prompt_value)
+            reasons.pop(prompt_value, None)
+        else:
+            raise ValueError("unsupported probation action")
+
+        probation["active_prompt_ids"] = sorted(active_set)
+        probation["reasons"] = reasons
+        probation["updated_at"] = self._now_iso()
+        state["updated_at"] = self._now_iso()
+        self._prompt_service_state_store.save(state)
+        self._prompt_service_state = state
+        return self.prompt_service_state_payload()
+
+    def authorize_execution(self, *, prompt_id: str, task_family: str) -> dict:
+        state = self._prompt_service_state if isinstance(self._prompt_service_state, dict) else None
+        result = self._execution_gateway.authorize(
+            prompt_id=prompt_id,
+            task_family=task_family,
+            prompt_services_state=state,
+        )
+        return {
+            "allowed": result.allowed,
+            "reason": result.reason,
+            "prompt_id": result.prompt_id,
+            "task_family": result.task_family,
+        }
 
     def restart_service(self, *, target: str) -> dict:
         if self._service_manager is None or not hasattr(self._service_manager, "restart"):
@@ -450,6 +586,23 @@ class ProviderCapabilityRefreshRequest(BaseModel):
     force_refresh: bool = False
 
 
+class PromptServiceRegisterRequest(BaseModel):
+    prompt_id: str
+    service_id: str
+    task_family: str
+    metadata: dict | None = None
+
+
+class PromptProbationRequest(BaseModel):
+    action: str
+    reason: str | None = None
+
+
+class ExecutionAuthorizeRequest(BaseModel):
+    prompt_id: str
+    task_family: str
+
+
 def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     app = FastAPI(title="Synthia AI Node Control API", version="0.1.0")
     app.add_middleware(
@@ -477,6 +630,9 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/governance/refresh",
                 "/api/capabilities/providers/refresh",
                 "/api/node/recover",
+                "/api/prompts/services",
+                "/api/prompts/services/{prompt_id}/probation",
+                "/api/execution/authorize",
                 "/api/services/status",
                 "/api/services/restart",
                 "/api/health",
@@ -560,6 +716,37 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             return state.recover_from_degraded()
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/prompts/services")
+    def get_prompt_services():
+        return state.prompt_service_state_payload()
+
+    @app.post("/api/prompts/services")
+    def post_prompt_services(payload: PromptServiceRegisterRequest):
+        try:
+            return state.register_prompt_service(
+                prompt_id=payload.prompt_id,
+                service_id=payload.service_id,
+                task_family=payload.task_family,
+                metadata=payload.metadata,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/prompts/services/{prompt_id}/probation")
+    def post_prompt_probation(prompt_id: str, payload: PromptProbationRequest):
+        try:
+            return state.update_prompt_probation(
+                prompt_id=prompt_id,
+                action=payload.action,
+                reason=payload.reason,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/execution/authorize")
+    def post_execution_authorize(payload: ExecutionAuthorizeRequest):
+        return state.authorize_execution(prompt_id=payload.prompt_id, task_family=payload.task_family)
 
     @app.get("/api/services/status")
     def get_services_status():

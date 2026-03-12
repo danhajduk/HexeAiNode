@@ -3,14 +3,16 @@
 ## Entry Conditions
 
 - [ ] Trusted restart enters `trusted -> capability_setup_pending` without bootstrap fallback.
+- [ ] Trusted restart may fast-path to `operational` when accepted capability + fresh governance + operational MQTT readiness are already valid.
 - [ ] Approved onboarding finalize enters `pending_approval -> trusted -> capability_setup_pending`.
 - [ ] Degraded recovery targets `capability_setup_pending` when operational prerequisites are incomplete.
 
 ## Status Payload Contract
 
 - [ ] `GET /api/node/status` includes `capability_setup`.
-- [ ] `capability_setup.readiness_flags` includes trust, identity, provider selection, runtime context booleans.
+- [ ] `capability_setup.readiness_flags` includes trust, identity, provider selection, task capability selection, runtime context booleans.
 - [ ] `capability_setup.provider_selection` includes configured/enabled/supported fields.
+- [ ] `capability_setup.task_capability_selection` includes configured/selected/available fields.
 - [ ] `capability_setup.blocking_reasons` is stable list shape for UI polling.
 - [ ] `capability_setup.declaration_allowed` reflects gate result.
 

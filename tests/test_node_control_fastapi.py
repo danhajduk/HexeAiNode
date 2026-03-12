@@ -99,6 +99,21 @@ class NodeControlFastApiTests(unittest.TestCase):
         def restart(self, *, target: str):
             return {"target": target, "result": "restarted"}
 
+    class _FakePromptServiceStateStore:
+        def __init__(self):
+            self.payload = {
+                "schema_version": "1.0",
+                "prompt_services": [],
+                "probation": {"active_prompt_ids": [], "reasons": {}, "updated_at": "2026-03-12T00:00:00Z"},
+                "updated_at": "2026-03-12T00:00:00Z",
+            }
+
+        def load_or_create(self):
+            return self.payload
+
+        def save(self, payload):
+            self.payload = payload
+
     def test_status_and_onboarding_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
@@ -110,6 +125,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
                 capability_runner=self._FakeCapabilityRunner(),
                 service_manager=self._FakeServiceManager(),
+                prompt_service_state_store=self._FakePromptServiceStateStore(),
             )
             app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
             client = TestClient(app)
@@ -177,6 +193,40 @@ class NodeControlFastApiTests(unittest.TestCase):
             node_recover_response = client.post("/api/node/recover")
             self.assertEqual(node_recover_response.status_code, 200)
             self.assertEqual(node_recover_response.json()["status"], "recovered")
+
+            prompt_register_response = client.post(
+                "/api/prompts/services",
+                json={
+                    "prompt_id": "prompt.alpha",
+                    "service_id": "svc-alpha",
+                    "task_family": "task.classification.text",
+                    "metadata": {"owner": "ops"},
+                },
+            )
+            self.assertEqual(prompt_register_response.status_code, 200)
+            prompt_get_response = client.get("/api/prompts/services")
+            self.assertEqual(prompt_get_response.status_code, 200)
+            self.assertEqual(len(prompt_get_response.json()["state"]["prompt_services"]), 1)
+
+            exec_authorize_response = client.post(
+                "/api/execution/authorize",
+                json={"prompt_id": "prompt.alpha", "task_family": "task.classification.text"},
+            )
+            self.assertEqual(exec_authorize_response.status_code, 200)
+            self.assertTrue(exec_authorize_response.json()["allowed"])
+
+            prompt_probation_response = client.post(
+                "/api/prompts/services/prompt.alpha/probation",
+                json={"action": "start", "reason": "manual_review"},
+            )
+            self.assertEqual(prompt_probation_response.status_code, 200)
+            exec_denied_response = client.post(
+                "/api/execution/authorize",
+                json={"prompt_id": "prompt.alpha", "task_family": "task.classification.text"},
+            )
+            self.assertEqual(exec_denied_response.status_code, 200)
+            self.assertFalse(exec_denied_response.json()["allowed"])
+            self.assertEqual(exec_denied_response.json()["reason"], "prompt_in_probation")
 
             services_status_response = client.get("/api/services/status")
             self.assertEqual(services_status_response.status_code, 200)

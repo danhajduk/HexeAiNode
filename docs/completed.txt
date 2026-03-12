@@ -107,3 +107,8 @@ Task 092: Implement provider latency measurement - Completed on 03/12/2026 10:07
 Task 093: Implement provider capability report generation - Completed on 03/12/2026 10:07
 Task 094: Implement provider capability submission to Core - Completed on 03/12/2026 10:07
 Task 095: Implement periodic provider capability refresh - Completed on 03/12/2026 10:07
+Task 102 (Phase 2): Add prompt/service registration state model and persisted metadata - Completed on 03/12/2026 14:42
+Task 103 (Phase 2): Add prompt/service registration control API endpoints and validation - Completed on 03/12/2026 14:42
+Task 104 (Phase 2): Add prompt probation lifecycle transitions and persistence - Completed on 03/12/2026 14:42
+Task 105 (Phase 2): Extend trusted telemetry payloads for probation and registration status - Completed on 03/12/2026 14:42
+Task 106 (Phase 2): Add execution gateway contract scaffolding and deny-by-default enforcement for unregistered prompts - Completed on 03/12/2026 14:42

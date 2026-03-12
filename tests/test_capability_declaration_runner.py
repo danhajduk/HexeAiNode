@@ -216,6 +216,39 @@ class _FakePhase2StateStore:
         self.saved = payload
 
 
+class _FakePromptServiceStateStore:
+    def load_or_create(self):
+        return {
+            "schema_version": "1.0",
+            "prompt_services": [
+                {
+                    "prompt_id": "prompt.alpha",
+                    "service_id": "svc-alpha",
+                    "task_family": "task.classification.text",
+                    "status": "registered",
+                    "metadata": {},
+                    "registered_at": "2026-03-12T00:00:00Z",
+                    "updated_at": "2026-03-12T00:00:00Z",
+                },
+                {
+                    "prompt_id": "prompt.beta",
+                    "service_id": "svc-beta",
+                    "task_family": "task.summarization.text",
+                    "status": "probation",
+                    "metadata": {},
+                    "registered_at": "2026-03-12T00:00:00Z",
+                    "updated_at": "2026-03-12T00:00:00Z",
+                },
+            ],
+            "probation": {
+                "active_prompt_ids": ["prompt.beta"],
+                "reasons": {"prompt.beta": "quality_review"},
+                "updated_at": "2026-03-12T00:00:00Z",
+            },
+            "updated_at": "2026-03-12T00:00:00Z",
+        }
+
+
 class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
     async def test_accepted_submission_transitions_to_operational(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
@@ -239,6 +272,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             governance_client=_FakeGovernanceClientSynced(),
             operational_readiness_checker=_FakeOperationalReadinessReady(),
             telemetry_publisher=telemetry,
+            prompt_service_state_store=_FakePromptServiceStateStore(),
         )
         result = await runner.submit_once()
         self.assertEqual(result["status"], "accepted")
@@ -250,6 +284,8 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(governance_store.saved["policy_version"], "1.0")
         self.assertEqual(runner.status_payload()["governance_status"]["state"], "fresh")
         self.assertIsNotNone(telemetry.last)
+        self.assertEqual(telemetry.last["payload"]["registered_count"], 1)
+        self.assertEqual(telemetry.last["payload"]["probation_count"], 1)
         self.assertIsNotNone(phase2_store.saved)
         self.assertIn("enabled_provider_selection", phase2_store.saved)
 

@@ -28,6 +28,10 @@ Backend file logs are written by code logger to:
 logs/backend.log
 ```
 
+Node control API contract:
+
+- `docs/ai-node/node-control-api-contract.md`
+
 Bootstrap connection timeout:
 - Default: 30 seconds in `bootstrap_connecting`
 - Behavior: transitions back to `unconfigured` if timeout expires
@@ -47,6 +51,7 @@ Config knobs:
 - `SYNTHIA_PROVIDER_CAPABILITY_REPORT_PATH` (default: `.run/provider_capability_report.json`)
 - `SYNTHIA_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS` (default: `14400`)
 - `SYNTHIA_TASK_CAPABILITY_SELECTION_CONFIG_PATH` (default: `.run/task_capability_selection_config.json`)
+- `SYNTHIA_PROMPT_SERVICE_STATE_PATH` (default: `.run/prompt_service_state.json`)
 - `OPENAI_API_KEY` (required for live OpenAI model discovery)
 - `SYNTHIA_OPENAI_BASE_URL` (optional OpenAI-compatible endpoint override)
 
@@ -65,6 +70,14 @@ curl http://127.0.0.1:9002/api/capabilities/config
 curl -X POST http://127.0.0.1:9002/api/capabilities/config \
   -H 'Content-Type: application/json' \
   -d '{"selected_task_families":["task.classification.text","task.summarization.text"]}'
+
+curl -X POST http://127.0.0.1:9002/api/prompts/services \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt_id":"prompt.alpha","service_id":"svc-alpha","task_family":"task.classification.text","metadata":{"owner":"ops"}}'
+
+curl -X POST http://127.0.0.1:9002/api/execution/authorize \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt_id":"prompt.alpha","task_family":"task.classification.text"}'
 ```
 
 ## Frontend run

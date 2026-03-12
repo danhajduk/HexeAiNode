@@ -93,6 +93,21 @@ class NodeControlApiTests(unittest.TestCase):
         def load(self):
             return self.payload
 
+    class _FakePromptServiceStateStore:
+        def __init__(self):
+            self.payload = {
+                "schema_version": "1.0",
+                "prompt_services": [],
+                "probation": {"active_prompt_ids": [], "reasons": {}, "updated_at": "2026-03-12T00:00:00Z"},
+                "updated_at": "2026-03-12T00:00:00Z",
+            }
+
+        def load_or_create(self):
+            return self.payload
+
+        def save(self, payload):
+            self.payload = payload
+
     class _FakeCapabilityRunner:
         async def submit_once(self):
             return {"status": "accepted"}
@@ -255,6 +270,41 @@ class NodeControlApiTests(unittest.TestCase):
             )
             payload = state.status_payload()
             self.assertTrue(payload["capability_setup"]["declaration_allowed"])
+
+    def test_prompt_service_registration_probation_and_execution_authorization(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                prompt_service_state_store=self._FakePromptServiceStateStore(),
+            )
+            registered = state.register_prompt_service(
+                prompt_id="prompt.alpha",
+                service_id="svc-alpha",
+                task_family="task.classification.text",
+                metadata={"owner": "ops"},
+            )
+            self.assertEqual(len(registered["state"]["prompt_services"]), 1)
+            allowed = state.authorize_execution(
+                prompt_id="prompt.alpha",
+                task_family="task.classification.text",
+            )
+            self.assertTrue(allowed["allowed"])
+
+            probation = state.update_prompt_probation(
+                prompt_id="prompt.alpha",
+                action="start",
+                reason="quality_review",
+            )
+            self.assertIn("prompt.alpha", probation["state"]["probation"]["active_prompt_ids"])
+            denied = state.authorize_execution(
+                prompt_id="prompt.alpha",
+                task_family="task.classification.text",
+            )
+            self.assertFalse(denied["allowed"])
+            self.assertEqual(denied["reason"], "prompt_in_probation")
 
 
 if __name__ == "__main__":

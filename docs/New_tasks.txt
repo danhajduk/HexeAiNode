@@ -43,3 +43,11 @@ Do not edit above this line:
 when implementing theese task compare with golden docs. if data is missing documemet in golden docs
 use: ai-node mismatch md file.
 then stop execution
+
+
+Phase 2 implementation tasks to add next:
+- [DONE] Task 102 (Phase 2): Added prompt/service registration state model and persisted metadata.
+- [DONE] Task 103 (Phase 2): Added prompt/service registration control API endpoints and validation.
+- [DONE] Task 104 (Phase 2): Added prompt probation lifecycle transitions and persistence.
+- [DONE] Task 105 (Phase 2): Extended trusted telemetry payloads for probation and registration status.
+- [DONE] Task 106 (Phase 2): Added execution gateway contract scaffolding and deny-by-default enforcement for unregistered prompts.

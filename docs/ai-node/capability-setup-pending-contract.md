@@ -4,11 +4,14 @@ This document defines the canonical node-side contract for lifecycle state `capa
 
 ## Entry Triggers
 
-Node enters `capability_setup_pending` only from `trusted` in these cases:
+Node enters `capability_setup_pending` from `trusted` in these cases:
 
 1. Trusted startup resume:
    - backend starts with valid trust state
    - startup path transitions `trusted -> capability_setup_pending`
+   - if persisted accepted capability + fresh governance + operational MQTT readiness are all valid, startup may continue immediately to:
+     - `capability_declaration_in_progress -> capability_declaration_accepted -> operational`
+   - otherwise node remains in `capability_setup_pending`
 2. Onboarding finalize approved:
    - node receives approved activation payload
    - trust state is persisted
@@ -25,11 +28,16 @@ The status API (`GET /api/node/status`) exposes `capability_setup` with required
 - `readiness_flags.trust_state_valid`
 - `readiness_flags.node_identity_valid`
 - `readiness_flags.provider_selection_valid`
+- `readiness_flags.task_capability_selection_valid`
 - `readiness_flags.core_runtime_context_valid`
 - `provider_selection.configured`
 - `provider_selection.enabled_count`
 - `provider_selection.enabled[]`
 - `provider_selection.supported.{cloud,local,future}[]`
+- `task_capability_selection.configured`
+- `task_capability_selection.selected_count`
+- `task_capability_selection.selected[]`
+- `task_capability_selection.available[]`
 - `blocking_reasons[]`
 - `declaration_allowed`
 
@@ -57,6 +65,7 @@ Before `POST /api/capabilities/declare`, backend enforces prerequisites:
 - valid trust state
 - valid node identity
 - valid provider selection
+- valid task capability selection
 - valid trusted runtime context
 - current lifecycle state is declaration-eligible
 
