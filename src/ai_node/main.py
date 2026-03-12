@@ -26,6 +26,7 @@ from ai_node.persistence.governance_state_store import GovernanceStateStore
 from ai_node.persistence.phase2_state_store import Phase2StateStore
 from ai_node.persistence.prompt_service_state_store import PromptServiceStateStore
 from ai_node.persistence.provider_capability_report_store import ProviderCapabilityReportStore
+from ai_node.providers.runtime_manager import ProviderRuntimeManager
 from ai_node.trust.trust_store import TrustStateStore
 
 
@@ -242,6 +243,12 @@ def run(
         path=provider_capability_report_path,
         logger=LOGGER,
     )
+    provider_runtime_manager = ProviderRuntimeManager(
+        logger=LOGGER,
+        provider_selection_store=provider_selection_store,
+        registry_path=os.environ.get("SYNTHIA_PROVIDER_REGISTRY_PATH", "data/provider_registry.json"),
+        metrics_path=os.environ.get("SYNTHIA_PROVIDER_METRICS_PATH", "data/provider_metrics.json"),
+    )
     prompt_service_state_store = PromptServiceStateStore(path=prompt_service_state_path, logger=LOGGER)
     LOGGER.info("[node-identity] %s", {"node_id": node_identity["node_id"], "path": node_identity_path})
     if isinstance(trust_state, dict):
@@ -358,6 +365,7 @@ def run(
         task_capability_selection_store=task_capability_selection_store,
         trust_state_store=trust_state_store,
         prompt_service_state_store=prompt_service_state_store,
+        provider_runtime_manager=provider_runtime_manager,
         service_manager=service_manager,
         startup_mode=startup_mode,
         trusted_runtime_context=trusted_runtime_context,

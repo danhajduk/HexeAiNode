@@ -38,16 +38,131 @@ Persistence rule:
 Continue working autonomously until all tasks in this document are completed.
 Do not stop early.
 
+---
+
+## Core Documentation Authority Rule (Golden Docs)
+
+The **Core documentation (“golden docs”) is the authoritative specification** for all Core-owned contracts and behaviors.
+
+When implementing tasks, the agent **must compare the repository implementation against the golden docs**.
+
+### Rule 1 — Core authority
+If there is a mismatch between **AI-Node code** and **Core documentation**:
+
+- **Core documentation wins**
+- Update the AI-Node implementation to match Core behavior
+- Do NOT redefine or override Core contracts locally.
+
+### Rule 2 — Missing Core-owned specification
+
+If required data, behavior, or contract is **missing from Core documentation** and the item is **Core-owned**:
+
+1. Create a mismatch report in:
+/home/dan/Projects/Synthia/docs/reports
+
+
+Suggested filename:
+ai-node-mismatch-task-<task-number>.md
+
+2. Document clearly:
+
+- what is missing
+- where it was discovered
+- what implementation depends on it
+- why it must be defined by Core
+
+3. **Stop execution immediately**.
+
+No further tasks may be implemented until the Core documentation is updated.
+
+### Rule 3 — Missing Node-owned specification
+
+If required data or behavior is **missing from Core documentation**, but the item is **Node-owned**:
+
+1. Create a mismatch report in:
+/home/dan/Projects/Synthia/docs/reports
+
+2. Document:
+
+- what is missing
+- why the responsibility belongs to the node
+- the local implementation decision
+
+3. Implement the missing functionality **locally in AI-Node**.
+
+4. Continue executing remaining tasks.
+
+### Rule 4 — No silent contract drift
+
+The agent must **never silently invent or redefine Core-owned contracts**.
+
+All divergences between:
+
+- code
+- architecture
+- documentation
+
+must be reported using the mismatch report process.
+
+### Rule 5 — Mismatch reporting is mandatory
+
+Any discovered divergence between **Core documentation and AI-Node implementation** must be documented.
+
+No undocumented behavior is allowed.
+
+---
+
 Do not edit above this line:
 #######################################################################
-when implementing theese task compare with golden docs. if data is missing documemet in golden docs
-use: ai-node mismatch md file.
-then stop execution
 
+[WIP] Task 125: Expose provider intelligence to Core
+Add runtime payload/report that sends provider intelligence upstream.
 
-Phase 2 implementation tasks to add next:
-- [DONE] Task 102 (Phase 2): Added prompt/service registration state model and persisted metadata.
-- [DONE] Task 103 (Phase 2): Added prompt/service registration control API endpoints and validation.
-- [DONE] Task 104 (Phase 2): Added prompt probation lifecycle transitions and persistence.
-- [DONE] Task 105 (Phase 2): Extended trusted telemetry payloads for probation and registration status.
-- [DONE] Task 106 (Phase 2): Added execution gateway contract scaffolding and deny-by-default enforcement for unregistered prompts.
+Include:
+- providers
+- models
+- latency metrics
+- success rates
+- pricing/context metadata
+- availability state
+
+[TODO] Task 126: Create provider intelligence refresh job
+Add periodic background job to:
+- health check providers
+- refresh model lists
+- recompute metrics snapshot
+- publish intelligence to Core
+
+[TODO] Task 127: Add debug endpoints for provider visibility
+Add local debug endpoints such as:
+- GET /debug/providers
+- GET /debug/providers/models
+- GET /debug/providers/metrics
+
+[TODO] Task 128: Add structured logging for provider execution
+Log:
+- provider_id
+- model_id
+- latency
+- token usage
+- cost estimate
+- success/failure
+- retry/fallback events
+
+[TODO] Task 129: Create Phase 4 unit tests
+Test:
+- provider registry
+- model discovery
+- normalized request/response mapping
+- health checks
+- fallback behavior
+- metrics collection
+
+[TODO] Task 130: Create mock provider for local testing
+Implement a fake provider adapter for repeatable tests and offline development.
+
+Use it to validate:
+- execution router
+- metrics collection
+- fallback logic
+- Core intelligence reporting

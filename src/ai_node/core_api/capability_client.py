@@ -5,7 +5,7 @@ import httpx
 
 
 DEFAULT_CAPABILITY_DECLARATION_PATH = "/api/system/nodes/capabilities/declaration"
-DEFAULT_PROVIDER_INTELLIGENCE_SUBMISSION_PATH = "/api/system/nodes/capabilities/providers"
+DEFAULT_PROVIDER_INTELLIGENCE_SUBMISSION_PATH = "/api/system/nodes/providers/capabilities/report"
 
 
 def _require_non_empty_string(value: object, name: str) -> str:

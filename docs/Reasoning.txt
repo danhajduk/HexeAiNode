@@ -462,3 +462,18 @@ Issue cause: Phase 2 follow-up tasks required persisted prompt registration stat
 Chosen fix: Added prompt service state persistence, node-control APIs, probation transitions, telemetry summary extension, and execution authorization gateway with default deny behavior.
 What changed: Added prompt/execution modules, new persistence store, wired startup/runtime dependencies, extended control API endpoints, updated tests and docs.
 Verification: Focused pytest suite for main entrypoint, capability runner, node control API/FastAPI, prompt state store, and execution gateway passed.
+###########
+Task #107-124
+Step objective: Implement provider runtime foundations (schema, adapters, registry, health/discovery refresh, local persistence, metrics, unified execution models, routing, and fallback).
+Issue cause: Node lacked provider runtime orchestration and normalized execution routing needed for Phase 4 provider intelligence.
+Chosen fix: Added provider schemas and adapters, a persistent provider registry, metrics collector with restart hydration, execution router with retry/fallback telemetry, and runtime manager wired into node control refresh flow.
+What changed: Added `src/ai_node/providers/execution_router.py`, `src/ai_node/providers/runtime_manager.py`, `tests/test_provider_runtime.py`; updated `src/ai_node/providers/provider_registry.py`, `src/ai_node/providers/metrics.py`, `src/ai_node/main.py`, `src/ai_node/runtime/node_control_api.py`.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_provider_runtime.py tests/test_capability_client.py tests/test_provider_intelligence.py tests/test_node_control_api.py` passed (18 tests).
+
+###########
+Task #125
+Step objective: Expose provider intelligence report upstream to Core.
+Issue cause: Golden docs define endpoint existence but do not define normative request/response payload contract for Core-owned ingestion.
+Chosen fix: Produced mandatory mismatch report and stopped task execution per Rule 2.
+What changed: Created `/home/dan/Projects/Synthia/docs/reports/ai-node-mismatch-task-125.md`; paused implementation before Task 125 code-level submission contract changes.
+Verification: Documentation blocker confirmed by scanning `/home/dan/Projects/Synthia/docs/api-reference.md` and existing golden mismatch artifacts.

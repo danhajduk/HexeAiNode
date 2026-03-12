@@ -38,6 +38,7 @@ class NodeControlState:
         trust_state_store=None,
         prompt_service_state_store=None,
         execution_gateway=None,
+        provider_runtime_manager=None,
         service_manager=None,
         startup_mode: str = "bootstrap_onboarding",
         trusted_runtime_context: dict | None = None,
@@ -54,6 +55,7 @@ class NodeControlState:
         self._trust_state_store = trust_state_store
         self._prompt_service_state_store = prompt_service_state_store
         self._execution_gateway = execution_gateway or ExecutionGateway()
+        self._provider_runtime_manager = provider_runtime_manager
         self._service_manager = service_manager or NullServiceManager()
         self._startup_mode = startup_mode
         self._trusted_runtime_context = trusted_runtime_context or {}
@@ -489,6 +491,8 @@ class NodeControlState:
         return await self._capability_runner.refresh_governance_once()
 
     async def refresh_provider_capabilities(self, *, force_refresh: bool) -> dict:
+        if self._provider_runtime_manager is not None and hasattr(self._provider_runtime_manager, "refresh"):
+            return {"source": "provider_runtime_manager", "force_refresh": force_refresh, "report": await self._provider_runtime_manager.refresh()}
         if self._capability_runner is None or not hasattr(self._capability_runner, "refresh_provider_capabilities_once"):
             raise ValueError("provider capability refresh is not configured")
         return await self._capability_runner.refresh_provider_capabilities_once(force_refresh=force_refresh)

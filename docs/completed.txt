@@ -112,3 +112,21 @@ Task 103 (Phase 2): Add prompt/service registration control API endpoints and va
 Task 104 (Phase 2): Add prompt probation lifecycle transitions and persistence - Completed on 03/12/2026 14:42
 Task 105 (Phase 2): Extend trusted telemetry payloads for probation and registration status - Completed on 03/12/2026 14:42
 Task 106 (Phase 2): Add execution gateway contract scaffolding and deny-by-default enforcement for unregistered prompts - Completed on 03/12/2026 14:42
+Task 107: Create provider capability schema - Completed on 03/12/2026 14:18
+Task 108: Create model capability schema - Completed on 03/12/2026 14:18
+Task 109: Build provider registry - Completed on 03/12/2026 14:18
+Task 110: Define provider adapter interface - Completed on 03/12/2026 14:18
+Task 111: Implement OpenAI provider adapter - Completed on 03/12/2026 14:18
+Task 112: Add local provider adapter scaffold - Completed on 03/12/2026 14:18
+Task 113: Create provider configuration loader - Completed on 03/12/2026 14:18
+Task 114: Implement provider health checks - Completed on 03/12/2026 14:18
+Task 115: Implement model discovery refresh - Completed on 03/12/2026 14:18
+Task 116: Persist provider intelligence locally - Completed on 03/12/2026 14:18
+Task 117: Collect latency metrics per provider/model - Completed on 03/12/2026 14:18
+Task 118: Collect success/failure metrics per provider/model - Completed on 03/12/2026 14:18
+Task 119: Collect cost and token telemetry per provider/model - Completed on 03/12/2026 14:18
+Task 120: Record context limits and feature support - Completed on 03/12/2026 14:18
+Task 121: Create unified prompt execution request model - Completed on 03/12/2026 14:18
+Task 122: Create unified prompt execution response model - Completed on 03/12/2026 14:18
+Task 123: Build execution router on the node - Completed on 03/12/2026 14:18
+Task 124: Add fallback routing behavior - Completed on 03/12/2026 14:18

@@ -78,7 +78,7 @@ class CapabilityClientTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertEqual(result.status, "accepted")
-        self.assertEqual(adapter.last_url, "http://10.0.0.100:9001/api/system/nodes/capabilities/providers")
+        self.assertEqual(adapter.last_url, "http://10.0.0.100:9001/api/system/nodes/providers/capabilities/report")
         self.assertEqual(
             adapter.last_payload,
             {
