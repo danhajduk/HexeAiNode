@@ -47,6 +47,16 @@ class NodeControlFastApiTests(unittest.TestCase):
                 },
             }
 
+    class _FakeServiceManager:
+        def __init__(self):
+            self.status = {"backend": "running", "frontend": "running", "node": "running"}
+
+        def get_status(self):
+            return self.status
+
+        def restart(self, *, target: str):
+            return {"target": target, "result": "restarted"}
+
     def test_status_and_onboarding_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
@@ -56,6 +66,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 logger=logging.getLogger("node-control-fastapi-test"),
                 provider_selection_store=self._FakeProviderSelectionStore(),
                 capability_runner=self._FakeCapabilityRunner(),
+                service_manager=self._FakeServiceManager(),
             )
             app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
             client = TestClient(app)
@@ -98,6 +109,14 @@ class NodeControlFastApiTests(unittest.TestCase):
             node_recover_response = client.post("/api/node/recover")
             self.assertEqual(node_recover_response.status_code, 200)
             self.assertEqual(node_recover_response.json()["status"], "recovered")
+
+            services_status_response = client.get("/api/services/status")
+            self.assertEqual(services_status_response.status_code, 200)
+            self.assertEqual(services_status_response.json()["services"]["backend"], "running")
+
+            services_restart_response = client.post("/api/services/restart", json={"target": "backend"})
+            self.assertEqual(services_restart_response.status_code, 200)
+            self.assertEqual(services_restart_response.json()["target"], "backend")
 
 
 if __name__ == "__main__":

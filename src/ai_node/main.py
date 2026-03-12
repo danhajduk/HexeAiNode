@@ -18,6 +18,7 @@ from ai_node.runtime.bootstrap_timeout import BootstrapConnectTimeoutMonitor
 from ai_node.runtime.capability_declaration_runner import CapabilityDeclarationRunner
 from ai_node.runtime.node_control_api import NodeControlState, create_node_control_app
 from ai_node.runtime.onboarding_runtime import OnboardingRuntime
+from ai_node.runtime.service_manager import UserSystemdServiceManager
 from ai_node.persistence.capability_state_store import CapabilityStateStore
 from ai_node.persistence.governance_state_store import GovernanceStateStore
 from ai_node.persistence.phase2_state_store import Phase2StateStore
@@ -274,6 +275,7 @@ def run(
         governance_state_store=governance_state_store,
         phase2_state_store=phase2_state_store,
     )
+    service_manager = UserSystemdServiceManager(logger=LOGGER)
     control_state = NodeControlState(
         lifecycle=lifecycle,
         config_path=bootstrap_config_path,
@@ -283,6 +285,7 @@ def run(
         capability_runner=capability_runner,
         node_identity_store=node_identity_store,
         provider_selection_store=provider_selection_store,
+        service_manager=service_manager,
         startup_mode=startup_mode,
         trusted_runtime_context=trusted_runtime_context,
     )

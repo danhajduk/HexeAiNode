@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from ai_node.config.bootstrap_config import create_bootstrap_config
 from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
+from ai_node.runtime.service_manager import NullServiceManager
 
 
 class NodeControlState:
@@ -22,6 +23,7 @@ class NodeControlState:
         capability_runner=None,
         node_identity_store=None,
         provider_selection_store=None,
+        service_manager=None,
         startup_mode: str = "bootstrap_onboarding",
         trusted_runtime_context: dict | None = None,
     ) -> None:
@@ -33,6 +35,7 @@ class NodeControlState:
         self._capability_runner = capability_runner
         self._node_identity_store = node_identity_store
         self._provider_selection_store = provider_selection_store
+        self._service_manager = service_manager or NullServiceManager()
         self._startup_mode = startup_mode
         self._trusted_runtime_context = trusted_runtime_context or {}
         self._phase2_diag = Phase2DiagnosticsLogger(logger)
@@ -109,12 +112,24 @@ class NodeControlState:
             "trusted_runtime_context": self._trusted_runtime_context,
             "provider_selection_configured": self._provider_selection_config is not None,
             "capability_declaration": capability_context,
+            "services": self.service_status_payload().get("services"),
         }
 
     def provider_selection_payload(self) -> dict:
         if self._provider_selection_config is None:
             return {"configured": False, "config": None}
         return {"configured": True, "config": self._provider_selection_config}
+
+    def service_status_payload(self) -> dict:
+        if self._service_manager is None or not hasattr(self._service_manager, "get_status"):
+            return {"configured": False, "services": {"backend": "unknown", "frontend": "unknown", "node": "unknown"}}
+        return {"configured": True, "services": self._service_manager.get_status()}
+
+    def restart_service(self, *, target: str) -> dict:
+        if self._service_manager is None or not hasattr(self._service_manager, "restart"):
+            raise ValueError("service manager is not configured")
+        result = self._service_manager.restart(target=target)
+        return {"status": "ok", **result, "services": self._service_manager.get_status()}
 
     def update_provider_selection(self, *, openai_enabled: bool) -> dict:
         if self._provider_selection_store is None or not hasattr(self._provider_selection_store, "save"):
@@ -228,6 +243,10 @@ class ProviderSelectionRequest(BaseModel):
     openai_enabled: bool
 
 
+class ServiceRestartRequest(BaseModel):
+    target: str
+
+
 def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     app = FastAPI(title="Synthia AI Node Control API", version="0.1.0")
     app.add_middleware(
@@ -253,6 +272,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/governance/status",
                 "/api/governance/refresh",
                 "/api/node/recover",
+                "/api/services/status",
+                "/api/services/restart",
                 "/api/health",
             ],
         }
@@ -312,6 +333,17 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def post_node_recover():
         try:
             return state.recover_from_degraded()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/services/status")
+    def get_services_status():
+        return state.service_status_payload()
+
+    @app.post("/api/services/restart")
+    def post_services_restart(payload: ServiceRestartRequest):
+        try:
+            return state.restart_service(target=payload.target)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -32,6 +32,7 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [openaiEnabled, setOpenaiEnabled] = useState(false);
   const [savingProvider, setSavingProvider] = useState(false);
+  const [restartingServiceTarget, setRestartingServiceTarget] = useState("");
   const [uiState, setUiState] = useState(() =>
     buildDashboardUiState({
       nodeStatus: null,
@@ -44,10 +45,11 @@ export default function App() {
 
   async function loadStatus() {
     const lastUpdatedAt = new Date().toISOString();
-    const [nodeResult, governanceResult, providerResult] = await Promise.allSettled([
+    const [nodeResult, governanceResult, providerResult, servicesResult] = await Promise.allSettled([
       apiGet("/api/node/status"),
       apiGet("/api/governance/status"),
       apiGet("/api/providers/config"),
+      apiGet("/api/services/status"),
     ]);
 
     if (nodeResult.status !== "fulfilled") {
@@ -72,12 +74,16 @@ export default function App() {
     const payload = nodeResult.value || {};
     const governancePayload = governanceResult.status === "fulfilled" ? governanceResult.value : null;
     const providerPayload = providerResult.status === "fulfilled" ? providerResult.value : null;
+    const servicePayload = servicesResult.status === "fulfilled" ? servicesResult.value : null;
     const partialFailures = [];
     if (governanceResult.status !== "fulfilled") {
       partialFailures.push("governance_status_unavailable");
     }
     if (providerResult.status !== "fulfilled") {
       partialFailures.push("provider_config_unavailable");
+    }
+    if (servicesResult.status !== "fulfilled") {
+      partialFailures.push("service_status_unavailable");
     }
 
     setBackendStatus(payload.status || "unknown");
@@ -93,21 +99,12 @@ export default function App() {
         nodeStatus: payload,
         governanceStatus: governancePayload,
         providerConfig: providerPayload,
+        serviceStatus: servicePayload?.services || null,
         apiReachable: true,
         lastUpdatedAt,
         partialFailures,
       })
     );
-  }
-
-  async function loadProviderConfig() {
-    try {
-      const payload = await apiGet("/api/providers/config");
-      const enabledProviders = payload?.config?.providers?.enabled || [];
-      setOpenaiEnabled(enabledProviders.includes("openai"));
-    } catch (_err) {
-      // keep provider section usable even if initial load fails
-    }
   }
 
   useEffect(() => {
@@ -194,6 +191,23 @@ export default function App() {
       setError(message);
     } finally {
       setSavingProvider(false);
+    }
+  }
+
+  async function onRestartService(target) {
+    if (restartingServiceTarget) {
+      return;
+    }
+    setRestartingServiceTarget(target);
+    setError("");
+    try {
+      await apiPost("/api/services/restart", { target });
+      await loadStatus();
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+    } finally {
+      setRestartingServiceTarget("");
     }
   }
 
@@ -379,13 +393,38 @@ export default function App() {
           </article>
           <article className="card">
             <h2>Service</h2>
-            <p className="muted">
-              Controlled with user systemd units:
-              <br />
-              <code>synthia-ai-node-backend.service</code>
-              <br />
-              <code>synthia-ai-node-frontend.service</code>
-            </p>
+            <p className="muted">User systemd service state and controls</p>
+            <div className="state-grid">
+              <span>Backend</span>
+              <span className={`conn-pill conn-${uiState.serviceStatus.backend}`}>{uiState.serviceStatus.backend}</span>
+              <span>Frontend</span>
+              <span className={`conn-pill conn-${uiState.serviceStatus.frontend}`}>{uiState.serviceStatus.frontend}</span>
+              <span>Node</span>
+              <span className={`conn-pill conn-${uiState.serviceStatus.node}`}>{uiState.serviceStatus.node}</span>
+            </div>
+            <div className="row">
+              <button
+                className="btn"
+                onClick={() => onRestartService("backend")}
+                disabled={Boolean(restartingServiceTarget)}
+              >
+                {restartingServiceTarget === "backend" ? "Restarting..." : "Restart Backend"}
+              </button>
+              <button
+                className="btn"
+                onClick={() => onRestartService("frontend")}
+                disabled={Boolean(restartingServiceTarget)}
+              >
+                {restartingServiceTarget === "frontend" ? "Restarting..." : "Restart Frontend"}
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => onRestartService("node")}
+                disabled={Boolean(restartingServiceTarget)}
+              >
+                {restartingServiceTarget === "node" ? "Restarting..." : "Restart Node"}
+              </button>
+            </div>
           </article>
         </section>
       )}

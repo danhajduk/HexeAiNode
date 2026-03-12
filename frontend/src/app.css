@@ -153,3 +153,12 @@ h2 {
 .conn-stale {
   color: #d17a00;
 }
+
+.conn-running {
+  color: #1f9d55;
+}
+
+.conn-stopped,
+.conn-failed {
+  color: #c0392b;
+}
