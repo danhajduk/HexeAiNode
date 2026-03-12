@@ -400,3 +400,10 @@ Step objective: Improve dashboard responsiveness for laptop/tablet/narrow viewpo
 Chosen fix: Added responsive breakpoints and layout rules so cards stack cleanly, controls wrap predictably, and state/progress rows remain readable on small widths.
 What changed: Updated frontend/src/app.css.
 Verification: `cd frontend && npm run build` passes.
+
+###########
+Task #088
+Step objective: Improve visual consistency with reusable dashboard UI primitives.
+Chosen fix: Added shared UI primitives for card headers, status badges, and health indicators, then replaced repeated card/status markup to standardize visual language.
+What changed: Added frontend/src/components/uiPrimitives.jsx; updated frontend/src/App.jsx and frontend/src/app.css with shared component styles and status color mappings.
+Verification: `cd frontend && npm run build` passes.

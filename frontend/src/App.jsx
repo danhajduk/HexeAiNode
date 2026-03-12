@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getTheme, setTheme } from "./theme/theme";
 import { apiGet, apiPost, getApiBase } from "./api";
 import { buildDashboardUiState } from "./uiStateModel";
+import { CardHeader, HealthIndicator, StatusBadge } from "./components/uiPrimitives";
 import "./app.css";
 
 const REFRESH_INTERVAL_MS = 7000;
@@ -289,13 +290,12 @@ export default function App() {
       ) : (
         <section className="grid">
           <article className={`card lifecycle-card ${lifecycleToneClass}`}>
-            <h2>Lifecycle</h2>
-            <p className="muted">Primary node diagnostic state</p>
+            <CardHeader title="Lifecycle" subtitle="Primary node diagnostic state" />
             <div className="state-grid">
               <span>Current State</span>
-              <code>{uiState.lifecycle.current}</code>
+              <StatusBadge value={uiState.lifecycle.current} />
               <span>Trust Status</span>
-              <code>{uiState.lifecycle.trustStatus}</code>
+              <StatusBadge value={uiState.lifecycle.trustStatus} />
               <span>Paired Core ID</span>
               <code>{uiState.coreConnection.pairedCoreId || "not_paired"}</code>
               <span>Pairing Timestamp</span>
@@ -305,8 +305,7 @@ export default function App() {
             </div>
           </article>
           <article className="card">
-            <h2>Onboarding</h2>
-            <p className="muted">Live onboarding progress by lifecycle stage.</p>
+            <CardHeader title="Onboarding" subtitle="Live onboarding progress by lifecycle stage." />
             <div className="progress-list">
               {onboardingSteps.map((step) => {
                 const state = uiState.onboarding.progress?.[step.key] || "pending";
@@ -340,33 +339,23 @@ export default function App() {
             ) : null}
           </article>
           <article className="card">
-            <h2>Runtime</h2>
-            <p className="muted">Operational signals and health indicators</p>
+            <CardHeader title="Runtime" subtitle="Operational signals and health indicators" />
             <div className="state-grid">
               <span>Core API</span>
-              <span className={`conn-pill conn-${uiState.runtimeHealth.coreApiConnectivity}`}>
-                {uiState.runtimeHealth.coreApiConnectivity}
-              </span>
+              <HealthIndicator value={uiState.runtimeHealth.coreApiConnectivity} />
               <span>Operational MQTT</span>
-              <span className={`conn-pill conn-${uiState.runtimeHealth.operationalMqttConnectivity}`}>
-                {uiState.runtimeHealth.operationalMqttConnectivity}
-              </span>
+              <HealthIndicator value={uiState.runtimeHealth.operationalMqttConnectivity} />
               <span>Governance</span>
-              <span className={`conn-pill conn-${uiState.runtimeHealth.governanceFreshness}`}>
-                {uiState.runtimeHealth.governanceFreshness}
-              </span>
+              <HealthIndicator value={uiState.runtimeHealth.governanceFreshness} />
               <span>Last Telemetry</span>
               <code>{uiState.runtimeHealth.lastTelemetryTimestamp || "none"}</code>
               <span>Node Health</span>
-              <span className={`conn-pill conn-${uiState.runtimeHealth.nodeHealthState}`}>
-                {uiState.runtimeHealth.nodeHealthState}
-              </span>
+              <HealthIndicator value={uiState.runtimeHealth.nodeHealthState} />
             </div>
           </article>
           {showCorePanel ? (
             <article className="card">
-              <h2>Core Connection</h2>
-              <p className="muted">Trusted Core endpoint metadata</p>
+              <CardHeader title="Core Connection" subtitle="Trusted Core endpoint metadata" />
               <div className="state-grid">
                 <span>Core ID</span>
                 <code>{uiState.coreConnection.pairedCoreId}</code>
@@ -378,17 +367,14 @@ export default function App() {
                   {uiState.coreConnection.operationalMqttPort ? `:${uiState.coreConnection.operationalMqttPort}` : ""}
                 </code>
                 <span>Connection</span>
-                <span className={`conn-pill conn-${uiState.coreConnection.connected ? "connected" : "disconnected"}`}>
-                  {uiState.coreConnection.connected ? "connected" : "disconnected"}
-                </span>
+                <HealthIndicator value={uiState.coreConnection.connected ? "connected" : "disconnected"} />
                 <span>Onboarding Ref</span>
                 <code>{uiState.onboarding.pendingSessionId || uiState.lifecycle.current}</code>
               </div>
             </article>
           ) : null}
           <article className="card">
-            <h2>Capability Summary</h2>
-            <p className="muted">Phase 2 declaration readiness snapshot</p>
+            <CardHeader title="Capability Summary" subtitle="Phase 2 declaration readiness snapshot" />
             <div className="state-grid">
               <span>Task Families</span>
               <code>{uiState.capabilitySummary.declaredTaskFamilies.join(", ") || "not_declared"}</code>
@@ -403,15 +389,14 @@ export default function App() {
             </div>
           </article>
           <article className="card">
-            <h2>Service</h2>
-            <p className="muted">User systemd service state and controls</p>
+            <CardHeader title="Service" subtitle="User systemd service state and controls" />
             <div className="state-grid">
               <span>Backend</span>
-              <span className={`conn-pill conn-${uiState.serviceStatus.backend}`}>{uiState.serviceStatus.backend}</span>
+              <StatusBadge value={uiState.serviceStatus.backend} />
               <span>Frontend</span>
-              <span className={`conn-pill conn-${uiState.serviceStatus.frontend}`}>{uiState.serviceStatus.frontend}</span>
+              <StatusBadge value={uiState.serviceStatus.frontend} />
               <span>Node</span>
-              <span className={`conn-pill conn-${uiState.serviceStatus.node}`}>{uiState.serviceStatus.node}</span>
+              <StatusBadge value={uiState.serviceStatus.node} />
             </div>
             <div className="row">
               <button

@@ -49,20 +49,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 088: Improve visual consistency with shared theme styles
-  - Standardize colors, badges, and typography across all cards.
-  - Define reusable UI components:
-    - status badge
-    - health indicator
-    - card header layout
-  - Align the UI with the Synthia visual design.
-
-  * Comments, descriptions, rules:
-    - Avoid inline styling; use shared CSS variables or theme definitions.
-    - Maintain dark-mode compatibility.
-    - Keep UI minimal and readable.
-
-
 [TODO] Task 089: Add UI diagnostics section for debugging
   - Create a hidden or expandable diagnostics panel.
   - Show:
