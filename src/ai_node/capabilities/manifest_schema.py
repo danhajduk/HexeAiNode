@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from ai_node.capabilities.node_features import (
@@ -8,13 +7,10 @@ from ai_node.capabilities.node_features import (
     PROMPT_GOVERNANCE_READY,
     TELEMETRY_SUPPORT,
     create_node_feature_declarations,
-    validate_node_feature_declarations,
 )
 from ai_node.capabilities.environment_hints import (
     collect_environment_hints,
-    validate_environment_hints,
 )
-from ai_node.capabilities.providers import validate_provider_capabilities
 from ai_node.capabilities.task_families import validate_task_family_capabilities
 
 CAPABILITY_MANIFEST_SCHEMA_VERSION = "1.0"
@@ -76,15 +72,9 @@ def create_capability_manifest(
             "network_tier": "lan",
             "region": "local",
         },
-        "metadata": {"schema_version": CAPABILITY_MANIFEST_SCHEMA_VERSION, **(metadata if isinstance(metadata, dict) else {})},
     }
     if feature_map.get(PROMPT_GOVERNANCE_READY, False):
         manifest["node_features"]["governance_refresh"] = True
-    if _is_non_empty_string(resolved_environment_hints.get("hostname")):
-        manifest["metadata"]["hostname"] = str(resolved_environment_hints.get("hostname")).strip()
-    if _is_non_empty_string(resolved_environment_hints.get("os_platform")):
-        manifest["metadata"]["os_platform"] = str(resolved_environment_hints.get("os_platform")).strip()
-    manifest["metadata"]["generated_at"] = datetime.now(timezone.utc).isoformat()
     is_valid, error = validate_capability_manifest(manifest)
     if not is_valid:
         raise ValueError(f"invalid capability manifest: {error}")
@@ -138,10 +128,7 @@ def validate_capability_manifest(data: object) -> Tuple[bool, Optional[str]]:
         if not _is_non_empty_string(environment_hints.get(key)):
             return False, f"invalid_environment_hint_{key}"
 
-    metadata = data.get("metadata")
-    if not isinstance(metadata, dict):
-        return False, "invalid_metadata"
-    if str(metadata.get("schema_version", "")).strip() != CAPABILITY_MANIFEST_SCHEMA_VERSION:
-        return False, "invalid_schema_version"
+    if "metadata" in data:
+        return False, "metadata_not_allowed"
 
     return True, None

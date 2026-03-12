@@ -68,7 +68,6 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
                     "network_tier": "lan",
                     "region": "local",
                 },
-                "metadata": {"schema_version": "1.0"},
             }
         )
         self.assertFalse(is_valid)
@@ -90,6 +89,23 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
         is_valid, error = validate_capability_manifest(manifest)
         self.assertFalse(is_valid)
         self.assertEqual(error, "unknown_task_family:audio_transcription")
+
+    def test_validate_rejects_metadata_field(self):
+        manifest = create_capability_manifest(
+            node_id="node-001",
+            node_type="ai-node",
+            node_name="main-ai-node",
+            node_software_version="0.1.0",
+            task_families=["text_classification"],
+            supported_providers=["openai"],
+            enabled_providers=["openai"],
+            node_features=["telemetry_support"],
+            environment_hints=self._valid_environment_hints(),
+        )
+        manifest["metadata"] = {"schema_version": "1.0"}
+        is_valid, error = validate_capability_manifest(manifest)
+        self.assertFalse(is_valid)
+        self.assertEqual(error, "metadata_not_allowed")
 
 
 if __name__ == "__main__":
