@@ -44,7 +44,3 @@ when implementing theese task compare with golden docs. if data is missing docum
 use: ai-node mismatch md file.
 then stop execution
 
-[DONE] Task 099: When status chages to :capability_setup_pending do:
-        - Open and in page popup with the data required from the user to continut to the next step
-[DONE] Task 100: When cliked on "save provider" add all of the data we have for the capability in that same popup.
-[DONE] Task 101: Currently when clicking on declara the node goes into degraded

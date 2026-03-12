@@ -1,10 +1,10 @@
 from dataclasses import dataclass
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
 
 
-DEFAULT_GOVERNANCE_SYNC_PATH = "/api/system/nodes/governance/baseline"
+DEFAULT_GOVERNANCE_SYNC_PATH = "/api/system/nodes/governance/current"
 
 
 def _require_non_empty_string(value: object, name: str) -> str:
@@ -13,7 +13,7 @@ def _require_non_empty_string(value: object, name: str) -> str:
     return value.strip()
 
 
-def _build_governance_url(*, core_api_endpoint: str, governance_path: str) -> str:
+def _build_governance_url(*, core_api_endpoint: str, governance_path: str, node_id: str) -> str:
     base = _require_non_empty_string(core_api_endpoint, "core_api_endpoint")
     path = _require_non_empty_string(governance_path, "governance_path")
     parsed = urlparse(base)
@@ -24,7 +24,8 @@ def _build_governance_url(*, core_api_endpoint: str, governance_path: str) -> st
     base_path = parsed.path.strip("/")
     if base_path and (relative_path == base_path or relative_path.startswith(f"{base_path}/")):
         relative_path = relative_path[len(base_path) :].lstrip("/")
-    return urljoin(normalized_base, relative_path)
+    base_url = urljoin(normalized_base, relative_path)
+    return f"{base_url}?{urlencode({'node_id': _require_non_empty_string(node_id, 'node_id')})}"
 
 
 @dataclass(frozen=True)
@@ -61,8 +62,13 @@ class GovernanceSyncClient:
         node_id: str,
         governance_path: str = DEFAULT_GOVERNANCE_SYNC_PATH,
     ) -> GovernanceSyncResult:
-        url = _build_governance_url(core_api_endpoint=core_api_endpoint, governance_path=governance_path)
+        url = _build_governance_url(
+            core_api_endpoint=core_api_endpoint,
+            governance_path=governance_path,
+            node_id=node_id,
+        )
         headers = {
+            "X-Node-Trust-Token": _require_non_empty_string(trust_token, "trust_token"),
             "Authorization": f"Bearer {_require_non_empty_string(trust_token, 'trust_token')}",
             "X-Synthia-Node-Id": _require_non_empty_string(node_id, "node_id"),
         }
