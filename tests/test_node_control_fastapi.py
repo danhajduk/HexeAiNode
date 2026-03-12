@@ -114,6 +114,16 @@ class NodeControlFastApiTests(unittest.TestCase):
         def save(self, payload):
             self.payload = payload
 
+    class _FakeProviderRuntimeManager:
+        def providers_snapshot(self):
+            return {"providers": [{"provider_id": "openai", "availability": "available", "models": []}]}
+
+        def models_snapshot(self):
+            return {"providers": [{"provider_id": "openai", "models": [{"model_id": "gpt-4o-mini"}]}]}
+
+        def metrics_snapshot(self):
+            return {"providers": {"openai": {"totals": {"total_requests": 1}}}}
+
     def test_status_and_onboarding_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
@@ -124,6 +134,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 provider_selection_store=self._FakeProviderSelectionStore(),
                 task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
                 capability_runner=self._FakeCapabilityRunner(),
+                provider_runtime_manager=self._FakeProviderRuntimeManager(),
                 service_manager=self._FakeServiceManager(),
                 prompt_service_state_store=self._FakePromptServiceStateStore(),
             )
@@ -235,6 +246,19 @@ class NodeControlFastApiTests(unittest.TestCase):
             services_restart_response = client.post("/api/services/restart", json={"target": "backend"})
             self.assertEqual(services_restart_response.status_code, 200)
             self.assertEqual(services_restart_response.json()["target"], "backend")
+
+            debug_providers_response = client.get("/debug/providers")
+            self.assertEqual(debug_providers_response.status_code, 200)
+            self.assertTrue(debug_providers_response.json()["configured"])
+            self.assertEqual(debug_providers_response.json()["providers"][0]["provider_id"], "openai")
+
+            debug_models_response = client.get("/debug/providers/models")
+            self.assertEqual(debug_models_response.status_code, 200)
+            self.assertEqual(debug_models_response.json()["providers"][0]["models"][0]["model_id"], "gpt-4o-mini")
+
+            debug_metrics_response = client.get("/debug/providers/metrics")
+            self.assertEqual(debug_metrics_response.status_code, 200)
+            self.assertEqual(debug_metrics_response.json()["providers"]["openai"]["totals"]["total_requests"], 1)
 
     def test_capability_declare_succeeds_when_capability_setup_is_ready(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -130,3 +130,9 @@ Task 121: Create unified prompt execution request model - Completed on 03/12/202
 Task 122: Create unified prompt execution response model - Completed on 03/12/2026 14:18
 Task 123: Build execution router on the node - Completed on 03/12/2026 14:18
 Task 124: Add fallback routing behavior - Completed on 03/12/2026 14:18
+Task 125: Expose provider intelligence to Core - Completed on 03/12/2026 15:45
+Task 126: Create provider intelligence refresh job - Completed on 03/12/2026 15:45
+Task 127: Add debug endpoints for provider visibility - Completed on 03/12/2026 15:45
+Task 128: Add structured logging for provider execution - Completed on 03/12/2026 15:45
+Task 129: Create Phase 4 unit tests - Completed on 03/12/2026 15:45
+Task 130: Create mock provider for local testing - Completed on 03/12/2026 15:45

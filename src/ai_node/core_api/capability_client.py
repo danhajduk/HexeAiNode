@@ -109,11 +109,11 @@ class CapabilityDeclarationClient:
         if hasattr(self._logger, "info"):
             self._logger.info("[provider-intelligence-submit-request] %s", {"url": url, "node_id": node_id})
 
-        status_code, payload = await self._http_adapter.post_json(
-            url,
-            {"provider_intelligence": provider_intelligence_report},
-            headers,
+        request_payload = _build_provider_intelligence_request_payload(
+            node_id=node_id,
+            report=provider_intelligence_report,
         )
+        status_code, payload = await self._http_adapter.post_json(url, request_payload, headers)
         result = _classify_capability_submission_response(status_code=status_code, payload=payload)
         if hasattr(self._logger, "info"):
             self._logger.info(
@@ -157,3 +157,131 @@ def _classify_capability_submission_response(*, status_code: int, payload: dict)
             error=str(payload.get("detail") or payload.get("error") or response_status),
         )
     return CapabilitySubmissionResult(status="accepted", payload=payload, retryable=False, error=None)
+
+
+def _build_provider_intelligence_request_payload(*, node_id: str, report: dict) -> dict:
+    normalized_node_id = _require_non_empty_string(node_id, "node_id")
+    structured = _structured_payload_from_runtime_report(report=report)
+    if structured is not None:
+        structured["node_id"] = normalized_node_id
+        structured.setdefault("node_available", True)
+        return structured
+    compatibility = _compatibility_payload_from_discovery_report(report=report)
+    compatibility["node_id"] = normalized_node_id
+    compatibility.setdefault("node_available", True)
+    return compatibility
+
+
+def _structured_payload_from_runtime_report(*, report: dict) -> dict | None:
+    providers = report.get("providers")
+    if not isinstance(providers, list):
+        return None
+    normalized_providers: list[dict] = []
+    normalized_models: list[dict] = []
+    metrics_snapshot: dict[str, list] = {"providers": []}
+    for provider_entry in providers:
+        if not isinstance(provider_entry, dict):
+            continue
+        provider_id = str(provider_entry.get("provider_id") or provider_entry.get("provider") or "").strip()
+        if not provider_id:
+            continue
+        normalized_providers.append(
+            {
+                "provider_id": provider_id,
+                "provider_type": str(provider_entry.get("provider_type") or "").strip() or None,
+                "provider_availability_state": str(
+                    provider_entry.get("availability")
+                    or provider_entry.get("provider_availability_state")
+                    or provider_entry.get("availability_state")
+                    or "unknown"
+                ).strip(),
+            }
+        )
+        metrics_models: list[dict] = []
+        for model_entry in provider_entry.get("models") or []:
+            if not isinstance(model_entry, dict):
+                continue
+            model_id = str(model_entry.get("model_id") or "").strip()
+            if not model_id:
+                continue
+            model_payload = {
+                "model_id": model_id,
+                "provider_id": provider_id,
+                "display_name": model_entry.get("display_name"),
+                "context_window": model_entry.get("context_window"),
+                "max_output_tokens": model_entry.get("max_output_tokens"),
+                "supports_streaming": bool(model_entry.get("supports_streaming")),
+                "supports_tools": bool(model_entry.get("supports_tools")),
+                "supports_vision": bool(model_entry.get("supports_vision")),
+                "supports_json_mode": bool(model_entry.get("supports_json_mode")),
+                "status": model_entry.get("status"),
+            }
+            pricing_input = model_entry.get("pricing_input")
+            pricing_output = model_entry.get("pricing_output")
+            if isinstance(pricing_input, (int, float)) and pricing_input >= 0:
+                model_payload["pricing_input_tokens"] = float(pricing_input)
+            if isinstance(pricing_output, (int, float)) and pricing_output >= 0:
+                model_payload["pricing_output_tokens"] = float(pricing_output)
+            normalized_models.append(model_payload)
+            metrics_models.append(
+                {
+                    "model_id": model_id,
+                    "latency_metrics": model_entry.get("latency_metrics") if isinstance(model_entry.get("latency_metrics"), dict) else {},
+                    "success_metrics": model_entry.get("success_metrics") if isinstance(model_entry.get("success_metrics"), dict) else {},
+                    "usage_metrics": model_entry.get("usage_metrics") if isinstance(model_entry.get("usage_metrics"), dict) else {},
+                }
+            )
+        metrics_snapshot["providers"].append(
+            {
+                "provider_id": provider_id,
+                "success_metrics": provider_entry.get("success_metrics")
+                if isinstance(provider_entry.get("success_metrics"), dict)
+                else {},
+                "models": metrics_models,
+            }
+        )
+    if not normalized_providers or not normalized_models:
+        return None
+    payload = {
+        "providers": normalized_providers,
+        "models": normalized_models,
+        "metrics_snapshot": metrics_snapshot,
+    }
+    observed_at = str(report.get("generated_at") or "").strip()
+    if observed_at:
+        payload["observed_at"] = observed_at
+    return payload
+
+
+def _compatibility_payload_from_discovery_report(*, report: dict) -> dict:
+    out: list[dict] = []
+    for provider_entry in report.get("providers") or []:
+        if not isinstance(provider_entry, dict):
+            continue
+        provider_id = str(provider_entry.get("provider") or provider_entry.get("provider_id") or "").strip()
+        if not provider_id:
+            continue
+        available_models = []
+        for model_entry in provider_entry.get("models") or []:
+            if not isinstance(model_entry, dict):
+                continue
+            model_id = str(model_entry.get("id") or model_entry.get("model_id") or "").strip()
+            if not model_id:
+                continue
+            pricing = model_entry.get("pricing")
+            latency = model_entry.get("latency_metrics")
+            available_models.append(
+                {
+                    "model_id": model_id,
+                    "pricing": pricing if isinstance(pricing, dict) else {},
+                    "latency_metrics": latency if isinstance(latency, dict) else {},
+                }
+            )
+        out.append({"provider": provider_id.lower(), "available_models": available_models})
+    payload = {"provider_intelligence": out}
+    observed_at = str(report.get("generated_at") or "").strip()
+    if observed_at:
+        payload["observed_at"] = observed_at
+    if isinstance(report.get("metrics_snapshot"), dict):
+        payload["metrics_snapshot"] = report.get("metrics_snapshot")
+    return payload

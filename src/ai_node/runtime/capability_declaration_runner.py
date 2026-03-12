@@ -38,6 +38,7 @@ class CapabilityDeclarationRunner:
         capability_client=None,
         governance_client=None,
         provider_intelligence_service=None,
+        provider_runtime_manager=None,
         provider_capability_refresh_interval_seconds: int = DEFAULT_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS,
         operational_readiness_checker=None,
         telemetry_publisher=None,
@@ -61,6 +62,7 @@ class CapabilityDeclarationRunner:
             cache_store=provider_capability_report_store,
             refresh_interval_seconds=provider_capability_refresh_interval_seconds,
         )
+        self._provider_runtime_manager = provider_runtime_manager
         self._operational_readiness_checker = operational_readiness_checker or OperationalMqttReadinessChecker(
             logger=logger
         )
@@ -90,7 +92,7 @@ class CapabilityDeclarationRunner:
             "manifest_summary": self._last_manifest_summary,
             "governance_bundle": self._governance_bundle,
             "governance_status": self._governance_status,
-            "provider_capability_report": compact_provider_intelligence_report(self._provider_capability_report),
+            "provider_capability_report": self._provider_report_payload(),
             "provider_intelligence_last_submitted_at": self._provider_intelligence_last_submitted_at,
             "operational_mqtt_readiness": (
                 self._operational_readiness_checker.status_payload()
@@ -102,6 +104,16 @@ class CapabilityDeclarationRunner:
             ),
             "prompt_service_registry": self._prompt_service_summary(),
         }
+
+    def _provider_report_payload(self) -> dict | None:
+        if not isinstance(self._provider_capability_report, dict):
+            return None
+        providers = self._provider_capability_report.get("providers")
+        if isinstance(providers, list) and any(
+            isinstance(item, dict) and str(item.get("provider_id") or "").strip() for item in providers
+        ):
+            return self._provider_capability_report
+        return compact_provider_intelligence_report(self._provider_capability_report)
 
     def _prompt_service_summary(self) -> dict:
         if self._prompt_service_state_store is None or not hasattr(self._prompt_service_state_store, "load_or_create"):
@@ -365,9 +377,7 @@ class CapabilityDeclarationRunner:
                         "result": {"phase": "operational_mqtt_readiness"},
                         "accepted_profile": accepted_payload,
                         "governance_bundle": governance_payload,
-                        "provider_capability_report": compact_provider_intelligence_report(
-                            self._provider_capability_report
-                        ),
+                        "provider_capability_report": self._provider_report_payload(),
                         "provider_intelligence_status": provider_intelligence_status,
                         "operational_mqtt_readiness": readiness_result,
                     }
@@ -403,9 +413,7 @@ class CapabilityDeclarationRunner:
                     "result": {"phase": "operational_mqtt_readiness"},
                     "accepted_profile": accepted_payload,
                     "governance_bundle": governance_payload,
-                    "provider_capability_report": compact_provider_intelligence_report(
-                        self._provider_capability_report
-                    ),
+                    "provider_capability_report": self._provider_report_payload(),
                     "provider_intelligence_status": provider_intelligence_status,
                     "operational_mqtt_readiness": readiness_result,
                 }
@@ -431,7 +439,7 @@ class CapabilityDeclarationRunner:
                 "result": result.payload,
                 "accepted_profile": accepted_payload,
                 "governance_bundle": governance_payload,
-                "provider_capability_report": compact_provider_intelligence_report(self._provider_capability_report),
+                "provider_capability_report": self._provider_report_payload(),
                 "provider_intelligence_status": provider_intelligence_status,
                 "operational_mqtt_readiness": readiness_result,
             }
@@ -472,10 +480,14 @@ class CapabilityDeclarationRunner:
             if self._provider_selection_store is not None and hasattr(self._provider_selection_store, "load_or_create")
             else None
         )
-        report, changed = await self._provider_intelligence_service.build_provider_capability_report(
-            provider_selection_config=provider_selection,
-            force_refresh=force_refresh,
-        )
+        if self._provider_runtime_manager is not None and hasattr(self._provider_runtime_manager, "refresh"):
+            report = await self._provider_runtime_manager.refresh()
+            changed = report != (self._provider_capability_report if isinstance(self._provider_capability_report, dict) else None)
+        else:
+            report, changed = await self._provider_intelligence_service.build_provider_capability_report(
+                provider_selection_config=provider_selection,
+                force_refresh=force_refresh,
+            )
         self._provider_capability_report = report
         self._persist_phase2_state()
 
@@ -489,7 +501,7 @@ class CapabilityDeclarationRunner:
                         core_api_endpoint=str(trust.get("core_api_endpoint") or "").strip(),
                         trust_token=str(trust.get("node_trust_token") or "").strip(),
                         node_id=self._node_id,
-                        provider_intelligence_report=compact_provider_intelligence_report(report),
+                        provider_intelligence_report=report,
                     )
                     core_submission = {
                         "submitted": True,
@@ -508,7 +520,7 @@ class CapabilityDeclarationRunner:
         return {
             "status": "refreshed",
             "changed": changed,
-            "report": compact_provider_intelligence_report(report),
+            "report": self._provider_report_payload(),
             "core_submission": core_submission,
         }
 
@@ -708,7 +720,7 @@ class CapabilityDeclarationRunner:
             "accepted_capability": self._accepted_profile if isinstance(self._accepted_profile, dict) else None,
             "active_governance": self._governance_bundle if isinstance(self._governance_bundle, dict) else None,
             "provider_capability_report": (
-                compact_provider_intelligence_report(self._provider_capability_report)
+                self._provider_report_payload()
                 if isinstance(self._provider_capability_report, dict)
                 else None
             ),

@@ -477,3 +477,60 @@ Issue cause: Golden docs define endpoint existence but do not define normative r
 Chosen fix: Produced mandatory mismatch report and stopped task execution per Rule 2.
 What changed: Created `/home/dan/Projects/Synthia/docs/reports/ai-node-mismatch-task-125.md`; paused implementation before Task 125 code-level submission contract changes.
 Verification: Documentation blocker confirmed by scanning `/home/dan/Projects/Synthia/docs/api-reference.md` and existing golden mismatch artifacts.
+###########
+Task #125-130
+Step objective: Resume provider intelligence tasks using new Core contracts and finish provider runtime integration.
+Issue cause: Tasks were previously blocked due missing Core contract docs; new Core contracts are now available for report and refresh lifecycle.
+Chosen fix: Aligned provider-intelligence submission payload to Core report contract, wired periodic refresh job, added provider debug endpoints, expanded structured provider execution logging path, and extended Phase 4 test coverage.
+What changed: Updated capability client payload mapping, capability runner/runtime wiring, node control background refresh + debug endpoints, and tests for structured submission/runtime/debug paths.
+Verification: ..............................                                           [100%]
+=============================== warnings summary ===============================
+tests/test_node_control_fastapi.py::NodeControlFastApiTests::test_capability_declare_succeeds_when_capability_setup_is_ready
+tests/test_node_control_fastapi.py::NodeControlFastApiTests::test_status_and_onboarding_endpoints
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_backfills_identity_from_trust_state_node_id
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_corrects_loopback_operational_host_in_trust_state
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_creates_node_identity_file
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_returns_success
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_reuses_existing_node_identity
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_reuses_existing_node_identity
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_with_valid_trust_state_uses_trusted_resume_startup_path
+  /home/dan/Projects/SynthiaAiNode/src/ai_node/runtime/node_control_api.py:679: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_node_control_fastapi.py: 4 warnings
+tests/test_main_entrypoint.py: 14 warnings
+  /home/dan/Projects/SynthiaAiNode/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+tests/test_node_control_fastapi.py::NodeControlFastApiTests::test_capability_declare_succeeds_when_capability_setup_is_ready
+tests/test_node_control_fastapi.py::NodeControlFastApiTests::test_status_and_onboarding_endpoints
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_backfills_identity_from_trust_state_node_id
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_corrects_loopback_operational_host_in_trust_state
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_creates_node_identity_file
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_returns_success
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_reuses_existing_node_identity
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_reuses_existing_node_identity
+tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_with_valid_trust_state_uses_trusted_resume_startup_path
+  /home/dan/Projects/SynthiaAiNode/src/ai_node/runtime/node_control_api.py:684: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+30 passed, 36 warnings in 5.66s passed.
+#############
+All Tasks completed 03/12/2026 15:45:50
+#############

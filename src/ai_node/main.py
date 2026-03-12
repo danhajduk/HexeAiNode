@@ -344,6 +344,7 @@ def run(
         phase2_state_store=phase2_state_store,
         provider_capability_report_store=provider_capability_report_store,
         prompt_service_state_store=prompt_service_state_store,
+        provider_runtime_manager=provider_runtime_manager,
         provider_capability_refresh_interval_seconds=provider_capability_refresh_interval_seconds,
     )
     if startup_mode == "trusted_resume":
@@ -367,6 +368,7 @@ def run(
         prompt_service_state_store=prompt_service_state_store,
         provider_runtime_manager=provider_runtime_manager,
         service_manager=service_manager,
+        provider_refresh_interval_seconds=provider_capability_refresh_interval_seconds,
         startup_mode=startup_mode,
         trusted_runtime_context=trusted_runtime_context,
     )

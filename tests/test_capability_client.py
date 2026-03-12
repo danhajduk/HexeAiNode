@@ -82,15 +82,55 @@ class CapabilityClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             adapter.last_payload,
             {
-                "provider_intelligence": {
-                    "schema_version": "1.0",
-                    "report_version": "1.0",
-                    "generated_at": "2026-03-12T00:00:00Z",
-                    "enabled_providers": ["openai"],
-                    "providers": [],
-                }
+                "node_id": "node-001",
+                "provider_intelligence": [],
+                "observed_at": "2026-03-12T00:00:00Z",
+                "node_available": True,
             },
         )
+
+    async def test_submit_provider_intelligence_uses_structured_mode_when_models_present(self):
+        adapter = _FakeHttpAdapter(200, {"status": "accepted"})
+        client = CapabilityDeclarationClient(logger=logging.getLogger("capability-client-test"), http_adapter=adapter)
+        result = await client.submit_provider_intelligence(
+            core_api_endpoint="http://10.0.0.100:9001",
+            trust_token="secret",
+            node_id="node-001",
+            provider_intelligence_report={
+                "generated_at": "2026-03-12T00:00:00Z",
+                "providers": [
+                    {
+                        "provider_id": "openai",
+                        "availability": "available",
+                        "success_metrics": {"success_rate": 1.0},
+                        "models": [
+                            {
+                                "model_id": "gpt-4o-mini",
+                                "display_name": "gpt-4o-mini",
+                                "context_window": 128000,
+                                "max_output_tokens": 4096,
+                                "supports_streaming": True,
+                                "supports_tools": True,
+                                "supports_vision": True,
+                                "supports_json_mode": True,
+                                "pricing_input": 0.15,
+                                "pricing_output": 0.60,
+                                "status": "available",
+                                "latency_metrics": {"p95_latency": 120.0},
+                                "usage_metrics": {"total_tokens": 100},
+                                "success_metrics": {"success_rate": 1.0},
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+        self.assertEqual(result.status, "accepted")
+        self.assertEqual(adapter.last_payload["node_id"], "node-001")
+        self.assertEqual(adapter.last_payload["providers"][0]["provider_id"], "openai")
+        self.assertEqual(adapter.last_payload["models"][0]["model_id"], "gpt-4o-mini")
+        self.assertEqual(adapter.last_payload["models"][0]["pricing_input_tokens"], 0.15)
+        self.assertIn("metrics_snapshot", adapter.last_payload)
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,6 +41,7 @@ class NodeControlState:
         execution_gateway=None,
         provider_runtime_manager=None,
         service_manager=None,
+        provider_refresh_interval_seconds: int = 900,
         startup_mode: str = "bootstrap_onboarding",
         trusted_runtime_context: dict | None = None,
     ) -> None:
@@ -57,6 +59,8 @@ class NodeControlState:
         self._execution_gateway = execution_gateway or ExecutionGateway()
         self._provider_runtime_manager = provider_runtime_manager
         self._service_manager = service_manager or NullServiceManager()
+        self._provider_refresh_interval_seconds = max(int(provider_refresh_interval_seconds), 60)
+        self._provider_refresh_task: asyncio.Task | None = None
         self._startup_mode = startup_mode
         self._trusted_runtime_context = trusted_runtime_context or {}
         self._phase2_diag = Phase2DiagnosticsLogger(logger)
@@ -491,11 +495,66 @@ class NodeControlState:
         return await self._capability_runner.refresh_governance_once()
 
     async def refresh_provider_capabilities(self, *, force_refresh: bool) -> dict:
+        if self._capability_runner is not None and hasattr(self._capability_runner, "refresh_provider_capabilities_once"):
+            return await self._capability_runner.refresh_provider_capabilities_once(force_refresh=force_refresh)
         if self._provider_runtime_manager is not None and hasattr(self._provider_runtime_manager, "refresh"):
             return {"source": "provider_runtime_manager", "force_refresh": force_refresh, "report": await self._provider_runtime_manager.refresh()}
         if self._capability_runner is None or not hasattr(self._capability_runner, "refresh_provider_capabilities_once"):
             raise ValueError("provider capability refresh is not configured")
         return await self._capability_runner.refresh_provider_capabilities_once(force_refresh=force_refresh)
+
+    async def start_background_jobs(self) -> None:
+        if self._provider_refresh_task is not None and not self._provider_refresh_task.done():
+            return
+        self._provider_refresh_task = asyncio.create_task(self._provider_refresh_loop())
+
+    async def stop_background_jobs(self) -> None:
+        if self._provider_refresh_task is None:
+            return
+        self._provider_refresh_task.cancel()
+        try:
+            await self._provider_refresh_task
+        except asyncio.CancelledError:
+            pass
+        self._provider_refresh_task = None
+
+    async def _provider_refresh_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self._provider_refresh_interval_seconds)
+            try:
+                result = await self.refresh_provider_capabilities(force_refresh=False)
+                if hasattr(self._logger, "info"):
+                    self._logger.info(
+                        "[provider-intelligence-refresh-job] %s",
+                        {
+                            "status": result.get("status"),
+                            "changed": result.get("changed"),
+                            "core_submission": result.get("core_submission"),
+                        },
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                if hasattr(self._logger, "warning"):
+                    self._logger.warning("[provider-intelligence-refresh-job-error] %s", {"error": str(exc)})
+
+    def debug_providers_payload(self) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "providers_snapshot"):
+            return {"configured": False, "providers": []}
+        snapshot = self._provider_runtime_manager.providers_snapshot()
+        return {"configured": True, **(snapshot if isinstance(snapshot, dict) else {"providers": []})}
+
+    def debug_provider_models_payload(self) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "models_snapshot"):
+            return {"configured": False, "providers": []}
+        snapshot = self._provider_runtime_manager.models_snapshot()
+        return {"configured": True, **(snapshot if isinstance(snapshot, dict) else {"providers": []})}
+
+    def debug_provider_metrics_payload(self) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "metrics_snapshot"):
+            return {"configured": False, "providers": {}}
+        snapshot = self._provider_runtime_manager.metrics_snapshot()
+        return {"configured": True, **(snapshot if isinstance(snapshot, dict) else {"providers": {}})}
 
     def recover_from_degraded(self) -> dict:
         if self._capability_runner is None or not hasattr(self._capability_runner, "recover_from_degraded"):
@@ -617,6 +676,16 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.on_event("startup")
+    async def _startup_jobs():
+        if hasattr(state, "start_background_jobs"):
+            await state.start_background_jobs()
+
+    @app.on_event("shutdown")
+    async def _shutdown_jobs():
+        if hasattr(state, "stop_background_jobs"):
+            await state.stop_background_jobs()
+
     @app.get("/")
     def root():
         return {
@@ -639,6 +708,9 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/execution/authorize",
                 "/api/services/status",
                 "/api/services/restart",
+                "/debug/providers",
+                "/debug/providers/models",
+                "/debug/providers/metrics",
                 "/api/health",
             ],
         }
@@ -762,6 +834,18 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             return state.restart_service(target=payload.target)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/debug/providers")
+    def get_debug_providers():
+        return state.debug_providers_payload()
+
+    @app.get("/debug/providers/models")
+    def get_debug_provider_models():
+        return state.debug_provider_models_payload()
+
+    @app.get("/debug/providers/metrics")
+    def get_debug_provider_metrics():
+        return state.debug_provider_metrics_payload()
 
     if hasattr(logger, "info"):
         logger.info("[node-control-api] FastAPI app initialized")

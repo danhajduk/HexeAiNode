@@ -70,6 +70,9 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("providers", report)
             self.assertTrue(Path(registry_path).exists())
             self.assertTrue(Path(metrics_path).exists())
+            providers_snapshot = runtime.providers_snapshot()
+            self.assertEqual(providers_snapshot["providers"][0]["provider_id"], "local")
+            self.assertIn("availability", providers_snapshot["providers"][0]["health"])
 
     async def test_registry_can_reload_models_from_persisted_snapshot(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -85,6 +88,31 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             model = loaded_registry.get_model(provider_id="mock", model_id="mock-model-v1")
             self.assertIsNotNone(model)
             self.assertEqual(model.model_id, "mock-model-v1")
+
+    async def test_execution_router_returns_normalized_response_shape(self):
+        registry = ProviderRegistry()
+        with tempfile.TemporaryDirectory() as tmp:
+            metrics = ProviderMetricsCollector(
+                metrics_path=str(Path(tmp) / "metrics.json"),
+                logger=logging.getLogger("test"),
+            )
+            provider = MockProviderAdapter(provider_id="mock")
+            registry.register_provider(provider_id="mock", adapter=provider)
+            registry.set_provider_health(provider_id="mock", payload={"availability": "available"})
+            router = ProviderExecutionRouter(
+                registry=registry,
+                metrics=metrics,
+                logger=logging.getLogger("test"),
+                default_provider="mock",
+                retry_count=0,
+            )
+            response = await router.execute(
+                UnifiedExecutionRequest(task_family="task.classification.text", prompt="hello world")
+            )
+            self.assertEqual(response.provider_id, "mock")
+            self.assertEqual(response.model_id, "mock-model-v1")
+            self.assertTrue(response.output_text.startswith("mock:"))
+            self.assertGreaterEqual(response.usage.total_tokens, 1)
 
 
 if __name__ == "__main__":
