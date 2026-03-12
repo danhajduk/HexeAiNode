@@ -434,3 +434,10 @@ Step objective: Show required user-input popup when node reaches capability_setu
 Chosen fix: Added a modal overlay that auto-opens on capability_setup_pending, surfaces required node/core context, and provides provider-save + capability-declare actions.
 What changed: Updated frontend/src/App.jsx and frontend/src/app.css; marked Task 099 done in docs/New_tasks.txt.
 Verification: `cd frontend && npm run build` passes.
+
+###########
+Task #100
+Step objective: Show complete capability data in the capability setup popup after provider save.
+Chosen fix: Refreshed node status immediately after provider save and added a capability-data section in the popup (status, task families, providers, governance version, declaration readiness, setup readiness flags).
+What changed: Updated frontend/src/App.jsx and frontend/src/app.css; marked Task 100 done in docs/New_tasks.txt.
+Verification: `cd frontend && npm run build` passes.

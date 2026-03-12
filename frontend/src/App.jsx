@@ -214,6 +214,7 @@ export default function App() {
     setError("");
     try {
       await apiPost("/api/providers/config", { openai_enabled: openaiEnabled });
+      await loadStatus();
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
       setError(message);
@@ -328,6 +329,29 @@ export default function App() {
             ) : (
               <p className="muted tiny">Setup is ready. Declare capabilities to continue.</p>
             )}
+            <div className="modal-capability-data">
+              <h3>Capability Data</h3>
+              <div className="state-grid">
+                <span>Capability Status</span>
+                <code>{uiState.capabilitySummary.capabilityStatus || "unknown"}</code>
+                <span>Task Families</span>
+                <code>{uiState.capabilitySummary.declaredTaskFamilies.join(", ") || "none"}</code>
+                <span>Enabled Providers</span>
+                <code>{uiState.capabilitySummary.enabledProviders.join(", ") || "none"}</code>
+                <span>Governance Policy</span>
+                <code>{uiState.capabilitySummary.governancePolicyVersion || "unknown"}</code>
+                <span>Declare Allowed</span>
+                <StatusBadge value={capabilityDeclareAllowed ? "ready" : "blocked"} />
+                <span>Trust Ready</span>
+                <StatusBadge value={setupReadinessFlags.trust_state_valid ? "ready" : "blocked"} />
+                <span>Identity Ready</span>
+                <StatusBadge value={setupReadinessFlags.node_identity_valid ? "ready" : "blocked"} />
+                <span>Provider Ready</span>
+                <StatusBadge value={setupReadinessFlags.provider_selection_valid ? "ready" : "blocked"} />
+                <span>Runtime Context</span>
+                <StatusBadge value={setupReadinessFlags.core_runtime_context_valid ? "ready" : "blocked"} />
+              </div>
+            </div>
           </article>
         </section>
       ) : null}
