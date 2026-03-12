@@ -393,3 +393,10 @@ Step objective: Improve live dashboard updates and partial-failure visibility.
 Chosen fix: Kept periodic polling and formalized live-update metadata display (last update timestamp, refresh interval, partial-failure warnings) while preserving graceful degraded rendering with partial endpoint failures.
 What changed: Updated frontend/src/App.jsx and frontend/src/app.css.
 Verification: `cd frontend && npm run build` passes.
+
+###########
+Task #087
+Step objective: Improve dashboard responsiveness for laptop/tablet/narrow viewport layouts.
+Chosen fix: Added responsive breakpoints and layout rules so cards stack cleanly, controls wrap predictably, and state/progress rows remain readable on small widths.
+What changed: Updated frontend/src/app.css.
+Verification: `cd frontend && npm run build` passes.

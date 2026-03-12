@@ -49,19 +49,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 087: Implement responsive layout improvements
-  - Ensure the dashboard layout works on:
-    - laptop screens
-    - tablet-sized displays
-    - narrow browser windows
-  - Adjust card layout to stack vertically when screen width is limited.
-
-  * Comments, descriptions, rules:
-    - Avoid fixed widths that break on smaller displays.
-    - Maintain visual hierarchy even when stacked.
-    - Keep the design consistent with the existing theme.
-
-
 [TODO] Task 088: Improve visual consistency with shared theme styles
   - Standardize colors, badges, and typography across all cards.
   - Define reusable UI components:

@@ -12,12 +12,13 @@
 .row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 12px;
 }
 
@@ -165,4 +166,42 @@ h2 {
 .conn-stopped,
 .conn-failed {
   color: #c0392b;
+}
+
+@media (max-width: 900px) {
+  .page {
+    padding: 16px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 12px;
+  }
+
+  .state-grid {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .progress-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .row .btn {
+    width: 100%;
+  }
+
+  .setup-form input,
+  .setup-form .btn,
+  .btn {
+    width: 100%;
+    box-sizing: border-box;
+  }
 }
