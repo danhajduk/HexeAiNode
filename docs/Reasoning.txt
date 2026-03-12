@@ -290,3 +290,10 @@ Step objective: Track governance version/freshness and define refresh behavior/s
 Chosen fix: Added explicit freshness evaluation (fresh/stale/unknown), integrated governance status tracking in declaration runtime, and exposed governance status/refresh APIs for telemetry surfaces.
 What changed: Added src/ai_node/governance/freshness.py and src/ai_node/governance/__init__.py; updated src/ai_node/runtime/capability_declaration_runner.py and src/ai_node/runtime/node_control_api.py; updated tests/test_capability_declaration_runner.py and tests/test_node_control_fastapi.py; added tests/test_governance_freshness.py.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_governance_freshness.py tests/test_governance_client.py tests/test_governance_state_store.py tests/test_capability_declaration_runner.py tests/test_node_control_fastapi.py tests/test_capability_client.py tests/test_capability_state_store.py tests/test_main_entrypoint.py` passes (29 tests).
+
+###########
+Task #072 (Phase 2)
+Step objective: Add trusted operational MQTT readiness before operational transition.
+Chosen fix: Added a dedicated operational MQTT readiness checker (separate from bootstrap path) and gated capability acceptance completion on successful operational MQTT readiness validation.
+What changed: Added src/ai_node/runtime/operational_mqtt_readiness.py; updated src/ai_node/runtime/capability_declaration_runner.py to run readiness checks with trust-issued MQTT identity/token; added tests/test_operational_mqtt_readiness.py and expanded tests/test_capability_declaration_runner.py.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_operational_mqtt_readiness.py tests/test_capability_declaration_runner.py tests/test_governance_freshness.py tests/test_governance_client.py tests/test_governance_state_store.py tests/test_node_control_fastapi.py tests/test_capability_client.py tests/test_main_entrypoint.py tests/test_connectivity_manager.py` passes (31 tests).

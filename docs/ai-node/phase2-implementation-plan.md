@@ -1,7 +1,7 @@
 # Synthia AI Node - Phase 2 Implementation Plan and Module Map
 
 Status: Active
-Implementation status: In progress (Tasks 059-071 implemented)
+Implementation status: In progress (Tasks 059-072 implemented)
 Last updated: 2026-03-11
 
 ## Scope
@@ -82,6 +82,10 @@ Out of scope in Phase 2:
   - governance freshness evaluation added with explicit `fresh` / `stale` / `unknown` state modeling
   - runtime now tracks active governance version, issued timestamp, last sync time, and refresh health
   - governance status and manual refresh APIs are exposed for telemetry and operational diagnostics
+- Task 072:
+  - post-trust operational MQTT readiness checker added as a dedicated runtime path
+  - readiness validates operational MQTT host/port/identity/token without reusing bootstrap flow
+  - transition to operational now requires successful operational MQTT readiness after governance sync
 
 ## Phase 2 Module Map (Python)
 
@@ -90,6 +94,7 @@ src/ai_node/
   runtime/
     post_trust_handoff.py          # startup trusted continuation and readiness bootstrap
     capability_declaration_runner.py # orchestrates declaration submit/retry/accept flow
+    operational_mqtt_readiness.py  # trusted operational MQTT connection readiness checks
   config/
     provider_selection_config.py   # supported/enabled provider config model + validation
   capabilities/

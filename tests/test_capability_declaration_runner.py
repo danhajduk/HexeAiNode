@@ -91,6 +91,27 @@ class _FakeGovernanceClientRetry:
         return _R()
 
 
+class _FakeOperationalReadinessReady:
+    def status_payload(self):
+        return {"ready": True, "last_attempt_at": "2026-03-11T00:00:00Z", "last_error": None, "endpoint": None}
+
+    async def check_once(self, **_kwargs):
+        return {"ready": True, "last_attempt_at": "2026-03-11T00:00:00Z", "last_error": None, "endpoint": None}
+
+
+class _FakeOperationalReadinessNotReady:
+    def status_payload(self):
+        return {
+            "ready": False,
+            "last_attempt_at": "2026-03-11T00:00:00Z",
+            "last_error": "connect_timeout",
+            "endpoint": {"host": "10.0.0.100", "port": 1883, "identity": "main-ai-node"},
+        }
+
+    async def check_once(self, **_kwargs):
+        return self.status_payload()
+
+
 class _FakeCapabilityStateStore:
     def __init__(self, existing=None):
         self.saved = None
@@ -132,6 +153,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             governance_state_store=governance_store,
             capability_client=_FakeClientAccepted(),
             governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
         )
         result = await runner.submit_once()
         self.assertEqual(result["status"], "accepted")
@@ -155,6 +177,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             node_id="node-001",
             capability_client=_FakeClientRetry(),
             governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
         )
         result = await runner.submit_once()
         self.assertEqual(result["status"], "retryable_failure")
@@ -185,6 +208,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             capability_state_store=state_store,
             capability_client=_FakeClientAccepted(),
             governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
         )
         status = runner.status_payload()
         self.assertEqual(status["status"], "accepted")
@@ -203,6 +227,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             capability_state_store=_FakeCapabilityStateStore(),
             capability_client=_FakeClientAccepted(),
             governance_client=_FakeGovernanceClientRetry(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
         )
         result = await runner.submit_once()
         self.assertEqual(result["status"], "retryable_failure")
@@ -239,6 +264,27 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         result = await runner.refresh_governance_once()
         self.assertEqual(result["status"], "retryable_failure")
         self.assertEqual(result["governance_status"]["refresh_state"], "core_temporarily_unavailable")
+
+    async def test_operational_readiness_failure_moves_to_retry_pending(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
+        lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        runner = CapabilityDeclarationRunner(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("capability-runner-test"),
+            trust_store=_FakeTrustStore(),
+            provider_selection_store=_FakeProviderSelectionStore(),
+            node_id="node-001",
+            capability_state_store=_FakeCapabilityStateStore(),
+            governance_state_store=_FakeGovernanceStateStore(),
+            capability_client=_FakeClientAccepted(),
+            governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessNotReady(),
+        )
+        result = await runner.submit_once()
+        self.assertEqual(result["status"], "retryable_failure")
+        self.assertEqual(lifecycle.get_state(), NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING)
+        self.assertEqual(runner.status_payload()["status"], "retry_pending")
 
 
 if __name__ == "__main__":

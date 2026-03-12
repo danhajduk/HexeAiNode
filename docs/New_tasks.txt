@@ -46,21 +46,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 072: Phase 2C — Implement trusted operational MQTT connection readiness
-  - Build the post-trust operational MQTT readiness path using the Core-issued operational identity/token.
-  - Validate that the node can prepare/use:
-    - operational MQTT host
-    - operational MQTT port
-    - operational identity
-    - operational token
-  - Keep this separate from bootstrap MQTT logic.
-
-  * Comments, descriptions, rules:
-    - Bootstrap MQTT and trusted operational MQTT must remain separate code paths.
-    - This task is readiness/connection behavior, not full message-feature implementation.
-    - Do not leak operational credentials to logs.
-
-
 [TODO] Task 073: Phase 2C — Implement baseline trusted status telemetry
   - Emit trusted node telemetry/status after capability acceptance and governance sync.
   - Include state/status such as:

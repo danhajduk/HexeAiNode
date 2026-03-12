@@ -9,6 +9,7 @@ from ai_node.core_api.capability_client import CapabilityDeclarationClient
 from ai_node.core_api.governance_client import GovernanceSyncClient
 from ai_node.governance.freshness import evaluate_governance_freshness
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
+from ai_node.runtime.operational_mqtt_readiness import OperationalMqttReadinessChecker
 
 
 class CapabilityDeclarationRunner:
@@ -24,6 +25,7 @@ class CapabilityDeclarationRunner:
         governance_state_store=None,
         capability_client=None,
         governance_client=None,
+        operational_readiness_checker=None,
     ) -> None:
         self._lifecycle = lifecycle
         self._logger = logger
@@ -34,6 +36,9 @@ class CapabilityDeclarationRunner:
         self._node_id = str(node_id).strip()
         self._capability_client = capability_client or CapabilityDeclarationClient(logger=logger)
         self._governance_client = governance_client or GovernanceSyncClient(logger=logger)
+        self._operational_readiness_checker = operational_readiness_checker or OperationalMqttReadinessChecker(
+            logger=logger
+        )
         self._status = "idle"
         self._last_error = None
         self._last_submitted_at = None
@@ -53,6 +58,11 @@ class CapabilityDeclarationRunner:
             "accepted_profile": self._accepted_profile,
             "governance_bundle": self._governance_bundle,
             "governance_status": self._governance_status,
+            "operational_mqtt_readiness": (
+                self._operational_readiness_checker.status_payload()
+                if hasattr(self._operational_readiness_checker, "status_payload")
+                else None
+            ),
         }
 
     def _load_accepted_profile(self) -> None:
@@ -180,6 +190,28 @@ class CapabilityDeclarationRunner:
                 self._governance_state_store.save(governance_payload)
             self._governance_bundle = governance_payload
             self._refresh_governance_status(refresh_state="synced", last_refresh_error=None)
+
+            readiness_result = await self._operational_readiness_checker.check_once(trust_state=trust_state)
+            if not readiness_result.get("ready"):
+                self._lifecycle.transition_to(
+                    NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING,
+                    {
+                        "source": "operational_mqtt_readiness",
+                        "error": readiness_result.get("last_error"),
+                        "retryable": True,
+                    },
+                )
+                self._status = "retry_pending"
+                self._last_error = str(readiness_result.get("last_error") or "operational_mqtt_not_ready")
+                return {
+                    "status": "retryable_failure",
+                    "retryable": True,
+                    "error": self._last_error,
+                    "result": {"phase": "operational_mqtt_readiness"},
+                    "accepted_profile": accepted_payload,
+                    "governance_bundle": governance_payload,
+                    "operational_mqtt_readiness": readiness_result,
+                }
             self._lifecycle.transition_to(
                 NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED,
                 {"source": "capability_declaration_runner"},
@@ -195,6 +227,7 @@ class CapabilityDeclarationRunner:
                 "result": result.payload,
                 "accepted_profile": accepted_payload,
                 "governance_bundle": governance_payload,
+                "operational_mqtt_readiness": readiness_result,
             }
 
         self._lifecycle.transition_to(
