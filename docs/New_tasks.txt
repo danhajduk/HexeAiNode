@@ -49,26 +49,6 @@ Do not edit above this line:
 [STOP HERE]
 
 
-[TODO] Task 081: Enhance onboarding card with progress visualization
-  - Replace the current static onboarding description with real progress indicators.
-  - Show steps:
-    - bootstrap discovery
-    - registration
-    - approval
-    - trust activation
-  - Each step should show one of:
-    - pending
-    - in progress
-    - completed
-    - failed
-  - Add icons or badges to visualize progress.
-
-  * Comments, descriptions, rules:
-    - Operators must be able to see exactly where onboarding stopped if it fails.
-    - Steps should map directly to Phase 1 onboarding states.
-    - Avoid hardcoding; read onboarding state from backend.
-
-
 [TODO] Task 082: Improve runtime health card with operational signals
   - Expand the Runtime card to show real operational status.
   - Include:

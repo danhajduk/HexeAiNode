@@ -351,3 +351,10 @@ Step objective: Add lifecycle status card as the primary dashboard diagnostic su
 Chosen fix: Added a dedicated Lifecycle card driven by canonical UI state with color-coded lifecycle tones and key trust/governance/core pairing fields.
 What changed: Updated frontend/src/App.jsx and frontend/src/app.css; updated src/ai_node/main.py to expose pairing timestamp in trusted runtime context; updated frontend/src/uiStateModel.js to include pairing timestamp in core connection model.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_main_entrypoint.py tests/test_node_control_fastapi.py tests/test_node_control_api.py` passes (13 tests); `cd frontend && npm run build` passes.
+
+###########
+Task #081
+Step objective: Replace static onboarding card text with lifecycle-driven progress visualization.
+Chosen fix: Rendered onboarding step badges using canonical UI onboarding state mapping for bootstrap discovery, registration, approval, and trust activation.
+What changed: Updated frontend/src/App.jsx onboarding card rendering and frontend/src/app.css with progress row/badge styles.
+Verification: `cd frontend && npm run build` passes.

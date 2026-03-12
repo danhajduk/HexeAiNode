@@ -155,6 +155,19 @@ export default function App() {
   const isPendingApproval = backendStatus === "pending_approval";
   const isCapabilitySetupPending = backendStatus === "capability_setup_pending";
   const lifecycleToneClass = `tone-${uiState.lifecycle.tone || "error"}`;
+  const onboardingSteps = [
+    { key: "bootstrap_discovery", label: "Bootstrap Discovery" },
+    { key: "registration", label: "Registration" },
+    { key: "approval", label: "Approval" },
+    { key: "trust_activation", label: "Trust Activation" },
+  ];
+
+  function stepStateLabel(value) {
+    if (value === "completed") return "Completed";
+    if (value === "in_progress") return "In Progress";
+    if (value === "failed") return "Failed";
+    return "Pending";
+  }
 
   async function onCopyNodeId() {
     if (!nodeId) {
@@ -267,7 +280,18 @@ export default function App() {
           </article>
           <article className="card">
             <h2>Onboarding</h2>
-            <p className="muted">Bootstrap, registration, approval, trust activation.</p>
+            <p className="muted">Live onboarding progress by lifecycle stage.</p>
+            <div className="progress-list">
+              {onboardingSteps.map((step) => {
+                const state = uiState.onboarding.progress?.[step.key] || "pending";
+                return (
+                  <div className="progress-row" key={step.key}>
+                    <span>{step.label}</span>
+                    <span className={`step-badge step-${state}`}>{stepStateLabel(state)}</span>
+                  </div>
+                );
+              })}
+            </div>
             {isPendingApproval && nodeId ? (
               <p className="muted tiny">
                 Pending approval for node: <code>{nodeId}</code>
