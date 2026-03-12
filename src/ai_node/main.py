@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import logging
 import os
 import signal
@@ -13,6 +14,7 @@ from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.identity.node_identity_store import NodeIdentityStore
 from ai_node.config.provider_selection_config import ProviderSelectionConfigStore
+from ai_node.config.task_capability_selection_config import TaskCapabilitySelectionConfigStore
 from ai_node.runtime.bootstrap_mqtt_runner import BootstrapMqttRunner
 from ai_node.runtime.bootstrap_timeout import BootstrapConnectTimeoutMonitor
 from ai_node.runtime.capability_declaration_runner import CapabilityDeclarationRunner
@@ -22,6 +24,7 @@ from ai_node.runtime.service_manager import UserSystemdServiceManager
 from ai_node.persistence.capability_state_store import CapabilityStateStore
 from ai_node.persistence.governance_state_store import GovernanceStateStore
 from ai_node.persistence.phase2_state_store import Phase2StateStore
+from ai_node.persistence.provider_capability_report_store import ProviderCapabilityReportStore
 from ai_node.trust.trust_store import TrustStateStore
 
 
@@ -111,6 +114,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to persisted provider selection config state",
     )
     parser.add_argument(
+        "--task-capability-selection-config-path",
+        default=os.environ.get(
+            "SYNTHIA_TASK_CAPABILITY_SELECTION_CONFIG_PATH",
+            ".run/task_capability_selection_config.json",
+        ),
+        help="Path to persisted selected task capability declarations",
+    )
+    parser.add_argument(
         "--capability-state-path",
         default=os.environ.get("SYNTHIA_CAPABILITY_STATE_PATH", ".run/capability_state.json"),
         help="Path to persisted accepted capability profile state",
@@ -124,6 +135,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--phase2-state-path",
         default=os.environ.get("SYNTHIA_PHASE2_STATE_PATH", ".run/phase2_state.json"),
         help="Path to persisted combined phase-2 activation state",
+    )
+    parser.add_argument(
+        "--provider-capability-report-path",
+        default=os.environ.get("SYNTHIA_PROVIDER_CAPABILITY_REPORT_PATH", ".run/provider_capability_report.json"),
+        help="Path to persisted provider capability report cache",
+    )
+    parser.add_argument(
+        "--provider-capability-refresh-interval-seconds",
+        type=int,
+        default=int(os.environ.get("SYNTHIA_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS", "14400")),
+        help="Provider capability refresh interval in seconds (recommended: 3600-21600)",
     )
     parser.add_argument(
         "--finalize-poll-interval-seconds",
@@ -166,9 +188,12 @@ def run(
     trust_state_path: str = ".run/trust_state.json",
     node_identity_path: str = ".run/node_identity.json",
     provider_selection_config_path: str = ".run/provider_selection_config.json",
+    task_capability_selection_config_path: str = ".run/task_capability_selection_config.json",
     capability_state_path: str = ".run/capability_state.json",
     governance_state_path: str = ".run/governance_state.json",
     phase2_state_path: str = ".run/phase2_state.json",
+    provider_capability_report_path: str = ".run/provider_capability_report.json",
+    provider_capability_refresh_interval_seconds: int = 14400,
     finalize_poll_interval_seconds: float = 2.0,
 ) -> int:
     configure_logging(log_file)
@@ -199,9 +224,17 @@ def run(
         path=provider_selection_config_path,
         logger=LOGGER,
     )
+    task_capability_selection_store = TaskCapabilitySelectionConfigStore(
+        path=task_capability_selection_config_path,
+        logger=LOGGER,
+    )
     capability_state_store = CapabilityStateStore(path=capability_state_path, logger=LOGGER)
     governance_state_store = GovernanceStateStore(path=governance_state_path, logger=LOGGER)
     phase2_state_store = Phase2StateStore(path=phase2_state_path, logger=LOGGER)
+    provider_capability_report_store = ProviderCapabilityReportStore(
+        path=provider_capability_report_path,
+        logger=LOGGER,
+    )
     LOGGER.info("[node-identity] %s", {"node_id": node_identity["node_id"], "path": node_identity_path})
     if isinstance(trust_state, dict):
         trust_node_id = str(trust_state.get("node_id") or "").strip()
@@ -288,12 +321,21 @@ def run(
         logger=LOGGER,
         trust_store=trust_state_store,
         provider_selection_store=provider_selection_store,
+        task_capability_selection_store=task_capability_selection_store,
         node_id=node_identity["node_id"],
         node_software_version=node_software_version,
         capability_state_store=capability_state_store,
         governance_state_store=governance_state_store,
         phase2_state_store=phase2_state_store,
+        provider_capability_report_store=provider_capability_report_store,
+        provider_capability_refresh_interval_seconds=provider_capability_refresh_interval_seconds,
     )
+    if startup_mode == "trusted_resume":
+        try:
+            resume_result = asyncio.run(capability_runner.resume_operational_if_ready())
+            LOGGER.info("[startup-resume] %s", resume_result)
+        except Exception:
+            LOGGER.exception("[startup-resume] failed to evaluate trusted startup resume")
     service_manager = UserSystemdServiceManager(logger=LOGGER)
     control_state = NodeControlState(
         lifecycle=lifecycle,
@@ -304,6 +346,7 @@ def run(
         capability_runner=capability_runner,
         node_identity_store=node_identity_store,
         provider_selection_store=provider_selection_store,
+        task_capability_selection_store=task_capability_selection_store,
         trust_state_store=trust_state_store,
         service_manager=service_manager,
         startup_mode=startup_mode,
@@ -346,9 +389,12 @@ def main() -> int:
         trust_state_path=args.trust_state_path,
         node_identity_path=args.node_identity_path,
         provider_selection_config_path=args.provider_selection_config_path,
+        task_capability_selection_config_path=args.task_capability_selection_config_path,
         capability_state_path=args.capability_state_path,
         governance_state_path=args.governance_state_path,
         phase2_state_path=args.phase2_state_path,
+        provider_capability_report_path=args.provider_capability_report_path,
+        provider_capability_refresh_interval_seconds=args.provider_capability_refresh_interval_seconds,
         finalize_poll_interval_seconds=args.finalize_poll_interval_seconds,
     )
 

@@ -56,6 +56,7 @@ export function buildDashboardUiState({
   nodeStatus = null,
   governanceStatus = null,
   providerConfig = null,
+  capabilityConfig = null,
   apiReachable = true,
   lastUpdatedAt = null,
   partialFailures = [],
@@ -67,6 +68,7 @@ export function buildDashboardUiState({
   const trustedContext = nodeStatus?.trusted_runtime_context || {};
   const governance = governanceStatus?.status || capability?.governance_status || {};
   const providerEnabled = providerConfig?.config?.providers?.enabled || [];
+  const selectedTaskFamiliesFromConfig = capabilityConfig?.config?.selected_task_families || [];
   const readiness = capability?.operational_mqtt_readiness || {};
   const telemetry = capability?.telemetry || {};
 
@@ -110,6 +112,10 @@ export function buildDashboardUiState({
       capabilityStatus: capability?.status || "idle",
       enabledProviders: providerEnabled,
       declaredTaskFamilies: capability?.manifest_summary?.task_families || [],
+      selectedTaskFamilies:
+        capability?.manifest_summary?.task_families?.length > 0
+          ? capability?.manifest_summary?.task_families
+          : selectedTaskFamiliesFromConfig,
       capabilityDeclarationTimestamp: capability?.accepted_profile?.acceptance_timestamp || null,
       governancePolicyVersion: governance?.active_governance_version || "",
       setupReadinessFlags: capabilitySetup?.readiness_flags || {},

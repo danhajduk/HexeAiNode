@@ -26,6 +26,12 @@ from ai_node.capabilities.environment_hints import (
     collect_environment_hints,
     validate_environment_hints,
 )
+from ai_node.capabilities.provider_intelligence import (
+    DEFAULT_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS,
+    PROVIDER_INTELLIGENCE_SCHEMA_VERSION,
+    ProviderIntelligenceService,
+    compact_provider_intelligence_report,
+)
 
 __all__ = [
     "CAPABILITY_MANIFEST_SCHEMA_VERSION",
@@ -44,4 +50,8 @@ __all__ = [
     "VALID_MEMORY_CLASSES",
     "collect_environment_hints",
     "validate_environment_hints",
+    "PROVIDER_INTELLIGENCE_SCHEMA_VERSION",
+    "DEFAULT_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS",
+    "ProviderIntelligenceService",
+    "compact_provider_intelligence_report",
 ]

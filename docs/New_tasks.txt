@@ -43,4 +43,3 @@ Do not edit above this line:
 when implementing theese task compare with golden docs. if data is missing documemet in golden docs
 use: ai-node mismatch md file.
 then stop execution
-

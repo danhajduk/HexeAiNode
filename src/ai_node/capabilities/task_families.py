@@ -2,12 +2,26 @@ import re
 from typing import Optional, Tuple
 
 
-TASK_CLASSIFICATION = "task.classification"
-TASK_SUMMARIZATION = "task.summarization"
+TASK_CLASSIFICATION_TEXT = "task.classification.text"
+TASK_CLASSIFICATION_EMAIL = "task.classification.email"
+TASK_CLASSIFICATION_IMAGE = "task.classification.image"
+
+TASK_SUMMARIZATION_TEXT = "task.summarization.text"
+TASK_SUMMARIZATION_EMAIL = "task.summarization.email"
+TASK_SUMMARIZATION_EVENT = "task.summarization.event"
+
+TASK_GENERATION_TEXT = "task.generation.text"
+TASK_GENERATION_IMAGE = "task.generation.image"
 
 CANONICAL_TASK_FAMILIES = (
-    TASK_CLASSIFICATION,
-    TASK_SUMMARIZATION,
+    TASK_CLASSIFICATION_TEXT,
+    TASK_CLASSIFICATION_EMAIL,
+    TASK_CLASSIFICATION_IMAGE,
+    TASK_SUMMARIZATION_TEXT,
+    TASK_SUMMARIZATION_EMAIL,
+    TASK_SUMMARIZATION_EVENT,
+    TASK_GENERATION_TEXT,
+    TASK_GENERATION_IMAGE,
 )
 
 _TASK_FAMILY_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._/-]{1,127}$")

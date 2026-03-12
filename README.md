@@ -39,6 +39,34 @@ Smoke-check mode:
 PYTHONPATH=src python -m ai_node.main --once
 ```
 
+## Provider intelligence
+
+Provider capability intelligence is cached locally and refreshed on-demand/periodically with a default 4-hour interval.
+
+Config knobs:
+- `SYNTHIA_PROVIDER_CAPABILITY_REPORT_PATH` (default: `.run/provider_capability_report.json`)
+- `SYNTHIA_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS` (default: `14400`)
+- `SYNTHIA_TASK_CAPABILITY_SELECTION_CONFIG_PATH` (default: `.run/task_capability_selection_config.json`)
+- `OPENAI_API_KEY` (required for live OpenAI model discovery)
+- `SYNTHIA_OPENAI_BASE_URL` (optional OpenAI-compatible endpoint override)
+
+Control API refresh endpoint:
+
+```bash
+curl -X POST http://127.0.0.1:9002/api/capabilities/providers/refresh \
+  -H 'Content-Type: application/json' \
+  -d '{"force_refresh": true}'
+```
+
+Task capability selection endpoints:
+
+```bash
+curl http://127.0.0.1:9002/api/capabilities/config
+curl -X POST http://127.0.0.1:9002/api/capabilities/config \
+  -H 'Content-Type: application/json' \
+  -d '{"selected_task_families":["task.classification.text","task.summarization.text"]}'
+```
+
 ## Frontend run
 
 ```bash

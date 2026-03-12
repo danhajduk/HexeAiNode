@@ -31,12 +31,31 @@ class NodeControlFastApiTests(unittest.TestCase):
         def load(self):
             return {"node_id": "node-001", "created_at": "2026-03-11T00:00:00Z"}
 
+    class _FakeTaskCapabilitySelectionStore:
+        def __init__(self):
+            self.payload = {
+                "schema_version": "1.0",
+                "selected_task_families": [
+                    "task.classification.text",
+                    "task.summarization.text",
+                ],
+            }
+
+        def load_or_create(self, **_kwargs):
+            return self.payload
+
+        def save(self, payload):
+            self.payload = payload
+
     class _FakeCapabilityRunner:
         async def submit_once(self):
             return {"status": "accepted"}
 
         async def refresh_governance_once(self):
             return {"status": "synced"}
+
+        async def refresh_provider_capabilities_once(self, *, force_refresh: bool = False):
+            return {"status": "refreshed", "changed": bool(force_refresh)}
 
         def recover_from_degraded(self):
             return {"status": "recovered", "target_state": "capability_setup_pending"}
@@ -88,6 +107,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 config_path=str(Path(tmp) / "bootstrap_config.json"),
                 logger=logging.getLogger("node-control-fastapi-test"),
                 provider_selection_store=self._FakeProviderSelectionStore(),
+                task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
                 capability_runner=self._FakeCapabilityRunner(),
                 service_manager=self._FakeServiceManager(),
             )
@@ -117,6 +137,20 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(provider_set_response.status_code, 200)
             self.assertIn("openai", provider_set_response.json()["config"]["providers"]["enabled"])
 
+            capability_config_get_response = client.get("/api/capabilities/config")
+            self.assertEqual(capability_config_get_response.status_code, 200)
+            self.assertIn("selected_task_families", capability_config_get_response.json()["config"])
+
+            capability_config_set_response = client.post(
+                "/api/capabilities/config",
+                json={"selected_task_families": ["task.classification.text"]},
+            )
+            self.assertEqual(capability_config_set_response.status_code, 200)
+            self.assertEqual(
+                capability_config_set_response.json()["config"]["selected_task_families"],
+                ["task.classification.text"],
+            )
+
             capability_declare_response = client.post("/api/capabilities/declare")
             self.assertEqual(capability_declare_response.status_code, 409)
             self.assertEqual(
@@ -131,6 +165,14 @@ class NodeControlFastApiTests(unittest.TestCase):
             governance_refresh_response = client.post("/api/governance/refresh")
             self.assertEqual(governance_refresh_response.status_code, 200)
             self.assertEqual(governance_refresh_response.json()["status"], "synced")
+
+            provider_refresh_response = client.post(
+                "/api/capabilities/providers/refresh",
+                json={"force_refresh": True},
+            )
+            self.assertEqual(provider_refresh_response.status_code, 200)
+            self.assertEqual(provider_refresh_response.json()["status"], "refreshed")
+            self.assertTrue(provider_refresh_response.json()["changed"])
 
             node_recover_response = client.post("/api/node/recover")
             self.assertEqual(node_recover_response.status_code, 200)
@@ -154,6 +196,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 config_path=str(Path(tmp) / "bootstrap_config.json"),
                 logger=logging.getLogger("node-control-fastapi-test"),
                 provider_selection_store=self._FakeProviderSelectionStore(),
+                task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
                 capability_runner=self._FakeCapabilityRunner(),
                 node_identity_store=self._FakeNodeIdentityStore(),
                 trust_state_store=self._FakeTrustStateStore(),

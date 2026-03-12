@@ -11,7 +11,18 @@ const DIAGNOSTIC_ENDPOINTS = [
   "/api/node/status",
   "/api/governance/status",
   "/api/providers/config",
+  "/api/capabilities/config",
   "/api/services/status",
+];
+const TASK_CAPABILITY_OPTIONS = [
+  "task.classification.text",
+  "task.classification.email",
+  "task.classification.image",
+  "task.summarization.text",
+  "task.summarization.email",
+  "task.summarization.event",
+  "task.generation.text",
+  "task.generation.image",
 ];
 
 function ThemeToggle() {
@@ -41,6 +52,7 @@ export default function App() {
   const [restarting, setRestarting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [openaiEnabled, setOpenaiEnabled] = useState(false);
+  const [selectedTaskFamilies, setSelectedTaskFamilies] = useState(TASK_CAPABILITY_OPTIONS);
   const [savingProvider, setSavingProvider] = useState(false);
   const [declaringCapabilities, setDeclaringCapabilities] = useState(false);
   const [showCapabilitySetupPopup, setShowCapabilitySetupPopup] = useState(false);
@@ -59,10 +71,11 @@ export default function App() {
 
   async function loadStatus() {
     const lastUpdatedAt = new Date().toISOString();
-    const [nodeResult, governanceResult, providerResult, servicesResult] = await Promise.allSettled([
+    const [nodeResult, governanceResult, providerResult, capabilityConfigResult, servicesResult] = await Promise.allSettled([
       apiGet("/api/node/status"),
       apiGet("/api/governance/status"),
       apiGet("/api/providers/config"),
+      apiGet("/api/capabilities/config"),
       apiGet("/api/services/status"),
     ]);
 
@@ -88,6 +101,7 @@ export default function App() {
     const payload = nodeResult.value || {};
     const governancePayload = governanceResult.status === "fulfilled" ? governanceResult.value : null;
     const providerPayload = providerResult.status === "fulfilled" ? providerResult.value : null;
+    const capabilityConfigPayload = capabilityConfigResult.status === "fulfilled" ? capabilityConfigResult.value : null;
     const servicePayload = servicesResult.status === "fulfilled" ? servicesResult.value : null;
     const partialFailures = [];
     if (governanceResult.status !== "fulfilled") {
@@ -95,6 +109,9 @@ export default function App() {
     }
     if (providerResult.status !== "fulfilled") {
       partialFailures.push("provider_config_unavailable");
+    }
+    if (capabilityConfigResult.status !== "fulfilled") {
+      partialFailures.push("capability_config_unavailable");
     }
     if (servicesResult.status !== "fulfilled") {
       partialFailures.push("service_status_unavailable");
@@ -108,11 +125,18 @@ export default function App() {
       const enabledProviders = providerPayload?.config?.providers?.enabled || [];
       setOpenaiEnabled(enabledProviders.includes("openai"));
     }
+    if ((payload.status || "unknown") === "capability_setup_pending" && capabilityConfigPayload) {
+      const selected = capabilityConfigPayload?.config?.selected_task_families || [];
+      if (Array.isArray(selected) && selected.length) {
+        setSelectedTaskFamilies(selected);
+      }
+    }
     setUiState(
       buildDashboardUiState({
         nodeStatus: payload,
         governanceStatus: governancePayload,
         providerConfig: providerPayload,
+        capabilityConfig: capabilityConfigPayload,
         serviceStatus: servicePayload?.services || null,
         apiReachable: true,
         lastUpdatedAt,
@@ -208,12 +232,46 @@ export default function App() {
     }
   }
 
+  function onToggleTaskFamily(taskFamily, enabled) {
+    setSelectedTaskFamilies((current) => {
+      const existing = new Set(current);
+      if (enabled) {
+        existing.add(taskFamily);
+      } else {
+        existing.delete(taskFamily);
+      }
+      return TASK_CAPABILITY_OPTIONS.filter((item) => existing.has(item));
+    });
+  }
+
+  function renderTaskCapabilityToggles(prefix) {
+    return (
+      <div className="capability-toggle-grid">
+        {TASK_CAPABILITY_OPTIONS.map((taskFamily) => {
+          const enabled = selectedTaskFamilies.includes(taskFamily);
+          return (
+            <button
+              key={`${prefix}-${taskFamily}`}
+              type="button"
+              className={`btn capability-toggle-btn ${enabled ? "is-on" : "is-off"}`}
+              onClick={() => onToggleTaskFamily(taskFamily, !enabled)}
+              aria-pressed={enabled}
+            >
+              {taskFamily}: {enabled ? "ON" : "OFF"}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   async function onSaveProviderSelection(event) {
     event.preventDefault();
     setSavingProvider(true);
     setError("");
     try {
       await apiPost("/api/providers/config", { openai_enabled: openaiEnabled });
+      await apiPost("/api/capabilities/config", { selected_task_families: selectedTaskFamilies });
       await loadStatus();
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
@@ -298,9 +356,14 @@ export default function App() {
                 />{" "}
                 Enable OpenAI on this node
               </label>
+              <div className="state-grid">
+                <span>Task Capabilities</span>
+                <code>{selectedTaskFamilies.join(", ") || "none_selected"}</code>
+              </div>
+              {renderTaskCapabilityToggles("modal")}
               <div className="row">
                 <button className="btn btn-primary" type="submit" disabled={savingProvider}>
-                  {savingProvider ? "Saving..." : "Save Provider Selection"}
+                  {savingProvider ? "Saving..." : "Save Setup Selection"}
                 </button>
                 <button
                   className="btn"
@@ -335,7 +398,7 @@ export default function App() {
                 <span>Capability Status</span>
                 <code>{uiState.capabilitySummary.capabilityStatus || "unknown"}</code>
                 <span>Task Families</span>
-                <code>{uiState.capabilitySummary.declaredTaskFamilies.join(", ") || "none"}</code>
+                <code>{uiState.capabilitySummary.selectedTaskFamilies.join(", ") || "none"}</code>
                 <span>Enabled Providers</span>
                 <code>{uiState.capabilitySummary.enabledProviders.join(", ") || "none"}</code>
                 <span>Governance Policy</span>
@@ -348,6 +411,8 @@ export default function App() {
                 <StatusBadge value={setupReadinessFlags.node_identity_valid ? "ready" : "blocked"} />
                 <span>Provider Ready</span>
                 <StatusBadge value={setupReadinessFlags.provider_selection_valid ? "ready" : "blocked"} />
+                <span>Task Capability Ready</span>
+                <StatusBadge value={setupReadinessFlags.task_capability_selection_valid ? "ready" : "blocked"} />
                 <span>Runtime Context</span>
                 <StatusBadge value={setupReadinessFlags.core_runtime_context_valid ? "ready" : "blocked"} />
               </div>
@@ -471,8 +536,13 @@ export default function App() {
                   />{" "}
                   Enable OpenAI on this node
                 </label>
+                <div className="state-grid">
+                  <span>Task Capabilities</span>
+                  <code>{selectedTaskFamilies.join(", ") || "none_selected"}</code>
+                </div>
+                {renderTaskCapabilityToggles("page")}
                 <button className="btn btn-primary" type="submit" disabled={savingProvider}>
-                  {savingProvider ? "Saving..." : "Save Provider Selection"}
+                  {savingProvider ? "Saving..." : "Save Setup Selection"}
                 </button>
                 <button
                   className="btn"
@@ -489,6 +559,8 @@ export default function App() {
                   <StatusBadge value={setupReadinessFlags.node_identity_valid ? "ready" : "blocked"} />
                   <span>Provider Ready</span>
                   <StatusBadge value={setupReadinessFlags.provider_selection_valid ? "ready" : "blocked"} />
+                  <span>Task Capability Ready</span>
+                  <StatusBadge value={setupReadinessFlags.task_capability_selection_valid ? "ready" : "blocked"} />
                   <span>Runtime Context</span>
                   <StatusBadge value={setupReadinessFlags.core_runtime_context_valid ? "ready" : "blocked"} />
                 </div>

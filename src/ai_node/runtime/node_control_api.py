@@ -5,7 +5,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES
 from ai_node.config.bootstrap_config import create_bootstrap_config
+from ai_node.config.task_capability_selection_config import create_task_capability_selection_config
 from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.service_manager import NullServiceManager
@@ -29,6 +31,7 @@ class NodeControlState:
         capability_runner=None,
         node_identity_store=None,
         provider_selection_store=None,
+        task_capability_selection_store=None,
         trust_state_store=None,
         service_manager=None,
         startup_mode: str = "bootstrap_onboarding",
@@ -42,6 +45,7 @@ class NodeControlState:
         self._capability_runner = capability_runner
         self._node_identity_store = node_identity_store
         self._provider_selection_store = provider_selection_store
+        self._task_capability_selection_store = task_capability_selection_store
         self._trust_state_store = trust_state_store
         self._service_manager = service_manager or NullServiceManager()
         self._startup_mode = startup_mode
@@ -49,10 +53,12 @@ class NodeControlState:
         self._phase2_diag = Phase2DiagnosticsLogger(logger)
         self._bootstrap_config = None
         self._provider_selection_config = None
+        self._task_capability_selection_config = None
         self._node_id = None
         self._identity_state = "unknown"
         self._load_identity()
         self._load_provider_selection_config()
+        self._load_task_capability_selection_config()
         self._load_existing_config()
 
     @staticmethod
@@ -75,6 +81,15 @@ class NodeControlState:
         )
         return supported_any
 
+    def _is_task_capability_selection_valid(self, payload: dict | None) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        selected = payload.get("selected_task_families")
+        if not isinstance(selected, list) or not selected:
+            return False
+        canonical = set(CANONICAL_TASK_FAMILIES)
+        return all(isinstance(item, str) and item.strip() in canonical for item in selected)
+
     def _build_capability_setup_contract(self) -> dict:
         trust_state = (
             self._trust_state_store.load()
@@ -83,8 +98,12 @@ class NodeControlState:
         )
         trusted_context = self._trusted_runtime_context if isinstance(self._trusted_runtime_context, dict) else {}
         provider_config = self._provider_selection_config if isinstance(self._provider_selection_config, dict) else None
+        task_capability_config = (
+            self._task_capability_selection_config if isinstance(self._task_capability_selection_config, dict) else None
+        )
         enabled_providers = []
         supported_providers = {"cloud": [], "local": [], "future": []}
+        selected_task_families = []
         if isinstance(provider_config, dict):
             providers = provider_config.get("providers") if isinstance(provider_config.get("providers"), dict) else {}
             enabled_providers = list(providers.get("enabled") or [])
@@ -94,11 +113,14 @@ class NodeControlState:
                 "local": list(supported.get("local") or []),
                 "future": list(supported.get("future") or []),
             }
+        if isinstance(task_capability_config, dict):
+            selected_task_families = list(task_capability_config.get("selected_task_families") or [])
 
         readiness_flags = {
             "trust_state_valid": isinstance(trust_state, dict),
             "node_identity_valid": self._identity_state == "valid" and self._is_non_empty_string(self._node_id),
             "provider_selection_valid": self._is_provider_selection_valid(provider_config),
+            "task_capability_selection_valid": self._is_task_capability_selection_valid(task_capability_config),
             "core_runtime_context_valid": (
                 self._is_non_empty_string(trusted_context.get("paired_core_id"))
                 and self._is_non_empty_string(trusted_context.get("core_api_endpoint"))
@@ -113,6 +135,8 @@ class NodeControlState:
             blocking_reasons.append("missing_or_invalid_node_identity")
         if not readiness_flags["provider_selection_valid"]:
             blocking_reasons.append("missing_or_invalid_provider_selection")
+        if not readiness_flags["task_capability_selection_valid"]:
+            blocking_reasons.append("missing_or_invalid_task_capability_selection")
         if not readiness_flags["core_runtime_context_valid"]:
             blocking_reasons.append("missing_or_invalid_trusted_runtime_context")
 
@@ -132,6 +156,12 @@ class NodeControlState:
                 "enabled_count": len(enabled_providers),
                 "enabled": enabled_providers,
                 "supported": supported_providers,
+            },
+            "task_capability_selection": {
+                "configured": task_capability_config is not None,
+                "selected_count": len(selected_task_families),
+                "selected": selected_task_families,
+                "available": list(CANONICAL_TASK_FAMILIES),
             },
             "blocking_reasons": blocking_reasons,
             "declaration_allowed": declaration_allowed,
@@ -189,6 +219,14 @@ class NodeControlState:
             return
         self._provider_selection_config = self._provider_selection_store.load_or_create(openai_enabled=False)
 
+    def _load_task_capability_selection_config(self) -> None:
+        if self._task_capability_selection_store is None or not hasattr(
+            self._task_capability_selection_store, "load_or_create"
+        ):
+            self._task_capability_selection_config = None
+            return
+        self._task_capability_selection_config = self._task_capability_selection_store.load_or_create()
+
     def status_payload(self) -> dict:
         state = self._lifecycle.get_state()
         runtime_context = {}
@@ -220,6 +258,7 @@ class NodeControlState:
             "startup_mode": self._startup_mode,
             "trusted_runtime_context": self._trusted_runtime_context,
             "provider_selection_configured": self._provider_selection_config is not None,
+            "task_capability_selection_configured": self._task_capability_selection_config is not None,
             "capability_setup": capability_setup_contract,
             "capability_declaration": capability_context,
             "services": self.service_status_payload().get("services"),
@@ -234,6 +273,11 @@ class NodeControlState:
         if self._service_manager is None or not hasattr(self._service_manager, "get_status"):
             return {"configured": False, "services": {"backend": "unknown", "frontend": "unknown", "node": "unknown"}}
         return {"configured": True, "services": self._service_manager.get_status()}
+
+    def task_capability_selection_payload(self) -> dict:
+        if self._task_capability_selection_config is None:
+            return {"configured": False, "config": None}
+        return {"configured": True, "config": self._task_capability_selection_config}
 
     def restart_service(self, *, target: str) -> dict:
         if self._service_manager is None or not hasattr(self._service_manager, "restart"):
@@ -261,6 +305,14 @@ class NodeControlState:
             }
         )
         return self.provider_selection_payload()
+
+    def update_task_capability_selection(self, *, selected_task_families: list[str]) -> dict:
+        if self._task_capability_selection_store is None or not hasattr(self._task_capability_selection_store, "save"):
+            raise ValueError("task capability selection store is not configured")
+        payload = create_task_capability_selection_config({"selected_task_families": selected_task_families})
+        self._task_capability_selection_store.save(payload)
+        self._task_capability_selection_config = payload
+        return self.task_capability_selection_payload()
 
     async def submit_capability_declaration(self) -> dict:
         if self._capability_runner is None or not hasattr(self._capability_runner, "submit_once"):
@@ -299,6 +351,11 @@ class NodeControlState:
         if self._capability_runner is None or not hasattr(self._capability_runner, "refresh_governance_once"):
             raise ValueError("governance refresh is not configured")
         return await self._capability_runner.refresh_governance_once()
+
+    async def refresh_provider_capabilities(self, *, force_refresh: bool) -> dict:
+        if self._capability_runner is None or not hasattr(self._capability_runner, "refresh_provider_capabilities_once"):
+            raise ValueError("provider capability refresh is not configured")
+        return await self._capability_runner.refresh_provider_capabilities_once(force_refresh=force_refresh)
 
     def recover_from_degraded(self) -> dict:
         if self._capability_runner is None or not hasattr(self._capability_runner, "recover_from_degraded"):
@@ -381,8 +438,16 @@ class ProviderSelectionRequest(BaseModel):
     openai_enabled: bool
 
 
+class TaskCapabilitySelectionRequest(BaseModel):
+    selected_task_families: list[str]
+
+
 class ServiceRestartRequest(BaseModel):
     target: str
+
+
+class ProviderCapabilityRefreshRequest(BaseModel):
+    force_refresh: bool = False
 
 
 def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
@@ -406,9 +471,11 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/onboarding/initiate",
                 "/api/onboarding/restart",
                 "/api/providers/config",
+                "/api/capabilities/config",
                 "/api/capabilities/declare",
                 "/api/governance/status",
                 "/api/governance/refresh",
+                "/api/capabilities/providers/refresh",
                 "/api/node/recover",
                 "/api/services/status",
                 "/api/services/restart",
@@ -449,6 +516,17 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.get("/api/capabilities/config")
+    def get_capabilities_config():
+        return state.task_capability_selection_payload()
+
+    @app.post("/api/capabilities/config")
+    def post_capabilities_config(payload: TaskCapabilitySelectionRequest):
+        try:
+            return state.update_task_capability_selection(selected_task_families=payload.selected_task_families)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post("/api/capabilities/declare")
     async def post_capability_declare():
         try:
@@ -466,6 +544,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     async def post_governance_refresh():
         try:
             return await state.refresh_governance()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/capabilities/providers/refresh")
+    async def post_provider_capability_refresh(payload: ProviderCapabilityRefreshRequest):
+        try:
+            return await state.refresh_provider_capabilities(force_refresh=payload.force_refresh)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

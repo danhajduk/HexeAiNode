@@ -22,7 +22,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
             node_type="ai-node",
             node_name="main-ai-node",
             node_software_version="0.1.0",
-            task_families=["task.classification"],
+            task_families=["task.classification.text"],
             supported_providers=["openai"],
             enabled_providers=[],
             node_features=["telemetry_support"],
@@ -53,7 +53,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
         is_valid, error = validate_capability_manifest(
             {
                 "manifest_version": "1.0",
-                "declared_task_families": ["task.classification"],
+                "declared_task_families": ["task.classification.text"],
                 "supported_providers": ["openai"],
                 "enabled_providers": [],
                 "node_features": {
@@ -96,7 +96,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
             node_type="ai-node",
             node_name="main-ai-node",
             node_software_version="0.1.0",
-            task_families=["task.classification"],
+            task_families=["task.classification.text"],
             supported_providers=["openai"],
             enabled_providers=["openai"],
             node_features=["telemetry_support"],

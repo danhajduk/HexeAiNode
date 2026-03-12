@@ -96,6 +96,27 @@ h2 {
   padding: 10px 12px;
 }
 
+.capability-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.capability-toggle-btn {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.capability-toggle-btn.is-on {
+  border-color: #1f9d55;
+  color: #1f9d55;
+}
+
+.capability-toggle-btn.is-off {
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
 .error {
   color: hsl(var(--color-danger));
 }
@@ -311,6 +332,10 @@ h2 {
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
+  }
+
+  .capability-toggle-grid {
+    grid-template-columns: 1fr;
   }
 
   .row .btn {

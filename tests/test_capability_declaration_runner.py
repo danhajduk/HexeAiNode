@@ -1,5 +1,6 @@
 import logging
 import unittest
+from datetime import datetime, timezone
 
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.capability_declaration_runner import CapabilityDeclarationRunner
@@ -40,6 +41,17 @@ class _FakeProviderSelectionStore:
         }
 
 
+class _FakeTaskCapabilitySelectionStore:
+    def load_or_create(self, **_kwargs):
+        return {
+            "schema_version": "1.0",
+            "selected_task_families": [
+                "task.classification.text",
+                "task.summarization.text",
+            ],
+        }
+
+
 class _FakeClientAccepted:
     async def submit_manifest(self, **_kwargs):
         class _R:
@@ -50,9 +62,36 @@ class _FakeClientAccepted:
 
         return _R()
 
+    async def submit_provider_intelligence(self, **_kwargs):
+        class _R:
+            status = "accepted"
+            payload = {"status": "accepted"}
+            retryable = False
+            error = None
+
+        return _R()
+
+
+class _FakeClientAcceptedCapture(_FakeClientAccepted):
+    def __init__(self):
+        self.last_manifest = None
+
+    async def submit_manifest(self, **kwargs):
+        self.last_manifest = kwargs.get("capability_manifest")
+        return await super().submit_manifest(**kwargs)
+
 
 class _FakeClientRetry:
     async def submit_manifest(self, **_kwargs):
+        class _R:
+            status = "retryable_failure"
+            payload = {"detail": "timeout"}
+            retryable = True
+            error = "timeout"
+
+        return _R()
+
+    async def submit_provider_intelligence(self, **_kwargs):
         class _R:
             status = "retryable_failure"
             payload = {"detail": "timeout"}
@@ -191,6 +230,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             logger=logging.getLogger("capability-runner-test"),
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
             node_id="node-001",
             capability_state_store=state_store,
             governance_state_store=governance_store,
@@ -222,6 +262,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             logger=logging.getLogger("capability-runner-test"),
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
             node_id="node-001",
             capability_client=_FakeClientRetry(),
             governance_client=_FakeGovernanceClientSynced(),
@@ -254,6 +295,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             logger=logging.getLogger("capability-runner-test"),
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
             node_id="node-001",
             capability_state_store=state_store,
             capability_client=_FakeClientAccepted(),
@@ -266,6 +308,77 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["status"], "accepted")
         self.assertEqual(status["accepted_profile"]["accepted_profile_id"], "cap-1")
 
+    async def test_resume_operational_if_ready_transitions_to_operational(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
+        lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        now = datetime.now(timezone.utc).isoformat()
+        runner = CapabilityDeclarationRunner(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("capability-runner-test"),
+            trust_store=_FakeTrustStore(),
+            provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
+            node_id="node-001",
+            capability_state_store=_FakeCapabilityStateStore(
+                existing={
+                    "schema_version": "1.0",
+                    "accepted_declaration_version": "1.0",
+                    "acceptance_timestamp": now,
+                    "accepted_profile_id": "cap-1",
+                    "core_restrictions": {},
+                    "core_notes": None,
+                    "raw_response": {"status": "accepted"},
+                }
+            ),
+            governance_state_store=_FakeGovernanceStateStore(
+                existing={
+                    "schema_version": "1.0",
+                    "policy_version": "1.0",
+                    "issued_timestamp": now,
+                    "synced_at": now,
+                    "refresh_expectations": {"recommended_interval_seconds": 900, "max_stale_seconds": 3600},
+                    "generic_node_class_rules": {},
+                    "feature_gating_defaults": {},
+                    "telemetry_expectations": {},
+                    "raw_response": {},
+                }
+            ),
+            capability_client=_FakeClientAccepted(),
+            governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
+            telemetry_publisher=_FakeTelemetryPublisher(),
+            phase2_state_store=_FakePhase2StateStore(),
+        )
+        result = await runner.resume_operational_if_ready()
+        self.assertTrue(result["resumed"])
+        self.assertEqual(result["target_state"], NodeLifecycleState.OPERATIONAL.value)
+        self.assertEqual(lifecycle.get_state(), NodeLifecycleState.OPERATIONAL)
+
+    async def test_resume_operational_if_ready_keeps_pending_when_prereq_missing(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
+        lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        runner = CapabilityDeclarationRunner(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("capability-runner-test"),
+            trust_store=_FakeTrustStore(),
+            provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
+            node_id="node-001",
+            capability_state_store=_FakeCapabilityStateStore(existing=None),
+            governance_state_store=_FakeGovernanceStateStore(existing=None),
+            capability_client=_FakeClientAccepted(),
+            governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
+            telemetry_publisher=_FakeTelemetryPublisher(),
+            phase2_state_store=_FakePhase2StateStore(),
+        )
+        result = await runner.resume_operational_if_ready()
+        self.assertFalse(result["resumed"])
+        self.assertEqual(result["reason"], "accepted_capability_missing")
+        self.assertEqual(lifecycle.get_state(), NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+
     async def test_governance_sync_retry_moves_to_retry_pending(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
         lifecycle.transition_to(NodeLifecycleState.TRUSTED)
@@ -275,6 +388,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             logger=logging.getLogger("capability-runner-test"),
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
             node_id="node-001",
             capability_state_store=_FakeCapabilityStateStore(),
             capability_client=_FakeClientAccepted(),
@@ -310,6 +424,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             logger=logging.getLogger("capability-runner-test"),
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
             node_id="node-001",
             governance_state_store=governance_store,
             capability_client=_FakeClientAccepted(),
@@ -318,6 +433,30 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         result = await runner.refresh_governance_once()
         self.assertEqual(result["status"], "retryable_failure")
         self.assertEqual(result["governance_status"]["refresh_state"], "core_temporarily_unavailable")
+
+    async def test_submit_manifest_uses_selected_task_capabilities(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
+        lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        client = _FakeClientAcceptedCapture()
+        runner = CapabilityDeclarationRunner(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("capability-runner-test"),
+            trust_store=_FakeTrustStore(),
+            provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
+            node_id="node-001",
+            capability_client=client,
+            governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
+            telemetry_publisher=_FakeTelemetryPublisher(),
+            phase2_state_store=_FakePhase2StateStore(),
+        )
+        await runner.submit_once()
+        self.assertEqual(
+            client.last_manifest["declared_task_families"],
+            ["task.classification.text", "task.summarization.text"],
+        )
 
     async def test_operational_readiness_failure_moves_to_retry_pending(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
@@ -328,6 +467,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             logger=logging.getLogger("capability-runner-test"),
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
             node_id="node-001",
             capability_state_store=_FakeCapabilityStateStore(),
             governance_state_store=_FakeGovernanceStateStore(),
@@ -351,6 +491,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             logger=logging.getLogger("capability-runner-test"),
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
             node_id="node-001",
             capability_state_store=_FakeCapabilityStateStore(),
             governance_state_store=_FakeGovernanceStateStore(),
@@ -377,6 +518,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             logger=logging.getLogger("capability-runner-test"),
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
             node_id="node-001",
             capability_state_store=_FakeCapabilityStateStore(),
             governance_state_store=_FakeGovernanceStateStore(),
@@ -399,6 +541,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             logger=logging.getLogger("capability-runner-test"),
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
             node_id="node-001",
             capability_state_store=_FakeCapabilityStateStore(),
             governance_state_store=_FakeGovernanceStateStore(),

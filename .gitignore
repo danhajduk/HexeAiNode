@@ -9,3 +9,5 @@ logs/
 scripts/stack.env
 frontend/node_modules/
 frontend/dist/
+
+docs/reports/

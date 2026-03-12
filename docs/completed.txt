@@ -102,3 +102,8 @@ Task 091-098: Capability setup pending contract/payload/gate/re-entry/logs/tests
 Task 099: capability_setup_pending popup + required input actions - Completed on 03/11/2026 23:59
 Task 100: capability popup now shows full capability data after save provider - Completed on 03/11/2026 23:59
 Task 101: fixed capability declaration Core endpoint contract to prevent false degraded transition on declare - Completed on 03/11/2026 23:59
+Task 091: Implement provider capability discovery module - Completed on 03/12/2026 10:07
+Task 092: Implement provider latency measurement - Completed on 03/12/2026 10:07
+Task 093: Implement provider capability report generation - Completed on 03/12/2026 10:07
+Task 094: Implement provider capability submission to Core - Completed on 03/12/2026 10:07
+Task 095: Implement periodic provider capability refresh - Completed on 03/12/2026 10:07

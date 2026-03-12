@@ -449,3 +449,10 @@ Issue cause: Backend posted capability declaration to `/api/system/nodes/capabil
 Chosen fix: Updated capability client default path to canonical singular endpoint and aligned trust header contract by sending `X-Node-Trust-Token` in addition to existing auth headers for compatibility.
 What changed: Updated src/ai_node/core_api/capability_client.py and tests/test_capability_client.py; marked Task 101 done in docs/New_tasks.txt.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_capability_client.py tests/test_capability_declaration_runner.py tests/test_node_control_fastapi.py` passes (13 tests).
+
+###########
+Task #091-095
+Step objective: Implement provider intelligence discovery, latency tracking, reporting, Core submission, and timed refresh flow.
+Chosen fix: Added a cache-aware provider intelligence service that discovers enabled provider models via provider APIs, normalizes model identifiers, captures latency sample metrics (avg/p95/success), persists local reports, and submits lightweight versioned reports to Core only after capability acceptance.
+What changed: Added src/ai_node/capabilities/provider_intelligence.py and src/ai_node/persistence/provider_capability_report_store.py; updated src/ai_node/runtime/capability_declaration_runner.py, src/ai_node/core_api/capability_client.py, src/ai_node/runtime/node_control_api.py, src/ai_node/main.py, src/ai_node/capabilities/__init__.py, src/ai_node/core_api/__init__.py, src/ai_node/persistence/__init__.py; added tests/test_provider_intelligence.py and tests/test_provider_capability_report_store.py; updated tests/test_capability_client.py, tests/test_capability_declaration_runner.py, and tests/test_node_control_fastapi.py.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_provider_intelligence tests.test_provider_capability_report_store tests.test_capability_client tests.test_capability_declaration_runner tests.test_node_control_fastapi tests.test_main_entrypoint` passes (28 tests).

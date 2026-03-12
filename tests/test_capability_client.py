@@ -62,6 +62,36 @@ class CapabilityClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "retryable_failure")
         self.assertTrue(result.retryable)
 
+    async def test_submit_provider_intelligence_uses_expected_payload(self):
+        adapter = _FakeHttpAdapter(200, {"status": "accepted"})
+        client = CapabilityDeclarationClient(logger=logging.getLogger("capability-client-test"), http_adapter=adapter)
+        result = await client.submit_provider_intelligence(
+            core_api_endpoint="http://10.0.0.100:9001",
+            trust_token="secret",
+            node_id="node-001",
+            provider_intelligence_report={
+                "schema_version": "1.0",
+                "report_version": "1.0",
+                "generated_at": "2026-03-12T00:00:00Z",
+                "enabled_providers": ["openai"],
+                "providers": [],
+            },
+        )
+        self.assertEqual(result.status, "accepted")
+        self.assertEqual(adapter.last_url, "http://10.0.0.100:9001/api/system/nodes/capabilities/providers")
+        self.assertEqual(
+            adapter.last_payload,
+            {
+                "provider_intelligence": {
+                    "schema_version": "1.0",
+                    "report_version": "1.0",
+                    "generated_at": "2026-03-12T00:00:00Z",
+                    "enabled_providers": ["openai"],
+                    "providers": [],
+                }
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

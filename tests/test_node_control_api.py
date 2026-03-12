@@ -39,6 +39,38 @@ class NodeControlApiTests(unittest.TestCase):
         def save(self, payload):
             self.payload = payload
 
+    class _FakeTaskCapabilitySelectionStore:
+        def __init__(self):
+            self.payload = {
+                "schema_version": "1.0",
+                "selected_task_families": [
+                    "task.classification.text",
+                    "task.summarization.text",
+                ],
+            }
+
+        def load_or_create(self, **_kwargs):
+            return self.payload
+
+        def save(self, payload):
+            self.payload = payload
+
+    class _FakeTaskCapabilitySelectionStore:
+        def __init__(self):
+            self.payload = {
+                "schema_version": "1.0",
+                "selected_task_families": [
+                    "task.classification.text",
+                    "task.summarization.text",
+                ],
+            }
+
+        def load_or_create(self, **_kwargs):
+            return self.payload
+
+        def save(self, payload):
+            self.payload = payload
+
     class _FakeTrustStateStore:
         def __init__(self, payload=None):
             self.payload = payload or {
@@ -182,6 +214,23 @@ class NodeControlApiTests(unittest.TestCase):
             disabled_payload = state.update_provider_selection(openai_enabled=False)
             self.assertNotIn("openai", disabled_payload["config"]["providers"]["enabled"])
 
+    def test_update_task_capability_selection_persists_selected_families(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
+            )
+            payload = state.update_task_capability_selection(
+                selected_task_families=["task.classification.text", "task.generation.image"]
+            )
+            self.assertEqual(
+                payload["config"]["selected_task_families"],
+                ["task.classification.text", "task.generation.image"],
+            )
+
     def test_capability_declaration_gate_requires_setup_prerequisites(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
@@ -194,6 +243,7 @@ class NodeControlApiTests(unittest.TestCase):
                 capability_runner=self._FakeCapabilityRunner(),
                 node_identity_store=self._FakeNodeIdentityStore({"node_id": "node-001"}),
                 provider_selection_store=self._FakeProviderSelectionStore(),
+                task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
                 trust_state_store=self._FakeTrustStateStore(),
                 startup_mode="trusted_resume",
                 trusted_runtime_context={

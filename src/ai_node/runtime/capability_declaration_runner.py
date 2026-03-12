@@ -3,6 +3,11 @@ from datetime import datetime, timezone
 from ai_node.capabilities.environment_hints import collect_environment_hints
 from ai_node.capabilities.manifest_schema import create_capability_manifest
 from ai_node.capabilities.node_features import create_node_feature_declarations
+from ai_node.capabilities.provider_intelligence import (
+    DEFAULT_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS,
+    ProviderIntelligenceService,
+    compact_provider_intelligence_report,
+)
 from ai_node.capabilities.providers import create_provider_capabilities_from_selection_config
 from ai_node.capabilities.task_families import create_declared_task_family_capabilities
 from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
@@ -22,13 +27,17 @@ class CapabilityDeclarationRunner:
         logger,
         trust_store,
         provider_selection_store,
+        task_capability_selection_store=None,
         node_id: str,
         node_software_version: str = "0.1.0",
         capability_state_store=None,
         governance_state_store=None,
         phase2_state_store=None,
+        provider_capability_report_store=None,
         capability_client=None,
         governance_client=None,
+        provider_intelligence_service=None,
+        provider_capability_refresh_interval_seconds: int = DEFAULT_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS,
         operational_readiness_checker=None,
         telemetry_publisher=None,
     ) -> None:
@@ -36,13 +45,20 @@ class CapabilityDeclarationRunner:
         self._logger = logger
         self._trust_store = trust_store
         self._provider_selection_store = provider_selection_store
+        self._task_capability_selection_store = task_capability_selection_store
         self._capability_state_store = capability_state_store
         self._governance_state_store = governance_state_store
         self._phase2_state_store = phase2_state_store
+        self._provider_capability_report_store = provider_capability_report_store
         self._node_id = str(node_id).strip()
         self._node_software_version = str(node_software_version).strip() or "0.1.0"
         self._capability_client = capability_client or CapabilityDeclarationClient(logger=logger)
         self._governance_client = governance_client or GovernanceSyncClient(logger=logger)
+        self._provider_intelligence_service = provider_intelligence_service or ProviderIntelligenceService(
+            logger=logger,
+            cache_store=provider_capability_report_store,
+            refresh_interval_seconds=provider_capability_refresh_interval_seconds,
+        )
         self._operational_readiness_checker = operational_readiness_checker or OperationalMqttReadinessChecker(
             logger=logger
         )
@@ -53,12 +69,15 @@ class CapabilityDeclarationRunner:
         self._accepted_profile = None
         self._governance_bundle = None
         self._last_manifest_summary = None
+        self._provider_capability_report = None
+        self._provider_intelligence_last_submitted_at = None
         self._governance_status = evaluate_governance_freshness(None)
         self._governance_status["refresh_state"] = "idle"
         self._governance_status["last_refresh_error"] = None
         self._diag = Phase2DiagnosticsLogger(logger)
         self._load_accepted_profile()
         self._load_governance_bundle()
+        self._load_provider_capability_report()
 
     def status_payload(self) -> dict:
         return {
@@ -69,6 +88,8 @@ class CapabilityDeclarationRunner:
             "manifest_summary": self._last_manifest_summary,
             "governance_bundle": self._governance_bundle,
             "governance_status": self._governance_status,
+            "provider_capability_report": compact_provider_intelligence_report(self._provider_capability_report),
+            "provider_intelligence_last_submitted_at": self._provider_intelligence_last_submitted_at,
             "operational_mqtt_readiness": (
                 self._operational_readiness_checker.status_payload()
                 if hasattr(self._operational_readiness_checker, "status_payload")
@@ -96,6 +117,14 @@ class CapabilityDeclarationRunner:
             return
         self._governance_bundle = payload
         self._refresh_governance_status(refresh_state="loaded", last_refresh_error=None)
+
+    def _load_provider_capability_report(self) -> None:
+        if self._provider_capability_report_store is None or not hasattr(self._provider_capability_report_store, "load"):
+            return
+        payload = self._provider_capability_report_store.load()
+        if not isinstance(payload, dict):
+            return
+        self._provider_capability_report = payload
 
     def _refresh_governance_status(self, *, refresh_state: str, last_refresh_error: str | None) -> None:
         status = evaluate_governance_freshness(self._governance_bundle)
@@ -127,6 +156,17 @@ class CapabilityDeclarationRunner:
             if self._provider_selection_store is not None and hasattr(self._provider_selection_store, "load_or_create")
             else None
         )
+        task_capability_selection = (
+            self._task_capability_selection_store.load_or_create()
+            if self._task_capability_selection_store is not None
+            and hasattr(self._task_capability_selection_store, "load_or_create")
+            else None
+        )
+        selected_task_families = (
+            list(task_capability_selection.get("selected_task_families") or [])
+            if isinstance(task_capability_selection, dict)
+            else None
+        )
         providers = create_provider_capabilities_from_selection_config(provider_selection)
         self._diag.provider_selection(
             {
@@ -140,7 +180,7 @@ class CapabilityDeclarationRunner:
             node_name=str(trust_state.get("node_name") or "ai-node").strip(),
             node_type=str(trust_state.get("node_type") or "ai-node").strip(),
             node_software_version=self._node_software_version,
-            task_families=create_declared_task_family_capabilities(),
+            task_families=create_declared_task_family_capabilities(selected_task_families),
             supported_providers=providers.get("supported"),
             enabled_providers=providers.get("enabled"),
             node_features=create_node_feature_declarations(),
@@ -265,6 +305,11 @@ class CapabilityDeclarationRunner:
                 }
             )
             self._persist_phase2_state()
+            provider_intelligence_status = await self.refresh_provider_capabilities_once(
+                force_refresh=True,
+                submit_to_core=True,
+                trust_state=trust_state,
+            )
 
             readiness_result = await self._operational_readiness_checker.check_once(trust_state=trust_state)
             if not readiness_result.get("ready"):
@@ -298,6 +343,10 @@ class CapabilityDeclarationRunner:
                         "result": {"phase": "operational_mqtt_readiness"},
                         "accepted_profile": accepted_payload,
                         "governance_bundle": governance_payload,
+                        "provider_capability_report": compact_provider_intelligence_report(
+                            self._provider_capability_report
+                        ),
+                        "provider_intelligence_status": provider_intelligence_status,
                         "operational_mqtt_readiness": readiness_result,
                     }
                 self._lifecycle.transition_to(
@@ -332,6 +381,10 @@ class CapabilityDeclarationRunner:
                     "result": {"phase": "operational_mqtt_readiness"},
                     "accepted_profile": accepted_payload,
                     "governance_bundle": governance_payload,
+                    "provider_capability_report": compact_provider_intelligence_report(
+                        self._provider_capability_report
+                    ),
+                    "provider_intelligence_status": provider_intelligence_status,
                     "operational_mqtt_readiness": readiness_result,
                 }
 
@@ -356,6 +409,8 @@ class CapabilityDeclarationRunner:
                 "result": result.payload,
                 "accepted_profile": accepted_payload,
                 "governance_bundle": governance_payload,
+                "provider_capability_report": compact_provider_intelligence_report(self._provider_capability_report),
+                "provider_intelligence_status": provider_intelligence_status,
                 "operational_mqtt_readiness": readiness_result,
             }
 
@@ -381,6 +436,58 @@ class CapabilityDeclarationRunner:
             "retryable": result.retryable,
             "error": result.error,
             "result": result.payload,
+        }
+
+    async def refresh_provider_capabilities_once(
+        self,
+        *,
+        force_refresh: bool = False,
+        submit_to_core: bool = True,
+        trust_state: dict | None = None,
+    ) -> dict:
+        provider_selection = (
+            self._provider_selection_store.load_or_create(openai_enabled=False)
+            if self._provider_selection_store is not None and hasattr(self._provider_selection_store, "load_or_create")
+            else None
+        )
+        report, changed = await self._provider_intelligence_service.build_provider_capability_report(
+            provider_selection_config=provider_selection,
+            force_refresh=force_refresh,
+        )
+        self._provider_capability_report = report
+        self._persist_phase2_state()
+
+        core_submission = {"submitted": False, "reason": None}
+        can_submit = submit_to_core and isinstance(self._accepted_profile, dict)
+        if can_submit:
+            trust = trust_state if isinstance(trust_state, dict) else (self._trust_store.load() if self._trust_store else None)
+            if isinstance(trust, dict):
+                if changed:
+                    result = await self._capability_client.submit_provider_intelligence(
+                        core_api_endpoint=str(trust.get("core_api_endpoint") or "").strip(),
+                        trust_token=str(trust.get("node_trust_token") or "").strip(),
+                        node_id=self._node_id,
+                        provider_intelligence_report=compact_provider_intelligence_report(report),
+                    )
+                    core_submission = {
+                        "submitted": True,
+                        "status": result.status,
+                        "retryable": result.retryable,
+                        "error": result.error,
+                    }
+                    self._provider_intelligence_last_submitted_at = datetime.now(timezone.utc).isoformat()
+                else:
+                    core_submission = {"submitted": False, "reason": "unchanged"}
+            else:
+                core_submission = {"submitted": False, "reason": "missing_trust_state"}
+        else:
+            core_submission = {"submitted": False, "reason": "capability_not_accepted"}
+
+        return {
+            "status": "refreshed",
+            "changed": changed,
+            "report": compact_provider_intelligence_report(report),
+            "core_submission": core_submission,
         }
 
     async def refresh_governance_once(self) -> dict:
@@ -418,10 +525,12 @@ class CapabilityDeclarationRunner:
                 }
             )
             self._persist_phase2_state()
+            provider_refresh = await self.refresh_provider_capabilities_once(force_refresh=False, submit_to_core=True)
             return {
                 "status": "synced",
                 "governance_bundle": governance_payload,
                 "governance_status": self._governance_status,
+                "provider_capability_refresh": provider_refresh,
             }
 
         self._refresh_governance_status(
@@ -498,6 +607,71 @@ class CapabilityDeclarationRunner:
         self._persist_phase2_state()
         return {"status": "recovered", "target_state": target_state.value, "capability_status": self._status}
 
+    async def resume_operational_if_ready(self) -> dict:
+        state = self._lifecycle.get_state()
+        if state != NodeLifecycleState.CAPABILITY_SETUP_PENDING:
+            return {
+                "resumed": False,
+                "reason": "lifecycle_not_capability_setup_pending",
+                "target_state": state.value,
+            }
+        if not isinstance(self._accepted_profile, dict):
+            return {
+                "resumed": False,
+                "reason": "accepted_capability_missing",
+                "target_state": state.value,
+            }
+        if self._governance_status.get("state") != "fresh":
+            return {
+                "resumed": False,
+                "reason": "governance_not_fresh",
+                "target_state": state.value,
+            }
+
+        trust_state = self._trust_store.load() if self._trust_store is not None else None
+        if not isinstance(trust_state, dict):
+            return {
+                "resumed": False,
+                "reason": "missing_valid_trust_state",
+                "target_state": state.value,
+            }
+
+        readiness_result = await self._operational_readiness_checker.check_once(trust_state=trust_state)
+        if not readiness_result.get("ready"):
+            return {
+                "resumed": False,
+                "reason": "operational_mqtt_not_ready",
+                "target_state": state.value,
+                "operational_mqtt_readiness": readiness_result,
+            }
+
+        self._lifecycle.transition_to(
+            NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS,
+            {"source": "startup_resume"},
+        )
+        self._lifecycle.transition_to(
+            NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED,
+            {"source": "startup_resume"},
+        )
+        self._lifecycle.transition_to(
+            NodeLifecycleState.OPERATIONAL,
+            {"source": "startup_resume"},
+        )
+        self._status = "accepted"
+        self._last_error = None
+        await self._emit_status_telemetry(
+            trust_state=trust_state,
+            lifecycle_state=NodeLifecycleState.OPERATIONAL.value,
+            overall_status="operational",
+        )
+        self._persist_phase2_state()
+        return {
+            "resumed": True,
+            "reason": "accepted_capability_and_fresh_governance_and_ready_mqtt",
+            "target_state": self._lifecycle.get_state().value,
+            "operational_mqtt_readiness": readiness_result,
+        }
+
     def _persist_phase2_state(self) -> None:
         if self._phase2_state_store is None or not hasattr(self._phase2_state_store, "save"):
             return
@@ -511,12 +685,22 @@ class CapabilityDeclarationRunner:
             "enabled_provider_selection": provider_selection if isinstance(provider_selection, dict) else {},
             "accepted_capability": self._accepted_profile if isinstance(self._accepted_profile, dict) else None,
             "active_governance": self._governance_bundle if isinstance(self._governance_bundle, dict) else None,
+            "provider_capability_report": (
+                compact_provider_intelligence_report(self._provider_capability_report)
+                if isinstance(self._provider_capability_report, dict)
+                else None
+            ),
             "timestamps": {
                 "capability_declaration_timestamp": (
                     self._accepted_profile.get("acceptance_timestamp") if isinstance(self._accepted_profile, dict) else None
                 ),
                 "governance_sync_timestamp": (
                     self._governance_bundle.get("synced_at") if isinstance(self._governance_bundle, dict) else None
+                ),
+                "provider_capability_refresh_timestamp": (
+                    self._provider_capability_report.get("generated_at")
+                    if isinstance(self._provider_capability_report, dict)
+                    else None
                 ),
             },
         }
