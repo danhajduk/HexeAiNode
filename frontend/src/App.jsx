@@ -589,6 +589,10 @@ export default function App() {
     setShowModelPricingPopup(true);
   }
 
+  function openSingleModelPricing(modelId) {
+    startPricingReview([modelId]);
+  }
+
   function advancePricingReview() {
     if (pricingReviewIndex + 1 < pricingReviewModelIds.length) {
       setPricingReviewIndex((current) => current + 1);
@@ -643,7 +647,7 @@ export default function App() {
   return (
     <main className="page">
       {showModelPricingPopup && pricingReviewModel ? (
-        <section className="modal-overlay" role="dialog" aria-modal="true" aria-label="Model pricing">
+        <section className="modal-overlay pricing-modal-overlay" role="dialog" aria-modal="true" aria-label="Model pricing">
           <article className="card modal-card">
             <CardHeader
               title="Model Pricing"
@@ -907,6 +911,9 @@ export default function App() {
                           onClick={() => onToggleOpenAiModel(model.model_id)}
                         >
                           {selectedOpenaiModelIds.includes(model.model_id) ? "Selected" : "Add Model"}
+                        </button>
+                        <button className="btn" type="button" onClick={() => openSingleModelPricing(model.model_id)}>
+                          Set Price
                         </button>
                       </div>
                     </article>
