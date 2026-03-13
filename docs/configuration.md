@@ -49,6 +49,11 @@ Provider-specific:
 - `data/provider_metrics.json`: provider metrics snapshot
 - `data/openai_pricing_catalog.json`: cached OpenAI pricing snapshot and change history
 
+## Repository Data Snapshots
+
+- `data/provider_registry.json` and `data/provider_metrics.json` are project snapshots and may be committed when they reflect the desired current node/provider state.
+- `.run/*.json` remains local runtime state and should not be committed.
+
 ## Secrets Handling
 
 - Trust tokens and operational MQTT tokens are stored in trust state and must not be logged or committed.

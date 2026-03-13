@@ -1,0 +1,3768 @@
+{
+  "providers": [
+    {
+      "availability": "available",
+      "health": {
+        "auth_valid": true,
+        "availability": "available",
+        "last_error": null,
+        "last_successful_check": "2026-03-13T21:43:19.897596+00:00",
+        "provider_id": "openai",
+        "reachable": true
+      },
+      "models": [
+        {
+          "base_model_id": "gpt-4-0613",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1686588896,
+          "display_name": "gpt-4-0613",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4-0613",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1687882411,
+          "display_name": "gpt-4",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-3.5-turbo",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1677610602,
+          "display_name": "gpt-3.5-turbo",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-3.5-turbo",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.4",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1772691852,
+          "display_name": "gpt-5.4",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.4",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.3-chat",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1772236571,
+          "display_name": "gpt-5.3-chat-latest",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.3-chat-latest",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.4",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1772654062,
+          "display_name": "gpt-5.4-2026-03-05",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.4-2026-03-05",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.4-pro",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1772659601,
+          "display_name": "gpt-5.4-pro",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.4-pro",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.4-pro",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1772659657,
+          "display_name": "gpt-5.4-pro-2026-03-05",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.4-pro-2026-03-05",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "davinci-002",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1692634301,
+          "display_name": "davinci-002",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "davinci-002",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "babbage-002",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1692634615,
+          "display_name": "babbage-002",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "babbage-002",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-3.5-turbo-instruct",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1692901427,
+          "display_name": "gpt-3.5-turbo-instruct",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-3.5-turbo-instruct",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-3.5-turbo-instruct-0914",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1694122472,
+          "display_name": "gpt-3.5-turbo-instruct-0914",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-3.5-turbo-instruct-0914",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "dall-e-3",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1698785189,
+          "display_name": "dall-e-3",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "dall-e-3",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "dall-e-2",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1698798177,
+          "display_name": "dall-e-2",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "dall-e-2",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4-1106",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1698957206,
+          "display_name": "gpt-4-1106-preview",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4-1106-preview",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-3.5-turbo-1106",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1698959748,
+          "display_name": "gpt-3.5-turbo-1106",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-3.5-turbo-1106",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "tts-1-hd",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1699046015,
+          "display_name": "tts-1-hd",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "tts-1-hd",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "tts-1-1106",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1699053241,
+          "display_name": "tts-1-1106",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "tts-1-1106",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "tts-1-hd-1106",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1699053533,
+          "display_name": "tts-1-hd-1106",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "tts-1-hd-1106",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "text-embedding-3-small",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1705948997,
+          "display_name": "text-embedding-3-small",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "text-embedding-3-small",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "text-embedding-3-large",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1705953180,
+          "display_name": "text-embedding-3-large",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "text-embedding-3-large",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4-0125",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1706037612,
+          "display_name": "gpt-4-0125-preview",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4-0125-preview",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4-turbo",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1706037777,
+          "display_name": "gpt-4-turbo-preview",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4-turbo-preview",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-3.5-turbo-0125",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1706048358,
+          "display_name": "gpt-3.5-turbo-0125",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-3.5-turbo-0125",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4-turbo",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1712361441,
+          "display_name": "gpt-4-turbo",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4-turbo",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4-turbo",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1712601677,
+          "display_name": "gpt-4-turbo-2024-04-09",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4-turbo-2024-04-09",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4o",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1715367049,
+          "display_name": "gpt-4o",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1715368132,
+          "display_name": "gpt-4o-2024-05-13",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-2024-05-13",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1721172717,
+          "display_name": "gpt-4o-mini-2024-07-18",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-2024-07-18",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1721172741,
+          "display_name": "gpt-4o-mini",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1722814719,
+          "display_name": "gpt-4o-2024-08-06",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-2024-08-06",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-audio",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1727460443,
+          "display_name": "gpt-4o-audio-preview",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-audio-preview",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-realtime",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1727659998,
+          "display_name": "gpt-4o-realtime-preview",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-realtime-preview",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "omni-moderation",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1731689265,
+          "display_name": "omni-moderation-latest",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "omni-moderation-latest",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "omni-moderation",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1732734466,
+          "display_name": "omni-moderation-2024-09-26",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "omni-moderation-2024-09-26",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4o-realtime",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1733945430,
+          "display_name": "gpt-4o-realtime-preview-2024-12-17",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-realtime-preview-2024-12-17",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-audio",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1734034239,
+          "display_name": "gpt-4o-audio-preview-2024-12-17",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-audio-preview-2024-12-17",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-mini-realtime",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1734112601,
+          "display_name": "gpt-4o-mini-realtime-preview-2024-12-17",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-realtime-preview-2024-12-17",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-mini-audio",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1734115920,
+          "display_name": "gpt-4o-mini-audio-preview-2024-12-17",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-audio-preview-2024-12-17",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "o1",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1734326976,
+          "display_name": "o1-2024-12-17",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o1-2024-12-17",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "o1",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1734375816,
+          "display_name": "o1",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o1",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4o-mini-realtime",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1734387380,
+          "display_name": "gpt-4o-mini-realtime-preview",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-realtime-preview",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-mini-audio",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1734387424,
+          "display_name": "gpt-4o-mini-audio-preview",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-audio-preview",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "o3-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1737146383,
+          "display_name": "o3-mini",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o3-mini",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "o3-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1738010200,
+          "display_name": "o3-mini-2025-01-31",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o3-mini-2025-01-31",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4o",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1739331543,
+          "display_name": "gpt-4o-2024-11-20",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-2024-11-20",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-mini-search",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1741390858,
+          "display_name": "gpt-4o-mini-search-preview-2025-03-11",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-search-preview-2025-03-11",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-mini-search",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1741391161,
+          "display_name": "gpt-4o-mini-search-preview",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-search-preview",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-transcribe",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1742068463,
+          "display_name": "gpt-4o-transcribe",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-transcribe",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-mini-transcribe",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1742068596,
+          "display_name": "gpt-4o-mini-transcribe",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-transcribe",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "o1-pro",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1742251504,
+          "display_name": "o1-pro-2025-03-19",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o1-pro-2025-03-19",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "o1-pro",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1742251791,
+          "display_name": "o1-pro",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o1-pro",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4o-mini-tts",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1742403959,
+          "display_name": "gpt-4o-mini-tts",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-tts",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "o3",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1744133301,
+          "display_name": "o3-2025-04-16",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o3-2025-04-16",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "o4-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1744133506,
+          "display_name": "o4-mini-2025-04-16",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o4-mini-2025-04-16",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "o3",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1744225308,
+          "display_name": "o3",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o3",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "o4-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1744225351,
+          "display_name": "o4-mini",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o4-mini",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4.1",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1744315746,
+          "display_name": "gpt-4.1-2025-04-14",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4.1-2025-04-14",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4.1",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1744316542,
+          "display_name": "gpt-4.1",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4.1",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4.1-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1744317547,
+          "display_name": "gpt-4.1-mini-2025-04-14",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4.1-mini-2025-04-14",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4.1-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1744318173,
+          "display_name": "gpt-4.1-mini",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4.1-mini",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4.1-nano",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1744321025,
+          "display_name": "gpt-4.1-nano-2025-04-14",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4.1-nano-2025-04-14",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4.1-nano",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1744321707,
+          "display_name": "gpt-4.1-nano",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4.1-nano",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-image-1",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1745517030,
+          "display_name": "gpt-image-1",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-image-1",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "o3-pro",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1748475349,
+          "display_name": "o3-pro",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o3-pro",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4o-realtime",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1748907838,
+          "display_name": "gpt-4o-realtime-preview-2025-06-03",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-realtime-preview-2025-06-03",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-audio",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1748908498,
+          "display_name": "gpt-4o-audio-preview-2025-06-03",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-audio-preview-2025-06-03",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "o3-pro",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1749166761,
+          "display_name": "o3-pro-2025-06-10",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o3-pro-2025-06-10",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "o4-mini-deep-research",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1749685485,
+          "display_name": "o4-mini-deep-research",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o4-mini-deep-research",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "o3-deep-research",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1749840121,
+          "display_name": "o3-deep-research",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o3-deep-research",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4o-transcribe-diarize",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1750798887,
+          "display_name": "gpt-4o-transcribe-diarize",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-transcribe-diarize",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "o3-deep-research",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1750865219,
+          "display_name": "o3-deep-research-2025-06-26",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o3-deep-research-2025-06-26",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "o4-mini-deep-research",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1750866121,
+          "display_name": "o4-mini-deep-research-2025-06-26",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "o4-mini-deep-research-2025-06-26",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5-chat",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1754073306,
+          "display_name": "gpt-5-chat-latest",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5-chat-latest",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1754075360,
+          "display_name": "gpt-5-2025-08-07",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5-2025-08-07",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1754425777,
+          "display_name": "gpt-5",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1754425867,
+          "display_name": "gpt-5-mini-2025-08-07",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5-mini-2025-08-07",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1754425928,
+          "display_name": "gpt-5-mini",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5-mini",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5-nano",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1754426303,
+          "display_name": "gpt-5-nano-2025-08-07",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5-nano-2025-08-07",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5-nano",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1754426384,
+          "display_name": "gpt-5-nano",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5-nano",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-audio",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1756256146,
+          "display_name": "gpt-audio-2025-08-28",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-audio-2025-08-28",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-realtime",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1756271701,
+          "display_name": "gpt-realtime",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-realtime",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-realtime",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1756271773,
+          "display_name": "gpt-realtime-2025-08-28",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-realtime-2025-08-28",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-audio",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1756339249,
+          "display_name": "gpt-audio",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-audio",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5-codex",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1757527818,
+          "display_name": "gpt-5-codex",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5-codex",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-image-1-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1758845821,
+          "display_name": "gpt-image-1-mini",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-image-1-mini",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5-pro",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1759469707,
+          "display_name": "gpt-5-pro-2025-10-06",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5-pro-2025-10-06",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5-pro",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1759469822,
+          "display_name": "gpt-5-pro",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5-pro",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-audio-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1759512027,
+          "display_name": "gpt-audio-mini",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-audio-mini",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-audio-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1759512137,
+          "display_name": "gpt-audio-mini-2025-10-06",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-audio-mini-2025-10-06",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5-search-api",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1759514629,
+          "display_name": "gpt-5-search-api",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5-search-api",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-realtime-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1759517133,
+          "display_name": "gpt-realtime-mini",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-realtime-mini",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-realtime-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1759517175,
+          "display_name": "gpt-realtime-mini-2025-10-06",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-realtime-mini-2025-10-06",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "sora-2",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1759708615,
+          "display_name": "sora-2",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "sora-2",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "sora-2-pro",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1759708663,
+          "display_name": "sora-2-pro",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "sora-2-pro",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5-search-api",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1760043960,
+          "display_name": "gpt-5-search-api-2025-10-14",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5-search-api-2025-10-14",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.1-chat",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1762547951,
+          "display_name": "gpt-5.1-chat-latest",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.1-chat-latest",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.1",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1762800353,
+          "display_name": "gpt-5.1-2025-11-13",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.1-2025-11-13",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.1",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1762800673,
+          "display_name": "gpt-5.1",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.1",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.1-codex",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1762988221,
+          "display_name": "gpt-5.1-codex",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.1-codex",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.1-codex-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1763007109,
+          "display_name": "gpt-5.1-codex-mini",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.1-codex-mini",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.1-codex-max",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1763671532,
+          "display_name": "gpt-5.1-codex-max",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.1-codex-max",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-image-1.5",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1764030620,
+          "display_name": "gpt-image-1.5",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-image-1.5",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.2",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1765313028,
+          "display_name": "gpt-5.2-2025-12-11",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.2-2025-12-11",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.2",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1765313051,
+          "display_name": "gpt-5.2",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.2",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.2-pro",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1765343959,
+          "display_name": "gpt-5.2-pro-2025-12-11",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.2-pro-2025-12-11",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.2-pro",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1765343983,
+          "display_name": "gpt-5.2-pro",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.2-pro",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.2-chat",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1765344352,
+          "display_name": "gpt-5.2-chat-latest",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.2-chat-latest",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4o-mini-transcribe",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1765610407,
+          "display_name": "gpt-4o-mini-transcribe-2025-12-15",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-transcribe-2025-12-15",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-mini-transcribe",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1765610545,
+          "display_name": "gpt-4o-mini-transcribe-2025-03-20",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-transcribe-2025-03-20",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-mini-tts",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1765610731,
+          "display_name": "gpt-4o-mini-tts-2025-03-20",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-tts-2025-03-20",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-mini-tts",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1765610837,
+          "display_name": "gpt-4o-mini-tts-2025-12-15",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-mini-tts-2025-12-15",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-realtime-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1765612007,
+          "display_name": "gpt-realtime-mini-2025-12-15",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-realtime-mini-2025-12-15",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-audio-mini",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1765760008,
+          "display_name": "gpt-audio-mini-2025-12-15",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-audio-mini-2025-12-15",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "chatgpt-image",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1765925279,
+          "display_name": "chatgpt-image-latest",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "chatgpt-image-latest",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.2-codex",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1766164985,
+          "display_name": "gpt-5.2-codex",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.2-codex",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-5.3-codex",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1770537915,
+          "display_name": "gpt-5.3-codex",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-5.3-codex",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-realtime-1.5",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1771461469,
+          "display_name": "gpt-realtime-1.5",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-realtime-1.5",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-audio-1.5",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1771550885,
+          "display_name": "gpt-audio-1.5",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-audio-1.5",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "gpt-4o-search",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1771905534,
+          "display_name": "gpt-4o-search-preview",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-search-preview",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-4o-search",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1771905621,
+          "display_name": "gpt-4o-search-preview-2025-03-11",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-4o-search-preview-2025-03-11",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": true
+        },
+        {
+          "base_model_id": "gpt-3.5-turbo-16k",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1683758102,
+          "display_name": "gpt-3.5-turbo-16k",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "gpt-3.5-turbo-16k",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "tts-1",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1681940951,
+          "display_name": "tts-1",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "tts-1",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "whisper-1",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1677532384,
+          "display_name": "whisper-1",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "whisper-1",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        },
+        {
+          "base_model_id": "text-embedding-ada-002",
+          "batch_pricing_input": null,
+          "batch_pricing_output": null,
+          "cached_pricing_input": null,
+          "context_window": null,
+          "created": 1671217299,
+          "display_name": "text-embedding-ada-002",
+          "input_modalities": [
+            "text"
+          ],
+          "max_output_tokens": null,
+          "model_id": "text-embedding-ada-002",
+          "output_modalities": [
+            "text"
+          ],
+          "pricing_input": null,
+          "pricing_notes": [
+            "pricing_not_found"
+          ],
+          "pricing_output": null,
+          "pricing_scraped_at": null,
+          "pricing_source_url": null,
+          "pricing_status": "scrape_failed",
+          "status": "available",
+          "supports_json_mode": true,
+          "supports_streaming": true,
+          "supports_tools": false,
+          "supports_vision": false
+        }
+      ],
+      "provider_id": "openai"
+    }
+  ]
+}

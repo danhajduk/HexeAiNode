@@ -77,6 +77,13 @@ curl http://127.0.0.1:9002/debug/providers/models
 curl http://127.0.0.1:9002/debug/providers/metrics
 ```
 
+Tracked runtime snapshots:
+
+- `data/provider_registry.json`: current discovered provider/model registry snapshot
+- `data/provider_metrics.json`: current provider metrics snapshot
+
+These `data/` snapshots are intended to stay in the repository for this project and are not omitted from commits unless you explicitly want them excluded.
+
 OpenAI credential + latest-model endpoints:
 
 ```bash
