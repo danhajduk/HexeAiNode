@@ -42,6 +42,7 @@ class ModelCapability(BaseModel):
     model_id: str
     display_name: str
     created: int | None = None
+    base_model_id: str | None = None
     input_modalities: list[str] = Field(default_factory=lambda: ["text"])
     output_modalities: list[str] = Field(default_factory=lambda: ["text"])
     context_window: int | None = None
@@ -51,7 +52,14 @@ class ModelCapability(BaseModel):
     supports_vision: bool = False
     supports_json_mode: bool = False
     pricing_input: float | None = None
+    cached_pricing_input: float | None = None
     pricing_output: float | None = None
+    batch_pricing_input: float | None = None
+    batch_pricing_output: float | None = None
+    pricing_status: str = "unknown"
+    pricing_source_url: str | None = None
+    pricing_scraped_at: str | None = None
+    pricing_notes: list[str] = Field(default_factory=list)
     status: ModelStatus = "available"
 
 

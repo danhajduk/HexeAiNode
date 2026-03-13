@@ -6,7 +6,7 @@ import httpx
 
 from ai_node.providers.base import ProviderAdapter
 from ai_node.providers.models import ModelCapability, UnifiedExecutionRequest, UnifiedExecutionResponse, UnifiedExecutionUsage
-from ai_node.providers.openai_catalog import get_openai_model_pricing
+from ai_node.providers.openai_catalog import OpenAIPricingCatalogService, get_openai_model_pricing
 
 
 def _iso_now() -> str:
@@ -16,10 +16,18 @@ def _iso_now() -> str:
 class OpenAIProviderAdapter(ProviderAdapter):
     provider_id = "openai"
 
-    def __init__(self, *, api_key: str, base_url: str = "https://api.openai.com/v1", timeout_seconds: float = 20.0) -> None:
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        base_url: str = "https://api.openai.com/v1",
+        timeout_seconds: float = 20.0,
+        pricing_catalog_service: OpenAIPricingCatalogService | None = None,
+    ) -> None:
         self._api_key = str(api_key or "").strip()
         self._base_url = str(base_url or "https://api.openai.com/v1").rstrip("/")
         self._timeout_seconds = float(timeout_seconds)
+        self._pricing_catalog_service = pricing_catalog_service
         self._metrics = {
             "health": {"reachable": False, "auth_valid": False, "last_successful_check": None, "last_error": None},
             "calls": 0,
@@ -95,7 +103,6 @@ class OpenAIProviderAdapter(ProviderAdapter):
             model_id = str(model.get("id") or "").strip()
             if not model_id:
                 continue
-            pricing = get_openai_model_pricing(model_id)
             out.append(
                 ModelCapability(
                     model_id=model_id,
@@ -109,12 +116,16 @@ class OpenAIProviderAdapter(ProviderAdapter):
                     supports_tools=False,
                     supports_vision=("vision" in model_id or "gpt-4o" in model_id),
                     supports_json_mode=True,
-                    pricing_input=pricing.get("input_per_1m_tokens") if isinstance(pricing, dict) else None,
-                    pricing_output=pricing.get("output_per_1m_tokens") if isinstance(pricing, dict) else None,
+                    pricing_status="unknown",
                     status="available",
                 )
             )
-        return out
+        if self._pricing_catalog_service is None:
+            return out
+        merged, unknown_models = self._pricing_catalog_service.merge_model_capabilities(out)
+        if unknown_models and hasattr(self._logger if hasattr(self, "_logger") else None, "warning"):
+            self._logger.warning("[openai-pricing-unknown-models] %s", {"models": unknown_models})
+        return merged
 
     async def get_model_capabilities(self, model_id: str) -> ModelCapability | None:
         model_value = str(model_id or "").strip()
@@ -187,8 +198,10 @@ class OpenAIProviderAdapter(ProviderAdapter):
             raise RuntimeError(str(exc).strip() or "openai_execute_failed") from exc
 
     def estimate_cost(self, *, model_id: str, prompt_tokens: int, completion_tokens: int) -> float | None:
-        pricing = get_openai_model_pricing(model_id)
+        pricing = get_openai_model_pricing(model_id, pricing_service=self._pricing_catalog_service)
         if not isinstance(pricing, dict):
+            return None
+        if str(pricing.get("pricing_status") or "").strip() not in {"ok"}:
             return None
         in_rate = pricing.get("input_per_1m_tokens")
         out_rate = pricing.get("output_per_1m_tokens")

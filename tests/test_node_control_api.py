@@ -8,6 +8,23 @@ from ai_node.runtime.node_control_api import NodeControlState
 
 
 class NodeControlApiTests(unittest.TestCase):
+    class _FakeProviderRuntimeManager:
+        async def refresh_pricing(self, *, force: bool):
+            return {"status": "ok", "changed": bool(force)}
+
+        def pricing_diagnostics_payload(self):
+            return {
+                "configured": True,
+                "refresh_state": "ok",
+                "stale": False,
+                "entry_count": 3,
+                "source_urls": ["https://openai.com/api/pricing/"],
+                "source_url_used": "https://openai.com/api/pricing/",
+                "last_refresh_time": "2026-03-13T00:00:00Z",
+                "unknown_models": [],
+                "last_error": None,
+            }
+
     class _FakeBootstrapRunner:
         def __init__(self):
             self.calls = []
@@ -302,6 +319,19 @@ class NodeControlApiTests(unittest.TestCase):
             payload = state.latest_provider_models_payload(provider_id="openai", limit=3)
             self.assertEqual(payload["provider_id"], "openai")
             self.assertEqual(payload["models"][0]["model_id"], "gpt-5")
+
+    def test_openai_pricing_payloads_proxy_runtime_manager(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_runtime_manager=self._FakeProviderRuntimeManager(),
+            )
+            diagnostics = state.openai_pricing_diagnostics_payload()
+            self.assertEqual(diagnostics["provider_id"], "openai")
+            self.assertEqual(diagnostics["entry_count"], 3)
 
     def test_capability_declaration_gate_requires_setup_prerequisites(self):
         with tempfile.TemporaryDirectory() as tmp:

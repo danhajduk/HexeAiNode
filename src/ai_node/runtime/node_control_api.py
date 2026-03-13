@@ -602,6 +602,36 @@ class NodeControlState:
             else datetime.now(timezone.utc).isoformat(),
         }
 
+    async def refresh_openai_pricing(self, *, force_refresh: bool) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "refresh_pricing"):
+            raise ValueError("provider pricing refresh is not configured")
+        payload = await self._provider_runtime_manager.refresh_pricing(force=force_refresh)
+        return {
+            "provider_id": "openai",
+            "force_refresh": bool(force_refresh),
+            **(payload if isinstance(payload, dict) else {}),
+        }
+
+    def openai_pricing_diagnostics_payload(self) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "pricing_diagnostics_payload"):
+            return {
+                "provider_id": "openai",
+                "configured": False,
+                "refresh_state": "unavailable",
+                "stale": True,
+                "entry_count": 0,
+                "source_urls": [],
+                "source_url_used": None,
+                "last_refresh_time": None,
+                "unknown_models": [],
+                "last_error": None,
+            }
+        payload = self._provider_runtime_manager.pricing_diagnostics_payload()
+        return {
+            "provider_id": "openai",
+            **(payload if isinstance(payload, dict) else {"configured": False}),
+        }
+
     async def submit_capability_declaration(self) -> dict:
         if self._capability_runner is None or not hasattr(self._capability_runner, "submit_once"):
             raise ValueError("capability declaration runner is not configured")
@@ -801,6 +831,10 @@ class ProviderCapabilityRefreshRequest(BaseModel):
     force_refresh: bool = False
 
 
+class OpenAIPricingRefreshRequest(BaseModel):
+    force_refresh: bool = True
+
+
 class PromptServiceRegisterRequest(BaseModel):
     prompt_id: str
     service_id: str
@@ -851,6 +885,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/providers/config",
                 "/api/providers/openai/credentials",
                 "/api/providers/openai/models/latest",
+                "/api/providers/openai/pricing/diagnostics",
+                "/api/providers/openai/pricing/refresh",
                 "/api/capabilities/config",
                 "/api/capabilities/declare",
                 "/api/governance/status",
@@ -920,6 +956,17 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/providers/openai/models/latest")
     def get_openai_latest_models(limit: int = 3):
         return state.latest_provider_models_payload(provider_id="openai", limit=limit)
+
+    @app.get("/api/providers/openai/pricing/diagnostics")
+    def get_openai_pricing_diagnostics():
+        return state.openai_pricing_diagnostics_payload()
+
+    @app.post("/api/providers/openai/pricing/refresh")
+    async def post_openai_pricing_refresh(payload: OpenAIPricingRefreshRequest):
+        try:
+            return await state.refresh_openai_pricing(force_refresh=payload.force_refresh)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/capabilities/config")
     def get_capabilities_config():

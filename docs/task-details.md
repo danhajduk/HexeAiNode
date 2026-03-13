@@ -32,3 +32,39 @@ Task mapping:
 - Task 146: Validate all documentation links
 - Task 147: Add a minimal archive folder only if needed
 - Task 148: Final documentation consistency pass
+
+## Task 153-176
+Original task source: `docs/New_tasks.txt`
+
+Summary of preserved scope:
+- Build an OpenAI pricing catalog subsystem that fetches official OpenAI pricing pages, parses pricing data, normalizes model identifiers, validates and caches the results, and merges pricing into the local provider model catalog.
+- Keep the scraping and parsing layer isolated from runtime inference logic and future-proof it for additional official sources without adding third-party pricing providers.
+- Add configurable official pricing sources, refresh cadence, stale-cache protection, manual refresh controls, pricing diff detection, diagnostics visibility, and structured observability.
+- Integrate canonical pricing into existing cost estimation so unknown or stale pricing disables projections rather than guessing.
+- Add unit tests for normalization, parsing, validation, fallback behavior, and documentation describing architecture, source policy, and limitations.
+
+Task mapping:
+- Task 153: Create OpenAI pricing catalog module
+- Task 154: Define canonical pricing data model
+- Task 155: Add pricing source configuration
+- Task 156: Implement raw HTML fetcher
+- Task 157: Implement pricing page parser
+- Task 158: Add model name normalization layer
+- Task 159: Add snapshot/base model resolver
+- Task 160: Create pricing validation layer
+- Task 161: Add local pricing cache storage
+- Task 162: Add stale-cache protection
+- Task 163: Implement merged model catalog builder
+- Task 164: Add unknown-model detection
+- Task 165: Add pricing refresh service
+- Task 166: Add refresh interval configuration
+- Task 167: Add CLI/admin task for manual refresh
+- Task 168: Add diff detection for pricing changes
+- Task 169: Add unit tests for normalization
+- Task 170: Add unit tests for parser extraction
+- Task 171: Add unit tests for validation and fallback behavior
+- Task 172: Add observability/logging
+- Task 173: Expose pricing catalog to the budget engine
+- Task 174: Add admin diagnostics endpoint/view
+- Task 175: Add documentation
+- Task 176: Add future-proof parser abstraction

@@ -115,6 +115,34 @@ This is the canonical source-of-truth contract for:
     - `pricing.input_per_1m_tokens`
     - `pricing.output_per_1m_tokens`
 
+### Read OpenAI pricing diagnostics
+
+- `GET /api/providers/openai/pricing/diagnostics`
+- Response:
+  - `provider_id: "openai"`
+  - `configured: boolean`
+  - `refresh_state: "missing" | "ok" | "stale" | "unavailable"`
+  - `stale: boolean`
+  - `entry_count: number`
+  - `source_urls: string[]`
+  - `source_url_used: string | null`
+  - `last_refresh_time: string | null`
+  - `unknown_models: string[]`
+  - `last_error: string | null`
+
+### Trigger OpenAI pricing refresh
+
+- `POST /api/providers/openai/pricing/refresh`
+- Request:
+  - `force_refresh: boolean` (default `true`)
+- Success:
+  - `provider_id: "openai"`
+  - `status: "ok" | "cached" | "stale" | "scrape_failed"`
+  - `changed: boolean`
+  - `snapshot: object | null`
+- Error:
+  - `400` when pricing refresh runtime is unavailable.
+
 ## Task Capability Configuration
 
 ### Read task-capability selection

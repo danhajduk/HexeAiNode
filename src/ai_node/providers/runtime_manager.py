@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import os
 
 from ai_node.providers.adapters.local_adapter import LocalProviderAdapter
 from ai_node.providers.adapters.openai_adapter import OpenAIProviderAdapter
@@ -6,6 +7,12 @@ from ai_node.providers.config_loader import ProviderConfigLoader
 from ai_node.providers.execution_router import ProviderExecutionRouter
 from ai_node.providers.metrics import ProviderMetricsCollector
 from ai_node.providers.models import UnifiedExecutionRequest, UnifiedExecutionResponse
+from ai_node.providers.openai_catalog import (
+    DEFAULT_OPENAI_PRICING_CATALOG_PATH,
+    DEFAULT_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS,
+    DEFAULT_OPENAI_PRICING_STALE_TOLERANCE_SECONDS,
+    OpenAIPricingCatalogService,
+)
 from ai_node.providers.provider_registry import ProviderRegistry
 
 
@@ -22,6 +29,9 @@ class ProviderRuntimeManager:
         provider_credentials_store=None,
         registry_path: str = "data/provider_registry.json",
         metrics_path: str = "data/provider_metrics.json",
+        pricing_catalog_path: str = DEFAULT_OPENAI_PRICING_CATALOG_PATH,
+        pricing_refresh_interval_seconds: int = DEFAULT_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS,
+        pricing_stale_tolerance_seconds: int = DEFAULT_OPENAI_PRICING_STALE_TOLERANCE_SECONDS,
     ) -> None:
         self._logger = logger
         self._loader = ProviderConfigLoader(
@@ -33,6 +43,12 @@ class ProviderRuntimeManager:
         self._registry_path = registry_path
         self._metrics = ProviderMetricsCollector(metrics_path=metrics_path, logger=logger)
         self._metrics_path = metrics_path
+        self._pricing_catalog_service = OpenAIPricingCatalogService(
+            logger=logger,
+            catalog_path=pricing_catalog_path,
+            refresh_interval_seconds=pricing_refresh_interval_seconds,
+            stale_tolerance_seconds=pricing_stale_tolerance_seconds,
+        )
         self._router = ProviderExecutionRouter(
             registry=self._registry,
             metrics=self._metrics,
@@ -42,8 +58,10 @@ class ProviderRuntimeManager:
         self._registry.load(path=self._registry_path)
 
     async def refresh(self) -> dict:
+        pricing_refresh = await self.refresh_pricing(force=False)
         config = self._loader.load()
         fallback_provider = None
+        unknown_models: list[str] = []
         for provider_id in config.enabled_providers:
             settings = config.providers.get(provider_id)
             if settings is None:
@@ -53,6 +71,10 @@ class ProviderRuntimeManager:
             health = await adapter.health_check()
             self._registry.set_provider_health(provider_id=provider_id, payload=health)
             models = await adapter.list_models()
+            if provider_id == "openai" and self._pricing_catalog_service is not None:
+                merged_models, provider_unknown_models = self._pricing_catalog_service.merge_model_capabilities(models)
+                models = merged_models
+                unknown_models.extend(provider_unknown_models)
             self._registry.set_models_for_provider(provider_id=provider_id, models=models)
             if fallback_provider is None and provider_id != config.default_provider:
                 fallback_provider = provider_id
@@ -66,7 +88,14 @@ class ProviderRuntimeManager:
         )
         self._registry.persist(path=self._registry_path)
         self._metrics.persist()
-        return self.intelligence_payload()
+        payload = self.intelligence_payload()
+        payload["pricing_refresh"] = pricing_refresh
+        payload["pricing_diagnostics"] = self.pricing_diagnostics_payload()
+        payload["unknown_priced_models"] = sorted(set(item for item in unknown_models if item))
+        return payload
+
+    async def refresh_pricing(self, *, force: bool) -> dict:
+        return await self._pricing_catalog_service.refresh(force=force)
 
     async def execute(self, request: UnifiedExecutionRequest) -> UnifiedExecutionResponse:
         response = await self._router.execute(request)
@@ -114,7 +143,14 @@ class ProviderRuntimeManager:
                         "supports_vision": bool(model.get("supports_vision")),
                         "supports_json_mode": bool(model.get("supports_json_mode")),
                         "pricing_input": model.get("pricing_input"),
+                        "cached_pricing_input": model.get("cached_pricing_input"),
                         "pricing_output": model.get("pricing_output"),
+                        "batch_pricing_input": model.get("batch_pricing_input"),
+                        "batch_pricing_output": model.get("batch_pricing_output"),
+                        "pricing_status": model.get("pricing_status"),
+                        "pricing_source_url": model.get("pricing_source_url"),
+                        "pricing_scraped_at": model.get("pricing_scraped_at"),
+                        "pricing_notes": model.get("pricing_notes"),
                         "status": model.get("status"),
                         "latency_metrics": {
                             "avg_latency": model_metrics.get("avg_latency"),
@@ -186,12 +222,15 @@ class ProviderRuntimeManager:
     def metrics_snapshot(self) -> dict:
         return self._metrics.snapshot()
 
-    @staticmethod
-    def _build_adapter(*, provider_id: str, settings):
+    def pricing_diagnostics_payload(self) -> dict:
+        return self._pricing_catalog_service.diagnostics_payload()
+
+    def _build_adapter(self, *, provider_id: str, settings):
         if provider_id == "openai":
             return OpenAIProviderAdapter(
                 api_key=settings.api_key or "",
                 base_url=settings.base_url or "https://api.openai.com/v1",
                 timeout_seconds=settings.timeout_seconds,
+                pricing_catalog_service=self._pricing_catalog_service,
             )
         return LocalProviderAdapter(provider_id=provider_id)

@@ -134,6 +134,22 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.payload = payload
 
     class _FakeProviderRuntimeManager:
+        async def refresh_pricing(self, *, force: bool):
+            return {"status": "ok", "changed": bool(force)}
+
+        def pricing_diagnostics_payload(self):
+            return {
+                "configured": True,
+                "refresh_state": "ok",
+                "stale": False,
+                "entry_count": 3,
+                "source_urls": ["https://openai.com/api/pricing/"],
+                "source_url_used": "https://openai.com/api/pricing/",
+                "last_refresh_time": "2026-03-13T00:00:00Z",
+                "unknown_models": [],
+                "last_error": None,
+            }
+
         def providers_snapshot(self):
             return {"providers": [{"provider_id": "openai", "availability": "available", "models": []}]}
 
@@ -216,6 +232,18 @@ class NodeControlFastApiTests(unittest.TestCase):
             latest_models_response = client.get("/api/providers/openai/models/latest?limit=3")
             self.assertEqual(latest_models_response.status_code, 200)
             self.assertEqual(latest_models_response.json()["models"][0]["model_id"], "gpt-5")
+
+            pricing_diagnostics_response = client.get("/api/providers/openai/pricing/diagnostics")
+            self.assertEqual(pricing_diagnostics_response.status_code, 200)
+            self.assertEqual(pricing_diagnostics_response.json()["entry_count"], 3)
+
+            pricing_refresh_response = client.post(
+                "/api/providers/openai/pricing/refresh",
+                json={"force_refresh": True},
+            )
+            self.assertEqual(pricing_refresh_response.status_code, 200)
+            self.assertEqual(pricing_refresh_response.json()["provider_id"], "openai")
+            self.assertEqual(pricing_refresh_response.json()["status"], "ok")
 
             capability_config_get_response = client.get("/api/capabilities/config")
             self.assertEqual(capability_config_get_response.status_code, 200)

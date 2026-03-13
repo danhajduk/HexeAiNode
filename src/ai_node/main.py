@@ -161,6 +161,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Provider capability refresh interval in seconds (recommended: 3600-21600)",
     )
     parser.add_argument(
+        "--openai-pricing-catalog-path",
+        default=os.environ.get("SYNTHIA_OPENAI_PRICING_CATALOG_PATH", "data/openai_pricing_catalog.json"),
+        help="Path to persisted OpenAI pricing catalog cache",
+    )
+    parser.add_argument(
+        "--openai-pricing-refresh-interval-seconds",
+        type=int,
+        default=int(os.environ.get("SYNTHIA_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS", "86400")),
+        help="OpenAI pricing refresh interval in seconds; 0 disables scheduled refresh",
+    )
+    parser.add_argument(
+        "--openai-pricing-stale-tolerance-seconds",
+        type=int,
+        default=int(os.environ.get("SYNTHIA_OPENAI_PRICING_STALE_TOLERANCE_SECONDS", "172800")),
+        help="Maximum pricing catalog age before cost estimation is disabled",
+    )
+    parser.add_argument(
         "--finalize-poll-interval-seconds",
         type=float,
         default=float(os.environ.get("SYNTHIA_FINALIZE_POLL_INTERVAL_SECONDS", "2")),
@@ -209,6 +226,9 @@ def run(
     provider_capability_report_path: str = ".run/provider_capability_report.json",
     prompt_service_state_path: str = ".run/prompt_service_state.json",
     provider_capability_refresh_interval_seconds: int = 14400,
+    openai_pricing_catalog_path: str = "data/openai_pricing_catalog.json",
+    openai_pricing_refresh_interval_seconds: int = 86400,
+    openai_pricing_stale_tolerance_seconds: int = 172800,
     finalize_poll_interval_seconds: float = 2.0,
 ) -> int:
     configure_logging(log_file)
@@ -260,6 +280,9 @@ def run(
         provider_credentials_store=provider_credentials_store,
         registry_path=os.environ.get("SYNTHIA_PROVIDER_REGISTRY_PATH", "data/provider_registry.json"),
         metrics_path=os.environ.get("SYNTHIA_PROVIDER_METRICS_PATH", "data/provider_metrics.json"),
+        pricing_catalog_path=openai_pricing_catalog_path,
+        pricing_refresh_interval_seconds=openai_pricing_refresh_interval_seconds,
+        pricing_stale_tolerance_seconds=openai_pricing_stale_tolerance_seconds,
     )
     prompt_service_state_store = PromptServiceStateStore(path=prompt_service_state_path, logger=LOGGER)
     LOGGER.info("[node-identity] %s", {"node_id": node_identity["node_id"], "path": node_identity_path})
@@ -431,6 +454,9 @@ def main() -> int:
         provider_capability_report_path=args.provider_capability_report_path,
         prompt_service_state_path=args.prompt_service_state_path,
         provider_capability_refresh_interval_seconds=args.provider_capability_refresh_interval_seconds,
+        openai_pricing_catalog_path=args.openai_pricing_catalog_path,
+        openai_pricing_refresh_interval_seconds=args.openai_pricing_refresh_interval_seconds,
+        openai_pricing_stale_tolerance_seconds=args.openai_pricing_stale_tolerance_seconds,
         finalize_poll_interval_seconds=args.finalize_poll_interval_seconds,
     )
 

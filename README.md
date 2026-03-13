@@ -54,6 +54,10 @@ Config knobs:
 - `SYNTHIA_PROVIDER_CREDENTIALS_PATH` (default: `.run/provider_credentials.json`)
 - `SYNTHIA_TASK_CAPABILITY_SELECTION_CONFIG_PATH` (default: `.run/task_capability_selection_config.json`)
 - `SYNTHIA_PROMPT_SERVICE_STATE_PATH` (default: `.run/prompt_service_state.json`)
+- `SYNTHIA_OPENAI_PRICING_CATALOG_PATH` (default: `data/openai_pricing_catalog.json`)
+- `SYNTHIA_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS` (default: `86400`)
+- `SYNTHIA_OPENAI_PRICING_STALE_TOLERANCE_SECONDS` (default: `172800`)
+- `SYNTHIA_OPENAI_PRICING_SOURCE_URLS` (optional comma-separated OpenAI pricing URLs)
 - `OPENAI_API_KEY` (required for live OpenAI model discovery)
 - `SYNTHIA_OPENAI_BASE_URL` (optional OpenAI-compatible endpoint override)
 
@@ -81,6 +85,10 @@ curl -X POST http://127.0.0.1:9002/api/providers/openai/credentials \
   -H 'Content-Type: application/json' \
   -d '{"api_key":"sk-...","admin_key":null,"user_identifier":"ops"}'
 curl http://127.0.0.1:9002/api/providers/openai/models/latest?limit=3
+curl http://127.0.0.1:9002/api/providers/openai/pricing/diagnostics
+curl -X POST http://127.0.0.1:9002/api/providers/openai/pricing/refresh \
+  -H 'Content-Type: application/json' \
+  -d '{"force_refresh":true}'
 ```
 
 Task capability selection endpoints:

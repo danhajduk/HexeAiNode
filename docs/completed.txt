@@ -141,3 +141,27 @@ Task 149: Add capability summary provider credentials button and OpenAI credenti
 Task 150: Persist OpenAI provider credentials securely without exposing tokens in UI, logs, or committed files - Completed on 03/13/2026 13:50
 Task 151: Show the latest three OpenAI models with price metadata in the provider credentials popup or capability UI - Completed on 03/13/2026 13:50
 Task 152: Include enabled OpenAI provider identity and discovered model list in the node-to-Core provider capability report - Completed on 03/13/2026 13:50
+Task 153: Create OpenAI pricing catalog module - Completed on 03/13/2026 14:25
+Task 154: Define canonical pricing data model - Completed on 03/13/2026 14:25
+Task 155: Add pricing source configuration - Completed on 03/13/2026 14:25
+Task 156: Implement raw HTML fetcher - Completed on 03/13/2026 14:25
+Task 157: Implement pricing page parser - Completed on 03/13/2026 14:25
+Task 158: Add model name normalization layer - Completed on 03/13/2026 14:25
+Task 159: Add snapshot/base model resolver - Completed on 03/13/2026 14:25
+Task 160: Create pricing validation layer - Completed on 03/13/2026 14:25
+Task 161: Add local pricing cache storage - Completed on 03/13/2026 14:25
+Task 162: Add stale-cache protection - Completed on 03/13/2026 14:25
+Task 163: Implement merged model catalog builder - Completed on 03/13/2026 14:25
+Task 164: Add unknown-model detection - Completed on 03/13/2026 14:25
+Task 165: Add pricing refresh service - Completed on 03/13/2026 14:25
+Task 166: Add refresh interval configuration - Completed on 03/13/2026 14:25
+Task 167: Add CLI/admin task for manual refresh - Completed on 03/13/2026 14:25
+Task 168: Add diff detection for pricing changes - Completed on 03/13/2026 14:25
+Task 169: Add unit tests for normalization - Completed on 03/13/2026 14:25
+Task 170: Add unit tests for parser extraction - Completed on 03/13/2026 14:25
+Task 171: Add unit tests for validation and fallback behavior - Completed on 03/13/2026 14:25
+Task 172: Add observability/logging - Completed on 03/13/2026 14:25
+Task 173: Expose pricing catalog to the budget engine - Completed on 03/13/2026 14:25
+Task 174: Add admin diagnostics endpoint/view - Completed on 03/13/2026 14:25
+Task 175: Add documentation - Completed on 03/13/2026 14:25
+Task 176: Add future-proof parser abstraction - Completed on 03/13/2026 14:25

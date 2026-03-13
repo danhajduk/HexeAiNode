@@ -28,6 +28,12 @@ Backend runtime:
 - `SYNTHIA_FINALIZE_POLL_INTERVAL_SECONDS` default `2`
 - `SYNTHIA_PROVIDER_REGISTRY_PATH` default `data/provider_registry.json`
 - `SYNTHIA_PROVIDER_METRICS_PATH` default `data/provider_metrics.json`
+- `SYNTHIA_OPENAI_PRICING_CATALOG_PATH` default `data/openai_pricing_catalog.json`
+- `SYNTHIA_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS` default `86400`
+- `SYNTHIA_OPENAI_PRICING_STALE_TOLERANCE_SECONDS` default `172800`
+- `SYNTHIA_OPENAI_PRICING_SOURCE_URLS` optional comma-separated `https://openai.com/...` URLs
+- `SYNTHIA_OPENAI_PRICING_FETCH_TIMEOUT_SECONDS` default `20`
+- `SYNTHIA_OPENAI_PRICING_FETCH_RETRY_COUNT` default `2`
 
 Provider-specific:
 
@@ -41,6 +47,7 @@ Provider-specific:
 - `.run/provider_credentials.json`: restricted-permission provider credential store
 - `data/provider_registry.json`: provider capability snapshot
 - `data/provider_metrics.json`: provider metrics snapshot
+- `data/openai_pricing_catalog.json`: cached OpenAI pricing snapshot and change history
 
 ## Secrets Handling
 
