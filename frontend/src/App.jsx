@@ -83,6 +83,7 @@ export default function App() {
   const [openaiUserIdentifier, setOpenaiUserIdentifier] = useState("");
   const [savingCredentials, setSavingCredentials] = useState(false);
   const [refreshingLatestModels, setRefreshingLatestModels] = useState(false);
+  const [pricingRefreshState, setPricingRefreshState] = useState("");
   const [uiState, setUiState] = useState(() =>
     buildDashboardUiState({
       nodeStatus: null,
@@ -370,7 +371,10 @@ export default function App() {
   async function refreshOpenAiModels() {
     setRefreshingLatestModels(true);
     setError("");
+    setPricingRefreshState("");
     try {
+      const pricingRefreshPayload = await apiPost("/api/providers/openai/pricing/refresh", { force_refresh: true });
+      setPricingRefreshState(String(pricingRefreshPayload?.status || "unknown"));
       await apiPost("/api/capabilities/providers/refresh", { force_refresh: true });
       const latestModelsPayload = await apiGet("/api/providers/openai/models/latest?limit=3");
       setLatestOpenaiModels(Array.isArray(latestModelsPayload?.models) ? latestModelsPayload.models : []);
@@ -564,7 +568,7 @@ export default function App() {
                   onClick={refreshOpenAiModels}
                   disabled={refreshingLatestModels || !openaiCredentialSummary.has_api_key}
                 >
-                  {refreshingLatestModels ? "Refreshing..." : "Refresh Models"}
+                  {refreshingLatestModels ? "Checking Prices..." : "Run Price Check"}
                 </button>
                 <button
                   className="btn"
@@ -578,6 +582,14 @@ export default function App() {
                   Close
                 </button>
               </div>
+              <p className="muted tiny">
+                Price check runs the OpenAI pricing refresh, then reloads provider discovery and the latest priced models.
+              </p>
+              {pricingRefreshState ? (
+                <p className="muted tiny">
+                  Last price check result: <code>{pricingRefreshState}</code>
+                </p>
+              ) : null}
             </form>
             <div className="modal-capability-data">
               <h3>Latest OpenAI Models</h3>
