@@ -37,6 +37,32 @@ _DATE_SUFFIX_PATTERNS = (
     re.compile(r"^(?P<base>.+)-\d{4}-\d{2}-\d{2}$"),
     re.compile(r"^(?P<base>.+)-\d{8}$"),
 )
+_LEGACY_SNAPSHOT_PATTERN = re.compile(r"-\d{4}$")
+_BASE_ALLOW_RE = re.compile(
+    r"^(?:"
+    r"gpt-5(?:\.\d+)?(?:-(?:mini|nano|pro))?"
+    r"|gpt-4\.1(?:-(?:mini|nano))?"
+    r"|gpt-4o(?:-mini)?"
+    r"|o1(?:-pro)?"
+    r"|o3(?:-(?:mini|pro))?"
+    r"|o4-mini"
+    r")$"
+)
+_EXCLUDED_MODEL_TAGS = {
+    "latest",
+    "preview",
+    "audio",
+    "realtime",
+    "search",
+    "codex",
+    "transcribe",
+    "tts",
+    "image",
+    "moderation",
+    "deep-research",
+    "instruct",
+    "diarize",
+}
 _DISPLAY_NAME_ALIASES = {
     "gpt-5": "gpt-5",
     "gpt-5 mini": "gpt-5-mini",
@@ -159,7 +185,20 @@ def is_openai_date_versioned_model_id(model_id: str) -> bool:
     normalized = _normalize_string(model_id).lower()
     if not normalized:
         return False
-    return any(pattern.match(normalized) is not None for pattern in _DATE_SUFFIX_PATTERNS)
+    return any(pattern.match(normalized) is not None for pattern in _DATE_SUFFIX_PATTERNS) or bool(
+        _LEGACY_SNAPSHOT_PATTERN.search(normalized)
+    )
+
+
+def is_regular_openai_model_id(model_id: str) -> bool:
+    normalized = _normalize_string(model_id).lower()
+    if not normalized:
+        return False
+    if is_openai_date_versioned_model_id(normalized):
+        return False
+    if any(tag in normalized for tag in _EXCLUDED_MODEL_TAGS):
+        return False
+    return _BASE_ALLOW_RE.fullmatch(normalized) is not None
 
 
 def _price_fields_present(entry: OpenAIPricingEntry) -> bool:

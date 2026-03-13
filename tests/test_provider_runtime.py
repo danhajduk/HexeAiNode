@@ -128,6 +128,8 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     ModelCapability(model_id="gpt-5.4-pro-2026-03-05", display_name="gpt-5.4-pro-2026-03-05", created=1741132800),
                     ModelCapability(model_id="gpt-5.4-pro", display_name="gpt-5.4-pro", created=1741046400),
                     ModelCapability(model_id="gpt-5.4-mini", display_name="gpt-5.4-mini", created=1740950000),
+                    ModelCapability(model_id="gpt-5.3-chat-latest", display_name="gpt-5.3-chat-latest", created=1741200000),
+                    ModelCapability(model_id="gpt-4-0613", display_name="gpt-4-0613", created=1686588896),
                 ],
             )
             payload = runtime.latest_models_payload(provider_id="openai", limit=9)

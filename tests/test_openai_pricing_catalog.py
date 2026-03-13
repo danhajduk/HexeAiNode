@@ -10,6 +10,7 @@ from ai_node.providers.openai_catalog import (
     OpenAIPricingSnapshot,
     get_openai_model_pricing,
     is_openai_date_versioned_model_id,
+    is_regular_openai_model_id,
     normalize_openai_display_name,
     resolve_openai_base_model_id,
     validate_openai_pricing_entries,
@@ -33,7 +34,12 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resolve_openai_base_model_id("gpt-5-mini-2026-03-01"), "gpt-5-mini")
         self.assertEqual(resolve_openai_base_model_id("gpt-5-chat-latest"), "gpt-5-chat")
         self.assertTrue(is_openai_date_versioned_model_id("gpt-5-mini-2026-03-01"))
+        self.assertTrue(is_openai_date_versioned_model_id("gpt-4-0613"))
         self.assertFalse(is_openai_date_versioned_model_id("gpt-5.4-pro"))
+        self.assertTrue(is_regular_openai_model_id("gpt-5.4-pro"))
+        self.assertFalse(is_regular_openai_model_id("gpt-5.3-chat-latest"))
+        self.assertFalse(is_regular_openai_model_id("gpt-4o-realtime-preview"))
+        self.assertFalse(is_regular_openai_model_id("gpt-4-0613"))
 
     def test_parser_extracts_prices_from_simple_html(self):
         parser = OpenAIPricingPageParser()

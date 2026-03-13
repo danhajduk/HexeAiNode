@@ -12,7 +12,7 @@ from ai_node.providers.openai_catalog import (
     DEFAULT_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS,
     DEFAULT_OPENAI_PRICING_STALE_TOLERANCE_SECONDS,
     OpenAIPricingCatalogService,
-    is_openai_date_versioned_model_id,
+    is_regular_openai_model_id,
     resolve_openai_base_model_id,
 )
 from ai_node.providers.provider_registry import ProviderRegistry
@@ -212,7 +212,7 @@ class ProviderRuntimeManager:
         for model in models:
             payload = model.model_dump()
             model_id = str(payload.get("model_id") or "").strip()
-            if provider_id == "openai" and is_openai_date_versioned_model_id(model_id):
+            if provider_id == "openai" and not is_regular_openai_model_id(model_id):
                 continue
             canonical_id = resolve_openai_base_model_id(model_id) if provider_id == "openai" else model_id
             existing = canonical_models.get(canonical_id)
