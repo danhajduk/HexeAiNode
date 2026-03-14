@@ -600,3 +600,9 @@ Chosen fix: Wired runtime refresh path to fetch models, apply existing catalog f
 What changed: Updated `tests/test_provider_runtime.py` with an integration-style runtime test covering refresh flow and feature catalog persistence; leveraged `ProviderRuntimeManager.refresh_openai_models_from_saved_credentials` path.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_provider_runtime tests.test_model_feature_catalog tests.test_model_capability_catalog tests.test_model_feature_schema` passed.
 ###########
+Task #203
+Step objective: Introduce a canonical capability graph definition artifact with explicit dependency-rule structure.
+Chosen fix: Added a versioned JSON graph scaffold under capabilities/task_graph.json using the required all_of rule format and an initial task.reasoning example.
+What changed: Added `capabilities/task_graph.json` and validated JSON parse integrity.
+Verification: `python -m json.tool capabilities/task_graph.json` passed.
+###########

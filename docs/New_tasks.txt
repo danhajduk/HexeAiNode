@@ -44,7 +44,7 @@ Stop processing task when you reach the [STOP] flag!
 Do not edit above this line:
 #######################################################################
 
-[WIP] Task 203: Introduce capability graph definition
+[WIP] Task 204: Define full task capability graph
 Create a graph definition file:
 
 capabilities/task_graph.json
@@ -59,8 +59,6 @@ Graph rule format:
   }
 }
 
-
-[TODO] Task 204: Define full task capability graph
 Define the following task capability nodes:
 
 Core intelligence
