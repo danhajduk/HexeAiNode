@@ -553,6 +553,41 @@ class NodeControlState:
             limit=limit,
         )
 
+    def openai_provider_model_catalog_payload(self) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "openai_model_catalog_payload"):
+            return {
+                "provider_id": "openai",
+                "models": [],
+                "source": "provider_model_catalog",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        payload = self._provider_runtime_manager.openai_model_catalog_payload()
+        raw_models = payload.get("models") if isinstance(payload, dict) and isinstance(payload.get("models"), list) else []
+        normalized = []
+        for item in raw_models:
+            if not isinstance(item, dict):
+                continue
+            model_id = str(item.get("model_id") or "").strip()
+            family = str(item.get("family") or "").strip()
+            if not model_id or not family:
+                continue
+            normalized.append(
+                {
+                    "model_id": model_id,
+                    "family": family,
+                    "discovered_at": str(item.get("discovered_at") or "").strip() or None,
+                    "enabled": bool(item.get("enabled")),
+                }
+            )
+        return {
+            "provider_id": "openai",
+            "models": normalized,
+            "source": str(payload.get("source") or "provider_model_catalog").strip() if isinstance(payload, dict) else "provider_model_catalog",
+            "generated_at": str(payload.get("generated_at") or datetime.now(timezone.utc).isoformat()).strip()
+            if isinstance(payload, dict)
+            else datetime.now(timezone.utc).isoformat(),
+        }
+
     @staticmethod
     def _extract_report_models(report: dict | None, provider_id: str) -> list[dict]:
         if not isinstance(report, dict):
@@ -1015,6 +1050,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/providers/openai/models/latest")
     def get_openai_latest_models(limit: int = 3):
         return state.latest_provider_models_payload(provider_id="openai", limit=limit)
+
+    @app.get("/api/providers/openai/models/catalog")
+    def get_openai_model_catalog():
+        return state.openai_provider_model_catalog_payload()
 
     @app.get("/api/providers/openai/pricing/diagnostics")
     def get_openai_pricing_diagnostics():

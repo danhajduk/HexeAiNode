@@ -109,6 +109,22 @@ class OpenAIProviderModelCatalogStore:
         except Exception:
             return None
 
+    def payload(self) -> dict:
+        snapshot = self.load()
+        if snapshot is None:
+            return {
+                "provider_id": "openai",
+                "models": [],
+                "source": "provider_model_catalog",
+                "generated_at": _iso_now(),
+            }
+        return {
+            "provider_id": snapshot.provider_id,
+            "models": [entry.model_dump() for entry in snapshot.models],
+            "source": "provider_model_catalog",
+            "generated_at": snapshot.updated_at,
+        }
+
     def save_from_model_ids(self, *, model_ids: list[str]) -> OpenAIProviderModelCatalogSnapshot:
         snapshot = build_openai_provider_model_catalog(model_ids=model_ids, existing_snapshot=self.load())
         self._path.parent.mkdir(parents=True, exist_ok=True)

@@ -195,6 +195,22 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "generated_at": "2026-03-13T00:00:00Z",
             }
 
+        def openai_model_catalog_payload(self):
+            return {
+                "provider_id": "openai",
+                "models": [
+                    {"model_id": "gpt-5-mini", "family": "llm", "discovered_at": "2026-03-13T00:00:00Z", "enabled": False},
+                    {
+                        "model_id": "omni-moderation-2024-09-26",
+                        "family": "moderation",
+                        "discovered_at": "2026-03-13T00:00:00Z",
+                        "enabled": False,
+                    },
+                ],
+                "source": "provider_model_catalog",
+                "generated_at": "2026-03-13T00:00:00Z",
+            }
+
     def test_status_and_onboarding_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
@@ -263,6 +279,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             latest_models_response = client.get("/api/providers/openai/models/latest?limit=3")
             self.assertEqual(latest_models_response.status_code, 200)
             self.assertEqual(latest_models_response.json()["models"][0]["model_id"], "gpt-5")
+
+            model_catalog_response = client.get("/api/providers/openai/models/catalog")
+            self.assertEqual(model_catalog_response.status_code, 200)
+            self.assertEqual(model_catalog_response.json()["models"][1]["family"], "moderation")
 
             pricing_diagnostics_response = client.get("/api/providers/openai/pricing/diagnostics")
             self.assertEqual(pricing_diagnostics_response.status_code, 200)

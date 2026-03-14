@@ -135,6 +135,21 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             payload = runtime.latest_models_payload(provider_id="openai", limit=9)
             self.assertEqual([item["model_id"] for item in payload["models"]], ["gpt-5.4-pro", "gpt-5.4-mini"])
 
+    async def test_openai_model_catalog_payload_returns_saved_filtered_models(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["local"]),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                provider_model_catalog_path=str(Path(tmp) / "provider_models.json"),
+            )
+            runtime._openai_model_catalog_store.save_from_model_ids(  # noqa: SLF001
+                model_ids=["gpt-5-mini", "omni-moderation-2024-09-26"]
+            )
+            payload = runtime.openai_model_catalog_payload()
+            self.assertEqual([item["model_id"] for item in payload["models"]], ["gpt-5-mini", "omni-moderation-2024-09-26"])
+
 
 if __name__ == "__main__":
     unittest.main()

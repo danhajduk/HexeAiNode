@@ -11,12 +11,12 @@
 }
 
 .provider-page-shell {
-  display: grid;
-  place-items: start center;
+  display: block;
+  width: 100%;
 }
 
 .provider-page-card {
-  width: min(860px, 100%);
+  width: 100%;
 }
 
 .modal-overlay {

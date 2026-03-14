@@ -130,6 +130,17 @@ This is the canonical source-of-truth contract for:
     - `pricing.input_per_1m_tokens`
     - `pricing.output_per_1m_tokens`
 
+### Read filtered OpenAI provider model catalog
+
+- `GET /api/providers/openai/models/catalog`
+- Response:
+  - `provider_id: "openai"`
+  - `models[]`
+    - `model_id`
+    - `family`
+    - `discovered_at`
+    - `enabled`
+
 For OpenAI, this response only includes regular base-model families used for normal LLM selection. Date-stamped snapshots such as `gpt-5.4-pro-2026-03-05`, legacy snapshots such as `gpt-4-0613`, and specialized variants containing tags like `latest`, `preview`, `realtime`, `audio`, `codex`, or `search` are filtered out in favor of canonical model IDs such as `gpt-5.4-pro`.
 
 ### Read OpenAI pricing diagnostics

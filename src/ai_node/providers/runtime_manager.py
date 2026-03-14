@@ -242,6 +242,9 @@ class ProviderRuntimeManager:
             "generated_at": _iso_now(),
         }
 
+    def openai_model_catalog_payload(self) -> dict:
+        return self._openai_model_catalog_store.payload()
+
     def providers_snapshot(self) -> dict:
         return self._registry.snapshot()
 

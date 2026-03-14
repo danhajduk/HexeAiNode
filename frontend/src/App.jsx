@@ -12,6 +12,7 @@ const DIAGNOSTIC_ENDPOINTS = [
   "/api/governance/status",
   "/api/providers/config",
   "/api/providers/openai/credentials",
+  "/api/providers/openai/models/catalog",
   "/api/providers/openai/models/latest?limit=9",
   "/api/capabilities/config",
   "/api/services/status",
@@ -78,6 +79,7 @@ export default function App() {
   const [restartingServiceTarget, setRestartingServiceTarget] = useState("");
   const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
   const [providerCredentials, setProviderCredentials] = useState(null);
+  const [openaiCatalogModels, setOpenaiCatalogModels] = useState([]);
   const [latestOpenaiModels, setLatestOpenaiModels] = useState([]);
   const [openaiApiToken, setOpenaiApiToken] = useState("");
   const [openaiServiceToken, setOpenaiServiceToken] = useState("");
@@ -115,6 +117,7 @@ export default function App() {
       governanceResult,
       providerResult,
       providerCredentialsResult,
+      modelCatalogResult,
       latestModelsResult,
       capabilityConfigResult,
       servicesResult,
@@ -123,6 +126,7 @@ export default function App() {
       apiGet("/api/governance/status"),
       apiGet("/api/providers/config"),
       apiGet("/api/providers/openai/credentials"),
+      apiGet("/api/providers/openai/models/catalog"),
       apiGet("/api/providers/openai/models/latest?limit=9"),
       apiGet("/api/capabilities/config"),
       apiGet("/api/services/status"),
@@ -151,6 +155,7 @@ export default function App() {
     const governancePayload = governanceResult.status === "fulfilled" ? governanceResult.value : null;
     const providerPayload = providerResult.status === "fulfilled" ? providerResult.value : null;
     const providerCredentialsPayload = providerCredentialsResult.status === "fulfilled" ? providerCredentialsResult.value : null;
+    const modelCatalogPayload = modelCatalogResult.status === "fulfilled" ? modelCatalogResult.value : null;
     const latestModelsPayload = latestModelsResult.status === "fulfilled" ? latestModelsResult.value : null;
     const capabilityConfigPayload = capabilityConfigResult.status === "fulfilled" ? capabilityConfigResult.value : null;
     const servicePayload = servicesResult.status === "fulfilled" ? servicesResult.value : null;
@@ -163,6 +168,9 @@ export default function App() {
     }
     if (providerCredentialsResult.status !== "fulfilled") {
       partialFailures.push("provider_credentials_unavailable");
+    }
+    if (modelCatalogResult.status !== "fulfilled") {
+      partialFailures.push("provider_model_catalog_unavailable");
     }
     if (latestModelsResult.status !== "fulfilled") {
       partialFailures.push("provider_models_unavailable");
@@ -178,6 +186,7 @@ export default function App() {
     setPendingApprovalUrl(payload.pending_approval_url || "");
     setNodeId(payload.node_id || "");
     setProviderCredentials(providerCredentialsPayload);
+    setOpenaiCatalogModels(Array.isArray(modelCatalogPayload?.models) ? modelCatalogPayload.models : []);
     setLatestOpenaiModels(Array.isArray(latestModelsPayload?.models) ? latestModelsPayload.models : []);
     setError("");
     if (!providerSetupDirty && providerCredentialsPayload?.credentials?.project_name) {
@@ -328,6 +337,7 @@ export default function App() {
   const canManageOpenAiCredentials =
     hasCapabilityRegistration && uiState.capabilitySummary.enabledProviders.includes("openai");
   const selectedOpenaiModel = latestOpenaiModels.find((model) => model.model_id === (selectedOpenaiModelIds[0] || "")) || null;
+  const openaiModelPriceById = Object.fromEntries(latestOpenaiModels.map((model) => [model.model_id, model.pricing || {}]));
   const pricingReviewModelId = pricingReviewModelIds[pricingReviewIndex] || "";
   const pricingReviewModel = latestOpenaiModels.find((model) => model.model_id === pricingReviewModelId) || null;
   const setupReadinessFlags = uiState.capabilitySummary.setupReadinessFlags || {};
@@ -509,7 +519,9 @@ export default function App() {
       const pricingRefreshPayload = await apiPost("/api/providers/openai/pricing/refresh", { force_refresh: true });
       setPricingRefreshState(String(pricingRefreshPayload?.status || "unknown"));
       await apiPost("/api/capabilities/providers/refresh", { force_refresh: true });
+      const modelCatalogPayload = await apiGet("/api/providers/openai/models/catalog");
       const latestModelsPayload = await apiGet("/api/providers/openai/models/latest?limit=9");
+      setOpenaiCatalogModels(Array.isArray(modelCatalogPayload?.models) ? modelCatalogPayload.models : []);
       setLatestOpenaiModels(Array.isArray(latestModelsPayload?.models) ? latestModelsPayload.models : []);
       await loadStatus();
     } catch (err) {
@@ -957,14 +969,14 @@ export default function App() {
             </form>
             <div className="modal-capability-data">
               <div className="model-section-header">
-                <h3>Canonical OpenAI Models</h3>
+                <h3>Filtered OpenAI Models</h3>
                 <span className="muted tiny">
-                  {savingModelPreference ? "Saving selections..." : "Selections save automatically"}
+                  {savingModelPreference ? "Saving selections..." : `${openaiCatalogModels.length} filtered models`}
                 </span>
               </div>
-              {latestOpenaiModels.length ? (
+              {openaiCatalogModels.length ? (
                 <div className="model-list mini-card-grid">
-                  {latestOpenaiModels.map((model) => (
+                  {openaiCatalogModels.map((model) => (
                     <article
                       key={model.model_id}
                       className={`model-card mini-model-card ${selectedOpenaiModelIds.includes(model.model_id) ? "is-selected" : ""}`}
@@ -976,12 +988,14 @@ export default function App() {
                       <div className="state-grid compact-grid">
                         <span>Model ID</span>
                         <code>{model.model_id}</code>
-                        <span>Created</span>
-                        <code>{formatCreatedAt(model.created)}</code>
+                        <span>Family</span>
+                        <code>{model.family}</code>
+                        <span>Discovered</span>
+                        <code>{model.discovered_at ? model.discovered_at.slice(0, 10) : "unknown"}</code>
                         <span>Input Price</span>
-                        <code>{formatPrice(model.pricing?.input_per_1m_tokens)}</code>
+                        <code>{formatPrice(openaiModelPriceById[model.model_id]?.input_per_1m_tokens)}</code>
                         <span>Output Price</span>
-                        <code>{formatPrice(model.pricing?.output_per_1m_tokens)}</code>
+                        <code>{formatPrice(openaiModelPriceById[model.model_id]?.output_per_1m_tokens)}</code>
                       </div>
                       <div className="row">
                         <button
