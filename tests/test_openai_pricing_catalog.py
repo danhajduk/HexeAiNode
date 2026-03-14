@@ -85,24 +85,19 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(entries[0].batch_input_price_per_1m, 1.5)
         self.assertEqual(entries[0].batch_output_price_per_1m, 7.5)
 
-    async def test_refresh_persists_snapshot_and_cost_lookup(self):
+    async def test_refresh_keeps_manual_only_snapshot_and_cost_lookup(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = OpenAIPricingCatalogService(
                 logger=logging.getLogger("openai-pricing-test"),
                 catalog_path=str(Path(tmp) / "openai_pricing_catalog.json"),
-                source_urls=["https://openai.com/api/pricing/"],
-                fetcher=_FakeFetcher(
-                    html="""
-                    <section>
-                      <h2>GPT-5 mini</h2>
-                      <p>Input $0.25 / 1M tokens</p>
-                      <p>Output $2.00 / 1M tokens</p>
-                    </section>
-                    """
-                ),
+            )
+            service.save_manual_pricing(
+                model_id="gpt-5-mini",
+                input_price_per_1m=0.25,
+                output_price_per_1m=2.0,
             )
             refresh = await service.refresh(force=True)
-            self.assertEqual(refresh["status"], "ok")
+            self.assertEqual(refresh["status"], "manual_only")
             self.assertTrue(Path(tmp, "openai_pricing_catalog.json").exists())
 
             merged_models, unknown_models = service.merge_model_capabilities(
@@ -117,43 +112,24 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(merged_models[0].base_model_id, "gpt-5-mini")
             self.assertEqual(merged_models[0].pricing_input, 0.25)
             self.assertEqual(merged_models[0].pricing_output, 2.0)
-            self.assertEqual(merged_models[0].pricing_status, "ok")
+            self.assertEqual(merged_models[0].pricing_status, "manual")
 
             pricing = get_openai_model_pricing("gpt-5-mini-2026-03-01", pricing_service=service)
             self.assertEqual(pricing["input_per_1m_tokens"], 0.25)
             self.assertEqual(pricing["output_per_1m_tokens"], 2.0)
 
-    async def test_refresh_failure_marks_existing_snapshot_stale(self):
+    async def test_refresh_without_snapshot_reports_manual_only(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = str(Path(tmp) / "openai_pricing_catalog.json")
-            seeded = OpenAIPricingCatalogService(
+            service = OpenAIPricingCatalogService(
                 logger=logging.getLogger("openai-pricing-test"),
-                catalog_path=path,
-                source_urls=["https://openai.com/api/pricing/"],
-                fetcher=_FakeFetcher(
-                    html="""
-                    <section>
-                      <h2>GPT-4o mini</h2>
-                      <p>Input $0.15 / 1M tokens</p>
-                      <p>Output $0.60 / 1M tokens</p>
-                    </section>
-                    """
-                ),
+                catalog_path=str(Path(tmp) / "openai_pricing_catalog.json"),
             )
-            await seeded.refresh(force=True)
-
-            failing = OpenAIPricingCatalogService(
-                logger=logging.getLogger("openai-pricing-test"),
-                catalog_path=path,
-                source_urls=["https://openai.com/api/pricing/"],
-                fetcher=_FakeFetcher(error="http_403"),
-            )
-            refresh = await failing.refresh(force=True)
-            self.assertEqual(refresh["status"], "stale")
-            self.assertEqual(refresh["snapshot"]["refresh_state"], "stale")
-            diagnostics = failing.diagnostics_payload()
+            refresh = await service.refresh(force=True)
+            self.assertEqual(refresh["status"], "manual_only")
+            self.assertIsNone(refresh["snapshot"])
+            diagnostics = service.diagnostics_payload()
             self.assertTrue(diagnostics["stale"])
-            self.assertEqual(diagnostics["last_error"], "http_403")
+            self.assertIn("live_pricing_scrape_disabled", diagnostics["notes"])
 
     def test_validation_rejects_empty_entry_sets(self):
         is_valid, error = validate_openai_pricing_entries([])

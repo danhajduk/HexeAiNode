@@ -110,6 +110,7 @@ UI behavior:
 - Selecting a model with unavailable pricing opens a per-model pricing popup so you can enter that model's price immediately or skip it.
 - `Review Selected Model Prices` walks through the currently selected models one by one so you can set different prices per model.
 - Manual pricing can be saved for the primary selected model or applied across all selected models from the popup.
+- The OpenAI pricing refresh endpoint is manual-only for now and just reloads the local pricing snapshot without scraping remote pricing pages.
 - In Capability Summary, selected models are marked with a green check.
 
 Task capability selection endpoints:

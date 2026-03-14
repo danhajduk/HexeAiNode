@@ -138,7 +138,7 @@ For OpenAI, this response only includes regular base-model families used for nor
 - Response:
   - `provider_id: "openai"`
   - `configured: boolean`
-  - `refresh_state: "missing" | "ok" | "stale" | "unavailable"`
+  - `refresh_state: "missing" | "manual" | "unavailable"`
   - `stale: boolean`
   - `entry_count: number`
   - `source_urls: string[]`
@@ -146,6 +146,7 @@ For OpenAI, this response only includes regular base-model families used for nor
   - `last_refresh_time: string | null`
   - `unknown_models: string[]`
   - `last_error: string | null`
+  - `notes?: string[]`
 
 ### Trigger OpenAI pricing refresh
 
@@ -154,9 +155,10 @@ For OpenAI, this response only includes regular base-model families used for nor
   - `force_refresh: boolean` (default `true`)
 - Success:
   - `provider_id: "openai"`
-  - `status: "ok" | "cached" | "stale" | "scrape_failed"`
+  - `status: "manual_only"`
   - `changed: boolean`
   - `snapshot: object | null`
+  - `notes?: string[]`
 - Error:
   - `400` when pricing refresh runtime is unavailable.
 

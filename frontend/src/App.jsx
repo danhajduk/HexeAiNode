@@ -853,7 +853,7 @@ export default function App() {
                   onClick={refreshOpenAiModels}
                   disabled={refreshingLatestModels || !openaiCredentialSummary.has_api_key}
                 >
-                  {refreshingLatestModels ? "Checking Prices..." : "Run Price Check"}
+                  {refreshingLatestModels ? "Reloading Models..." : "Reload Models"}
                 </button>
                 <button
                   className="btn"
@@ -868,11 +868,11 @@ export default function App() {
                 </button>
               </div>
               <p className="muted tiny">
-                Price check runs the OpenAI pricing refresh, then reloads provider discovery and the latest priced models.
+                Reload Models keeps pricing manual-only, refreshes provider discovery, and reloads the latest saved model list.
               </p>
               {pricingRefreshState ? (
                 <p className="muted tiny">
-                  Last price check result: <code>{pricingRefreshState}</code>
+                  Last pricing sync result: <code>{pricingRefreshState}</code>
                 </p>
               ) : null}
             </form>

@@ -549,49 +549,31 @@ class OpenAIPricingCatalogService:
 
     async def refresh(self, *, force: bool = False) -> dict:
         previous = self.load_snapshot()
-        if not force and previous is not None and not self.should_refresh(previous):
-            return {"status": "cached", "changed": False, "snapshot": previous.model_dump()}
+        notes = ["live_pricing_scrape_disabled"]
         if hasattr(self._logger, "info"):
-            self._logger.info("[openai-pricing-refresh-start] %s", {"source_urls": self._source_urls, "force": force})
-        try:
-            source_url, html = await self._fetcher.fetch_first_available(urls=self._source_urls)
-            parsed_entries = self._parser.parse(html=html, source_url=source_url, scraped_at=_iso_now())
-            is_valid, error = validate_openai_pricing_entries(parsed_entries)
-            if not is_valid:
-                raise ValueError(error or "openai_pricing_validation_failed")
-            changes = _build_change_summary(previous, parsed_entries)
-            snapshot = OpenAIPricingSnapshot(
-                source_urls=list(self._source_urls),
-                source_url_used=source_url,
-                scraped_at=_iso_now(),
-                refresh_state="ok",
-                stale=False,
-                last_error=None,
-                entries=parsed_entries,
-                unknown_models=(previous.unknown_models if previous is not None else []),
-                changes=changes,
-            )
-            self._store.save(snapshot)
-            if hasattr(self._logger, "info"):
-                self._logger.info(
-                    "[openai-pricing-refresh-complete] %s",
-                    {"source_url": source_url, "entries": len(parsed_entries), "changes": len(changes)},
-                )
-            return {"status": "ok", "changed": bool(changes), "snapshot": snapshot.model_dump(), "changes": changes}
-        except Exception as exc:
-            error = str(exc).strip() or type(exc).__name__
-            stale_snapshot = None
-            if previous is not None:
-                stale_snapshot = previous.model_copy(update={"stale": True, "refresh_state": "stale", "last_error": error})
-                self._store.save(stale_snapshot)
-            if hasattr(self._logger, "warning"):
-                self._logger.warning("[openai-pricing-refresh-failed] %s", {"error": error, "has_previous": previous is not None})
+            self._logger.info("[openai-pricing-refresh-skipped] %s", {"force": force, "manual_only": True})
+        if previous is None:
             return {
-                "status": "stale" if stale_snapshot is not None else "scrape_failed",
+                "status": "manual_only",
                 "changed": False,
-                "snapshot": stale_snapshot.model_dump() if stale_snapshot is not None else None,
-                "error": error,
+                "snapshot": None,
+                "notes": notes,
             }
+        snapshot = previous.model_copy(
+            update={
+                "refresh_state": "manual",
+                "stale": False,
+                "last_error": None,
+                "notes": sorted(set(list(previous.notes or []) + notes)),
+            }
+        )
+        self._store.save(snapshot)
+        return {
+            "status": "manual_only",
+            "changed": False,
+            "snapshot": snapshot.model_dump(),
+            "notes": notes,
+        }
 
     def save_manual_pricing(
         self,
@@ -721,6 +703,7 @@ class OpenAIPricingCatalogService:
                 "last_refresh_time": None,
                 "unknown_models": [],
                 "last_error": None,
+                "notes": ["live_pricing_scrape_disabled"],
             }
         return {
             "configured": True,

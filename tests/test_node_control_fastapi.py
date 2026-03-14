@@ -144,7 +144,7 @@ class NodeControlFastApiTests(unittest.TestCase):
 
     class _FakeProviderRuntimeManager:
         async def refresh_pricing(self, *, force: bool):
-            return {"status": "ok", "changed": bool(force)}
+            return {"status": "manual_only", "changed": False, "notes": ["live_pricing_scrape_disabled"]}
 
         def save_manual_openai_pricing(self, *, model_id: str, display_name=None, input_price_per_1m=None, output_price_per_1m=None):
             return {
@@ -158,14 +158,15 @@ class NodeControlFastApiTests(unittest.TestCase):
         def pricing_diagnostics_payload(self):
             return {
                 "configured": True,
-                "refresh_state": "ok",
+                "refresh_state": "manual",
                 "stale": False,
                 "entry_count": 3,
                 "source_urls": ["https://openai.com/api/pricing/"],
-                "source_url_used": "https://openai.com/api/pricing/",
+                "source_url_used": "manual://local_override",
                 "last_refresh_time": "2026-03-13T00:00:00Z",
                 "unknown_models": [],
                 "last_error": None,
+                "notes": ["live_pricing_scrape_disabled"],
             }
 
         def providers_snapshot(self):
@@ -269,7 +270,7 @@ class NodeControlFastApiTests(unittest.TestCase):
             )
             self.assertEqual(pricing_refresh_response.status_code, 200)
             self.assertEqual(pricing_refresh_response.json()["provider_id"], "openai")
-            self.assertEqual(pricing_refresh_response.json()["status"], "ok")
+            self.assertEqual(pricing_refresh_response.json()["status"], "manual_only")
 
             manual_pricing_response = client.post(
                 "/api/providers/openai/pricing/manual",

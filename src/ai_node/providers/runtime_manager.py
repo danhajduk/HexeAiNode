@@ -60,7 +60,6 @@ class ProviderRuntimeManager:
         self._registry.load(path=self._registry_path)
 
     async def refresh(self) -> dict:
-        pricing_refresh = await self.refresh_pricing(force=False)
         config = self._loader.load()
         fallback_provider = None
         unknown_models: list[str] = []
@@ -91,7 +90,6 @@ class ProviderRuntimeManager:
         self._registry.persist(path=self._registry_path)
         self._metrics.persist()
         payload = self.intelligence_payload()
-        payload["pricing_refresh"] = pricing_refresh
         payload["pricing_diagnostics"] = self.pricing_diagnostics_payload()
         payload["unknown_priced_models"] = sorted(set(item for item in unknown_models if item))
         return payload
