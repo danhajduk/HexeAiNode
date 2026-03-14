@@ -612,3 +612,9 @@ Chosen fix: Expanded capabilities/task_graph.json to include all required core, 
 What changed: Updated `capabilities/task_graph.json` with complete task node definitions.
 Verification: `python -m json.tool capabilities/task_graph.json` passed.
 ###########
+Task #205
+Step objective: Implement capability graph resolver that unions enabled-model features and evaluates graph dependency rules into enabled tasks.
+Chosen fix: Added runtime resolver module with graph loading, feature union construction, rule evaluation (`all_of`/`any_of`/`none_of`), and node-capability payload assembly.
+What changed: Added `src/ai_node/runtime/capability_resolver.py` and `tests/test_capability_resolver.py`.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_resolver tests.test_provider_runtime tests.test_model_feature_catalog` passed.
+###########

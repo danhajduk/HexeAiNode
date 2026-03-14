@@ -195,6 +195,7 @@ Task 201: Implement classification prompt for model features - Completed on 03/1
 Task 202: Run classification after provider setup - Completed on 03/13/2026 20:58
 Task 203: Introduce capability graph definition - Completed on 03/13/2026 20:59
 Task 204: Define full task capability graph - Completed on 03/13/2026 21:00
+Task 205: Implement capability graph resolver - Completed on 03/13/2026 21:02
 Task 197: Add tests for model filtering - Completed on 03/13/2026 20:46
 Task 198: Add tests for capability classification schema - Completed on 03/13/2026 20:46
 Task 199: Introduce model feature classification schema - Completed on 03/13/2026 20:46
