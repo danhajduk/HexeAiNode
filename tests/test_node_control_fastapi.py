@@ -143,6 +143,13 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.payload = payload
 
     class _FakeProviderRuntimeManager:
+        def __init__(self):
+            self.refresh_calls = 0
+
+        async def refresh(self):
+            self.refresh_calls += 1
+            return {"providers": []}
+
         async def refresh_pricing(self, *, force: bool):
             return {"status": "manual_only", "changed": False, "notes": ["live_pricing_scrape_disabled"]}
 
@@ -214,6 +221,7 @@ class NodeControlFastApiTests(unittest.TestCase):
     def test_status_and_onboarding_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
+            runtime_manager = self._FakeProviderRuntimeManager()
             state = NodeControlState(
                 lifecycle=lifecycle,
                 config_path=str(Path(tmp) / "bootstrap_config.json"),
@@ -222,7 +230,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 provider_credentials_store=self._FakeProviderCredentialsStore(),
                 task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
                 capability_runner=self._FakeCapabilityRunner(),
-                provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                provider_runtime_manager=runtime_manager,
                 service_manager=self._FakeServiceManager(),
                 prompt_service_state_store=self._FakePromptServiceStateStore(),
             )
@@ -267,6 +275,7 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(credentials_set_response.status_code, 200)
             self.assertTrue(credentials_set_response.json()["credentials"]["has_api_token"])
             self.assertTrue(credentials_set_response.json()["credentials"]["api_token_hint"].endswith("1234"))
+            self.assertEqual(runtime_manager.refresh_calls, 1)
 
             preferences_set_response = client.post(
                 "/api/providers/openai/preferences",

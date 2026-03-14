@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import tempfile
 import unittest
@@ -9,6 +10,13 @@ from ai_node.runtime.node_control_api import NodeControlState
 
 class NodeControlApiTests(unittest.TestCase):
     class _FakeProviderRuntimeManager:
+        def __init__(self):
+            self.refresh_calls = 0
+
+        async def refresh(self):
+            self.refresh_calls += 1
+            return {"providers": []}
+
         async def refresh_pricing(self, *, force: bool):
             return {"status": "manual_only", "changed": False, "notes": ["live_pricing_scrape_disabled"]}
 
@@ -309,11 +317,13 @@ class NodeControlApiTests(unittest.TestCase):
     def test_update_openai_credentials_returns_redacted_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            runtime_manager = self._FakeProviderRuntimeManager()
             state = NodeControlState(
                 lifecycle=lifecycle,
                 config_path=str(Path(tmp) / "bootstrap_config.json"),
                 logger=logging.getLogger("node-control-test"),
                 provider_credentials_store=self._FakeProviderCredentialsStore(),
+                provider_runtime_manager=runtime_manager,
             )
             payload = state.update_openai_credentials(
                 api_token="token-alpha-1234",
@@ -325,6 +335,9 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertTrue(payload["credentials"]["has_service_token"])
             self.assertTrue(payload["credentials"]["api_token_hint"].endswith("1234"))
             self.assertEqual(payload["credentials"]["project_name"], "ops-user")
+            self.assertEqual(runtime_manager.refresh_calls, 0)
+            asyncio.run(state.refresh_provider_models_after_openai_credentials_save())
+            self.assertEqual(runtime_manager.refresh_calls, 1)
 
     def test_latest_provider_models_payload_returns_latest_three(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -521,6 +521,11 @@ class NodeControlState:
         )
         return self.provider_credentials_payload(provider_id="openai")
 
+    async def refresh_provider_models_after_openai_credentials_save(self) -> None:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "refresh"):
+            return
+        await self._provider_runtime_manager.refresh()
+
     def update_openai_preferences(
         self,
         *,
@@ -1027,13 +1032,15 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         return state.provider_credentials_payload(provider_id="openai")
 
     @app.post("/api/providers/openai/credentials")
-    def post_openai_credentials(payload: OpenAICredentialsRequest):
+    async def post_openai_credentials(payload: OpenAICredentialsRequest):
         try:
-            return state.update_openai_credentials(
+            response = state.update_openai_credentials(
                 api_token=payload.api_token,
                 service_token=payload.service_token,
                 project_name=payload.project_name,
             )
+            await state.refresh_provider_models_after_openai_credentials_save()
+            return response
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

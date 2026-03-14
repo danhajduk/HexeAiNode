@@ -109,6 +109,7 @@ UI behavior:
 - `Setup AI Provider` opens a dedicated OpenAI provider page instead of using the dashboard popup.
 - The provider setup form now requires an OpenAI API token, service token, and project name.
 - Tokens are validated before submit and are masked after save.
+- Saving the OpenAI provider setup triggers backend model discovery immediately, so a saved token fetches models right away.
 - OpenAI model selections on the provider page save automatically when you select or unselect a model.
 - Selecting a model with unavailable pricing opens a per-model pricing popup so you can enter that model's price immediately or skip it.
 - `Review Selected Model Prices` walks through the currently selected models one by one so you can set different prices per model.
