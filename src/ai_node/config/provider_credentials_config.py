@@ -1,11 +1,14 @@
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
 
 
 PROVIDER_CREDENTIALS_SCHEMA_VERSION = "1.0"
+_TOKEN_FORMAT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9._-]+)+$")
+_PROJECT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$")
 
 
 def _iso_now() -> str:
@@ -42,10 +45,13 @@ def _mask_secret(value: object) -> str | None:
 def _normalize_provider_payload(payload: object) -> dict:
     if not isinstance(payload, dict):
         return {}
+    api_token = _normalize_string(payload.get("api_token")) or _normalize_string(payload.get("api_key"))
+    service_token = _normalize_string(payload.get("service_token")) or _normalize_string(payload.get("admin_key"))
+    project_name = _normalize_string(payload.get("project_name")) or _normalize_string(payload.get("user_identifier"))
     return {
-        "api_key": _normalize_string(payload.get("api_key")),
-        "admin_key": _normalize_string(payload.get("admin_key")),
-        "user_identifier": _normalize_string(payload.get("user_identifier")),
+        "api_token": api_token,
+        "service_token": service_token,
+        "project_name": project_name,
         "default_model_id": _normalize_string(payload.get("default_model_id")),
         "selected_model_ids": _normalize_string_list(payload.get("selected_model_ids")),
         "updated_at": _normalize_string(payload.get("updated_at")) or _iso_now(),
@@ -97,16 +103,16 @@ def summarize_provider_credentials(payload: dict | None) -> dict:
         normalized_name = _normalize_string(provider_name)
         if normalized_name is None or not isinstance(provider_payload, dict):
             continue
-        api_key = _normalize_string(provider_payload.get("api_key"))
-        admin_key = _normalize_string(provider_payload.get("admin_key"))
-        user_identifier = _normalize_string(provider_payload.get("user_identifier"))
+        api_token = _normalize_string(provider_payload.get("api_token")) or _normalize_string(provider_payload.get("api_key"))
+        service_token = _normalize_string(provider_payload.get("service_token")) or _normalize_string(provider_payload.get("admin_key"))
+        project_name = _normalize_string(provider_payload.get("project_name")) or _normalize_string(provider_payload.get("user_identifier"))
         summary[normalized_name] = {
-            "configured": bool(api_key or admin_key or user_identifier),
-            "has_api_key": api_key is not None,
-            "has_admin_key": admin_key is not None,
-            "api_key_hint": _mask_secret(api_key),
-            "admin_key_hint": _mask_secret(admin_key),
-            "user_identifier": user_identifier,
+            "configured": bool(api_token and service_token and project_name),
+            "has_api_token": api_token is not None,
+            "has_service_token": service_token is not None,
+            "api_token_hint": _mask_secret(api_token),
+            "service_token_hint": _mask_secret(service_token),
+            "project_name": project_name,
             "default_model_id": _normalize_string(provider_payload.get("default_model_id")),
             "selected_model_ids": _normalize_string_list(provider_payload.get("selected_model_ids")),
             "updated_at": _normalize_string(provider_payload.get("updated_at")),
@@ -168,19 +174,31 @@ class ProviderCredentialsStore:
     def upsert_openai_credentials(
         self,
         *,
-        api_key: str,
-        admin_key: str | None = None,
-        user_identifier: str | None = None,
+        api_token: str,
+        service_token: str,
+        project_name: str,
     ) -> dict:
-        normalized_api_key = _normalize_string(api_key)
-        if normalized_api_key is None:
-            raise ValueError("api_key is required")
+        normalized_api_token = _normalize_string(api_token)
+        normalized_service_token = _normalize_string(service_token)
+        normalized_project_name = _normalize_string(project_name)
+        if normalized_api_token is None:
+            raise ValueError("api_token is required")
+        if normalized_service_token is None:
+            raise ValueError("service_token is required")
+        if normalized_project_name is None:
+            raise ValueError("project_name is required")
+        if len(normalized_api_token) < 12 or _TOKEN_FORMAT_RE.fullmatch(normalized_api_token) is None:
+            raise ValueError("api_token format is invalid")
+        if len(normalized_service_token) < 12 or _TOKEN_FORMAT_RE.fullmatch(normalized_service_token) is None:
+            raise ValueError("service_token format is invalid")
+        if _PROJECT_NAME_RE.fullmatch(normalized_project_name) is None:
+            raise ValueError("project_name format is invalid")
         payload = self.load_or_create()
         providers = payload.setdefault("providers", {})
         providers["openai"] = {
-            "api_key": normalized_api_key,
-            "admin_key": _normalize_string(admin_key),
-            "user_identifier": _normalize_string(user_identifier),
+            "api_token": normalized_api_token,
+            "service_token": normalized_service_token,
+            "project_name": normalized_project_name,
             "default_model_id": _normalize_string((providers.get("openai") or {}).get("default_model_id")),
             "selected_model_ids": _normalize_string_list((providers.get("openai") or {}).get("selected_model_ids")),
             "updated_at": _iso_now(),
@@ -199,9 +217,9 @@ class ProviderCredentialsStore:
         existing = providers.get("openai")
         if not isinstance(existing, dict):
             existing = {
-                "api_key": None,
-                "admin_key": None,
-                "user_identifier": None,
+                "api_token": None,
+                "service_token": None,
+                "project_name": None,
                 "default_model_id": None,
                 "selected_model_ids": [],
                 "updated_at": _iso_now(),

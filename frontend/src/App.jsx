@@ -26,6 +26,7 @@ const TASK_CAPABILITY_OPTIONS = [
   "task.generation.text",
   "task.generation.image",
 ];
+const OPENAI_TOKEN_FORMAT = /^[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9._-]+)+$/;
 
 function ThemeToggle() {
   const [theme, setLocalTheme] = useState(getTheme());
@@ -78,10 +79,10 @@ export default function App() {
   const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
   const [providerCredentials, setProviderCredentials] = useState(null);
   const [latestOpenaiModels, setLatestOpenaiModels] = useState([]);
-  const [showProviderCredentialsPopup, setShowProviderCredentialsPopup] = useState(false);
-  const [openaiApiKey, setOpenaiApiKey] = useState("");
-  const [openaiAdminKey, setOpenaiAdminKey] = useState("");
-  const [openaiUserIdentifier, setOpenaiUserIdentifier] = useState("");
+  const [openaiApiToken, setOpenaiApiToken] = useState("");
+  const [openaiServiceToken, setOpenaiServiceToken] = useState("");
+  const [openaiProjectName, setOpenaiProjectName] = useState("");
+  const [providerSetupDirty, setProviderSetupDirty] = useState(false);
   const [selectedOpenaiModelIds, setSelectedOpenaiModelIds] = useState([]);
   const [manualPricingInput, setManualPricingInput] = useState("");
   const [manualPricingOutput, setManualPricingOutput] = useState("");
@@ -179,10 +180,10 @@ export default function App() {
     setProviderCredentials(providerCredentialsPayload);
     setLatestOpenaiModels(Array.isArray(latestModelsPayload?.models) ? latestModelsPayload.models : []);
     setError("");
-    if (!showProviderCredentialsPopup && providerCredentialsPayload?.credentials?.user_identifier) {
-      setOpenaiUserIdentifier(providerCredentialsPayload.credentials.user_identifier);
+    if (!providerSetupDirty && providerCredentialsPayload?.credentials?.project_name) {
+      setOpenaiProjectName(providerCredentialsPayload.credentials.project_name);
     }
-    if (!showProviderCredentialsPopup) {
+    if (!providerSetupDirty) {
       setSelectedOpenaiModelIds(
         Array.isArray(providerCredentialsPayload?.credentials?.selected_model_ids)
           ? providerCredentialsPayload.credentials.selected_model_ids
@@ -356,6 +357,10 @@ export default function App() {
     window.location.hash = "#/providers/openai";
   }
 
+  function isValidToken(value) {
+    return typeof value === "string" && value.trim().length >= 12 && OPENAI_TOKEN_FORMAT.test(value.trim());
+  }
+
   async function onCopyNodeId() {
     if (!nodeId) {
       return;
@@ -517,17 +522,31 @@ export default function App() {
 
   async function onSaveOpenAiCredentials(event) {
     event.preventDefault();
+    if (!isValidToken(openaiApiToken)) {
+      setError("OpenAI API token format looks invalid");
+      return;
+    }
+    if (!isValidToken(openaiServiceToken)) {
+      setError("OpenAI service token format looks invalid");
+      return;
+    }
+    if (!openaiProjectName.trim()) {
+      setError("OpenAI project name is required");
+      return;
+    }
     setSavingCredentials(true);
     setError("");
     try {
       const credentialsPayload = await apiPost("/api/providers/openai/credentials", {
-        api_key: openaiApiKey,
-        admin_key: openaiAdminKey || null,
-        user_identifier: openaiUserIdentifier || null,
+        api_token: openaiApiToken.trim(),
+        service_token: openaiServiceToken.trim(),
+        project_name: openaiProjectName.trim(),
       });
       setProviderCredentials(credentialsPayload);
-      setOpenaiApiKey("");
-      setOpenaiAdminKey("");
+      setOpenaiApiToken("");
+      setOpenaiServiceToken("");
+      setOpenaiProjectName(credentialsPayload?.credentials?.project_name || openaiProjectName.trim());
+      setProviderSetupDirty(false);
       await refreshOpenAiModels();
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
@@ -812,81 +831,123 @@ export default function App() {
           </article>
         </section>
       ) : null}
-      {showProviderCredentialsPopup ? (
-        <section className="modal-overlay" role="dialog" aria-modal="true" aria-label="OpenAI credentials">
-          <article className="card modal-card">
+      {null}
+      <section className="card hero">
+        <h1>Synthia AI Node</h1>
+        <p className="muted">Node setup and onboarding controls</p>
+        <div className="row">
+          <ThemeToggle />
+          <span className="pill">{backendStatus}</span>
+          <button className="btn" onClick={onRestartSetup} disabled={restarting}>
+            {restarting ? "Restarting..." : "Restart Setup"}
+          </button>
+          {isPendingApproval && pendingApprovalUrl ? (
+            <a className="btn btn-primary" href={pendingApprovalUrl} target="_blank" rel="noreferrer">
+              Approve In Core
+            </a>
+          ) : null}
+        </div>
+        <p className="muted tiny">API: {getApiBase()}</p>
+        <p className="muted tiny">
+          Last update: <code>{uiState.meta.lastUpdatedAt || "never"}</code> | Refresh:{" "}
+          <code>{REFRESH_INTERVAL_MS / 1000}s</code>
+        </p>
+        {uiState.meta.partialFailures?.length ? (
+          <p className="warning tiny">
+            Partial data unavailable: <code>{uiState.meta.partialFailures.join(", ")}</code>
+          </p>
+        ) : null}
+        <div className="row">
+          <span className="muted tiny">
+            Unique ID: <code>{nodeId || "unavailable"}</code>
+          </span>
+          <button className="btn" onClick={onCopyNodeId} disabled={!nodeId}>
+            {copied ? "Copied" : "Copy Unique ID"}
+          </button>
+        </div>
+        {error ? <p className="error">{error}</p> : null}
+      </section>
+
+      {isProviderSetupRoute ? (
+        <section className="provider-page-shell">
+          <article className="card provider-page-card">
             <CardHeader
-              title="OpenAI Credentials"
-              subtitle="Save local provider credentials, pick a canonical model, and enter manual pricing when live pricing is blocked."
+              title="Setup AI Provider"
+              subtitle="Save OpenAI provider credentials, review discovered models, and manage manual pricing from a dedicated page."
             />
             <form className="setup-form" onSubmit={onSaveOpenAiCredentials}>
               <label>
-                OpenAI API Key
+                OpenAI API Token
                 <input
                   type="password"
-                  value={openaiApiKey}
-                  onChange={(event) => setOpenaiApiKey(event.target.value)}
-                  placeholder="sk-..."
+                  value={openaiApiToken}
+                  onChange={(event) => {
+                    setOpenaiApiToken(event.target.value);
+                    setProviderSetupDirty(true);
+                  }}
+                  placeholder="sk-proj-..."
                   required
                 />
               </label>
               <label>
-                Admin Token
+                OpenAI Service Token
                 <input
                   type="password"
-                  value={openaiAdminKey}
-                  onChange={(event) => setOpenaiAdminKey(event.target.value)}
-                  placeholder="Optional reserved token"
+                  value={openaiServiceToken}
+                  onChange={(event) => {
+                    setOpenaiServiceToken(event.target.value);
+                    setProviderSetupDirty(true);
+                  }}
+                  placeholder="sk-service-..."
+                  required
                 />
               </label>
               <label>
-                User / Org Label
+                OpenAI Project Name
                 <input
-                  value={openaiUserIdentifier}
-                  onChange={(event) => setOpenaiUserIdentifier(event.target.value)}
-                  placeholder="Optional operator label"
+                  value={openaiProjectName}
+                  onChange={(event) => {
+                    setOpenaiProjectName(event.target.value);
+                    setProviderSetupDirty(true);
+                  }}
+                  placeholder="project-name"
+                  required
                 />
               </label>
               <div className="state-grid">
-                <span>Saved API Key</span>
-                <code>{openaiCredentialSummary.api_key_hint || "not_saved"}</code>
-                <span>Saved Admin Token</span>
-                <code>{openaiCredentialSummary.admin_key_hint || "not_saved"}</code>
-                <span>Saved Label</span>
-                <code>{openaiCredentialSummary.user_identifier || "none"}</code>
-                <span>Primary Model</span>
+                <span>Provider</span>
+                <code>openai</code>
+                <span>Provider State</span>
+                <StatusBadge value={openaiCredentialSummary.configured ? "configured" : "pending"} />
+                <span>Saved API Token</span>
+                <code>{openaiCredentialSummary.api_token_hint || "not_saved"}</code>
+                <span>Saved Service Token</span>
+                <code>{openaiCredentialSummary.service_token_hint || "not_saved"}</code>
+                <span>Project Name</span>
+                <code>{openaiCredentialSummary.project_name || "not_saved"}</code>
+                <span>Saved Model</span>
                 <code>{openaiCredentialSummary.default_model_id || "not_selected"}</code>
-                <span>Selected Models</span>
-                <code>{(openaiCredentialSummary.selected_model_ids || []).join(", ") || "none"}</code>
                 <span>Updated</span>
                 <code>{openaiCredentialSummary.updated_at || "never"}</code>
               </div>
               <div className="row">
                 <button className="btn btn-primary" type="submit" disabled={savingCredentials || refreshingLatestModels}>
-                  {savingCredentials ? "Saving..." : "Save Credentials"}
+                  {savingCredentials ? "Saving..." : "Save Provider Setup"}
                 </button>
                 <button
                   className="btn"
                   type="button"
                   onClick={refreshOpenAiModels}
-                  disabled={refreshingLatestModels || !openaiCredentialSummary.has_api_key}
+                  disabled={refreshingLatestModels || !openaiCredentialSummary.has_api_token}
                 >
                   {refreshingLatestModels ? "Reloading Models..." : "Reload Models"}
                 </button>
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={() => {
-                    setShowProviderCredentialsPopup(false);
-                    setOpenaiApiKey("");
-                    setOpenaiAdminKey("");
-                  }}
-                >
-                  Close
+                <button className="btn" type="button" onClick={navigateToDashboard}>
+                  Back To Dashboard
                 </button>
               </div>
               <p className="muted tiny">
-                Reload Models keeps pricing manual-only, refreshes provider discovery, and reloads the latest saved model list.
+                Tokens are masked after save and are never rendered back into the form. Reload Models refreshes local discovery only.
               </p>
               {pricingRefreshState ? (
                 <p className="muted tiny">
@@ -939,7 +1000,7 @@ export default function App() {
                 </div>
               ) : (
                 <p className="muted tiny">
-                  No OpenAI models discovered yet. Save credentials and run a refresh to populate this list.
+                  No OpenAI models discovered yet. Save provider setup and reload discovery to populate this list.
                 </p>
               )}
               {selectedOpenaiModel ? (
@@ -1014,70 +1075,6 @@ export default function App() {
                   </div>
                 </form>
               ) : null}
-            </div>
-          </article>
-        </section>
-      ) : null}
-      <section className="card hero">
-        <h1>Synthia AI Node</h1>
-        <p className="muted">Node setup and onboarding controls</p>
-        <div className="row">
-          <ThemeToggle />
-          <span className="pill">{backendStatus}</span>
-          <button className="btn" onClick={onRestartSetup} disabled={restarting}>
-            {restarting ? "Restarting..." : "Restart Setup"}
-          </button>
-          {isPendingApproval && pendingApprovalUrl ? (
-            <a className="btn btn-primary" href={pendingApprovalUrl} target="_blank" rel="noreferrer">
-              Approve In Core
-            </a>
-          ) : null}
-        </div>
-        <p className="muted tiny">API: {getApiBase()}</p>
-        <p className="muted tiny">
-          Last update: <code>{uiState.meta.lastUpdatedAt || "never"}</code> | Refresh:{" "}
-          <code>{REFRESH_INTERVAL_MS / 1000}s</code>
-        </p>
-        {uiState.meta.partialFailures?.length ? (
-          <p className="warning tiny">
-            Partial data unavailable: <code>{uiState.meta.partialFailures.join(", ")}</code>
-          </p>
-        ) : null}
-        <div className="row">
-          <span className="muted tiny">
-            Unique ID: <code>{nodeId || "unavailable"}</code>
-          </span>
-          <button className="btn" onClick={onCopyNodeId} disabled={!nodeId}>
-            {copied ? "Copied" : "Copy Unique ID"}
-          </button>
-        </div>
-        {error ? <p className="error">{error}</p> : null}
-      </section>
-
-      {isProviderSetupRoute ? (
-        <section className="provider-page-shell">
-          <article className="card provider-page-card">
-            <CardHeader
-              title="Setup AI Provider"
-              subtitle="Configure OpenAI outside of the main dashboard so provider setup stays focused and separate."
-            />
-            <div className="state-grid">
-              <span>Provider</span>
-              <code>openai</code>
-              <span>Saved API Key</span>
-              <code>{openaiCredentialSummary.api_key_hint || "not_saved"}</code>
-              <span>Saved Model</span>
-              <code>{openaiCredentialSummary.default_model_id || "not_selected"}</code>
-              <span>Updated</span>
-              <code>{openaiCredentialSummary.updated_at || "never"}</code>
-            </div>
-            <p className="muted">
-              This dedicated provider page replaces the old dashboard popup entry point. Provider setup details will live here.
-            </p>
-            <div className="row">
-              <button className="btn" type="button" onClick={navigateToDashboard}>
-                Back To Dashboard
-              </button>
             </div>
           </article>
         </section>
@@ -1247,7 +1244,7 @@ export default function App() {
                 <span className="muted tiny">Available after capability registration completes with OpenAI enabled.</span>
               ) : (
                 <span className="muted tiny">
-                  Saved key: <code>{openaiCredentialSummary.api_key_hint || "not_saved"}</code> | Model:{" "}
+                  Saved token: <code>{openaiCredentialSummary.api_token_hint || "not_saved"}</code> | Model:{" "}
                   <code>{openaiCredentialSummary.default_model_id || "not_selected"}</code>
                 </span>
               )}

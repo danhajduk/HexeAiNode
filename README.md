@@ -90,7 +90,7 @@ OpenAI credential + latest-model endpoints:
 curl http://127.0.0.1:9002/api/providers/openai/credentials
 curl -X POST http://127.0.0.1:9002/api/providers/openai/credentials \
   -H 'Content-Type: application/json' \
-  -d '{"api_key":"sk-...","admin_key":null,"user_identifier":"ops"}'
+  -d '{"api_token":"sk-proj-...","service_token":"sk-service-...","project_name":"ops"}'
 curl -X POST http://127.0.0.1:9002/api/providers/openai/preferences \
   -H 'Content-Type: application/json' \
   -d '{"default_model_id":"gpt-5.4-pro","selected_model_ids":["gpt-5.4-pro","gpt-5.4-mini"]}'
@@ -106,11 +106,15 @@ curl -X POST http://127.0.0.1:9002/api/providers/openai/pricing/manual \
 
 UI behavior:
 
-- OpenAI model selections in the credentials popup now save automatically when you select or unselect a model.
+- `Setup AI Provider` opens a dedicated OpenAI provider page instead of using the dashboard popup.
+- The provider setup form now requires an OpenAI API token, service token, and project name.
+- Tokens are validated before submit and are masked after save.
+- OpenAI model selections on the provider page save automatically when you select or unselect a model.
 - Selecting a model with unavailable pricing opens a per-model pricing popup so you can enter that model's price immediately or skip it.
 - `Review Selected Model Prices` walks through the currently selected models one by one so you can set different prices per model.
-- Manual pricing can be saved for the primary selected model or applied across all selected models from the popup.
+- Manual pricing can be saved for the primary selected model or applied across all selected models from the provider page.
 - The OpenAI pricing refresh endpoint is manual-only for now and just reloads the local pricing snapshot without scraping remote pricing pages.
+- Filtered OpenAI provider models are also persisted locally in `data/provider_models.json`.
 - In Capability Summary, selected models are marked with a green check.
 
 Task capability selection endpoints:

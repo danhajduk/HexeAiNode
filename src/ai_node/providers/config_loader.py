@@ -54,7 +54,11 @@ class ProviderConfigLoader:
                     api_key=(
                         _first_non_empty_string(
                             str(os.environ.get(api_key_env) or "").strip() or None,
-                            stored_openai.get("api_key") if isinstance(stored_openai, dict) else None,
+                            (
+                                stored_openai.get("api_token") or stored_openai.get("api_key")
+                                if isinstance(stored_openai, dict)
+                                else None
+                            ),
                         )
                     ),
                     default_model_id=(

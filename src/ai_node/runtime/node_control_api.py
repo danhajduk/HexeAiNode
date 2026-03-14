@@ -328,11 +328,11 @@ class NodeControlState:
             if isinstance(credentials, dict)
             else {
                 "configured": False,
-                "has_api_key": False,
-                "has_admin_key": False,
-                "api_key_hint": None,
-                "admin_key_hint": None,
-                "user_identifier": None,
+                "has_api_token": False,
+                "has_service_token": False,
+                "api_token_hint": None,
+                "service_token_hint": None,
+                "project_name": None,
                 "default_model_id": None,
                 "selected_model_ids": [],
                 "updated_at": None,
@@ -498,25 +498,25 @@ class NodeControlState:
     def update_openai_credentials(
         self,
         *,
-        api_key: str,
-        admin_key: str | None = None,
-        user_identifier: str | None = None,
+        api_token: str,
+        service_token: str,
+        project_name: str,
     ) -> dict:
         if self._provider_credentials_store is None or not hasattr(self._provider_credentials_store, "upsert_openai_credentials"):
             raise ValueError("provider credentials store is not configured")
         payload = self._provider_credentials_store.upsert_openai_credentials(
-            api_key=api_key,
-            admin_key=admin_key,
-            user_identifier=user_identifier,
+            api_token=api_token,
+            service_token=service_token,
+            project_name=project_name,
         )
         self._provider_credentials_summary = summarize_provider_credentials(payload)
         self._phase2_diag.provider_selection(
             {
                 "source": "openai_credentials_saved",
                 "provider": "openai",
-                "has_api_key": True,
-                "has_admin_key": bool(admin_key),
-                "user_identifier": bool(str(user_identifier or "").strip()),
+                "has_api_token": True,
+                "has_service_token": True,
+                "project_name": bool(str(project_name or "").strip()),
             }
         )
         return self.provider_credentials_payload(provider_id="openai")
@@ -849,9 +849,9 @@ class ProviderSelectionRequest(BaseModel):
 
 
 class OpenAICredentialsRequest(BaseModel):
-    api_key: str
-    admin_key: str | None = None
-    user_identifier: str | None = None
+    api_token: str
+    service_token: str
+    project_name: str
 
 
 class OpenAIPreferencesRequest(BaseModel):
@@ -995,9 +995,9 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def post_openai_credentials(payload: OpenAICredentialsRequest):
         try:
             return state.update_openai_credentials(
-                api_key=payload.api_key,
-                admin_key=payload.admin_key,
-                user_identifier=payload.user_identifier,
+                api_token=payload.api_token,
+                service_token=payload.service_token,
+                project_name=payload.project_name,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

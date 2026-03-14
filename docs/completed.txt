@@ -166,3 +166,8 @@ Task 174: Add admin diagnostics endpoint/view - Completed on 03/13/2026 14:25
 Task 175: Add documentation - Completed on 03/13/2026 14:25
 Task 176: Add future-proof parser abstraction - Completed on 03/13/2026 14:25
 Task 177: Add "Setup AI Provider" navigation ( remove the openai creds btn) - Completed on 03/13/2026 18:36
+Task 178: Implement AI Provider Setup page UI - Completed on 03/13/2026 18:44
+Task 179: Persist provider configuration - Completed on 03/13/2026 18:44
+Task 180: Fetch OpenAI model list after token save - Completed on 03/13/2026 18:44
+Task 181: Filter models into supported Synthia families - Completed on 03/13/2026 18:44
+Task 182: Store filtered model catalog locally - Completed on 03/13/2026 18:44

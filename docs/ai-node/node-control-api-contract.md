@@ -86,18 +86,18 @@ This is the canonical source-of-truth contract for:
   - `configured: boolean`
   - `credentials`
     - redacted token hints only
-    - `has_api_key`
-    - `has_admin_key`
-    - `user_identifier`
+    - `has_api_token`
+    - `has_service_token`
+    - `project_name`
     - `updated_at`
 
 ### Save OpenAI credentials
 
 - `POST /api/providers/openai/credentials`
 - Request:
-  - `api_key: string`
-  - `admin_key?: string | null`
-  - `user_identifier?: string | null`
+  - `api_token: string`
+  - `service_token: string`
+  - `project_name: string`
 - Success: redacted OpenAI credential summary payload.
 - Error:
   - `400` when provider credential validation/store fails.

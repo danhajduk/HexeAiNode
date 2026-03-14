@@ -79,11 +79,11 @@ class NodeControlApiTests(unittest.TestCase):
         def load(self):
             return self.payload
 
-        def upsert_openai_credentials(self, *, api_key: str, admin_key=None, user_identifier=None):
+        def upsert_openai_credentials(self, *, api_token: str, service_token: str, project_name: str):
             self.payload["providers"]["openai"] = {
-                "api_key": api_key,
-                "admin_key": admin_key,
-                "user_identifier": user_identifier,
+                "api_token": api_token,
+                "service_token": service_token,
+                "project_name": project_name,
                 "default_model_id": self.payload.get("providers", {}).get("openai", {}).get("default_model_id"),
                 "selected_model_ids": self.payload.get("providers", {}).get("openai", {}).get("selected_model_ids", []),
                 "updated_at": "2026-03-13T00:00:00Z",
@@ -316,15 +316,15 @@ class NodeControlApiTests(unittest.TestCase):
                 provider_credentials_store=self._FakeProviderCredentialsStore(),
             )
             payload = state.update_openai_credentials(
-                api_key="test-api-key-1234",
-                admin_key="test-admin-key-7890",
-                user_identifier="ops-user",
+                api_token="token-alpha-1234",
+                service_token="service-token-7890",
+                project_name="ops-user",
             )
             self.assertTrue(payload["configured"])
-            self.assertTrue(payload["credentials"]["has_api_key"])
-            self.assertTrue(payload["credentials"]["has_admin_key"])
-            self.assertTrue(payload["credentials"]["api_key_hint"].endswith("1234"))
-            self.assertEqual(payload["credentials"]["user_identifier"], "ops-user")
+            self.assertTrue(payload["credentials"]["has_api_token"])
+            self.assertTrue(payload["credentials"]["has_service_token"])
+            self.assertTrue(payload["credentials"]["api_token_hint"].endswith("1234"))
+            self.assertEqual(payload["credentials"]["project_name"], "ops-user")
 
     def test_latest_provider_models_payload_returns_latest_three(self):
         with tempfile.TemporaryDirectory() as tmp:

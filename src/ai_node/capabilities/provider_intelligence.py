@@ -330,7 +330,7 @@ class ProviderIntelligenceService:
         openai_payload = providers.get("openai")
         if not isinstance(openai_payload, dict):
             return ""
-        return str(openai_payload.get("api_key") or "").strip()
+        return str(openai_payload.get("api_token") or openai_payload.get("api_key") or "").strip()
 
 
 def compact_provider_intelligence_report(payload: dict | None) -> dict:

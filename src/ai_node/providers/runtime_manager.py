@@ -15,6 +15,10 @@ from ai_node.providers.openai_catalog import (
     is_regular_openai_model_id,
     resolve_openai_base_model_id,
 )
+from ai_node.providers.openai_model_catalog import (
+    DEFAULT_OPENAI_PROVIDER_MODEL_CATALOG_PATH,
+    OpenAIProviderModelCatalogStore,
+)
 from ai_node.providers.provider_registry import ProviderRegistry
 
 
@@ -34,6 +38,7 @@ class ProviderRuntimeManager:
         pricing_catalog_path: str = DEFAULT_OPENAI_PRICING_CATALOG_PATH,
         pricing_refresh_interval_seconds: int = DEFAULT_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS,
         pricing_stale_tolerance_seconds: int = DEFAULT_OPENAI_PRICING_STALE_TOLERANCE_SECONDS,
+        provider_model_catalog_path: str = DEFAULT_OPENAI_PROVIDER_MODEL_CATALOG_PATH,
     ) -> None:
         self._logger = logger
         self._loader = ProviderConfigLoader(
@@ -50,6 +55,10 @@ class ProviderRuntimeManager:
             catalog_path=pricing_catalog_path,
             refresh_interval_seconds=pricing_refresh_interval_seconds,
             stale_tolerance_seconds=pricing_stale_tolerance_seconds,
+        )
+        self._openai_model_catalog_store = OpenAIProviderModelCatalogStore(
+            path=provider_model_catalog_path,
+            logger=logger,
         )
         self._router = ProviderExecutionRouter(
             registry=self._registry,
@@ -73,6 +82,9 @@ class ProviderRuntimeManager:
             self._registry.set_provider_health(provider_id=provider_id, payload=health)
             models = await adapter.list_models()
             if provider_id == "openai" and self._pricing_catalog_service is not None:
+                self._openai_model_catalog_store.save_from_model_ids(
+                    model_ids=[getattr(model, "model_id", "") for model in models]
+                )
                 merged_models, provider_unknown_models = self._pricing_catalog_service.merge_model_capabilities(models)
                 models = merged_models
                 unknown_models.extend(provider_unknown_models)

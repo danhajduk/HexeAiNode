@@ -41,11 +41,11 @@ class NodeControlFastApiTests(unittest.TestCase):
         def load(self):
             return self.payload
 
-        def upsert_openai_credentials(self, *, api_key: str, admin_key=None, user_identifier=None):
+        def upsert_openai_credentials(self, *, api_token: str, service_token: str, project_name: str):
             self.payload["providers"]["openai"] = {
-                "api_key": api_key,
-                "admin_key": admin_key,
-                "user_identifier": user_identifier,
+                "api_token": api_token,
+                "service_token": service_token,
+                "project_name": project_name,
                 "default_model_id": self.payload.get("providers", {}).get("openai", {}).get("default_model_id"),
                 "selected_model_ids": self.payload.get("providers", {}).get("openai", {}).get("selected_model_ids", []),
                 "updated_at": "2026-03-13T00:00:00Z",
@@ -242,11 +242,15 @@ class NodeControlFastApiTests(unittest.TestCase):
 
             credentials_set_response = client.post(
                 "/api/providers/openai/credentials",
-                json={"api_key": "test-api-key-1234", "admin_key": "test-admin-key-7890", "user_identifier": "ops"},
+                json={
+                    "api_token": "token-alpha-1234",
+                    "service_token": "service-token-7890",
+                    "project_name": "ops",
+                },
             )
             self.assertEqual(credentials_set_response.status_code, 200)
-            self.assertTrue(credentials_set_response.json()["credentials"]["has_api_key"])
-            self.assertTrue(credentials_set_response.json()["credentials"]["api_key_hint"].endswith("1234"))
+            self.assertTrue(credentials_set_response.json()["credentials"]["has_api_token"])
+            self.assertTrue(credentials_set_response.json()["credentials"]["api_token_hint"].endswith("1234"))
 
             preferences_set_response = client.post(
                 "/api/providers/openai/preferences",
