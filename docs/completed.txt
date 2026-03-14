@@ -204,6 +204,7 @@ Task 210: Update AI Provider Setup UI - Completed on 03/13/2026 21:09
 Task 211: Display capability graph resolution - Completed on 03/13/2026 21:10
 Task 212: Add diagnostics panel - Completed on 03/13/2026 21:11
 Task 213: Add refresh controls - Completed on 03/13/2026 21:14
+Task 214: Add validation tests for feature schema - Completed on 03/13/2026 21:15
 Task 197: Add tests for model filtering - Completed on 03/13/2026 20:46
 Task 198: Add tests for capability classification schema - Completed on 03/13/2026 20:46
 Task 199: Introduce model feature classification schema - Completed on 03/13/2026 20:46

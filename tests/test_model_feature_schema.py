@@ -19,6 +19,10 @@ class ModelFeatureSchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "classification_feature_unknown"):
             normalize_feature_flags(feature_flags={"unknown_feature": True})
 
+    def test_normalize_feature_flags_requires_object_schema(self):
+        with self.assertRaisesRegex(ValueError, "classification_feature_flags_invalid"):
+            normalize_feature_flags(feature_flags=["chat"])
+
     def test_normalize_feature_flags_rejects_non_boolean_values(self):
         with self.assertRaisesRegex(ValueError, "classification_feature_value_invalid"):
             normalize_feature_flags(feature_flags={"chat": "yes"})

@@ -666,3 +666,9 @@ Chosen fix: Wired capability rebuild to recompute and persist node capabilities 
 What changed: Updated `src/ai_node/providers/runtime_manager.py`, `src/ai_node/runtime/node_control_api.py`, `frontend/src/App.jsx`, and `tests/test_node_control_fastapi.py`.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_node_control_fastapi tests.test_node_control_api` and `npm --prefix frontend run build` passed.
 ###########
+Task #214
+Step objective: Add explicit validation coverage for model feature schema payloads in classifier JSON handling.
+Chosen fix: Added schema test coverage to enforce object-shaped feature flag payloads while retaining unknown-key and boolean-type rejection checks.
+What changed: Updated `tests/test_model_feature_schema.py`.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_model_feature_schema tests.test_model_capability_catalog tests.test_model_feature_catalog` passed.
+###########

@@ -44,7 +44,7 @@ Stop processing task when you reach the [STOP] flag!
 Do not edit above this line:
 #######################################################################
 
-[WIP] Task 214: Add validation tests for feature schema
+[WIP] Task 215: Add capability graph resolution tests
 Create a graph definition file:
 
 capabilities/task_graph.json
@@ -225,7 +225,6 @@ Test classification JSON:
 - required schema enforced
 - boolean fields validated
 
-[TODO] Task 215: Add capability graph resolution tests
 Test graph resolver:
 
 - single model
