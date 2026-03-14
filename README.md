@@ -95,6 +95,12 @@ curl -X POST http://127.0.0.1:9002/api/providers/openai/preferences \
   -H 'Content-Type: application/json' \
   -d '{"default_model_id":"gpt-5.4-pro","selected_model_ids":["gpt-5.4-pro","gpt-5.4-mini"]}'
 curl http://127.0.0.1:9002/api/providers/openai/models/latest?limit=9
+curl http://127.0.0.1:9002/api/providers/openai/models/capabilities
+curl http://127.0.0.1:9002/api/providers/openai/models/enabled
+curl -X POST http://127.0.0.1:9002/api/providers/openai/models/enabled \
+  -H 'Content-Type: application/json' \
+  -d '{"model_ids":["gpt-5-mini","gpt-4.1"]}'
+curl http://127.0.0.1:9002/api/providers/openai/capability-resolution
 curl http://127.0.0.1:9002/api/providers/openai/pricing/diagnostics
 curl -X POST http://127.0.0.1:9002/api/providers/openai/pricing/refresh \
   -H 'Content-Type: application/json' \
@@ -110,6 +116,9 @@ UI behavior:
 - The provider setup form now requires an OpenAI API token, service token, and project name.
 - Tokens are validated before submit and are masked after save.
 - Saving the OpenAI provider setup triggers backend model discovery immediately, so a saved token fetches models right away.
+- The provider page shows the full filtered catalog in 240px mini-cards aligned left, grouped by family, with newest models first.
+- Each model card includes capability badges, speed tier, cost tier, and recommended tasks from the saved capability catalog.
+- Models can be enabled or disabled for node capability resolution separately from the selected-model pricing flow.
 - OpenAI model selections on the provider page save automatically when you select or unselect a model.
 - Selecting a model with unavailable pricing opens a per-model pricing popup so you can enter that model's price immediately or skip it.
 - `Review Selected Model Prices` walks through the currently selected models one by one so you can set different prices per model.
@@ -117,6 +126,7 @@ UI behavior:
 - The OpenAI pricing refresh endpoint is manual-only for now and just reloads the local pricing snapshot without scraping remote pricing pages.
 - Filtered OpenAI provider models are also persisted locally in `data/provider_models.json`.
 - After filtered models are refreshed, the node automatically picks the smallest available OpenAI LLM for capability classification and stores the batch result in `data/provider_model_capabilities.json`.
+- Enabled provider models are persisted in `data/provider_enabled_models.json`, and only enabled models contribute to the resolved node capability summary.
 - In Capability Summary, selected models are marked with a green check.
 
 Task capability selection endpoints:

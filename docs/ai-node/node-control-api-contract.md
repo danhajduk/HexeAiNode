@@ -143,6 +143,75 @@ This is the canonical source-of-truth contract for:
 
 For OpenAI, this response only includes regular base-model families used for normal LLM selection. Date-stamped snapshots such as `gpt-5.4-pro-2026-03-05`, legacy snapshots such as `gpt-4-0613`, and specialized variants containing tags like `latest`, `preview`, `realtime`, `audio`, `codex`, or `search` are filtered out in favor of canonical model IDs such as `gpt-5.4-pro`.
 
+### Read OpenAI model capability catalog
+
+- `GET /api/providers/openai/models/capabilities`
+- Response:
+  - `provider_id: "openai"`
+  - `classification_model: string | null`
+  - `entries[]`
+    - `model_id`
+    - `family`
+    - `reasoning`
+    - `vision`
+    - `image_generation`
+    - `audio_input`
+    - `audio_output`
+    - `realtime`
+    - `tool_calling`
+    - `structured_output`
+    - `long_context`
+    - `coding_strength`
+    - `speed_tier`
+    - `cost_tier`
+    - `recommended_for[]`
+
+### Read enabled OpenAI models
+
+- `GET /api/providers/openai/models/enabled`
+- Response:
+  - `provider_id: "openai"`
+  - `models[]`
+    - `model_id`
+    - `enabled`
+    - `selected_at`
+
+### Save enabled OpenAI models
+
+- `POST /api/providers/openai/models/enabled`
+- Request:
+  - `model_ids: string[]`
+- Success:
+  - `provider_id: "openai"`
+  - `models[]`
+    - `model_id`
+    - `enabled`
+    - `selected_at`
+
+### Read resolved OpenAI capability summary
+
+- `GET /api/providers/openai/capability-resolution`
+- Response:
+  - `provider_id: "openai"`
+  - `enabled_model_ids: string[]`
+  - `classification_model: string | null`
+  - `updated_at: string | null`
+  - `capabilities`
+    - `reasoning`
+    - `vision`
+    - `image_generation`
+    - `audio_input`
+    - `audio_output`
+    - `realtime`
+    - `tool_calling`
+    - `structured_output`
+    - `long_context`
+    - `coding_strength`
+    - `speed_tier`
+    - `cost_tier`
+    - `recommended_for[]`
+  - `enabled_models[]`
+
 ### Read OpenAI pricing diagnostics
 
 - `GET /api/providers/openai/pricing/diagnostics`

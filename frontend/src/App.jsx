@@ -13,7 +13,10 @@ const DIAGNOSTIC_ENDPOINTS = [
   "/api/providers/config",
   "/api/providers/openai/credentials",
   "/api/providers/openai/models/catalog",
+  "/api/providers/openai/models/capabilities",
+  "/api/providers/openai/models/enabled",
   "/api/providers/openai/models/latest?limit=9",
+  "/api/providers/openai/capability-resolution",
   "/api/capabilities/config",
   "/api/services/status",
 ];
@@ -74,6 +77,19 @@ function parseIsoTimestamp(value) {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function formatTierLabel(value) {
+  const normalized = String(value || "unknown").replaceAll("_", " ");
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function formatRecommendedTask(value) {
+  return String(value || "")
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default function App() {
   const [routeHash, setRouteHash] = useState(() => window.location.hash || "#/");
   const [backendStatus, setBackendStatus] = useState("loading");
@@ -95,6 +111,9 @@ export default function App() {
   const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
   const [providerCredentials, setProviderCredentials] = useState(null);
   const [openaiCatalogModels, setOpenaiCatalogModels] = useState([]);
+  const [openaiModelCapabilities, setOpenaiModelCapabilities] = useState([]);
+  const [enabledOpenaiModelIds, setEnabledOpenaiModelIds] = useState([]);
+  const [resolvedOpenaiCapabilities, setResolvedOpenaiCapabilities] = useState(null);
   const [latestOpenaiModels, setLatestOpenaiModels] = useState([]);
   const [openaiApiToken, setOpenaiApiToken] = useState("");
   const [openaiServiceToken, setOpenaiServiceToken] = useState("");
@@ -133,7 +152,10 @@ export default function App() {
       providerResult,
       providerCredentialsResult,
       modelCatalogResult,
+      modelCapabilitiesResult,
+      enabledModelsResult,
       latestModelsResult,
+      capabilityResolutionResult,
       capabilityConfigResult,
       servicesResult,
     ] = await Promise.allSettled([
@@ -142,7 +164,10 @@ export default function App() {
       apiGet("/api/providers/config"),
       apiGet("/api/providers/openai/credentials"),
       apiGet("/api/providers/openai/models/catalog"),
+      apiGet("/api/providers/openai/models/capabilities"),
+      apiGet("/api/providers/openai/models/enabled"),
       apiGet("/api/providers/openai/models/latest?limit=9"),
+      apiGet("/api/providers/openai/capability-resolution"),
       apiGet("/api/capabilities/config"),
       apiGet("/api/services/status"),
     ]);
@@ -171,7 +196,10 @@ export default function App() {
     const providerPayload = providerResult.status === "fulfilled" ? providerResult.value : null;
     const providerCredentialsPayload = providerCredentialsResult.status === "fulfilled" ? providerCredentialsResult.value : null;
     const modelCatalogPayload = modelCatalogResult.status === "fulfilled" ? modelCatalogResult.value : null;
+    const modelCapabilitiesPayload = modelCapabilitiesResult.status === "fulfilled" ? modelCapabilitiesResult.value : null;
+    const enabledModelsPayload = enabledModelsResult.status === "fulfilled" ? enabledModelsResult.value : null;
     const latestModelsPayload = latestModelsResult.status === "fulfilled" ? latestModelsResult.value : null;
+    const capabilityResolutionPayload = capabilityResolutionResult.status === "fulfilled" ? capabilityResolutionResult.value : null;
     const capabilityConfigPayload = capabilityConfigResult.status === "fulfilled" ? capabilityConfigResult.value : null;
     const servicePayload = servicesResult.status === "fulfilled" ? servicesResult.value : null;
     const partialFailures = [];
@@ -187,8 +215,17 @@ export default function App() {
     if (modelCatalogResult.status !== "fulfilled") {
       partialFailures.push("provider_model_catalog_unavailable");
     }
+    if (modelCapabilitiesResult.status !== "fulfilled") {
+      partialFailures.push("provider_model_capabilities_unavailable");
+    }
+    if (enabledModelsResult.status !== "fulfilled") {
+      partialFailures.push("provider_enabled_models_unavailable");
+    }
     if (latestModelsResult.status !== "fulfilled") {
       partialFailures.push("provider_models_unavailable");
+    }
+    if (capabilityResolutionResult.status !== "fulfilled") {
+      partialFailures.push("provider_capability_resolution_unavailable");
     }
     if (capabilityConfigResult.status !== "fulfilled") {
       partialFailures.push("capability_config_unavailable");
@@ -202,7 +239,14 @@ export default function App() {
     setNodeId(payload.node_id || "");
     setProviderCredentials(providerCredentialsPayload);
     setOpenaiCatalogModels(Array.isArray(modelCatalogPayload?.models) ? modelCatalogPayload.models : []);
+    setOpenaiModelCapabilities(Array.isArray(modelCapabilitiesPayload?.entries) ? modelCapabilitiesPayload.entries : []);
+    setEnabledOpenaiModelIds(
+      Array.isArray(enabledModelsPayload?.models)
+        ? enabledModelsPayload.models.filter((model) => model?.enabled).map((model) => model.model_id)
+        : []
+    );
     setLatestOpenaiModels(Array.isArray(latestModelsPayload?.models) ? latestModelsPayload.models : []);
+    setResolvedOpenaiCapabilities(capabilityResolutionPayload);
     setError("");
     if (!providerSetupDirty && providerCredentialsPayload?.credentials?.project_name) {
       setOpenaiProjectName(providerCredentialsPayload.credentials.project_name);
@@ -354,6 +398,9 @@ export default function App() {
   const selectedOpenaiModel = latestOpenaiModels.find((model) => model.model_id === (selectedOpenaiModelIds[0] || "")) || null;
   const openaiModelPriceById = Object.fromEntries(latestOpenaiModels.map((model) => [model.model_id, model.pricing || {}]));
   const openaiModelCreatedById = Object.fromEntries(latestOpenaiModels.map((model) => [model.model_id, model.created || 0]));
+  const openaiCapabilityById = Object.fromEntries(
+    openaiModelCapabilities.map((entry) => [entry.model_id, entry])
+  );
   const groupedOpenAiCatalogModels = OPENAI_MODEL_GROUPS.map(([family, label]) => ({
     family,
     label,
@@ -366,6 +413,7 @@ export default function App() {
           (Number(openaiModelCreatedById[left.model_id] || 0) || parseIsoTimestamp(left.discovered_at))
       ),
   })).filter((group) => group.models.length > 0);
+  const resolvedCapabilityFlags = resolvedOpenaiCapabilities?.capabilities || {};
   const pricingReviewModelId = pricingReviewModelIds[pricingReviewIndex] || "";
   const pricingReviewModel = latestOpenaiModels.find((model) => model.model_id === pricingReviewModelId) || null;
   const setupReadinessFlags = uiState.capabilitySummary.setupReadinessFlags || {};
@@ -467,6 +515,30 @@ export default function App() {
     }
   }
 
+  async function persistEnabledOpenAiModels(nextEnabledModelIds) {
+    setError("");
+    const payload = await apiPost("/api/providers/openai/models/enabled", {
+      model_ids: nextEnabledModelIds,
+    });
+    setEnabledOpenaiModelIds(Array.isArray(payload?.models) ? payload.models.filter((model) => model?.enabled).map((model) => model.model_id) : []);
+    const resolutionPayload = await apiGet("/api/providers/openai/capability-resolution");
+    setResolvedOpenaiCapabilities(resolutionPayload);
+  }
+
+  async function onToggleEnabledOpenAiModel(modelId) {
+    const nextEnabledModelIds = enabledOpenaiModelIds.includes(modelId)
+      ? enabledOpenaiModelIds.filter((item) => item !== modelId)
+      : [...enabledOpenaiModelIds, modelId];
+    setEnabledOpenaiModelIds(nextEnabledModelIds);
+    try {
+      await persistEnabledOpenAiModels(nextEnabledModelIds);
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      setEnabledOpenaiModelIds(enabledOpenaiModelIds);
+    }
+  }
+
   function renderTaskCapabilityToggles(prefix) {
     return (
       <div className="capability-toggle-grid">
@@ -548,9 +620,19 @@ export default function App() {
       setPricingRefreshState(String(pricingRefreshPayload?.status || "unknown"));
       await apiPost("/api/capabilities/providers/refresh", { force_refresh: true });
       const modelCatalogPayload = await apiGet("/api/providers/openai/models/catalog");
+      const modelCapabilitiesPayload = await apiGet("/api/providers/openai/models/capabilities");
       const latestModelsPayload = await apiGet("/api/providers/openai/models/latest?limit=9");
+      const enabledModelsPayload = await apiGet("/api/providers/openai/models/enabled");
+      const capabilityResolutionPayload = await apiGet("/api/providers/openai/capability-resolution");
       setOpenaiCatalogModels(Array.isArray(modelCatalogPayload?.models) ? modelCatalogPayload.models : []);
+      setOpenaiModelCapabilities(Array.isArray(modelCapabilitiesPayload?.entries) ? modelCapabilitiesPayload.entries : []);
       setLatestOpenaiModels(Array.isArray(latestModelsPayload?.models) ? latestModelsPayload.models : []);
+      setEnabledOpenaiModelIds(
+        Array.isArray(enabledModelsPayload?.models)
+          ? enabledModelsPayload.models.filter((model) => model?.enabled).map((model) => model.model_id)
+          : []
+      );
+      setResolvedOpenaiCapabilities(capabilityResolutionPayload);
       await loadStatus();
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
@@ -1014,37 +1096,92 @@ export default function App() {
                       </div>
                       <div className="model-list mini-card-grid">
                         {group.models.map((model) => (
+                          (() => {
+                            const capabilityEntry = openaiCapabilityById[model.model_id] || null;
+                            const capabilityBadges = [
+                              capabilityEntry?.reasoning ? "Reasoning" : null,
+                              capabilityEntry?.vision ? "Vision" : null,
+                              capabilityEntry?.image_generation ? "Image Generation" : null,
+                              capabilityEntry?.audio_input ? "Audio In" : null,
+                              capabilityEntry?.audio_output ? "Audio Out" : null,
+                              capabilityEntry?.realtime ? "Realtime" : null,
+                              capabilityEntry?.structured_output ? "Structured" : null,
+                              capabilityEntry?.tool_calling ? "Tools" : null,
+                              capabilityEntry?.long_context ? "Long Context" : null,
+                            ].filter(Boolean);
+                            return (
                           <article
                             key={model.model_id}
-                            className={`model-card mini-model-card ${selectedOpenaiModelIds.includes(model.model_id) ? "is-selected" : ""}`}
+                            className={`model-card mini-model-card ${
+                              selectedOpenaiModelIds.includes(model.model_id) || enabledOpenaiModelIds.includes(model.model_id)
+                                ? "is-selected"
+                                : ""
+                            }`}
                           >
                             <div className="model-card-header">
                               <strong>{model.model_id}</strong>
-                              <StatusBadge value={selectedOpenaiModelIds.includes(model.model_id) ? "selected" : "available"} />
+                              <StatusBadge value={enabledOpenaiModelIds.includes(model.model_id) ? "enabled" : "available"} />
                             </div>
                             <div className="state-grid compact-grid">
                               <span>Model ID</span>
                               <code>{model.model_id}</code>
                               <span>Discovered</span>
                               <code>{model.discovered_at ? model.discovered_at.slice(0, 10) : "unknown"}</code>
+                              <span>Speed</span>
+                              <code>{formatTierLabel(capabilityEntry?.speed_tier || "unknown")}</code>
+                              <span>Cost</span>
+                              <code>{formatTierLabel(capabilityEntry?.cost_tier || "unknown")}</code>
+                              <span>Coding</span>
+                              <code>{formatTierLabel(capabilityEntry?.coding_strength || "unknown")}</code>
                               <span>Input Price</span>
                               <code>{formatPrice(openaiModelPriceById[model.model_id]?.input_per_1m_tokens)}</code>
                               <span>Output Price</span>
                               <code>{formatPrice(openaiModelPriceById[model.model_id]?.output_per_1m_tokens)}</code>
                             </div>
+                            <div className="capability-badge-list">
+                              {capabilityBadges.length ? (
+                                capabilityBadges.map((badge) => (
+                                  <span key={`${model.model_id}-${badge}`} className="capability-badge">
+                                    {badge}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="muted tiny">Capabilities pending classification</span>
+                              )}
+                            </div>
+                            <div className="recommended-task-list">
+                              {(capabilityEntry?.recommended_for || []).length ? (
+                                capabilityEntry.recommended_for.map((task) => (
+                                  <span key={`${model.model_id}-${task}`} className="capability-badge">
+                                    {formatRecommendedTask(task)}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="muted tiny">No recommended tasks saved yet</span>
+                              )}
+                            </div>
                             <div className="row model-card-actions">
+                              <button
+                                className={`btn ${enabledOpenaiModelIds.includes(model.model_id) ? "btn-primary" : ""}`}
+                                type="button"
+                                onClick={() => onToggleEnabledOpenAiModel(model.model_id)}
+                              >
+                                {enabledOpenaiModelIds.includes(model.model_id) ? "Disable" : "Enable"}
+                              </button>
                               <button
                                 className={`btn ${selectedOpenaiModelIds.includes(model.model_id) ? "btn-primary" : ""}`}
                                 type="button"
                                 onClick={() => onToggleOpenAiModel(model.model_id)}
                               >
-                                {selectedOpenaiModelIds.includes(model.model_id) ? "Selected" : "Add Model"}
+                                {selectedOpenaiModelIds.includes(model.model_id) ? "Selected" : "Select"}
                               </button>
                               <button className="btn" type="button" onClick={() => openSingleModelPricing(model.model_id)}>
                                 Set Price
                               </button>
                             </div>
                           </article>
+                            );
+                          })()
                         ))}
                       </div>
                     </section>
@@ -1056,6 +1193,58 @@ export default function App() {
                 </p>
               )}
             </div>
+            <article className="card capability-summary-card">
+              <CardHeader
+                title="Resolved Node Capabilities"
+                subtitle="Only enabled models contribute to this capability summary."
+              />
+              <div className="capability-summary-grid">
+                <div className="state-grid">
+                  <span>Enabled Models</span>
+                  <code>{enabledOpenaiModelIds.join(", ") || "none_enabled"}</code>
+                  <span>Classifier</span>
+                  <code>{resolvedOpenaiCapabilities?.classification_model || "unavailable"}</code>
+                  <span>Reasoning</span>
+                  <StatusBadge value={resolvedCapabilityFlags.reasoning ? "enabled" : "disabled"} />
+                  <span>Vision</span>
+                  <StatusBadge value={resolvedCapabilityFlags.vision ? "enabled" : "disabled"} />
+                  <span>Image Generation</span>
+                  <StatusBadge value={resolvedCapabilityFlags.image_generation ? "enabled" : "disabled"} />
+                  <span>Audio Input</span>
+                  <StatusBadge value={resolvedCapabilityFlags.audio_input ? "enabled" : "disabled"} />
+                  <span>Audio Output</span>
+                  <StatusBadge value={resolvedCapabilityFlags.audio_output ? "enabled" : "disabled"} />
+                  <span>Realtime</span>
+                  <StatusBadge value={resolvedCapabilityFlags.realtime ? "enabled" : "disabled"} />
+                  <span>Structured Output</span>
+                  <StatusBadge value={resolvedCapabilityFlags.structured_output ? "enabled" : "disabled"} />
+                  <span>Long Context</span>
+                  <StatusBadge value={resolvedCapabilityFlags.long_context ? "enabled" : "disabled"} />
+                  <span>Tool Calling</span>
+                  <StatusBadge value={resolvedCapabilityFlags.tool_calling ? "enabled" : "disabled"} />
+                  <span>Coding Strength</span>
+                  <code>{formatTierLabel(resolvedCapabilityFlags.coding_strength || "unknown")}</code>
+                  <span>Speed Tier</span>
+                  <code>{formatTierLabel(resolvedCapabilityFlags.speed_tier || "unknown")}</code>
+                  <span>Cost Tier</span>
+                  <code>{formatTierLabel(resolvedCapabilityFlags.cost_tier || "unknown")}</code>
+                </div>
+                <div>
+                  <strong>Recommended Tasks</strong>
+                  <div className="recommended-task-list">
+                    {(resolvedCapabilityFlags.recommended_for || []).length ? (
+                      resolvedCapabilityFlags.recommended_for.map((task) => (
+                        <span key={task} className="capability-badge">
+                          {formatRecommendedTask(task)}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="muted tiny">Enable one or more classified models to build node capabilities.</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </article>
           </article>
         </section>
       ) : isUnconfigured ? (

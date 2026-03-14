@@ -593,6 +593,86 @@ class NodeControlState:
             else datetime.now(timezone.utc).isoformat(),
         }
 
+    def openai_provider_model_capabilities_payload(self) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "openai_model_capabilities_payload"):
+            return {
+                "provider_id": "openai",
+                "classification_model": None,
+                "entries": [],
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "source": "provider_model_capabilities",
+            }
+        payload = self._provider_runtime_manager.openai_model_capabilities_payload()
+        entries = payload.get("entries") if isinstance(payload, dict) and isinstance(payload.get("entries"), list) else []
+        return {
+            "provider_id": "openai",
+            "classification_model": payload.get("classification_model") if isinstance(payload, dict) else None,
+            "entries": entries,
+            "generated_at": str(payload.get("generated_at") or datetime.now(timezone.utc).isoformat()).strip()
+            if isinstance(payload, dict)
+            else datetime.now(timezone.utc).isoformat(),
+            "source": str(payload.get("source") or "provider_model_capabilities").strip()
+            if isinstance(payload, dict)
+            else "provider_model_capabilities",
+        }
+
+    def openai_enabled_models_payload(self) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "openai_enabled_models_payload"):
+            return {
+                "provider_id": "openai",
+                "models": [],
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "source": "provider_enabled_models",
+            }
+        payload = self._provider_runtime_manager.openai_enabled_models_payload()
+        models = payload.get("models") if isinstance(payload, dict) and isinstance(payload.get("models"), list) else []
+        return {
+            "provider_id": "openai",
+            "models": models,
+            "generated_at": str(payload.get("generated_at") or datetime.now(timezone.utc).isoformat()).strip()
+            if isinstance(payload, dict)
+            else datetime.now(timezone.utc).isoformat(),
+            "source": str(payload.get("source") or "provider_enabled_models").strip()
+            if isinstance(payload, dict)
+            else "provider_enabled_models",
+        }
+
+    def save_openai_enabled_models(self, *, model_ids: list[str]) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "save_openai_enabled_models"):
+            raise ValueError("openai enabled model persistence is not configured")
+        payload = self._provider_runtime_manager.save_openai_enabled_models(model_ids=model_ids)
+        return {
+            "provider_id": "openai",
+            **(payload if isinstance(payload, dict) else {}),
+        }
+
+    def openai_resolved_capabilities_payload(self) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "openai_resolved_capabilities_payload"):
+            return {
+                "provider_id": "openai",
+                "enabled_model_ids": [],
+                "classification_model": None,
+                "updated_at": None,
+                "capabilities": {
+                    "reasoning": False,
+                    "vision": False,
+                    "image_generation": False,
+                    "audio_input": False,
+                    "audio_output": False,
+                    "realtime": False,
+                    "tool_calling": False,
+                    "structured_output": False,
+                    "long_context": False,
+                    "coding_strength": "low",
+                    "speed_tier": "low",
+                    "cost_tier": "low",
+                    "recommended_for": [],
+                },
+                "enabled_models": [],
+            }
+        payload = self._provider_runtime_manager.openai_resolved_capabilities_payload()
+        return {"provider_id": "openai", **(payload if isinstance(payload, dict) else {})}
+
     @staticmethod
     def _extract_report_models(report: dict | None, provider_id: str) -> list[dict]:
         if not isinstance(report, dict):
@@ -922,6 +1002,10 @@ class OpenAIManualPricingRequest(BaseModel):
     output_price_per_1m: float | None = None
 
 
+class OpenAIEnabledModelsRequest(BaseModel):
+    model_ids: list[str]
+
+
 class PromptServiceRegisterRequest(BaseModel):
     prompt_id: str
     service_id: str
@@ -1061,6 +1145,25 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/providers/openai/models/catalog")
     def get_openai_model_catalog():
         return state.openai_provider_model_catalog_payload()
+
+    @app.get("/api/providers/openai/models/capabilities")
+    def get_openai_model_capabilities():
+        return state.openai_provider_model_capabilities_payload()
+
+    @app.get("/api/providers/openai/models/enabled")
+    def get_openai_enabled_models():
+        return state.openai_enabled_models_payload()
+
+    @app.post("/api/providers/openai/models/enabled")
+    def post_openai_enabled_models(payload: OpenAIEnabledModelsRequest):
+        try:
+            return state.save_openai_enabled_models(model_ids=payload.model_ids)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/providers/openai/capability-resolution")
+    def get_openai_capability_resolution():
+        return state.openai_resolved_capabilities_payload()
 
     @app.get("/api/providers/openai/pricing/diagnostics")
     def get_openai_pricing_diagnostics():

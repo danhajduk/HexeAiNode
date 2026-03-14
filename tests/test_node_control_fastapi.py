@@ -218,6 +218,96 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "generated_at": "2026-03-13T00:00:00Z",
             }
 
+        def openai_model_capabilities_payload(self):
+            return {
+                "provider_id": "openai",
+                "classification_model": "gpt-5-mini",
+                "entries": [
+                    {
+                        "model_id": "gpt-5-mini",
+                        "family": "llm",
+                        "reasoning": True,
+                        "vision": False,
+                        "image_generation": False,
+                        "audio_input": False,
+                        "audio_output": False,
+                        "realtime": False,
+                        "tool_calling": True,
+                        "structured_output": True,
+                        "long_context": True,
+                        "coding_strength": "high",
+                        "speed_tier": "medium",
+                        "cost_tier": "medium",
+                        "recommended_for": ["chat", "coding"],
+                    }
+                ],
+                "source": "provider_model_capabilities",
+                "generated_at": "2026-03-13T00:00:00Z",
+            }
+
+        def openai_enabled_models_payload(self):
+            return {
+                "provider_id": "openai",
+                "models": [
+                    {"model_id": "gpt-5-mini", "enabled": True, "selected_at": "2026-03-13T00:00:00Z"},
+                ],
+                "source": "provider_enabled_models",
+                "generated_at": "2026-03-13T00:00:00Z",
+            }
+
+        def save_openai_enabled_models(self, *, model_ids: list[str]):
+            return {
+                "provider_id": "openai",
+                "models": [
+                    {"model_id": model_id, "enabled": True, "selected_at": "2026-03-13T00:00:00Z"}
+                    for model_id in model_ids
+                ],
+                "source": "provider_enabled_models",
+                "generated_at": "2026-03-13T00:00:00Z",
+            }
+
+        def openai_resolved_capabilities_payload(self):
+            return {
+                "provider_id": "openai",
+                "enabled_model_ids": ["gpt-5-mini"],
+                "classification_model": "gpt-5-mini",
+                "updated_at": "2026-03-13T00:00:00Z",
+                "capabilities": {
+                    "reasoning": True,
+                    "vision": False,
+                    "image_generation": False,
+                    "audio_input": False,
+                    "audio_output": False,
+                    "realtime": False,
+                    "tool_calling": True,
+                    "structured_output": True,
+                    "long_context": True,
+                    "coding_strength": "high",
+                    "speed_tier": "medium",
+                    "cost_tier": "medium",
+                    "recommended_for": ["chat", "coding"],
+                },
+                "enabled_models": [
+                    {
+                        "model_id": "gpt-5-mini",
+                        "family": "llm",
+                        "reasoning": True,
+                        "vision": False,
+                        "image_generation": False,
+                        "audio_input": False,
+                        "audio_output": False,
+                        "realtime": False,
+                        "tool_calling": True,
+                        "structured_output": True,
+                        "long_context": True,
+                        "coding_strength": "high",
+                        "speed_tier": "medium",
+                        "cost_tier": "medium",
+                        "recommended_for": ["chat", "coding"],
+                    }
+                ],
+            }
+
     def test_status_and_onboarding_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
@@ -292,6 +382,25 @@ class NodeControlFastApiTests(unittest.TestCase):
             model_catalog_response = client.get("/api/providers/openai/models/catalog")
             self.assertEqual(model_catalog_response.status_code, 200)
             self.assertEqual(model_catalog_response.json()["models"][1]["family"], "moderation")
+
+            model_capabilities_response = client.get("/api/providers/openai/models/capabilities")
+            self.assertEqual(model_capabilities_response.status_code, 200)
+            self.assertEqual(model_capabilities_response.json()["classification_model"], "gpt-5-mini")
+
+            enabled_models_response = client.get("/api/providers/openai/models/enabled")
+            self.assertEqual(enabled_models_response.status_code, 200)
+            self.assertEqual(enabled_models_response.json()["models"][0]["model_id"], "gpt-5-mini")
+
+            enabled_models_set_response = client.post(
+                "/api/providers/openai/models/enabled",
+                json={"model_ids": ["gpt-5-mini", "gpt-4o"]},
+            )
+            self.assertEqual(enabled_models_set_response.status_code, 200)
+            self.assertEqual(len(enabled_models_set_response.json()["models"]), 2)
+
+            capability_resolution_response = client.get("/api/providers/openai/capability-resolution")
+            self.assertEqual(capability_resolution_response.status_code, 200)
+            self.assertTrue(capability_resolution_response.json()["capabilities"]["reasoning"])
 
             pricing_diagnostics_response = client.get("/api/providers/openai/pricing/diagnostics")
             self.assertEqual(pricing_diagnostics_response.status_code, 200)

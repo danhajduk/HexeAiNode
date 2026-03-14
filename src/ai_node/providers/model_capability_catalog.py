@@ -191,6 +191,24 @@ class ProviderModelCapabilitiesStore:
         except Exception:
             return None
 
+    def payload(self) -> dict:
+        snapshot = self.load()
+        if snapshot is None:
+            return {
+                "provider_id": "openai",
+                "classification_model": None,
+                "generated_at": _iso_now(),
+                "entries": [],
+                "source": "provider_model_capabilities",
+            }
+        return {
+            "provider_id": snapshot.provider_id,
+            "classification_model": snapshot.classification_model,
+            "generated_at": snapshot.updated_at,
+            "entries": [entry.model_dump() for entry in snapshot.entries],
+            "source": "provider_model_capabilities",
+        }
+
     def save(self, *, classification_model: str | None, entries: list[ProviderModelCapabilityEntry]) -> ProviderModelCapabilitiesSnapshot:
         snapshot = ProviderModelCapabilitiesSnapshot(
             classification_model=_normalize_string(classification_model) or None,

@@ -46,51 +46,6 @@ Do not edit above this line:
 
 [STOP]
 
-[TODO] Task 188: Add capability mapping UI
-Display discovered models to the user.
-
-UI elements:
-
-Model card with:
-
-- model name
-- capability badges
-- speed tier
-- cost tier
-- recommended tasks
-
-Allow the user to enable/disable models.
-
-[TODO] Task 189: Persist selected models
-Store user-selected models:
-
-provider_enabled_models.json
-
-Fields:
-
-model_id
-enabled
-selected_at
-
-Only enabled models should influence node capabilities.
-
-[TODO] Task 190: Derive node capabilities from selected models
-Create a resolver that maps enabled models to node capabilities.
-
-Example mappings:
-
-reasoning → reasoning tasks
-coding_strength high/medium → coding tasks
-vision → image analysis
-image_generation → image generation tasks
-audio_input → speech-to-text
-audio_output → text-to-speech
-realtime → realtime voice interaction
-structured_output → structured extraction
-long_context → long-document processing
-
-Combine capabilities across all enabled models.
-
 [TODO] Task 191: Build node task capability list
 From resolved model capabilities generate node task families:
 

@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ai_node.providers.model_capability_catalog import ProviderModelCapabilityEntry
 from ai_node.providers.adapters.mock_adapter import MockProviderAdapter
 from ai_node.providers.execution_router import ProviderExecutionRouter
 from ai_node.providers.metrics import ProviderMetricsCollector
@@ -149,6 +150,42 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             )
             payload = runtime.openai_model_catalog_payload()
             self.assertEqual([item["model_id"] for item in payload["models"]], ["gpt-5-mini", "omni-moderation-2024-09-26"])
+
+    async def test_openai_enabled_models_and_resolved_capabilities_payloads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["local"]),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                provider_model_capabilities_path=str(Path(tmp) / "provider_model_capabilities.json"),
+                provider_enabled_models_path=str(Path(tmp) / "provider_enabled_models.json"),
+            )
+            runtime._provider_model_capabilities_store.save(  # noqa: SLF001
+                classification_model="gpt-5-mini",
+                entries=[
+                    ProviderModelCapabilityEntry(
+                        model_id="gpt-5-mini",
+                        family="llm",
+                        reasoning=True,
+                        tool_calling=True,
+                        structured_output=True,
+                        long_context=True,
+                        coding_strength="high",
+                        speed_tier="medium",
+                        cost_tier="medium",
+                        recommended_for=["coding"],
+                    )
+                ],
+            )
+            runtime.save_openai_enabled_models(model_ids=["gpt-5-mini"])
+
+            enabled_payload = runtime.openai_enabled_models_payload()
+            resolved_payload = runtime.openai_resolved_capabilities_payload()
+
+            self.assertEqual(enabled_payload["models"][0]["model_id"], "gpt-5-mini")
+            self.assertTrue(resolved_payload["capabilities"]["reasoning"])
+            self.assertEqual(resolved_payload["capabilities"]["coding_strength"], "high")
 
 
 if __name__ == "__main__":

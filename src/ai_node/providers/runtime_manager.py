@@ -5,6 +5,7 @@ from ai_node.providers.adapters.local_adapter import LocalProviderAdapter
 from ai_node.providers.adapters.openai_adapter import OpenAIProviderAdapter
 from ai_node.providers.config_loader import ProviderConfigLoader
 from ai_node.providers.execution_router import ProviderExecutionRouter
+from ai_node.providers.capability_resolution import resolve_enabled_model_capabilities
 from ai_node.providers.model_capability_catalog import (
     DEFAULT_PROVIDER_MODEL_CAPABILITIES_PATH,
     OpenAIModelCapabilityClassifier,
@@ -23,6 +24,10 @@ from ai_node.providers.openai_catalog import (
 from ai_node.providers.openai_model_catalog import (
     DEFAULT_OPENAI_PROVIDER_MODEL_CATALOG_PATH,
     OpenAIProviderModelCatalogStore,
+)
+from ai_node.config.provider_enabled_models_config import (
+    DEFAULT_PROVIDER_ENABLED_MODELS_PATH,
+    ProviderEnabledModelsStore,
 )
 from ai_node.providers.provider_registry import ProviderRegistry
 
@@ -45,6 +50,7 @@ class ProviderRuntimeManager:
         pricing_stale_tolerance_seconds: int = DEFAULT_OPENAI_PRICING_STALE_TOLERANCE_SECONDS,
         provider_model_catalog_path: str = DEFAULT_OPENAI_PROVIDER_MODEL_CATALOG_PATH,
         provider_model_capabilities_path: str = DEFAULT_PROVIDER_MODEL_CAPABILITIES_PATH,
+        provider_enabled_models_path: str = DEFAULT_PROVIDER_ENABLED_MODELS_PATH,
     ) -> None:
         self._logger = logger
         self._loader = ProviderConfigLoader(
@@ -68,6 +74,10 @@ class ProviderRuntimeManager:
         )
         self._provider_model_capabilities_store = ProviderModelCapabilitiesStore(
             path=provider_model_capabilities_path,
+            logger=logger,
+        )
+        self._provider_enabled_models_store = ProviderEnabledModelsStore(
+            path=provider_enabled_models_path,
             logger=logger,
         )
         self._router = ProviderExecutionRouter(
@@ -255,6 +265,27 @@ class ProviderRuntimeManager:
 
     def openai_model_catalog_payload(self) -> dict:
         return self._openai_model_catalog_store.payload()
+
+    def openai_model_capabilities_payload(self) -> dict:
+        return self._provider_model_capabilities_store.payload()
+
+    def openai_enabled_models_payload(self) -> dict:
+        return self._provider_enabled_models_store.payload()
+
+    def save_openai_enabled_models(self, *, model_ids: list[str]) -> dict:
+        snapshot = self._provider_enabled_models_store.save_enabled_model_ids(model_ids=model_ids)
+        return {
+            "provider_id": snapshot.provider_id,
+            "models": [entry.model_dump() for entry in snapshot.models],
+            "generated_at": snapshot.updated_at,
+            "source": "provider_enabled_models",
+        }
+
+    def openai_resolved_capabilities_payload(self) -> dict:
+        enabled_snapshot = self._provider_enabled_models_store.load()
+        capabilities_snapshot = self._provider_model_capabilities_store.load()
+        enabled_model_ids = [entry.model_id for entry in enabled_snapshot.models] if enabled_snapshot is not None else []
+        return resolve_enabled_model_capabilities(snapshot=capabilities_snapshot, enabled_model_ids=enabled_model_ids)
 
     async def _refresh_openai_model_capabilities(self, *, adapter: OpenAIProviderAdapter, models: list) -> None:
         if not models:
