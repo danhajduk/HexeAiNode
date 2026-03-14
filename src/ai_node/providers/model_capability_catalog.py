@@ -5,6 +5,11 @@ from typing import Awaitable, Callable
 
 from pydantic import BaseModel, Field
 
+from ai_node.providers.model_feature_schema import (
+    MODEL_FEATURE_KEYS,
+    create_default_feature_flags,
+    normalize_feature_flags,
+)
 from ai_node.providers.openai_model_catalog import OpenAIProviderModelCatalogEntry
 
 
@@ -55,6 +60,7 @@ class ProviderModelCapabilityEntry(BaseModel):
     speed_tier: str = "medium"
     cost_tier: str = "medium"
     recommended_for: list[str] = Field(default_factory=list)
+    feature_flags: dict[str, bool] = Field(default_factory=create_default_feature_flags)
 
 
 class ProviderModelCapabilitiesSnapshot(BaseModel):
@@ -100,6 +106,7 @@ def select_openai_classification_model(models: list[OpenAIProviderModelCatalogEn
 def build_openai_capability_classification_prompt(*, models: list[OpenAIProviderModelCatalogEntry], classification_model: str) -> tuple[str, str]:
     model_lines = "\n".join(f"- {item.model_id} ({item.family})" for item in models)
     allowed = ", ".join(RECOMMENDED_FOR_OPTIONS)
+    feature_keys = ", ".join(MODEL_FEATURE_KEYS)
     system_prompt = (
         "You are a model capability classifier for Synthia. "
         "Return JSON only. No markdown, no prose, no code fences. "
@@ -110,7 +117,8 @@ def build_openai_capability_classification_prompt(*, models: list[OpenAIProvider
         "Return a JSON object with key 'models' containing one entry per input model.\n"
         "Each entry must include: model_id, family, reasoning, vision, image_generation, audio_input, "
         "audio_output, realtime, tool_calling, structured_output, long_context, coding_strength, speed_tier, "
-        "cost_tier, recommended_for.\n"
+        "cost_tier, recommended_for, feature_flags.\n"
+        f"feature_flags must be an object with these boolean keys: {feature_keys}.\n"
         "coding_strength must be one of: low, medium, high.\n"
         "speed_tier must be one of: low, medium, high.\n"
         "cost_tier must be one of: low, medium, high.\n"
@@ -158,6 +166,7 @@ def validate_provider_model_capability_payload(*, payload: object, expected_mode
                 "recommended_for": sorted(set(str(value).strip() for value in item.get("recommended_for") or [] if str(value).strip())),
             }
         )
+        entry.feature_flags = _resolve_model_feature_flags(raw_entry=item, entry=entry)
         if entry.family != expected_map[model_id]:
             raise ValueError(f"classification_family_mismatch:{model_id}")
         if entry.coding_strength not in _CODING_STRENGTH_OPTIONS:
@@ -175,6 +184,72 @@ def validate_provider_model_capability_payload(*, payload: object, expected_mode
         raise ValueError("classification_models_incomplete")
     validated.sort(key=lambda item: item.model_id)
     return validated
+
+
+def _resolve_model_feature_flags(*, raw_entry: dict, entry: ProviderModelCapabilityEntry) -> dict[str, bool]:
+    raw_feature_flags = raw_entry.get("feature_flags")
+    if isinstance(raw_feature_flags, dict):
+        return normalize_feature_flags(feature_flags=raw_feature_flags)
+
+    # Backward-compatible derivation for models classified before explicit feature flags.
+    normalized = create_default_feature_flags()
+    recommended = set(entry.recommended_for)
+    family = str(entry.family or "").strip().lower()
+    is_coding = entry.coding_strength in {"medium", "high"}
+
+    normalized["chat"] = family == "llm" or "chat" in recommended
+    normalized["reasoning"] = bool(entry.reasoning)
+    normalized["instruction_following"] = family == "llm"
+    normalized["classification"] = "classification" in recommended
+    normalized["summarization"] = "summarization" in recommended
+    normalized["information_extraction"] = bool(entry.structured_output)
+    normalized["translation"] = "translation" in recommended
+    normalized["sentiment_analysis"] = "sentiment_analysis" in recommended
+    normalized["long_context"] = bool(entry.long_context)
+
+    normalized["structured_output"] = bool(entry.structured_output)
+    normalized["json_output"] = bool(entry.structured_output)
+    normalized["schema_output"] = bool(entry.structured_output)
+    normalized["tool_calling"] = bool(entry.tool_calling)
+    normalized["function_calling"] = bool(entry.tool_calling)
+    normalized["planning"] = bool(entry.reasoning)
+    normalized["automation_commands"] = bool(entry.tool_calling)
+    normalized["environment_control"] = bool(entry.tool_calling)
+
+    normalized["code_generation"] = is_coding
+    normalized["code_review"] = is_coding
+    normalized["code_debugging"] = is_coding
+    normalized["code_explanation"] = is_coding
+
+    normalized["vision_input"] = bool(entry.vision)
+    normalized["image_understanding"] = bool(entry.vision)
+    normalized["document_understanding"] = bool(entry.vision)
+    normalized["ocr"] = bool(entry.vision)
+    normalized["object_detection"] = bool(entry.vision)
+
+    normalized["image_generation"] = bool(entry.image_generation)
+    normalized["image_editing"] = bool(entry.image_generation)
+    normalized["image_variation"] = bool(entry.image_generation)
+
+    normalized["audio_input"] = bool(entry.audio_input)
+    normalized["speech_to_text"] = bool(entry.audio_input) or family == "speech_to_text"
+    normalized["audio_output"] = bool(entry.audio_output)
+    normalized["text_to_speech"] = bool(entry.audio_output) or family == "text_to_speech"
+    normalized["voice_conversation"] = bool(entry.realtime and (entry.audio_input or entry.audio_output))
+    normalized["audio_analysis"] = bool(entry.audio_input)
+
+    normalized["realtime_interaction"] = bool(entry.realtime)
+    normalized["streaming_output"] = bool(entry.realtime)
+    normalized["low_latency"] = bool(entry.realtime)
+
+    normalized["embeddings"] = family == "embeddings" or "embeddings" in recommended
+    normalized["semantic_search"] = normalized["embeddings"]
+    normalized["document_indexing"] = normalized["embeddings"]
+    normalized["knowledge_retrieval"] = normalized["embeddings"]
+
+    normalized["moderation"] = family == "moderation" or "moderation" in recommended
+    normalized["policy_check"] = normalized["moderation"]
+    return normalized
 
 
 class ProviderModelCapabilitiesStore:

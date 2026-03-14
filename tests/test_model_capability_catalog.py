@@ -85,6 +85,117 @@ class ModelCapabilityCatalogTests(unittest.IsolatedAsyncioTestCase):
                 expected_models=models,
             )
 
+    def test_validate_accepts_valid_json_output_and_stabilizes_order(self):
+        models = [
+            OpenAIProviderModelCatalogEntry(model_id="whisper-1", family="speech_to_text", discovered_at="2026-03-13T00:00:00Z"),
+            OpenAIProviderModelCatalogEntry(model_id="gpt-5-mini", family="llm", discovered_at="2026-03-13T00:00:00Z"),
+        ]
+        payload = {
+            "models": [
+                {
+                    "model_id": "whisper-1",
+                    "family": "speech_to_text",
+                    "reasoning": False,
+                    "vision": False,
+                    "image_generation": False,
+                    "audio_input": True,
+                    "audio_output": False,
+                    "realtime": False,
+                    "tool_calling": False,
+                    "structured_output": False,
+                    "long_context": False,
+                    "coding_strength": "low",
+                    "speed_tier": "high",
+                    "cost_tier": "low",
+                    "recommended_for": ["speech_recognition", "speech_recognition"],
+                },
+                {
+                    "model_id": "gpt-5-mini",
+                    "family": "llm",
+                    "reasoning": True,
+                    "vision": False,
+                    "image_generation": False,
+                    "audio_input": False,
+                    "audio_output": False,
+                    "realtime": False,
+                    "tool_calling": True,
+                    "structured_output": True,
+                    "long_context": True,
+                    "coding_strength": "high",
+                    "speed_tier": "medium",
+                    "cost_tier": "medium",
+                    "recommended_for": ["coding", "chat", "coding"],
+                },
+            ]
+        }
+        validated = validate_provider_model_capability_payload(payload=payload, expected_models=models)
+        self.assertEqual([entry.model_id for entry in validated], ["gpt-5-mini", "whisper-1"])
+        self.assertEqual(validated[0].recommended_for, ["chat", "coding"])
+
+    def test_validate_rejects_invalid_schema_payloads(self):
+        models = [OpenAIProviderModelCatalogEntry(model_id="gpt-5-mini", family="llm", discovered_at="2026-03-13T00:00:00Z")]
+        with self.assertRaisesRegex(ValueError, "classification_payload_invalid"):
+            validate_provider_model_capability_payload(payload=[], expected_models=models)
+        with self.assertRaisesRegex(ValueError, "classification_models_missing"):
+            validate_provider_model_capability_payload(payload={}, expected_models=models)
+
+    def test_validate_rejects_invalid_controlled_vocabulary_for_tiers(self):
+        models = [OpenAIProviderModelCatalogEntry(model_id="gpt-5-mini", family="llm", discovered_at="2026-03-13T00:00:00Z")]
+        with self.assertRaisesRegex(ValueError, "classification_coding_strength_invalid"):
+            validate_provider_model_capability_payload(
+                payload={
+                    "models": [
+                        {
+                            "model_id": "gpt-5-mini",
+                            "family": "llm",
+                            "reasoning": True,
+                            "vision": False,
+                            "image_generation": False,
+                            "audio_input": False,
+                            "audio_output": False,
+                            "realtime": False,
+                            "tool_calling": True,
+                            "structured_output": True,
+                            "long_context": True,
+                            "coding_strength": "expert",
+                            "speed_tier": "medium",
+                            "cost_tier": "medium",
+                            "recommended_for": ["chat"],
+                        }
+                    ]
+                },
+                expected_models=models,
+            )
+
+    def test_validate_rejects_unknown_feature_flags(self):
+        models = [OpenAIProviderModelCatalogEntry(model_id="gpt-5-mini", family="llm", discovered_at="2026-03-13T00:00:00Z")]
+        with self.assertRaisesRegex(ValueError, "classification_feature_unknown"):
+            validate_provider_model_capability_payload(
+                payload={
+                    "models": [
+                        {
+                            "model_id": "gpt-5-mini",
+                            "family": "llm",
+                            "reasoning": True,
+                            "vision": False,
+                            "image_generation": False,
+                            "audio_input": False,
+                            "audio_output": False,
+                            "realtime": False,
+                            "tool_calling": True,
+                            "structured_output": True,
+                            "long_context": True,
+                            "coding_strength": "high",
+                            "speed_tier": "medium",
+                            "cost_tier": "medium",
+                            "recommended_for": ["chat"],
+                            "feature_flags": {"unknown_feature": True},
+                        }
+                    ]
+                },
+                expected_models=models,
+            )
+
     async def test_classifier_saves_batch_results(self):
         models = [
             OpenAIProviderModelCatalogEntry(model_id="gpt-5-mini", family="llm", discovered_at="2026-03-13T00:00:00Z"),

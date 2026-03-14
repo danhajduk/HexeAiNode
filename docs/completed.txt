@@ -189,3 +189,7 @@ Task 193: Declare capabilities to Core - Completed on 03/13/2026 20:42
 Task 194: Add redeclaration trigger - Completed on 03/13/2026 20:42
 Task 195: Add diagnostics panel - Completed on 03/13/2026 20:42
 Task 196: Add manual refresh controls - Completed on 03/13/2026 20:42
+Task 199: Introduce model feature classification schema - Completed on 03/13/2026 20:55
+Task 197: Add tests for model filtering - Completed on 03/13/2026 20:46
+Task 198: Add tests for capability classification schema - Completed on 03/13/2026 20:46
+Task 199: Introduce model feature classification schema - Completed on 03/13/2026 20:46

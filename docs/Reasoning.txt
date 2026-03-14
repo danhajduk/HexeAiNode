@@ -558,3 +558,27 @@ Chosen fix: Added admin controls for model discovery refresh, capability classif
 What changed: Added admin route guards and frontend action buttons wired to manual control endpoints.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_client tests.test_capability_declaration_runner tests.test_node_control_api tests.test_node_control_fastapi` and `npm --prefix frontend run build` passed.
 ###########
+Task #197
+Step objective: Add deterministic model filtering tests for valid families, preview/snapshot exclusions, and duplicate handling.
+Chosen fix: Expanded OpenAI model catalog tests into focused cases that assert accepted families, excluded variants, duplicate removal, and stable sorted output order.
+What changed: Updated tests/test_openai_model_catalog.py with dedicated filtering scenarios.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_openai_model_catalog` passed.
+###########
+Task #198
+Step objective: Strengthen capability classification schema validation tests.
+Chosen fix: Added validation tests for valid JSON acceptance, invalid schema rejection, controlled vocabulary enforcement, and recommended_for validation stability.
+What changed: Updated tests/test_model_capability_catalog.py with additional schema validation cases.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_model_capability_catalog` passed.
+###########
+Task #199
+Step objective: Introduce canonical model feature schema for provider model classification.
+Chosen fix: Added a dedicated feature schema vocabulary and integrated feature flag normalization/derivation into model capability validation while preserving backward compatibility.
+What changed: Added src/ai_node/providers/model_feature_schema.py, wired feature flags into src/ai_node/providers/model_capability_catalog.py, and added tests/test_model_feature_schema.py.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_model_feature_schema tests.test_model_capability_catalog tests.test_provider_runtime tests.test_capability_resolution tests.test_node_control_fastapi` passed.
+###########
+Task #199
+Step objective: Introduce canonical model feature classification schema and enforce it in provider model classification.
+Chosen fix: Added grouped canonical feature vocabulary, normalization/validation helpers, classification prompt contract for feature_flags, and compatibility mapping when legacy classifier output omits explicit feature_flags.
+What changed: Added `src/ai_node/providers/model_feature_schema.py`; updated `src/ai_node/providers/model_capability_catalog.py`; added coverage in `tests/test_model_feature_schema.py` and `tests/test_model_capability_catalog.py`.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_model_feature_schema tests.test_model_capability_catalog` passed.
+###########
