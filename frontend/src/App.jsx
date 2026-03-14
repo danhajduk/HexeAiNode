@@ -14,9 +14,11 @@ const DIAGNOSTIC_ENDPOINTS = [
   "/api/providers/openai/credentials",
   "/api/providers/openai/models/catalog",
   "/api/providers/openai/models/capabilities",
+  "/api/providers/openai/models/features",
   "/api/providers/openai/models/enabled",
   "/api/providers/openai/models/latest?limit=9",
   "/api/providers/openai/capability-resolution",
+  "/api/capabilities/node/resolved",
   "/api/capabilities/config",
   "/api/services/status",
 ];
@@ -114,6 +116,8 @@ export default function App() {
   const [openaiModelCapabilities, setOpenaiModelCapabilities] = useState([]);
   const [enabledOpenaiModelIds, setEnabledOpenaiModelIds] = useState([]);
   const [resolvedOpenaiCapabilities, setResolvedOpenaiCapabilities] = useState(null);
+  const [openaiModelFeatures, setOpenaiModelFeatures] = useState([]);
+  const [resolvedNodeCapabilities, setResolvedNodeCapabilities] = useState(null);
   const [latestOpenaiModels, setLatestOpenaiModels] = useState([]);
   const [openaiApiToken, setOpenaiApiToken] = useState("");
   const [openaiServiceToken, setOpenaiServiceToken] = useState("");
@@ -159,6 +163,8 @@ export default function App() {
       enabledModelsResult,
       latestModelsResult,
       capabilityResolutionResult,
+      modelFeaturesResult,
+      nodeCapabilitiesResult,
       capabilityConfigResult,
       servicesResult,
       capabilityDiagnosticsResult,
@@ -172,6 +178,8 @@ export default function App() {
       apiGet("/api/providers/openai/models/enabled"),
       apiGet("/api/providers/openai/models/latest?limit=9"),
       apiGet("/api/providers/openai/capability-resolution"),
+      apiGet("/api/providers/openai/models/features"),
+      apiGet("/api/capabilities/node/resolved"),
       apiGet("/api/capabilities/config"),
       apiGet("/api/services/status"),
       apiAdminGet("/api/capabilities/diagnostics"),
@@ -205,6 +213,8 @@ export default function App() {
     const enabledModelsPayload = enabledModelsResult.status === "fulfilled" ? enabledModelsResult.value : null;
     const latestModelsPayload = latestModelsResult.status === "fulfilled" ? latestModelsResult.value : null;
     const capabilityResolutionPayload = capabilityResolutionResult.status === "fulfilled" ? capabilityResolutionResult.value : null;
+    const modelFeaturesPayload = modelFeaturesResult.status === "fulfilled" ? modelFeaturesResult.value : null;
+    const nodeCapabilitiesPayload = nodeCapabilitiesResult.status === "fulfilled" ? nodeCapabilitiesResult.value : null;
     const capabilityConfigPayload = capabilityConfigResult.status === "fulfilled" ? capabilityConfigResult.value : null;
     const servicePayload = servicesResult.status === "fulfilled" ? servicesResult.value : null;
     const capabilityDiagnosticsPayload = capabilityDiagnosticsResult.status === "fulfilled" ? capabilityDiagnosticsResult.value : null;
@@ -233,6 +243,12 @@ export default function App() {
     if (capabilityResolutionResult.status !== "fulfilled") {
       partialFailures.push("provider_capability_resolution_unavailable");
     }
+    if (modelFeaturesResult.status !== "fulfilled") {
+      partialFailures.push("provider_model_features_unavailable");
+    }
+    if (nodeCapabilitiesResult.status !== "fulfilled") {
+      partialFailures.push("node_capabilities_unavailable");
+    }
     if (capabilityConfigResult.status !== "fulfilled") {
       partialFailures.push("capability_config_unavailable");
     }
@@ -253,6 +269,8 @@ export default function App() {
     );
     setLatestOpenaiModels(Array.isArray(latestModelsPayload?.models) ? latestModelsPayload.models : []);
     setResolvedOpenaiCapabilities(capabilityResolutionPayload);
+    setOpenaiModelFeatures(Array.isArray(modelFeaturesPayload?.entries) ? modelFeaturesPayload.entries : []);
+    setResolvedNodeCapabilities(nodeCapabilitiesPayload);
     setCapabilityDiagnostics(capabilityDiagnosticsPayload);
     setError("");
     if (!providerSetupDirty && providerCredentialsPayload?.credentials?.project_name) {
@@ -421,6 +439,24 @@ export default function App() {
       ),
   })).filter((group) => group.models.length > 0);
   const resolvedCapabilityFlags = resolvedOpenaiCapabilities?.capabilities || {};
+  const openaiFeatureUnion = openaiModelFeatures.reduce((acc, entry) => {
+    if (!entry || typeof entry !== "object" || !entry.features || typeof entry.features !== "object") {
+      return acc;
+    }
+    Object.entries(entry.features).forEach(([feature, enabled]) => {
+      if (enabled) {
+        acc[feature] = true;
+      } else if (!(feature in acc)) {
+        acc[feature] = false;
+      }
+    });
+    return acc;
+  }, {});
+  const resolvedNodeTasks = Array.isArray(resolvedNodeCapabilities?.enabled_task_capabilities)
+    ? resolvedNodeCapabilities.enabled_task_capabilities
+    : Array.isArray(resolvedNodeCapabilities?.resolved_tasks)
+      ? resolvedNodeCapabilities.resolved_tasks
+      : [];
   const pricingReviewModelId = pricingReviewModelIds[pricingReviewIndex] || "";
   const pricingReviewModel = latestOpenaiModels.find((model) => model.model_id === pricingReviewModelId) || null;
   const setupReadinessFlags = uiState.capabilitySummary.setupReadinessFlags || {};
@@ -1271,6 +1307,36 @@ export default function App() {
                       <span className="muted tiny">Enable one or more classified models to build node capabilities.</span>
                     )}
                   </div>
+                </div>
+              </div>
+              <div>
+                <strong>Model Features</strong>
+                <div className="recommended-task-list">
+                  {Object.entries(openaiFeatureUnion)
+                    .filter(([, enabled]) => enabled)
+                    .sort(([left], [right]) => left.localeCompare(right))
+                    .map(([feature]) => (
+                      <span key={feature} className="capability-badge">
+                        {formatRecommendedTask(feature)}
+                      </span>
+                    ))}
+                  {!Object.values(openaiFeatureUnion).some((enabled) => enabled) ? (
+                    <span className="muted tiny">No model features resolved yet.</span>
+                  ) : null}
+                </div>
+              </div>
+              <div>
+                <strong>Resolved Node Tasks</strong>
+                <div className="recommended-task-list">
+                  {resolvedNodeTasks.length ? (
+                    resolvedNodeTasks.map((task) => (
+                      <span key={task} className="capability-badge">
+                        {task}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="muted tiny">No node tasks resolved yet.</span>
+                  )}
                 </div>
               </div>
             </article>

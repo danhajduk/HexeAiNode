@@ -628,6 +628,50 @@ class NodeControlState:
             else "provider_model_capabilities",
         }
 
+    def openai_model_features_payload(self) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "openai_model_features_payload"):
+            return {
+                "schema_version": "1.0",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "entries": [],
+                "source": "provider_model_features",
+            }
+        payload = self._provider_runtime_manager.openai_model_features_payload()
+        if not isinstance(payload, dict):
+            return {
+                "schema_version": "1.0",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "entries": [],
+                "source": "provider_model_features",
+            }
+        return payload
+
+    def node_capabilities_payload(self) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "node_capabilities_payload"):
+            return {
+                "schema_version": "1.0",
+                "capability_graph_version": "1.0",
+                "enabled_models": [],
+                "feature_union": {},
+                "resolved_tasks": [],
+                "enabled_task_capabilities": [],
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "source": "node_capabilities",
+            }
+        payload = self._provider_runtime_manager.node_capabilities_payload()
+        if not isinstance(payload, dict):
+            return {
+                "schema_version": "1.0",
+                "capability_graph_version": "1.0",
+                "enabled_models": [],
+                "feature_union": {},
+                "resolved_tasks": [],
+                "enabled_task_capabilities": [],
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "source": "node_capabilities",
+            }
+        return payload
+
     def openai_enabled_models_payload(self) -> dict:
         if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "openai_enabled_models_payload"):
             return {
@@ -1231,6 +1275,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def get_openai_model_capabilities():
         return state.openai_provider_model_capabilities_payload()
 
+    @app.get("/api/providers/openai/models/features")
+    def get_openai_model_features():
+        return state.openai_model_features_payload()
+
     @app.get("/api/providers/openai/models/enabled")
     def get_openai_enabled_models():
         return state.openai_enabled_models_payload()
@@ -1247,6 +1295,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/providers/openai/capability-resolution")
     def get_openai_capability_resolution():
         return state.openai_resolved_capabilities_payload()
+
+    @app.get("/api/capabilities/node/resolved")
+    def get_node_capabilities():
+        return state.node_capabilities_payload()
 
     @app.get("/api/providers/openai/pricing/diagnostics")
     def get_openai_pricing_diagnostics():

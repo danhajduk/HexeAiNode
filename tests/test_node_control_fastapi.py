@@ -259,6 +259,22 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "generated_at": "2026-03-13T00:00:00Z",
             }
 
+        def openai_model_features_payload(self):
+            return {
+                "schema_version": "1.0",
+                "generated_at": "2026-03-13T00:00:00Z",
+                "source": "provider_model_features",
+                "entries": [
+                    {
+                        "model_id": "gpt-5-mini",
+                        "provider": "openai",
+                        "classification_model": "gpt-5-mini",
+                        "classified_at": "2026-03-13T00:00:00Z",
+                        "features": {"chat": True, "reasoning": True},
+                    }
+                ],
+            }
+
         def openai_enabled_models_payload(self):
             return {
                 "provider_id": "openai",
@@ -320,6 +336,18 @@ class NodeControlFastApiTests(unittest.TestCase):
                         "recommended_for": ["chat", "coding"],
                     }
                 ],
+            }
+
+        def node_capabilities_payload(self):
+            return {
+                "schema_version": "1.0",
+                "capability_graph_version": "1.0",
+                "enabled_models": ["gpt-5-mini"],
+                "feature_union": {"chat": True, "reasoning": True},
+                "resolved_tasks": ["task.chat", "task.reasoning"],
+                "enabled_task_capabilities": ["task.chat", "task.reasoning"],
+                "generated_at": "2026-03-13T00:00:00Z",
+                "source": "node_capabilities",
             }
 
     def test_status_and_onboarding_endpoints(self):
@@ -402,6 +430,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(model_capabilities_response.status_code, 200)
             self.assertEqual(model_capabilities_response.json()["classification_model"], "gpt-5-mini")
 
+            model_features_response = client.get("/api/providers/openai/models/features")
+            self.assertEqual(model_features_response.status_code, 200)
+            self.assertEqual(model_features_response.json()["entries"][0]["model_id"], "gpt-5-mini")
+
             enabled_models_response = client.get("/api/providers/openai/models/enabled")
             self.assertEqual(enabled_models_response.status_code, 200)
             self.assertEqual(enabled_models_response.json()["models"][0]["model_id"], "gpt-5-mini")
@@ -416,6 +448,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             capability_resolution_response = client.get("/api/providers/openai/capability-resolution")
             self.assertEqual(capability_resolution_response.status_code, 200)
             self.assertTrue(capability_resolution_response.json()["capabilities"]["reasoning"])
+
+            node_capabilities_response = client.get("/api/capabilities/node/resolved")
+            self.assertEqual(node_capabilities_response.status_code, 200)
+            self.assertIn("task.reasoning", node_capabilities_response.json()["enabled_task_capabilities"])
 
             diagnostics_response = client.get("/api/capabilities/diagnostics")
             self.assertEqual(diagnostics_response.status_code, 200)

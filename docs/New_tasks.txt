@@ -44,7 +44,7 @@ Stop processing task when you reach the [STOP] flag!
 Do not edit above this line:
 #######################################################################
 
-[WIP] Task 210: Update AI Provider Setup UI
+[WIP] Task 211: Display capability graph resolution
 Create a graph definition file:
 
 capabilities/task_graph.json
@@ -190,7 +190,6 @@ Model Features
 Resolved Node Tasks
 - tasks enabled via capability graph
 
-[TODO] Task 211: Display capability graph resolution
 Add UI card:
 
 Resolved Node Capabilities

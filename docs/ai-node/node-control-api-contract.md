@@ -165,6 +165,30 @@ For OpenAI, this response only includes regular base-model families used for nor
     - `speed_tier`
     - `cost_tier`
     - `recommended_for[]`
+
+### Read OpenAI model feature catalog
+
+- `GET /api/providers/openai/models/features`
+- Response:
+  - `schema_version`
+  - `generated_at`
+  - `entries[]`
+    - `model_id`
+    - `provider`
+    - `classification_model`
+    - `classified_at`
+    - `features` (boolean feature map)
+
+### Read resolved node task capabilities
+
+- `GET /api/capabilities/node/resolved`
+- Response:
+  - `schema_version`
+  - `capability_graph_version`
+  - `enabled_models[]`
+  - `feature_union` (boolean feature map)
+  - `resolved_tasks[]`
+  - `enabled_task_capabilities[]`
     - `feature_flags` (canonical model feature schema booleans)
 
 ### Refresh OpenAI model capability catalog (admin)

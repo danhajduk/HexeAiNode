@@ -642,3 +642,9 @@ Chosen fix: Extended provider metadata assembly in declaration runner to include
 What changed: Updated `src/ai_node/runtime/capability_declaration_runner.py`, declaration runner tests, and API contract docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_declaration_runner tests.test_provider_runtime tests.test_capability_resolver` passed.
 ###########
+Task #210
+Step objective: Update AI provider setup UI to show model feature union and resolved node tasks.
+Chosen fix: Added backend endpoints for model feature catalog and resolved node capabilities, loaded these in frontend status fetch, and rendered dedicated "Model Features" and "Resolved Node Tasks" sections on provider setup.
+What changed: Updated `src/ai_node/runtime/node_control_api.py`, `frontend/src/App.jsx`, `tests/test_node_control_fastapi.py`, and API contract docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_node_control_fastapi tests.test_node_control_api tests.test_capability_declaration_runner tests.test_provider_runtime` and `npm --prefix frontend run build` passed.
+###########
