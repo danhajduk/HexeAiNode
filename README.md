@@ -116,6 +116,7 @@ UI behavior:
 - Manual pricing can be saved for the primary selected model or applied across all selected models from the provider page.
 - The OpenAI pricing refresh endpoint is manual-only for now and just reloads the local pricing snapshot without scraping remote pricing pages.
 - Filtered OpenAI provider models are also persisted locally in `data/provider_models.json`.
+- After filtered models are refreshed, the node automatically picks the smallest available OpenAI LLM for capability classification and stores the batch result in `data/provider_model_capabilities.json`.
 - In Capability Summary, selected models are marked with a green check.
 
 Task capability selection endpoints:

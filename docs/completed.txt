@@ -173,3 +173,8 @@ Task 181: Filter models into supported Synthia families - Completed on 03/13/202
 Task 182: Store filtered model catalog locally - Completed on 03/13/2026 18:44
 Task 182.1 Fixes from previus batch. - Completed on 03/13/2026 18:54
 Task 182.2: Ui tweeks: - Completed on 03/13/2026 19:06
+Task 183: Select classification model - Completed on 03/13/2026 19:09
+Task 184: Implement capability classification prompt - Completed on 03/13/2026 19:09
+Task 185: Define controlled vocabulary for recommended_for - Completed on 03/13/2026 19:09
+Task 186: Run capability classification - Completed on 03/13/2026 19:09
+Task 187: Persist model capability catalog - Completed on 03/13/2026 19:09

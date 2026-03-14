@@ -5,6 +5,11 @@ from ai_node.providers.adapters.local_adapter import LocalProviderAdapter
 from ai_node.providers.adapters.openai_adapter import OpenAIProviderAdapter
 from ai_node.providers.config_loader import ProviderConfigLoader
 from ai_node.providers.execution_router import ProviderExecutionRouter
+from ai_node.providers.model_capability_catalog import (
+    DEFAULT_PROVIDER_MODEL_CAPABILITIES_PATH,
+    OpenAIModelCapabilityClassifier,
+    ProviderModelCapabilitiesStore,
+)
 from ai_node.providers.metrics import ProviderMetricsCollector
 from ai_node.providers.models import UnifiedExecutionRequest, UnifiedExecutionResponse
 from ai_node.providers.openai_catalog import (
@@ -39,6 +44,7 @@ class ProviderRuntimeManager:
         pricing_refresh_interval_seconds: int = DEFAULT_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS,
         pricing_stale_tolerance_seconds: int = DEFAULT_OPENAI_PRICING_STALE_TOLERANCE_SECONDS,
         provider_model_catalog_path: str = DEFAULT_OPENAI_PROVIDER_MODEL_CATALOG_PATH,
+        provider_model_capabilities_path: str = DEFAULT_PROVIDER_MODEL_CAPABILITIES_PATH,
     ) -> None:
         self._logger = logger
         self._loader = ProviderConfigLoader(
@@ -58,6 +64,10 @@ class ProviderRuntimeManager:
         )
         self._openai_model_catalog_store = OpenAIProviderModelCatalogStore(
             path=provider_model_catalog_path,
+            logger=logger,
+        )
+        self._provider_model_capabilities_store = ProviderModelCapabilitiesStore(
+            path=provider_model_capabilities_path,
             logger=logger,
         )
         self._router = ProviderExecutionRouter(
@@ -82,9 +92,10 @@ class ProviderRuntimeManager:
             self._registry.set_provider_health(provider_id=provider_id, payload=health)
             models = await adapter.list_models()
             if provider_id == "openai" and self._pricing_catalog_service is not None:
-                self._openai_model_catalog_store.save_from_model_ids(
+                model_catalog_snapshot = self._openai_model_catalog_store.save_from_model_ids(
                     model_ids=[getattr(model, "model_id", "") for model in models]
                 )
+                await self._refresh_openai_model_capabilities(adapter=adapter, models=model_catalog_snapshot.models)
                 merged_models, provider_unknown_models = self._pricing_catalog_service.merge_model_capabilities(models)
                 models = merged_models
                 unknown_models.extend(provider_unknown_models)
@@ -244,6 +255,34 @@ class ProviderRuntimeManager:
 
     def openai_model_catalog_payload(self) -> dict:
         return self._openai_model_catalog_store.payload()
+
+    async def _refresh_openai_model_capabilities(self, *, adapter: OpenAIProviderAdapter, models: list) -> None:
+        if not models:
+            self._provider_model_capabilities_store.save(classification_model=None, entries=[])
+            return
+
+        async def execute_batch(model_id: str, system_prompt: str, user_prompt: str) -> str:
+            response = await adapter.execute_prompt(
+                UnifiedExecutionRequest(
+                    task_family="task.classification.text",
+                    system_prompt=system_prompt,
+                    prompt=user_prompt,
+                    requested_model=model_id,
+                    temperature=0,
+                )
+            )
+            return response.output_text
+
+        classifier = OpenAIModelCapabilityClassifier(
+            logger=self._logger,
+            store=self._provider_model_capabilities_store,
+            execute_batch=execute_batch,
+        )
+        try:
+            await classifier.classify_and_save(models=models)
+        except Exception as exc:
+            if hasattr(self._logger, "warning"):
+                self._logger.warning("[provider-model-capability-classification-failed] %s", {"error": str(exc).strip() or type(exc).__name__})
 
     def providers_snapshot(self) -> dict:
         return self._registry.snapshot()
