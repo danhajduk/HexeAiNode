@@ -289,6 +289,18 @@ class _FakeProviderRuntimeManager:
             ],
         }
 
+    def node_capabilities_payload(self):
+        return {
+            "enabled_task_capabilities": [
+                "task.reasoning",
+                "task.classification",
+                "task.summarization",
+                "task.speech_to_text",
+            ],
+            "feature_union": {"reasoning": True, "chat": True, "speech_to_text": True},
+            "capability_graph_version": "1.0",
+        }
+
 
 class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
     async def test_accepted_submission_transitions_to_operational(self):
@@ -559,13 +571,23 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             client.last_manifest["declared_task_families"],
-            ["task.classification", "task.coding", "task.reasoning", "task.speech_to_text", "task.summarization"],
+            ["task.classification", "task.reasoning", "task.speech_to_text", "task.summarization"],
         )
         self.assertEqual(client.last_manifest["provider_metadata"][0]["classification_model"], "gpt-5-mini")
         self.assertEqual(
             client.last_manifest["provider_metadata"][0]["task_families"],
             ["task.classification", "task.reasoning", "task.speech_to_text"],
         )
+        self.assertEqual(client.last_manifest["provider_metadata"][0]["provider"], "openai")
+        self.assertEqual(
+            client.last_manifest["provider_metadata"][0]["feature_union"],
+            {"reasoning": True, "chat": True, "speech_to_text": True},
+        )
+        self.assertEqual(
+            client.last_manifest["provider_metadata"][0]["resolved_tasks"],
+            ["task.reasoning", "task.classification", "task.summarization", "task.speech_to_text"],
+        )
+        self.assertEqual(client.last_manifest["provider_metadata"][0]["capability_graph_version"], "1.0")
         self.assertEqual(
             client.last_manifest["enabled_models"],
             [

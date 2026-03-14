@@ -165,6 +165,7 @@ For OpenAI, this response only includes regular base-model families used for nor
     - `speed_tier`
     - `cost_tier`
     - `recommended_for[]`
+    - `feature_flags` (canonical model feature schema booleans)
 
 ### Refresh OpenAI model capability catalog (admin)
 
@@ -295,6 +296,16 @@ For OpenAI, this response only includes regular base-model families used for nor
 - `POST /api/capabilities/declare`
 - Request body: empty JSON object `{}`.
 - Success: runner declaration result payload.
+- Declaration task set behavior:
+  - `declared_task_families` is built from resolved node task capabilities (`runtime/node_capabilities.json`) when available.
+  - raw model-level capabilities are not directly declared as task families.
+- Provider intelligence metadata behavior:
+  - declaration manifest `provider_metadata[]` includes:
+    - `provider`
+    - `enabled_models`
+    - `feature_union`
+    - `resolved_tasks`
+    - `capability_graph_version`
 - Errors:
   - `409` with structured payload when prerequisites are unmet:
     - `detail.error_code = capability_setup_prerequisites_unmet`

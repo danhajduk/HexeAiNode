@@ -630,3 +630,15 @@ Chosen fix: Integrated graph resolver into runtime manager and persisted resolve
 What changed: Updated `src/ai_node/providers/runtime_manager.py`; extended `tests/test_provider_runtime.py`.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_provider_runtime tests.test_capability_resolver tests.test_feature_union` passed.
 ###########
+Task #208
+Step objective: Switch capability declaration payload to resolved node task capabilities instead of raw model-derived task mapping.
+Chosen fix: Updated declaration runner manifest builder to prefer `enabled_task_capabilities` from runtime node capability payload and only fallback to legacy derivation when unavailable.
+What changed: Updated `src/ai_node/runtime/capability_declaration_runner.py`, expanded canonical task family list, and adjusted declaration tests.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_declaration_runner tests.test_capability_manifest_schema tests.test_provider_runtime tests.test_capability_resolver` passed.
+###########
+Task #209
+Step objective: Include provider intelligence metadata in declaration payload for Core acceptance.
+Chosen fix: Extended provider metadata assembly in declaration runner to include provider identity, enabled models, feature_union, resolved_tasks, and capability_graph_version sourced from node capability runtime state.
+What changed: Updated `src/ai_node/runtime/capability_declaration_runner.py`, declaration runner tests, and API contract docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_declaration_runner tests.test_provider_runtime tests.test_capability_resolver` passed.
+###########

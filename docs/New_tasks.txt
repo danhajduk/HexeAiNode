@@ -44,7 +44,7 @@ Stop processing task when you reach the [STOP] flag!
 Do not edit above this line:
 #######################################################################
 
-[WIP] Task 208: Update AI node capability declaration builder
+[WIP] Task 210: Update AI Provider Setup UI
 Create a graph definition file:
 
 capabilities/task_graph.json
@@ -170,7 +170,6 @@ declared_task_families:
 - task.vision_analysis
 - task.speech_to_text
 
-[TODO] Task 209: Include provider intelligence in declaration payload
 Add provider intelligence metadata to capability declaration payload.
 
 Fields:
@@ -183,7 +182,6 @@ capability_graph_version
 
 This fixes the current Core rejection issue.
 
-[TODO] Task 210: Update AI Provider Setup UI
 Modify setup page to display two sections:
 
 Model Features

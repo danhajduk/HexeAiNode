@@ -208,6 +208,31 @@ class CapabilityDeclarationRunner:
         enabled_models = []
         provider_metadata = []
         derived_task_families: list[str] = []
+        resolved_node_tasks: list[str] = []
+        resolved_node_capabilities = (
+            self._provider_runtime_manager.node_capabilities_payload()
+            if self._provider_runtime_manager is not None and hasattr(self._provider_runtime_manager, "node_capabilities_payload")
+            else None
+        )
+        node_feature_union = (
+            resolved_node_capabilities.get("feature_union")
+            if isinstance(resolved_node_capabilities, dict)
+            else {}
+        )
+        node_resolved_tasks = (
+            list(
+                resolved_node_capabilities.get("enabled_task_capabilities")
+                or resolved_node_capabilities.get("resolved_tasks")
+                or []
+            )
+            if isinstance(resolved_node_capabilities, dict)
+            else []
+        )
+        node_capability_graph_version = (
+            str(resolved_node_capabilities.get("capability_graph_version") or "1.0").strip()
+            if isinstance(resolved_node_capabilities, dict)
+            else "1.0"
+        )
         if isinstance(resolved_provider_capabilities, dict):
             enabled_models = [
                 {
@@ -220,18 +245,33 @@ class CapabilityDeclarationRunner:
             derived_task_families = derive_declared_task_families(resolved_capabilities=resolved_provider_capabilities)
             provider_metadata.append(
                 {
+                    "provider": "openai",
                     "provider_id": "openai",
                     "classification_model": resolved_provider_capabilities.get("classification_model"),
                     "enabled_model_ids": list(resolved_provider_capabilities.get("enabled_model_ids") or []),
                     "resolved_capabilities": resolved_provider_capabilities.get("capabilities") or {},
                     "task_families": list(resolved_provider_capabilities.get("task_families") or derived_task_families),
+                    "enabled_models": list(resolved_provider_capabilities.get("enabled_model_ids") or []),
+                    "feature_union": node_feature_union,
+                    "resolved_tasks": node_resolved_tasks,
+                    "capability_graph_version": node_capability_graph_version,
                 }
+            )
+        if isinstance(resolved_node_capabilities, dict):
+            resolved_node_tasks = list(
+                resolved_node_capabilities.get("enabled_task_capabilities")
+                or resolved_node_capabilities.get("resolved_tasks")
+                or []
             )
 
         manifest_task_families = (
-            derived_task_families
-            if derived_task_families
-            else create_declared_task_family_capabilities(selected_task_families)
+            resolved_node_tasks
+            if resolved_node_tasks
+            else (
+                derived_task_families
+                if derived_task_families
+                else create_declared_task_family_capabilities(selected_task_families)
+            )
         )
         return create_capability_manifest(
             node_id=self._node_id,
