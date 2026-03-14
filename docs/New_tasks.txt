@@ -44,7 +44,7 @@ Stop processing task when you reach the [STOP] flag!
 Do not edit above this line:
 #######################################################################
 
-[WIP] Task 207: Resolve node task capabilities
+[WIP] Task 208: Update AI node capability declaration builder
 Create a graph definition file:
 
 capabilities/task_graph.json
@@ -154,7 +154,6 @@ Store result as:
 
 runtime/node_capabilities.json
 
-[TODO] Task 208: Update AI node capability declaration builder
 Modify declaration payload generator.
 
 Instead of declaring raw model capabilities:

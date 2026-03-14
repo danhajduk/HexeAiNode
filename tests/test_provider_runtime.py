@@ -287,6 +287,47 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(resolved_payload["capabilities"]["reasoning"])
             self.assertEqual(resolved_payload["capabilities"]["coding_strength"], "high")
 
+    async def test_save_enabled_models_persists_node_capabilities(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph_path = Path(tmp) / "task_graph.json"
+            graph_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "capability_graph_version": "1.0",
+                        "tasks": {
+                            "task.reasoning": {"all_of": ["reasoning"]},
+                            "task.chat": {"all_of": ["chat"]},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            node_capabilities_path = Path(tmp) / "runtime" / "node_capabilities.json"
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["openai"]),
+                provider_credentials_store=_CredentialsStore(),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                provider_model_features_path=str(Path(tmp) / "providers" / "openai" / "provider_model_features.json"),
+                provider_enabled_models_path=str(Path(tmp) / "provider_enabled_models.json"),
+                node_capabilities_path=str(node_capabilities_path),
+                task_graph_path=str(graph_path),
+            )
+            runtime._provider_model_feature_catalog_store.save_entries(  # noqa: SLF001
+                provider="openai",
+                classification_model="gpt-5-mini",
+                entries=[{"model_id": "gpt-5-mini", "features": {"reasoning": True, "chat": True}}],
+            )
+
+            runtime.save_openai_enabled_models(model_ids=["gpt-5-mini"])
+
+            self.assertTrue(node_capabilities_path.exists())
+            payload = runtime.node_capabilities_payload()
+            self.assertEqual(payload["enabled_models"], ["gpt-5-mini"])
+            self.assertEqual(payload["enabled_task_capabilities"], ["task.chat", "task.reasoning"])
+
     async def test_refresh_openai_models_runs_filtered_classification_and_saves_feature_catalog(self):
         with tempfile.TemporaryDirectory() as tmp:
             runtime = ProviderRuntimeManager(

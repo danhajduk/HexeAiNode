@@ -1,5 +1,7 @@
+import json
 from datetime import datetime, timezone
 import os
+from pathlib import Path
 
 from ai_node.capabilities.resolved_task_families import derive_declared_task_families
 from ai_node.providers.adapters.local_adapter import LocalProviderAdapter
@@ -16,6 +18,7 @@ from ai_node.providers.model_feature_catalog import (
     DEFAULT_PROVIDER_MODEL_FEATURES_PATH,
     ProviderModelFeatureCatalogStore,
 )
+from ai_node.runtime.capability_resolver import load_task_graph, resolve_node_capabilities
 from ai_node.providers.metrics import ProviderMetricsCollector
 from ai_node.providers.models import UnifiedExecutionRequest, UnifiedExecutionResponse
 from ai_node.providers.openai_catalog import (
@@ -57,6 +60,8 @@ class ProviderRuntimeManager:
         provider_model_capabilities_path: str = DEFAULT_PROVIDER_MODEL_CAPABILITIES_PATH,
         provider_model_features_path: str = DEFAULT_PROVIDER_MODEL_FEATURES_PATH,
         provider_enabled_models_path: str = DEFAULT_PROVIDER_ENABLED_MODELS_PATH,
+        node_capabilities_path: str = "runtime/node_capabilities.json",
+        task_graph_path: str = "capabilities/task_graph.json",
     ) -> None:
         self._logger = logger
         self._loader = ProviderConfigLoader(
@@ -90,6 +95,8 @@ class ProviderRuntimeManager:
             path=provider_enabled_models_path,
             logger=logger,
         )
+        self._node_capabilities_path = Path(node_capabilities_path)
+        self._task_graph_path = task_graph_path
         self._router = ProviderExecutionRouter(
             registry=self._registry,
             metrics=self._metrics,
@@ -304,6 +311,7 @@ class ProviderRuntimeManager:
 
     def save_openai_enabled_models(self, *, model_ids: list[str]) -> dict:
         snapshot = self._provider_enabled_models_store.save_enabled_model_ids(model_ids=model_ids)
+        self._resolve_and_persist_node_capabilities()
         return {
             "provider_id": snapshot.provider_id,
             "models": [entry.model_dump() for entry in snapshot.models],
@@ -317,6 +325,45 @@ class ProviderRuntimeManager:
         enabled_model_ids = [entry.model_id for entry in enabled_snapshot.models] if enabled_snapshot is not None else []
         payload = resolve_enabled_model_capabilities(snapshot=capabilities_snapshot, enabled_model_ids=enabled_model_ids)
         payload["task_families"] = derive_declared_task_families(resolved_capabilities=payload)
+        return payload
+
+    def node_capabilities_payload(self) -> dict:
+        if not self._node_capabilities_path.exists():
+            return {
+                "schema_version": "1.0",
+                "capability_graph_version": "1.0",
+                "enabled_models": [],
+                "feature_union": {},
+                "resolved_tasks": [],
+                "enabled_task_capabilities": [],
+                "generated_at": _iso_now(),
+                "source": "node_capabilities",
+            }
+        try:
+            payload = json.loads(self._node_capabilities_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {
+                "schema_version": "1.0",
+                "capability_graph_version": "1.0",
+                "enabled_models": [],
+                "feature_union": {},
+                "resolved_tasks": [],
+                "enabled_task_capabilities": [],
+                "generated_at": _iso_now(),
+                "source": "node_capabilities",
+            }
+        if not isinstance(payload, dict):
+            return {
+                "schema_version": "1.0",
+                "capability_graph_version": "1.0",
+                "enabled_models": [],
+                "feature_union": {},
+                "resolved_tasks": [],
+                "enabled_task_capabilities": [],
+                "generated_at": _iso_now(),
+                "source": "node_capabilities",
+            }
+        payload.setdefault("source", "node_capabilities")
         return payload
 
     async def rerun_openai_model_capabilities(self) -> dict:
@@ -412,9 +459,29 @@ class ProviderRuntimeManager:
                 ],
                 classified_at=snapshot.updated_at,
             )
+            self._resolve_and_persist_node_capabilities()
         except Exception as exc:
             if hasattr(self._logger, "warning"):
                 self._logger.warning("[provider-model-capability-classification-failed] %s", {"error": str(exc).strip() or type(exc).__name__})
+
+    def _resolve_and_persist_node_capabilities(self) -> None:
+        try:
+            enabled_snapshot = self._provider_enabled_models_store.load()
+            enabled_models = [entry.model_id for entry in enabled_snapshot.models] if enabled_snapshot is not None else []
+            task_graph = load_task_graph(path=self._task_graph_path)
+            payload = resolve_node_capabilities(
+                enabled_models=enabled_models,
+                model_feature_catalog=self._provider_model_feature_catalog_store.payload(),
+                task_graph=task_graph,
+            )
+            payload["enabled_task_capabilities"] = list(payload.get("resolved_tasks") or [])
+            payload["generated_at"] = _iso_now()
+            payload["source"] = "node_capabilities"
+            self._node_capabilities_path.parent.mkdir(parents=True, exist_ok=True)
+            self._node_capabilities_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        except Exception as exc:
+            if hasattr(self._logger, "warning"):
+                self._logger.warning("[node-capabilities-resolve-failed] %s", {"error": str(exc).strip() or type(exc).__name__})
 
     def providers_snapshot(self) -> dict:
         return self._registry.snapshot()

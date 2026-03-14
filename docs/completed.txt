@@ -197,6 +197,7 @@ Task 203: Introduce capability graph definition - Completed on 03/13/2026 20:59
 Task 204: Define full task capability graph - Completed on 03/13/2026 21:00
 Task 205: Implement capability graph resolver - Completed on 03/13/2026 21:02
 Task 206: Implement feature union builder - Completed on 03/13/2026 21:03
+Task 207: Resolve node task capabilities - Completed on 03/13/2026 21:04
 Task 197: Add tests for model filtering - Completed on 03/13/2026 20:46
 Task 198: Add tests for capability classification schema - Completed on 03/13/2026 20:46
 Task 199: Introduce model feature classification schema - Completed on 03/13/2026 20:46

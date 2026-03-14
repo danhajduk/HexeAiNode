@@ -624,3 +624,9 @@ Chosen fix: Extracted feature union logic into runtime/feature_union.py with det
 What changed: Added `src/ai_node/runtime/feature_union.py`, updated resolver import usage, and added `tests/test_feature_union.py`.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_feature_union tests.test_capability_resolver` passed.
 ###########
+Task #207
+Step objective: Resolve enabled node task capabilities from enabled models and persist runtime output.
+Chosen fix: Integrated graph resolver into runtime manager and persisted resolved payload to runtime/node_capabilities.json including enabled_task_capabilities for downstream declaration usage.
+What changed: Updated `src/ai_node/providers/runtime_manager.py`; extended `tests/test_provider_runtime.py`.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_provider_runtime tests.test_capability_resolver tests.test_feature_union` passed.
+###########
