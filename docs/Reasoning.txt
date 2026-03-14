@@ -606,3 +606,9 @@ Chosen fix: Added a versioned JSON graph scaffold under capabilities/task_graph.
 What changed: Added `capabilities/task_graph.json` and validated JSON parse integrity.
 Verification: `python -m json.tool capabilities/task_graph.json` passed.
 ###########
+Task #204
+Step objective: Populate the capability graph with the full task capability set and explicit feature dependencies.
+Chosen fix: Expanded capabilities/task_graph.json to include all required core, automation, coding, vision, image, speech, realtime, knowledge, and safety task nodes with deterministic all_of dependency rules.
+What changed: Updated `capabilities/task_graph.json` with complete task node definitions.
+Verification: `python -m json.tool capabilities/task_graph.json` passed.
+###########

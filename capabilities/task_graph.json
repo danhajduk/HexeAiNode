@@ -2,9 +2,194 @@
   "schema_version": "1.0",
   "capability_graph_version": "1.0",
   "tasks": {
+    "task.chat": {
+      "all_of": [
+        "chat"
+      ]
+    },
     "task.reasoning": {
       "all_of": [
         "reasoning"
+      ]
+    },
+    "task.classification": {
+      "all_of": [
+        "classification"
+      ]
+    },
+    "task.summarization": {
+      "all_of": [
+        "summarization"
+      ]
+    },
+    "task.information_extraction": {
+      "all_of": [
+        "information_extraction"
+      ]
+    },
+    "task.structured_extraction": {
+      "all_of": [
+        "structured_output",
+        "information_extraction"
+      ]
+    },
+    "task.translation": {
+      "all_of": [
+        "translation"
+      ]
+    },
+    "task.sentiment_analysis": {
+      "all_of": [
+        "sentiment_analysis"
+      ]
+    },
+    "task.task_planning": {
+      "all_of": [
+        "planning"
+      ]
+    },
+    "task.workflow_reasoning": {
+      "all_of": [
+        "reasoning",
+        "planning"
+      ]
+    },
+    "task.tool_usage": {
+      "all_of": [
+        "tool_calling"
+      ]
+    },
+    "task.automation_command": {
+      "all_of": [
+        "automation_commands"
+      ]
+    },
+    "task.environment_control": {
+      "all_of": [
+        "environment_control"
+      ]
+    },
+    "task.code_generation": {
+      "all_of": [
+        "code_generation"
+      ]
+    },
+    "task.code_review": {
+      "all_of": [
+        "code_review"
+      ]
+    },
+    "task.code_debugging": {
+      "all_of": [
+        "code_debugging"
+      ]
+    },
+    "task.code_explanation": {
+      "all_of": [
+        "code_explanation"
+      ]
+    },
+    "task.vision_analysis": {
+      "all_of": [
+        "vision_input",
+        "image_understanding"
+      ]
+    },
+    "task.object_detection": {
+      "all_of": [
+        "object_detection"
+      ]
+    },
+    "task.image_description": {
+      "all_of": [
+        "image_understanding"
+      ]
+    },
+    "task.document_ocr": {
+      "all_of": [
+        "document_understanding",
+        "ocr"
+      ]
+    },
+    "task.image_generation": {
+      "all_of": [
+        "image_generation"
+      ]
+    },
+    "task.image_editing": {
+      "all_of": [
+        "image_editing"
+      ]
+    },
+    "task.image_variation": {
+      "all_of": [
+        "image_variation"
+      ]
+    },
+    "task.speech_to_text": {
+      "all_of": [
+        "speech_to_text"
+      ]
+    },
+    "task.text_to_speech": {
+      "all_of": [
+        "text_to_speech"
+      ]
+    },
+    "task.voice_conversation": {
+      "all_of": [
+        "voice_conversation"
+      ]
+    },
+    "task.audio_analysis": {
+      "all_of": [
+        "audio_analysis"
+      ]
+    },
+    "task.realtime_voice": {
+      "all_of": [
+        "realtime_interaction",
+        "voice_conversation"
+      ]
+    },
+    "task.streaming_response": {
+      "all_of": [
+        "streaming_output"
+      ]
+    },
+    "task.low_latency_interaction": {
+      "all_of": [
+        "low_latency"
+      ]
+    },
+    "task.embedding_generation": {
+      "all_of": [
+        "embeddings"
+      ]
+    },
+    "task.semantic_search": {
+      "all_of": [
+        "semantic_search"
+      ]
+    },
+    "task.document_indexing": {
+      "all_of": [
+        "document_indexing"
+      ]
+    },
+    "task.knowledge_retrieval": {
+      "all_of": [
+        "knowledge_retrieval"
+      ]
+    },
+    "task.moderation": {
+      "all_of": [
+        "moderation"
+      ]
+    },
+    "task.policy_check": {
+      "all_of": [
+        "policy_check"
       ]
     }
   }

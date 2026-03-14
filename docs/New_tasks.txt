@@ -44,7 +44,7 @@ Stop processing task when you reach the [STOP] flag!
 Do not edit above this line:
 #######################################################################
 
-[WIP] Task 204: Define full task capability graph
+[WIP] Task 205: Implement capability graph resolver
 Create a graph definition file:
 
 capabilities/task_graph.json
@@ -116,7 +116,6 @@ Safety
 - task.moderation
 - task.policy_check
 
-[TODO] Task 205: Implement capability graph resolver
 Create resolver module:
 
 runtime/capability_resolver.py
