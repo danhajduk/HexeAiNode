@@ -11,6 +11,7 @@ from ai_node.providers.model_capability_catalog import (
     select_openai_classification_model,
     validate_provider_model_capability_payload,
 )
+from ai_node.providers.model_feature_schema import MODEL_FEATURE_KEYS
 from ai_node.providers.openai_model_catalog import OpenAIProviderModelCatalogEntry
 
 
@@ -56,6 +57,21 @@ class ModelCapabilityCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("gpt-5-mini (llm)", user_prompt)
         self.assertIn("whisper-1 (speech_to_text)", user_prompt)
         self.assertIn(", ".join(RECOMMENDED_FOR_OPTIONS), user_prompt)
+        self.assertIn("Return JSON only", _system_prompt)
+        for feature_key in MODEL_FEATURE_KEYS:
+            self.assertIn(feature_key, user_prompt)
+
+    def test_prompt_uses_model_id_list_as_input(self):
+        models = [
+            OpenAIProviderModelCatalogEntry(model_id="gpt-5.2-nano", family="llm", discovered_at="2026-03-13T00:00:00Z"),
+            OpenAIProviderModelCatalogEntry(model_id="gpt-5.2-mini", family="llm", discovered_at="2026-03-13T00:00:00Z"),
+        ]
+        _system_prompt, user_prompt = build_openai_capability_classification_prompt(
+            models=models,
+            classification_model="gpt-5.2-nano",
+        )
+        self.assertIn("- gpt-5.2-nano (llm)", user_prompt)
+        self.assertIn("- gpt-5.2-mini (llm)", user_prompt)
 
     def test_validate_rejects_invalid_recommended_for_values(self):
         models = [OpenAIProviderModelCatalogEntry(model_id="gpt-5-mini", family="llm", discovered_at="2026-03-13T00:00:00Z")]

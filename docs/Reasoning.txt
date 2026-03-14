@@ -588,3 +588,9 @@ Chosen fix: Added a dedicated feature catalog store with normalized entries and 
 What changed: Added `src/ai_node/providers/model_feature_catalog.py`; updated `src/ai_node/providers/runtime_manager.py`; added `tests/test_model_feature_catalog.py`.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_model_feature_catalog tests.test_model_feature_schema tests.test_model_capability_catalog` passed.
 ###########
+Task #201
+Step objective: Ensure classifier prompt contract explicitly targets full feature-flag classification output and nano/mini selection behavior.
+Chosen fix: Extended prompt tests to verify JSON-only wording, inclusion of every canonical feature key, and model-id list input formatting used for batch classification.
+What changed: Updated `tests/test_model_capability_catalog.py` with prompt contract coverage for feature flag schema and model-list input assertions.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_model_capability_catalog tests.test_model_feature_schema tests.test_model_feature_catalog` passed.
+###########

@@ -44,7 +44,7 @@ Stop processing task when you reach the [STOP] flag!
 Do not edit above this line:
 #######################################################################
 
-[WIP] Task 201: Implement classification prompt for model features
+[WIP] Task 202: Run classification after provider setup
 Create the prompt used by the nano/mini classifier model.
 
 Requirements:
@@ -58,7 +58,7 @@ Classifier model priority:
 
 1. gpt-x.x-nano
 2. gpt-x.x-mini
-[TODO] Task 202: Run classification after provider setup
+Run classification after provider setup
 After the OpenAI token is saved:
 
 1. fetch models

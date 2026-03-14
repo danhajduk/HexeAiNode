@@ -191,6 +191,7 @@ Task 195: Add diagnostics panel - Completed on 03/13/2026 20:42
 Task 196: Add manual refresh controls - Completed on 03/13/2026 20:42
 Task 199: Introduce model feature classification schema - Completed on 03/13/2026 20:55
 Task 200: Create provider_model_features.json catalog - Completed on 03/13/2026 20:56
+Task 201: Implement classification prompt for model features - Completed on 03/13/2026 20:57
 Task 197: Add tests for model filtering - Completed on 03/13/2026 20:46
 Task 198: Add tests for capability classification schema - Completed on 03/13/2026 20:46
 Task 199: Introduce model feature classification schema - Completed on 03/13/2026 20:46
