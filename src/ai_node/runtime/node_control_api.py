@@ -1,9 +1,10 @@
 import asyncio
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -521,7 +522,18 @@ class NodeControlState:
         )
         return self.provider_credentials_payload(provider_id="openai")
 
+    def _has_saved_openai_api_token(self) -> bool:
+        credentials = self.provider_credentials_payload(provider_id="openai").get("credentials")
+        return bool(isinstance(credentials, dict) and credentials.get("has_api_token"))
+
     async def refresh_provider_models_after_openai_credentials_save(self) -> None:
+        if (
+            self._has_saved_openai_api_token()
+            and self._provider_runtime_manager is not None
+            and hasattr(self._provider_runtime_manager, "refresh_openai_models_from_saved_credentials")
+        ):
+            await self._provider_runtime_manager.refresh_openai_models_from_saved_credentials()
+            return
         if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "refresh"):
             return
         await self._provider_runtime_manager.refresh()
@@ -645,6 +657,11 @@ class NodeControlState:
             "provider_id": "openai",
             **(payload if isinstance(payload, dict) else {}),
         }
+
+    async def rerun_openai_model_capabilities(self) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "rerun_openai_model_capabilities"):
+            raise ValueError("openai model capability refresh is not configured")
+        return await self._provider_runtime_manager.rerun_openai_model_capabilities()
 
     def openai_resolved_capabilities_payload(self) -> dict:
         if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "openai_resolved_capabilities_payload"):
@@ -820,16 +837,67 @@ class NodeControlState:
             )
         return await self._capability_runner.submit_once()
 
+    async def redeclare_capabilities(self, *, reason: str, force: bool = False) -> dict:
+        if self._capability_runner is None or not hasattr(self._capability_runner, "redeclare_if_needed"):
+            return {"status": "skipped", "reason": "capability_redeclaration_not_configured"}
+        return await self._capability_runner.redeclare_if_needed(reason=reason, force=force)
+
+    async def rebuild_node_capabilities(self) -> dict:
+        resolved = self.openai_resolved_capabilities_payload()
+        return {
+            "status": "rebuilt",
+            "provider_id": "openai",
+            "resolved_capabilities": resolved,
+            "task_families": list(resolved.get("task_families") or []),
+        }
+
+    def capability_diagnostics_payload(self) -> dict:
+        capability_status = (
+            self._capability_runner.status_payload()
+            if self._capability_runner is not None and hasattr(self._capability_runner, "status_payload")
+            else {}
+        )
+        resolved = self.openai_resolved_capabilities_payload()
+        return {
+            "admin": True,
+            "generated_at": self._now_iso(),
+            "discovered_models": self.openai_provider_model_catalog_payload(),
+            "enabled_models": self.openai_enabled_models_payload(),
+            "capability_catalog": self.openai_provider_model_capabilities_payload(),
+            "resolved_capabilities": resolved,
+            "classification_model": resolved.get("classification_model"),
+            "last_declaration_payload": capability_status.get("last_manifest_payload"),
+            "last_declaration_result": capability_status.get("last_declaration_result"),
+        }
+
     async def refresh_governance(self) -> dict:
         if self._capability_runner is None or not hasattr(self._capability_runner, "refresh_governance_once"):
             raise ValueError("governance refresh is not configured")
         return await self._capability_runner.refresh_governance_once()
 
     async def refresh_provider_capabilities(self, *, force_refresh: bool) -> dict:
+        openai_reload = None
+        if (
+            force_refresh
+            and self._has_saved_openai_api_token()
+            and self._provider_runtime_manager is not None
+            and hasattr(self._provider_runtime_manager, "refresh_openai_models_from_saved_credentials")
+        ):
+            openai_reload = await self._provider_runtime_manager.refresh_openai_models_from_saved_credentials()
         if self._capability_runner is not None and hasattr(self._capability_runner, "refresh_provider_capabilities_once"):
-            return await self._capability_runner.refresh_provider_capabilities_once(force_refresh=force_refresh)
+            result = await self._capability_runner.refresh_provider_capabilities_once(force_refresh=force_refresh)
+            if openai_reload is not None:
+                return {**result, "openai_model_reload": openai_reload}
+            return result
         if self._provider_runtime_manager is not None and hasattr(self._provider_runtime_manager, "refresh"):
-            return {"source": "provider_runtime_manager", "force_refresh": force_refresh, "report": await self._provider_runtime_manager.refresh()}
+            result = {
+                "source": "provider_runtime_manager",
+                "force_refresh": force_refresh,
+                "report": await self._provider_runtime_manager.refresh(),
+            }
+            if openai_reload is not None:
+                result["openai_model_reload"] = openai_reload
+            return result
         if self._capability_runner is None or not hasattr(self._capability_runner, "refresh_provider_capabilities_once"):
             raise ValueError("provider capability refresh is not configured")
         return await self._capability_runner.refresh_provider_capabilities_once(force_refresh=force_refresh)
@@ -1006,6 +1074,10 @@ class OpenAIEnabledModelsRequest(BaseModel):
     model_ids: list[str]
 
 
+class RefreshTriggerRequest(BaseModel):
+    force_refresh: bool = True
+
+
 class PromptServiceRegisterRequest(BaseModel):
     prompt_id: str
     service_id: str
@@ -1025,6 +1097,13 @@ class ExecutionAuthorizeRequest(BaseModel):
 
 def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     app = FastAPI(title="Synthia AI Node Control API", version="0.1.0")
+    configured_admin_token = str(os.environ.get("SYNTHIA_ADMIN_TOKEN") or "").strip()
+
+    def require_admin(admin_token: str | None) -> None:
+        if not configured_admin_token:
+            return
+        if str(admin_token or "").strip() != configured_admin_token:
+            raise HTTPException(status_code=403, detail="admin access required")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -1105,9 +1184,11 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         return state.provider_selection_payload()
 
     @app.post("/api/providers/config")
-    def post_provider_config(payload: ProviderSelectionRequest):
+    async def post_provider_config(payload: ProviderSelectionRequest):
         try:
-            return state.update_provider_selection(openai_enabled=payload.openai_enabled)
+            response = state.update_provider_selection(openai_enabled=payload.openai_enabled)
+            redeclare = await state.redeclare_capabilities(reason="provider_configuration_changed", force=False)
+            return {**response, "redeclare": redeclare}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1155,9 +1236,11 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         return state.openai_enabled_models_payload()
 
     @app.post("/api/providers/openai/models/enabled")
-    def post_openai_enabled_models(payload: OpenAIEnabledModelsRequest):
+    async def post_openai_enabled_models(payload: OpenAIEnabledModelsRequest):
         try:
-            return state.save_openai_enabled_models(model_ids=payload.model_ids)
+            response = state.save_openai_enabled_models(model_ids=payload.model_ids)
+            redeclare = await state.redeclare_capabilities(reason="enabled_models_changed", force=False)
+            return {**response, "redeclare": redeclare}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1173,6 +1256,16 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     async def post_openai_pricing_refresh(payload: OpenAIPricingRefreshRequest):
         try:
             return await state.refresh_openai_pricing(force_refresh=payload.force_refresh)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/providers/openai/models/classification/refresh")
+    async def post_openai_model_capabilities_refresh(x_synthia_admin_token: str | None = Header(default=None)):
+        try:
+            require_admin(x_synthia_admin_token)
+            response = await state.rerun_openai_model_capabilities()
+            redeclare = await state.redeclare_capabilities(reason="capability_catalog_refresh", force=False)
+            return {**response, "redeclare": redeclare}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1208,6 +1301,25 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.post("/api/capabilities/rebuild")
+    async def post_capability_rebuild(x_synthia_admin_token: str | None = Header(default=None)):
+        try:
+            require_admin(x_synthia_admin_token)
+            return await state.rebuild_node_capabilities()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/capabilities/redeclare")
+    async def post_capability_redeclare(
+        payload: RefreshTriggerRequest,
+        x_synthia_admin_token: str | None = Header(default=None),
+    ):
+        try:
+            require_admin(x_synthia_admin_token)
+            return await state.redeclare_capabilities(reason="manual_redeclare", force=payload.force_refresh)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/api/governance/status")
     def get_governance_status():
         return state.governance_status_payload()
@@ -1220,9 +1332,15 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/capabilities/providers/refresh")
-    async def post_provider_capability_refresh(payload: ProviderCapabilityRefreshRequest):
+    async def post_provider_capability_refresh(
+        payload: ProviderCapabilityRefreshRequest,
+        x_synthia_admin_token: str | None = Header(default=None),
+    ):
         try:
-            return await state.refresh_provider_capabilities(force_refresh=payload.force_refresh)
+            require_admin(x_synthia_admin_token)
+            response = await state.refresh_provider_capabilities(force_refresh=payload.force_refresh)
+            redeclare = await state.redeclare_capabilities(reason="provider_capability_refresh", force=False)
+            return {**response, "redeclare": redeclare}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1286,6 +1404,11 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/debug/providers/metrics")
     def get_debug_provider_metrics():
         return state.debug_provider_metrics_payload()
+
+    @app.get("/api/capabilities/diagnostics")
+    def get_capability_diagnostics(x_synthia_admin_token: str | None = Header(default=None)):
+        require_admin(x_synthia_admin_token)
+        return state.capability_diagnostics_payload()
 
     if hasattr(logger, "info"):
         logger.info("[node-control-api] FastAPI app initialized")

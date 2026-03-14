@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import os
 
+from ai_node.capabilities.resolved_task_families import derive_declared_task_families
 from ai_node.providers.adapters.local_adapter import LocalProviderAdapter
 from ai_node.providers.adapters.openai_adapter import OpenAIProviderAdapter
 from ai_node.providers.config_loader import ProviderConfigLoader
@@ -302,7 +303,54 @@ class ProviderRuntimeManager:
         enabled_snapshot = self._provider_enabled_models_store.load()
         capabilities_snapshot = self._provider_model_capabilities_store.load()
         enabled_model_ids = [entry.model_id for entry in enabled_snapshot.models] if enabled_snapshot is not None else []
-        return resolve_enabled_model_capabilities(snapshot=capabilities_snapshot, enabled_model_ids=enabled_model_ids)
+        payload = resolve_enabled_model_capabilities(snapshot=capabilities_snapshot, enabled_model_ids=enabled_model_ids)
+        payload["task_families"] = derive_declared_task_families(resolved_capabilities=payload)
+        return payload
+
+    async def rerun_openai_model_capabilities(self) -> dict:
+        config = self._loader.load()
+        settings = config.providers.get("openai")
+        if settings is None or not settings.enabled:
+            raise ValueError("openai provider is not enabled")
+        adapter = self._build_adapter(provider_id="openai", settings=settings)
+        model_catalog_snapshot = self._openai_model_catalog_store.load()
+        if model_catalog_snapshot is None or not model_catalog_snapshot.models:
+            models = await adapter.list_models()
+            model_catalog_snapshot = self._openai_model_catalog_store.save_from_model_ids(
+                model_ids=[getattr(model, "model_id", "") for model in models]
+            )
+        await self._refresh_openai_model_capabilities(adapter=adapter, models=model_catalog_snapshot.models)
+        return {"status": "refreshed", **self.openai_model_capabilities_payload()}
+
+    async def refresh_openai_models_from_saved_credentials(self) -> dict:
+        settings = (
+            self._loader.load_provider_settings(provider_id="openai", enabled=True)
+            if hasattr(self._loader, "load_provider_settings")
+            else None
+        )
+        if settings is None or not str(settings.api_key or "").strip():
+            raise ValueError("openai credentials are not configured")
+        adapter = self._build_adapter(provider_id="openai", settings=settings)
+        self._registry.register_provider(provider_id="openai", adapter=adapter)
+        health = await adapter.health_check()
+        self._registry.set_provider_health(provider_id="openai", payload=health)
+        models = await adapter.list_models()
+        model_catalog_snapshot = self._openai_model_catalog_store.save_from_model_ids(
+            model_ids=[getattr(model, "model_id", "") for model in models]
+        )
+        await self._refresh_openai_model_capabilities(adapter=adapter, models=model_catalog_snapshot.models)
+        unknown_models: list[str] = []
+        if self._pricing_catalog_service is not None:
+            models, unknown_models = self._pricing_catalog_service.merge_model_capabilities(models)
+        self._registry.set_models_for_provider(provider_id="openai", models=models)
+        self._registry.persist(path=self._registry_path)
+        self._metrics.persist()
+        return {
+            "status": "refreshed",
+            "provider_id": "openai",
+            "classification_model": self.openai_model_capabilities_payload().get("classification_model"),
+            "unknown_priced_models": sorted(set(item for item in unknown_models if item)),
+        }
 
     async def _refresh_openai_model_capabilities(self, *, adapter: OpenAIProviderAdapter, models: list) -> None:
         if not models:

@@ -163,9 +163,14 @@ def _build_provider_intelligence_request_payload(*, node_id: str, report: dict) 
     normalized_node_id = _require_non_empty_string(node_id, "node_id")
     structured = _structured_payload_from_runtime_report(report=report)
     if structured is not None:
-        structured["node_id"] = normalized_node_id
-        structured.setdefault("node_available", True)
-        return structured
+        payload = {
+            "node_id": normalized_node_id,
+            "provider_intelligence": structured,
+            "node_available": True,
+        }
+        if structured.get("observed_at"):
+            payload["observed_at"] = structured.get("observed_at")
+        return payload
     compatibility = _compatibility_payload_from_discovery_report(report=report)
     compatibility["node_id"] = normalized_node_id
     compatibility.setdefault("node_available", True)

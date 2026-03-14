@@ -1,4 +1,5 @@
 import logging
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -79,6 +80,9 @@ class NodeControlFastApiTests(unittest.TestCase):
         async def submit_once(self):
             return {"status": "accepted"}
 
+        async def redeclare_if_needed(self, *, reason: str, force: bool = False):
+            return {"status": "accepted", "reason": reason, "force": force}
+
         async def refresh_governance_once(self):
             return {"status": "synced"}
 
@@ -91,6 +95,8 @@ class NodeControlFastApiTests(unittest.TestCase):
         def status_payload(self):
             return {
                 "status": "idle",
+                "last_manifest_payload": {"manifest_version": "1.0"},
+                "last_declaration_result": {"status": "accepted"},
                 "governance_status": {
                     "state": "fresh",
                     "active_governance_version": "1.0",
@@ -145,10 +151,18 @@ class NodeControlFastApiTests(unittest.TestCase):
     class _FakeProviderRuntimeManager:
         def __init__(self):
             self.refresh_calls = 0
+            self.openai_reload_calls = 0
 
         async def refresh(self):
             self.refresh_calls += 1
             return {"providers": []}
+
+        async def refresh_openai_models_from_saved_credentials(self):
+            self.openai_reload_calls += 1
+            return {"status": "refreshed", "provider_id": "openai", "classification_model": "gpt-5-mini"}
+
+        async def rerun_openai_model_capabilities(self):
+            return {"status": "refreshed", "provider_id": "openai", "classification_model": "gpt-5-mini"}
 
         async def refresh_pricing(self, *, force: bool):
             return {"status": "manual_only", "changed": False, "notes": ["live_pricing_scrape_disabled"]}
@@ -365,7 +379,8 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(credentials_set_response.status_code, 200)
             self.assertTrue(credentials_set_response.json()["credentials"]["has_api_token"])
             self.assertTrue(credentials_set_response.json()["credentials"]["api_token_hint"].endswith("1234"))
-            self.assertEqual(runtime_manager.refresh_calls, 1)
+            self.assertEqual(runtime_manager.refresh_calls, 0)
+            self.assertEqual(runtime_manager.openai_reload_calls, 1)
 
             preferences_set_response = client.post(
                 "/api/providers/openai/preferences",
@@ -401,6 +416,11 @@ class NodeControlFastApiTests(unittest.TestCase):
             capability_resolution_response = client.get("/api/providers/openai/capability-resolution")
             self.assertEqual(capability_resolution_response.status_code, 200)
             self.assertTrue(capability_resolution_response.json()["capabilities"]["reasoning"])
+
+            diagnostics_response = client.get("/api/capabilities/diagnostics")
+            self.assertEqual(diagnostics_response.status_code, 200)
+            self.assertEqual(diagnostics_response.json()["classification_model"], "gpt-5-mini")
+            self.assertIn("last_declaration_payload", diagnostics_response.json())
 
             pricing_diagnostics_response = client.get("/api/providers/openai/pricing/diagnostics")
             self.assertEqual(pricing_diagnostics_response.status_code, 200)
@@ -457,6 +477,13 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(provider_refresh_response.status_code, 200)
             self.assertEqual(provider_refresh_response.json()["status"], "refreshed")
             self.assertTrue(provider_refresh_response.json()["changed"])
+            self.assertEqual(provider_refresh_response.json()["openai_model_reload"]["classification_model"], "gpt-5-mini")
+            self.assertEqual(provider_refresh_response.json()["redeclare"]["reason"], "provider_capability_refresh")
+            self.assertEqual(runtime_manager.openai_reload_calls, 2)
+
+            classification_refresh_response = client.post("/api/providers/openai/models/classification/refresh")
+            self.assertEqual(classification_refresh_response.status_code, 200)
+            self.assertEqual(classification_refresh_response.json()["redeclare"]["reason"], "capability_catalog_refresh")
 
             node_recover_response = client.post("/api/node/recover")
             self.assertEqual(node_recover_response.status_code, 200)
@@ -544,6 +571,46 @@ class NodeControlFastApiTests(unittest.TestCase):
             response = client.post("/api/capabilities/declare")
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["status"], "accepted")
+
+    def test_admin_routes_require_token_when_configured(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old_admin_token = os.environ.get("SYNTHIA_ADMIN_TOKEN")
+            os.environ["SYNTHIA_ADMIN_TOKEN"] = "admin-token"
+            try:
+                lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
+                state = NodeControlState(
+                    lifecycle=lifecycle,
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-fastapi-test"),
+                    capability_runner=self._FakeCapabilityRunner(),
+                    provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                )
+                app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+                client = TestClient(app)
+
+                unauthorized_diag = client.get("/api/capabilities/diagnostics")
+                self.assertEqual(unauthorized_diag.status_code, 403)
+
+                authorized_diag = client.get(
+                    "/api/capabilities/diagnostics",
+                    headers={"X-Synthia-Admin-Token": "admin-token"},
+                )
+                self.assertEqual(authorized_diag.status_code, 200)
+
+                unauthorized_refresh = client.post("/api/capabilities/providers/refresh", json={"force_refresh": True})
+                self.assertEqual(unauthorized_refresh.status_code, 403)
+
+                authorized_refresh = client.post(
+                    "/api/capabilities/providers/refresh",
+                    json={"force_refresh": True},
+                    headers={"X-Synthia-Admin-Token": "admin-token"},
+                )
+                self.assertEqual(authorized_refresh.status_code, 200)
+            finally:
+                if old_admin_token is None:
+                    os.environ.pop("SYNTHIA_ADMIN_TOKEN", None)
+                else:
+                    os.environ["SYNTHIA_ADMIN_TOKEN"] = old_admin_token
 
 
 if __name__ == "__main__":

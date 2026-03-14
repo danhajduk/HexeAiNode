@@ -1,5 +1,7 @@
 """Capability manifest helpers."""
 
+from importlib import import_module
+
 from ai_node.capabilities.manifest_schema import (
     CAPABILITY_MANIFEST_SCHEMA_VERSION,
     create_capability_manifest,
@@ -26,12 +28,6 @@ from ai_node.capabilities.environment_hints import (
     collect_environment_hints,
     validate_environment_hints,
 )
-from ai_node.capabilities.provider_intelligence import (
-    DEFAULT_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS,
-    PROVIDER_INTELLIGENCE_SCHEMA_VERSION,
-    ProviderIntelligenceService,
-    compact_provider_intelligence_report,
-)
 
 __all__ = [
     "CAPABILITY_MANIFEST_SCHEMA_VERSION",
@@ -55,3 +51,20 @@ __all__ = [
     "ProviderIntelligenceService",
     "compact_provider_intelligence_report",
 ]
+
+
+_LAZY_PROVIDER_INTELLIGENCE_EXPORTS = {
+    "DEFAULT_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS",
+    "PROVIDER_INTELLIGENCE_SCHEMA_VERSION",
+    "ProviderIntelligenceService",
+    "compact_provider_intelligence_report",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_PROVIDER_INTELLIGENCE_EXPORTS:
+        module = import_module("ai_node.capabilities.provider_intelligence")
+        value = getattr(module, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

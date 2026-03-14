@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from ai_node.capabilities.environment_hints import collect_environment_hints
 from ai_node.capabilities.manifest_schema import create_capability_manifest
 from ai_node.capabilities.node_features import create_node_feature_declarations
+from ai_node.capabilities.resolved_task_families import derive_declared_task_families
 from ai_node.capabilities.provider_intelligence import (
     DEFAULT_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS,
     ProviderIntelligenceService,
@@ -76,6 +77,8 @@ class CapabilityDeclarationRunner:
         self._accepted_profile = None
         self._governance_bundle = None
         self._last_manifest_summary = None
+        self._last_manifest_payload = None
+        self._last_declaration_result = None
         self._provider_capability_report = None
         self._provider_intelligence_last_submitted_at = None
         self._governance_status = evaluate_governance_freshness(None)
@@ -85,6 +88,7 @@ class CapabilityDeclarationRunner:
         self._load_accepted_profile()
         self._load_governance_bundle()
         self._load_provider_capability_report()
+        self._load_phase2_state()
 
     def status_payload(self) -> dict:
         return {
@@ -93,6 +97,8 @@ class CapabilityDeclarationRunner:
             "last_submitted_at": self._last_submitted_at,
             "accepted_profile": self._accepted_profile,
             "manifest_summary": self._last_manifest_summary,
+            "last_manifest_payload": self._last_manifest_payload,
+            "last_declaration_result": self._last_declaration_result,
             "governance_bundle": self._governance_bundle,
             "governance_status": self._governance_status,
             "provider_capability_report": self._provider_report_payload(),
@@ -163,6 +169,17 @@ class CapabilityDeclarationRunner:
             return
         self._provider_capability_report = payload
 
+    def _load_phase2_state(self) -> None:
+        if self._phase2_state_store is None or not hasattr(self._phase2_state_store, "load"):
+            return
+        payload = self._phase2_state_store.load()
+        if not isinstance(payload, dict):
+            return
+        if isinstance(payload.get("last_manifest_payload"), dict):
+            self._last_manifest_payload = payload.get("last_manifest_payload")
+        if isinstance(payload.get("last_declaration_result"), dict):
+            self._last_declaration_result = payload.get("last_declaration_result")
+
     def _refresh_governance_status(self, *, refresh_state: str, last_refresh_error: str | None) -> None:
         status = evaluate_governance_freshness(self._governance_bundle)
         status["refresh_state"] = refresh_state
@@ -175,6 +192,60 @@ class CapabilityDeclarationRunner:
             return False
         normalized = error.strip().lower()
         return normalized in {"connect_rc_5", "not authorised", "not authorized"}
+
+    def _build_manifest_payload(self, *, trust_state: dict, selected_task_families: list[str] | None) -> dict:
+        provider_selection = (
+            self._provider_selection_store.load_or_create(openai_enabled=False)
+            if self._provider_selection_store is not None and hasattr(self._provider_selection_store, "load_or_create")
+            else None
+        )
+        providers = create_provider_capabilities_from_selection_config(provider_selection)
+        resolved_provider_capabilities = (
+            self._provider_runtime_manager.openai_resolved_capabilities_payload()
+            if self._provider_runtime_manager is not None and hasattr(self._provider_runtime_manager, "openai_resolved_capabilities_payload")
+            else None
+        )
+        enabled_models = []
+        provider_metadata = []
+        derived_task_families: list[str] = []
+        if isinstance(resolved_provider_capabilities, dict):
+            enabled_models = [
+                {
+                    "provider_id": "openai",
+                    "model_id": item.get("model_id"),
+                }
+                for item in resolved_provider_capabilities.get("enabled_models") or []
+                if isinstance(item, dict) and str(item.get("model_id") or "").strip()
+            ]
+            derived_task_families = derive_declared_task_families(resolved_capabilities=resolved_provider_capabilities)
+            provider_metadata.append(
+                {
+                    "provider_id": "openai",
+                    "classification_model": resolved_provider_capabilities.get("classification_model"),
+                    "enabled_model_ids": list(resolved_provider_capabilities.get("enabled_model_ids") or []),
+                    "resolved_capabilities": resolved_provider_capabilities.get("capabilities") or {},
+                    "task_families": list(resolved_provider_capabilities.get("task_families") or derived_task_families),
+                }
+            )
+
+        manifest_task_families = (
+            derived_task_families
+            if derived_task_families
+            else create_declared_task_family_capabilities(selected_task_families)
+        )
+        return create_capability_manifest(
+            node_id=self._node_id,
+            node_name=str(trust_state.get("node_name") or "ai-node").strip(),
+            node_type=str(trust_state.get("node_type") or "ai-node").strip(),
+            node_software_version=self._node_software_version,
+            task_families=manifest_task_families,
+            supported_providers=providers.get("supported"),
+            enabled_providers=providers.get("enabled"),
+            node_features=create_node_feature_declarations(),
+            environment_hints=collect_environment_hints(),
+            provider_metadata=provider_metadata,
+            enabled_models=enabled_models,
+        )
 
     async def submit_once(self) -> dict:
         state = self._lifecycle.get_state()
@@ -212,17 +283,7 @@ class CapabilityDeclarationRunner:
                 "supported_providers": sorted((providers.get("supported") or [])),
             }
         )
-        manifest = create_capability_manifest(
-            node_id=self._node_id,
-            node_name=str(trust_state.get("node_name") or "ai-node").strip(),
-            node_type=str(trust_state.get("node_type") or "ai-node").strip(),
-            node_software_version=self._node_software_version,
-            task_families=create_declared_task_family_capabilities(selected_task_families),
-            supported_providers=providers.get("supported"),
-            enabled_providers=providers.get("enabled"),
-            node_features=create_node_feature_declarations(),
-            environment_hints=collect_environment_hints(),
-        )
+        manifest = self._build_manifest_payload(trust_state=trust_state, selected_task_families=selected_task_families)
         self._diag.capability_manifest(
             {
                 "node_id": self._node_id,
@@ -236,6 +297,7 @@ class CapabilityDeclarationRunner:
             "enabled_providers": list(manifest.get("enabled_providers") or []),
             "manifest_version": manifest.get("manifest_version"),
         }
+        self._last_manifest_payload = manifest
 
         self._lifecycle.transition_to(
             NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS,
@@ -259,6 +321,13 @@ class CapabilityDeclarationRunner:
                 "error": result.error,
             }
         )
+        self._last_declaration_result = {
+            "status": result.status,
+            "retryable": result.retryable,
+            "error": result.error,
+            "payload": result.payload,
+            "submitted_at": self._last_submitted_at,
+        }
 
         if result.status == "accepted":
             accepted_payload = {
@@ -281,6 +350,7 @@ class CapabilityDeclarationRunner:
                 "core_restrictions": result.payload.get("core_restrictions") or result.payload.get("restrictions") or {},
                 "core_notes": str(result.payload.get("core_notes") or result.payload.get("notes") or "").strip() or None,
                 "raw_response": result.payload,
+                "submitted_manifest": manifest,
             }
             if self._capability_state_store is not None and hasattr(self._capability_state_store, "save"):
                 self._capability_state_store.save(accepted_payload)
@@ -527,6 +597,71 @@ class CapabilityDeclarationRunner:
             "core_submission": core_submission,
         }
 
+    async def redeclare_if_needed(self, *, reason: str, force: bool = False) -> dict:
+        if not isinstance(self._accepted_profile, dict):
+            return {"status": "skipped", "reason": "capability_not_accepted"}
+        trust_state = self._trust_store.load() if self._trust_store is not None else None
+        if not isinstance(trust_state, dict):
+            return {"status": "skipped", "reason": "missing_trust_state"}
+        task_capability_selection = (
+            self._task_capability_selection_store.load_or_create()
+            if self._task_capability_selection_store is not None
+            and hasattr(self._task_capability_selection_store, "load_or_create")
+            else None
+        )
+        selected_task_families = (
+            list(task_capability_selection.get("selected_task_families") or [])
+            if isinstance(task_capability_selection, dict)
+            else None
+        )
+        manifest = self._build_manifest_payload(trust_state=trust_state, selected_task_families=selected_task_families)
+        if not force and isinstance(self._last_manifest_payload, dict) and manifest == self._last_manifest_payload:
+            return {"status": "unchanged", "reason": reason}
+
+        result = await self._capability_client.submit_manifest(
+            core_api_endpoint=str(trust_state.get("core_api_endpoint") or "").strip(),
+            trust_token=str(trust_state.get("node_trust_token") or "").strip(),
+            node_id=self._node_id,
+            capability_manifest=manifest,
+        )
+        self._last_submitted_at = datetime.now(timezone.utc).isoformat()
+        self._last_manifest_payload = manifest
+        self._last_manifest_summary = {
+            "task_families": list(manifest.get("declared_task_families") or []),
+            "enabled_providers": list(manifest.get("enabled_providers") or []),
+            "manifest_version": manifest.get("manifest_version"),
+        }
+        self._last_declaration_result = {
+            "status": result.status,
+            "retryable": result.retryable,
+            "error": result.error,
+            "payload": result.payload,
+            "submitted_at": self._last_submitted_at,
+            "reason": reason,
+        }
+        if result.status == "accepted":
+            self._accepted_profile = {
+                **(self._accepted_profile or {}),
+                "acceptance_timestamp": str(
+                    result.payload.get("accepted_at")
+                    or result.payload.get("acceptance_timestamp")
+                    or datetime.now(timezone.utc).isoformat()
+                ).strip(),
+                "raw_response": result.payload,
+                "submitted_manifest": manifest,
+            }
+            if self._capability_state_store is not None and hasattr(self._capability_state_store, "save"):
+                self._capability_state_store.save(self._accepted_profile)
+        self._persist_phase2_state()
+        return {
+            "status": result.status,
+            "retryable": result.retryable,
+            "error": result.error,
+            "result": result.payload,
+            "reason": reason,
+            "manifest_summary": self._last_manifest_summary,
+        }
+
     async def refresh_governance_once(self) -> dict:
         trust_state = self._trust_store.load() if self._trust_store is not None else None
         if not isinstance(trust_state, dict):
@@ -727,6 +862,8 @@ class CapabilityDeclarationRunner:
                 if isinstance(self._provider_capability_report, dict)
                 else None
             ),
+            "last_manifest_payload": self._last_manifest_payload if isinstance(self._last_manifest_payload, dict) else None,
+            "last_declaration_result": self._last_declaration_result if isinstance(self._last_declaration_result, dict) else None,
             "timestamps": {
                 "capability_declaration_timestamp": (
                     self._accepted_profile.get("acceptance_timestamp") if isinstance(self._accepted_profile, dict) else None

@@ -7,8 +7,22 @@ export function getApiBase() {
   return `${protocol}//${hostname}:9002`;
 }
 
-export async function apiGet(path) {
-  const response = await fetch(`${getApiBase()}${path}`);
+function requestHeaders(extraHeaders = {}) {
+  return { ...extraHeaders };
+}
+
+function adminHeaders() {
+  const token = import.meta.env.VITE_ADMIN_TOKEN;
+  if (!token) {
+    return {};
+  }
+  return { "X-Synthia-Admin-Token": token };
+}
+
+export async function apiGet(path, extraHeaders = {}) {
+  const response = await fetch(`${getApiBase()}${path}`, {
+    headers: requestHeaders(extraHeaders),
+  });
   const payload = await response.json();
   if (!response.ok) {
     const detail = payload.detail;
@@ -21,10 +35,10 @@ export async function apiGet(path) {
   return payload;
 }
 
-export async function apiPost(path, body) {
+export async function apiPost(path, body, extraHeaders = {}) {
   const response = await fetch(`${getApiBase()}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: requestHeaders({ "Content-Type": "application/json", ...extraHeaders }),
     body: JSON.stringify(body),
   });
   const payload = await response.json();
@@ -37,4 +51,12 @@ export async function apiPost(path, body) {
     throw new Error(message);
   }
   return payload;
+}
+
+export async function apiAdminGet(path) {
+  return apiGet(path, adminHeaders());
+}
+
+export async function apiAdminPost(path, body) {
+  return apiPost(path, body, adminHeaders());
 }

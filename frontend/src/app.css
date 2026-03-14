@@ -66,7 +66,7 @@
 }
 
 .mini-card-grid {
-  grid-template-columns: repeat(auto-fill, 240px);
+  grid-template-columns: repeat(auto-fill, 270px);
   justify-content: start;
 }
 
@@ -444,6 +444,17 @@ h2 {
   cursor: pointer;
   font-weight: 600;
   margin-bottom: 8px;
+}
+
+.json-block {
+  margin: 8px 0 0;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid hsl(var(--color-border));
+  background: hsl(var(--color-bg));
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 @media (max-width: 900px) {

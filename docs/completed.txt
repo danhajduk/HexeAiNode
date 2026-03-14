@@ -118,6 +118,9 @@ Task 109: Build provider registry - Completed on 03/12/2026 14:18
 Task 110: Define provider adapter interface - Completed on 03/12/2026 14:18
 Task 111: Implement OpenAI provider adapter - Completed on 03/12/2026 14:18
 Task 112: Add local provider adapter scaffold - Completed on 03/12/2026 14:18
+Task 190.1: Previous batch fix - Completed on 03/13/2026 20:18
+Task 191: Build node task capability list - Completed on 03/13/2026 20:32
+Task 192: Update node capability declaration manifest - Completed on 03/13/2026 20:32
 Task 113: Create provider configuration loader - Completed on 03/12/2026 14:18
 Task 114: Implement provider health checks - Completed on 03/12/2026 14:18
 Task 115: Implement model discovery refresh - Completed on 03/12/2026 14:18
@@ -182,3 +185,7 @@ Task 187.1: Tweeks from prevuis batch - Completed on 03/13/2026 19:25
 Task 188: Add capability mapping UI - Completed on 03/13/2026 19:25
 Task 189: Persist selected models - Completed on 03/13/2026 19:25
 Task 190: Derive node capabilities from selected models - Completed on 03/13/2026 19:25
+Task 193: Declare capabilities to Core - Completed on 03/13/2026 20:42
+Task 194: Add redeclaration trigger - Completed on 03/13/2026 20:42
+Task 195: Add diagnostics panel - Completed on 03/13/2026 20:42
+Task 196: Add manual refresh controls - Completed on 03/13/2026 20:42

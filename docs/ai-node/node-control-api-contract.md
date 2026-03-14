@@ -166,6 +166,18 @@ For OpenAI, this response only includes regular base-model families used for nor
     - `cost_tier`
     - `recommended_for[]`
 
+### Refresh OpenAI model capability catalog (admin)
+
+- `POST /api/providers/openai/models/classification/refresh`
+- Header (required when `SYNTHIA_ADMIN_TOKEN` is configured):
+  - `X-Synthia-Admin-Token: <token>`
+- Success:
+  - capability refresh payload
+  - `redeclare`: capability redeclaration result triggered with reason `capability_catalog_refresh`
+- Error:
+  - `403` when admin token is required and missing/invalid
+  - `400` when capability refresh runtime is unavailable
+
 ### Read enabled OpenAI models
 
 - `GET /api/providers/openai/models/enabled`
@@ -311,9 +323,55 @@ For OpenAI, this response only includes regular base-model families used for nor
 - `POST /api/capabilities/providers/refresh`
 - Request:
   - `force_refresh: boolean` (default `false`)
+- Header (required when `SYNTHIA_ADMIN_TOKEN` is configured):
+  - `X-Synthia-Admin-Token: <token>`
 - Success: provider intelligence refresh payload.
 - Error:
+  - `403` when admin token is required and missing/invalid
   - `400` when runner is unavailable.
+
+## Capability Diagnostics And Manual Controls (admin)
+
+### Diagnostics payload
+
+- `GET /api/capabilities/diagnostics`
+- Header (required when `SYNTHIA_ADMIN_TOKEN` is configured):
+  - `X-Synthia-Admin-Token: <token>`
+- Response:
+  - `discovered_models`
+  - `enabled_models`
+  - `capability_catalog`
+  - `classification_model`
+  - `last_declaration_payload`
+  - `last_declaration_result`
+- Error:
+  - `403` when admin token is required and missing/invalid
+
+### Rebuild capabilities
+
+- `POST /api/capabilities/rebuild`
+- Header (required when `SYNTHIA_ADMIN_TOKEN` is configured):
+  - `X-Synthia-Admin-Token: <token>`
+- Success:
+  - `status: "rebuilt"`
+  - `resolved_capabilities`
+  - `task_families`
+- Error:
+  - `403` when admin token is required and missing/invalid
+  - `400` when capability rebuild runtime is unavailable
+
+### Manual redeclaration
+
+- `POST /api/capabilities/redeclare`
+- Request:
+  - `force_refresh: boolean` (default `false`)
+- Header (required when `SYNTHIA_ADMIN_TOKEN` is configured):
+  - `X-Synthia-Admin-Token: <token>`
+- Success:
+  - capability redeclaration result payload
+- Error:
+  - `403` when admin token is required and missing/invalid
+  - `400` when capability redeclaration runtime is unavailable
 
 ### Background refresh behavior
 

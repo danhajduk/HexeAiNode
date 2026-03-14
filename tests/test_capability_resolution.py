@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ai_node.capabilities.resolved_task_families import derive_declared_task_families
 from ai_node.config.provider_enabled_models_config import ProviderEnabledModelsStore
 from ai_node.providers.capability_resolution import resolve_enabled_model_capabilities
 from ai_node.providers.model_capability_catalog import (
@@ -65,6 +66,85 @@ class CapabilityResolutionTests(unittest.TestCase):
         self.assertEqual(
             payload["capabilities"]["recommended_for"],
             ["automation", "chat", "coding", "vision_analysis"],
+        )
+
+    def test_derive_declared_task_families_only_from_enabled_models(self):
+        resolved = {
+            "capabilities": {
+                "reasoning": True,
+                "vision": False,
+                "image_generation": False,
+                "audio_input": True,
+                "audio_output": False,
+                "realtime": False,
+                "tool_calling": True,
+                "structured_output": True,
+                "long_context": True,
+                "coding_strength": "high",
+                "speed_tier": "medium",
+                "cost_tier": "medium",
+                "recommended_for": ["classification", "coding", "summarization"],
+            },
+            "enabled_models": [
+                {
+                    "model_id": "gpt-5-mini",
+                    "family": "llm",
+                },
+                {
+                    "model_id": "whisper-1",
+                    "family": "speech_to_text",
+                },
+            ],
+        }
+
+        task_families = derive_declared_task_families(resolved_capabilities=resolved)
+
+        self.assertEqual(
+            task_families,
+            [
+                "task.classification",
+                "task.summarization",
+                "task.reasoning",
+                "task.coding",
+                "task.speech_to_text",
+            ],
+        )
+
+    def test_derive_declared_task_families_includes_specialized_model_families(self):
+        resolved = {
+            "capabilities": {
+                "reasoning": False,
+                "vision": False,
+                "image_generation": False,
+                "audio_input": False,
+                "audio_output": False,
+                "realtime": False,
+                "tool_calling": False,
+                "structured_output": False,
+                "long_context": False,
+                "coding_strength": "low",
+                "speed_tier": "low",
+                "cost_tier": "low",
+                "recommended_for": [],
+            },
+            "enabled_models": [
+                {"model_id": "text-embedding-3-small", "family": "embeddings"},
+                {"model_id": "omni-moderation-latest-safe", "family": "moderation"},
+                {"model_id": "gpt-realtime-mini", "family": "realtime_voice"},
+                {"model_id": "tts-1", "family": "text_to_speech"},
+            ],
+        }
+
+        task_families = derive_declared_task_families(resolved_capabilities=resolved)
+
+        self.assertEqual(
+            task_families,
+            [
+                "task.text_to_speech",
+                "task.realtime_voice",
+                "task.embedding_generation",
+                "task.moderation",
+            ],
         )
 
 

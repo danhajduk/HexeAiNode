@@ -249,6 +249,47 @@ class _FakePromptServiceStateStore:
         }
 
 
+class _FakeProviderRuntimeManager:
+    def openai_resolved_capabilities_payload(self):
+        return {
+            "provider_id": "openai",
+            "classification_model": "gpt-5-mini",
+            "enabled_model_ids": ["gpt-5-mini", "whisper-1"],
+            "task_families": [
+                "task.classification",
+                "task.reasoning",
+                "task.speech_to_text",
+            ],
+            "capabilities": {
+                "reasoning": True,
+                "vision": False,
+                "image_generation": False,
+                "audio_input": True,
+                "audio_output": False,
+                "realtime": False,
+                "tool_calling": True,
+                "structured_output": True,
+                "long_context": False,
+                "coding_strength": "medium",
+                "speed_tier": "medium",
+                "cost_tier": "medium",
+                "recommended_for": ["classification", "reasoning"],
+            },
+            "enabled_models": [
+                {
+                    "model_id": "gpt-5-mini",
+                    "family": "llm",
+                    "reasoning": True,
+                },
+                {
+                    "model_id": "whisper-1",
+                    "family": "speech_to_text",
+                    "audio_input": True,
+                },
+            ],
+        }
+
+
 class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
     async def test_accepted_submission_transitions_to_operational(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
@@ -492,6 +533,45 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             client.last_manifest["declared_task_families"],
             ["task.classification.text", "task.summarization.text"],
+        )
+
+    async def test_submit_manifest_uses_resolved_provider_task_capabilities_when_available(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
+        lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        client = _FakeClientAcceptedCapture()
+        runner = CapabilityDeclarationRunner(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("capability-runner-test"),
+            trust_store=_FakeTrustStore(),
+            provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
+            node_id="node-001",
+            capability_client=client,
+            governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
+            telemetry_publisher=_FakeTelemetryPublisher(),
+            phase2_state_store=_FakePhase2StateStore(),
+            provider_runtime_manager=_FakeProviderRuntimeManager(),
+        )
+
+        await runner.submit_once()
+
+        self.assertEqual(
+            client.last_manifest["declared_task_families"],
+            ["task.classification", "task.coding", "task.reasoning", "task.speech_to_text", "task.summarization"],
+        )
+        self.assertEqual(client.last_manifest["provider_metadata"][0]["classification_model"], "gpt-5-mini")
+        self.assertEqual(
+            client.last_manifest["provider_metadata"][0]["task_families"],
+            ["task.classification", "task.reasoning", "task.speech_to_text"],
+        )
+        self.assertEqual(
+            client.last_manifest["enabled_models"],
+            [
+                {"provider_id": "openai", "model_id": "gpt-5-mini"},
+                {"provider_id": "openai", "model_id": "whisper-1"},
+            ],
         )
 
     async def test_operational_readiness_failure_moves_to_retry_pending(self):

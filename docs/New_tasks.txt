@@ -44,86 +44,7 @@ Stop processing task when you reach the [STOP] flag!
 Do not edit above this line:
 #######################################################################
 
-[STOP]
-
-[TODO] Task 191: Build node task capability list
-From resolved model capabilities generate node task families:
-
-Examples:
-
-task.classification
-task.summarization
-task.reasoning
-task.coding
-task.vision_analysis
-task.image_generation
-task.speech_to_text
-task.text_to_speech
-task.realtime_voice
-task.embedding_generation
-task.moderation
-
-Ensure tasks are declared only when supported by selected models.
-
-[TODO] Task 192: Update node capability declaration manifest
-Modify node declaration builder to include resolved task capabilities.
-
-Declaration should include:
-
-- node metadata
-- declared task families
-- provider metadata
-- enabled models
-
-Ensure compatibility with existing Core declaration schema.
-
-[TODO] Task 193: Declare capabilities to Core
-Send capability declaration to Core endpoint:
-
-POST /api/system/nodes/capabilities/declaration
-
-Include trust token header.
-
-Handle responses:
-
-- success
-- rejected
-- validation errors
-
-Persist last successful declaration.
-
-[TODO] Task 194: Add redeclaration trigger
-Trigger capability redeclaration when:
-
-- enabled models change
-- provider configuration changes
-- capability catalog refresh occurs
-
-Avoid unnecessary redeclarations.
-
-[TODO] Task 195: Add diagnostics panel
-Create an admin diagnostics section showing:
-
-- discovered models
-- enabled models
-- capability catalog
-- classification model used
-- last declaration payload
-- last declaration result
-
-Hide from non-admin users.
-
-[TODO] Task 196: Add manual refresh controls
-Add admin actions:
-
-- refresh model discovery
-- rerun capability classification
-- rebuild node capabilities
-- redeclare capabilities to Core
-
-Avoid full node restart.
-
-[TODO] Task 197: Add tests for model filtering
+[WIP] Task 197: Add tests for model filtering
 Test filtering logic for:
 
 - valid model families
@@ -142,3 +63,70 @@ Test:
 - recommended_for validation
 
 Ensure classification results remain stable.
+
+[TODO] Task 199: Introduce model feature classification schema
+Create a canonical feature schema used for provider model classification.
+
+Features to support:
+
+Core cognition
+- chat
+- reasoning
+- instruction_following
+- classification
+- summarization
+- information_extraction
+- translation
+- sentiment_analysis
+- long_context
+
+Automation / tools
+- structured_output
+- json_output
+- schema_output
+- tool_calling
+- function_calling
+- planning
+- automation_commands
+- environment_control
+
+Coding
+- code_generation
+- code_review
+- code_debugging
+- code_explanation
+
+Vision
+- vision_input
+- image_understanding
+- document_understanding
+- ocr
+- object_detection
+
+Images
+- image_generation
+- image_editing
+- image_variation
+
+Audio
+- audio_input
+- speech_to_text
+- audio_output
+- text_to_speech
+- voice_conversation
+- audio_analysis
+
+Realtime
+- realtime_interaction
+- streaming_output
+- low_latency
+
+Knowledge
+- embeddings
+- semantic_search
+- document_indexing
+- knowledge_retrieval
+
+Safety
+- moderation
+- policy_check

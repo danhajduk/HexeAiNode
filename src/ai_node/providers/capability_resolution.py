@@ -21,6 +21,7 @@ def resolve_enabled_model_capabilities(*, snapshot: ProviderModelCapabilitiesSna
     entries = []
     if snapshot is not None:
         entries = [entry for entry in snapshot.entries if entry.model_id in enabled_set]
+    families = sorted({entry.family for entry in entries if str(entry.family or "").strip()})
     recommended = sorted({item for entry in entries for item in entry.recommended_for})
     return {
         "provider_id": "openai",
@@ -37,6 +38,8 @@ def resolve_enabled_model_capabilities(*, snapshot: ProviderModelCapabilitiesSna
             "tool_calling": any(entry.tool_calling for entry in entries),
             "structured_output": any(entry.structured_output for entry in entries),
             "long_context": any(entry.long_context for entry in entries),
+            "embeddings": "embeddings" in families,
+            "moderation": "moderation" in families,
             "coding_strength": _best_tier([entry.coding_strength for entry in entries], default="low"),
             "speed_tier": _best_tier([entry.speed_tier for entry in entries], default="low"),
             "cost_tier": _best_tier([entry.cost_tier for entry in entries], default="low"),

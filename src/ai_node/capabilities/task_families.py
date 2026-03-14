@@ -22,6 +22,17 @@ CANONICAL_TASK_FAMILIES = (
     TASK_SUMMARIZATION_EVENT,
     TASK_GENERATION_TEXT,
     TASK_GENERATION_IMAGE,
+    "task.classification",
+    "task.summarization",
+    "task.reasoning",
+    "task.coding",
+    "task.vision_analysis",
+    "task.image_generation",
+    "task.speech_to_text",
+    "task.text_to_speech",
+    "task.realtime_voice",
+    "task.embedding_generation",
+    "task.moderation",
 )
 
 _TASK_FAMILY_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._/-]{1,127}$")

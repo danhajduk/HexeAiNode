@@ -41,6 +41,8 @@ def create_capability_manifest(
     enabled_providers: list[str] | None = None,
     node_features: list[str] | None = None,
     environment_hints: dict | None = None,
+    provider_metadata: list[dict] | None = None,
+    enabled_models: list[dict] | None = None,
     manifest_version: str = CAPABILITY_MANIFEST_SCHEMA_VERSION,
     metadata: dict | None = None,
 ) -> dict:
@@ -73,6 +75,10 @@ def create_capability_manifest(
             "region": "local",
         },
     }
+    if isinstance(provider_metadata, list):
+        manifest["provider_metadata"] = [item for item in provider_metadata if isinstance(item, dict)]
+    if isinstance(enabled_models, list):
+        manifest["enabled_models"] = [item for item in enabled_models if isinstance(item, dict)]
     if feature_map.get(PROMPT_GOVERNANCE_READY, False):
         manifest["node_features"]["governance_refresh"] = True
     is_valid, error = validate_capability_manifest(manifest)
@@ -130,5 +136,24 @@ def validate_capability_manifest(data: object) -> Tuple[bool, Optional[str]]:
 
     if "metadata" in data:
         return False, "metadata_not_allowed"
+
+    if "provider_metadata" in data:
+        if not isinstance(data.get("provider_metadata"), list):
+            return False, "invalid_provider_metadata"
+        for item in data.get("provider_metadata") or []:
+            if not isinstance(item, dict):
+                return False, "invalid_provider_metadata_entry"
+            if not _is_non_empty_string(item.get("provider_id")):
+                return False, "invalid_provider_metadata_provider_id"
+    if "enabled_models" in data:
+        if not isinstance(data.get("enabled_models"), list):
+            return False, "invalid_enabled_models"
+        for item in data.get("enabled_models") or []:
+            if not isinstance(item, dict):
+                return False, "invalid_enabled_model_entry"
+            if not _is_non_empty_string(item.get("provider_id")):
+                return False, "invalid_enabled_model_provider_id"
+            if not _is_non_empty_string(item.get("model_id")):
+                return False, "invalid_enabled_model_model_id"
 
     return True, None

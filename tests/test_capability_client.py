@@ -127,10 +127,11 @@ class CapabilityClientTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result.status, "accepted")
         self.assertEqual(adapter.last_payload["node_id"], "node-001")
-        self.assertEqual(adapter.last_payload["providers"][0]["provider_id"], "openai")
-        self.assertEqual(adapter.last_payload["models"][0]["model_id"], "gpt-4o-mini")
-        self.assertEqual(adapter.last_payload["models"][0]["pricing_input_tokens"], 0.15)
-        self.assertIn("metrics_snapshot", adapter.last_payload)
+        structured_payload = adapter.last_payload["provider_intelligence"]
+        self.assertEqual(structured_payload["providers"][0]["provider_id"], "openai")
+        self.assertEqual(structured_payload["models"][0]["model_id"], "gpt-4o-mini")
+        self.assertEqual(structured_payload["models"][0]["pricing_input_tokens"], 0.15)
+        self.assertIn("metrics_snapshot", structured_payload)
 
 
 if __name__ == "__main__":

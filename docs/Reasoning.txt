@@ -534,3 +534,27 @@ tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_with_valid_tru
 #############
 All Tasks completed 03/12/2026 15:45:50
 #############
+Task #193
+Step objective: Ensure capability declaration submission uses Core declaration contract and persists last successful declaration context.
+Chosen fix: Kept declaration endpoint and trust-token headers in client path, persisted last manifest and last declaration result in phase-2 state, and ensured accepted profile stores submitted manifest.
+What changed: Updated capability declaration runner/client payload handling and aligned client/runner tests with the current payload shape.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_client tests.test_capability_declaration_runner tests.test_node_control_api tests.test_node_control_fastapi` passed.
+###########
+Task #194
+Step objective: Trigger redeclaration only when capability inputs change and avoid unnecessary redeclare calls.
+Chosen fix: Added redeclaration trigger on model-enable change, provider config save, provider capability refresh, and capability catalog refresh; runner short-circuits when manifest is unchanged.
+What changed: Updated API routes to trigger redeclaration and kept redeclare comparison in runner; added tests for classification refresh and redeclare reason handling.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_client tests.test_capability_declaration_runner tests.test_node_control_api tests.test_node_control_fastapi` passed.
+###########
+Task #195
+Step objective: Add admin diagnostics panel with capability declaration visibility fields.
+Chosen fix: Added frontend admin diagnostics card backed by `/api/capabilities/diagnostics` and rendered only when admin diagnostics are accessible.
+What changed: Updated frontend API helpers for admin header support, added diagnostics UI with required fields and declaration payload/result views, and documented contract updates.
+Verification: `npm --prefix frontend run build` passed.
+###########
+Task #196
+Step objective: Add admin manual refresh controls without requiring service restarts.
+Chosen fix: Added admin controls for model discovery refresh, capability classification rerun, capability rebuild, and manual redeclaration; protected admin routes with optional `SYNTHIA_ADMIN_TOKEN`.
+What changed: Added admin route guards and frontend action buttons wired to manual control endpoints.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_client tests.test_capability_declaration_runner tests.test_node_control_api tests.test_node_control_fastapi` and `npm --prefix frontend run build` passed.
+###########

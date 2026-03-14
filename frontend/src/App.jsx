@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getTheme, setTheme } from "./theme/theme";
-import { apiGet, apiPost, getApiBase } from "./api";
+import { apiAdminGet, apiAdminPost, apiGet, apiPost, getApiBase } from "./api";
 import { buildDashboardUiState } from "./uiStateModel";
 import { CardHeader, HealthIndicator, StatusBadge } from "./components/uiPrimitives";
 import "./app.css";
@@ -134,6 +134,9 @@ export default function App() {
   const [popupPricingInput, setPopupPricingInput] = useState("");
   const [popupPricingOutput, setPopupPricingOutput] = useState("");
   const [savingPopupPricing, setSavingPopupPricing] = useState(false);
+  const [capabilityDiagnostics, setCapabilityDiagnostics] = useState(null);
+  const [runningAdminAction, setRunningAdminAction] = useState("");
+  const [adminActionState, setAdminActionState] = useState("");
   const [uiState, setUiState] = useState(() =>
     buildDashboardUiState({
       nodeStatus: null,
@@ -158,6 +161,7 @@ export default function App() {
       capabilityResolutionResult,
       capabilityConfigResult,
       servicesResult,
+      capabilityDiagnosticsResult,
     ] = await Promise.allSettled([
       apiGet("/api/node/status"),
       apiGet("/api/governance/status"),
@@ -170,6 +174,7 @@ export default function App() {
       apiGet("/api/providers/openai/capability-resolution"),
       apiGet("/api/capabilities/config"),
       apiGet("/api/services/status"),
+      apiAdminGet("/api/capabilities/diagnostics"),
     ]);
 
     if (nodeResult.status !== "fulfilled") {
@@ -202,6 +207,7 @@ export default function App() {
     const capabilityResolutionPayload = capabilityResolutionResult.status === "fulfilled" ? capabilityResolutionResult.value : null;
     const capabilityConfigPayload = capabilityConfigResult.status === "fulfilled" ? capabilityConfigResult.value : null;
     const servicePayload = servicesResult.status === "fulfilled" ? servicesResult.value : null;
+    const capabilityDiagnosticsPayload = capabilityDiagnosticsResult.status === "fulfilled" ? capabilityDiagnosticsResult.value : null;
     const partialFailures = [];
     if (governanceResult.status !== "fulfilled") {
       partialFailures.push("governance_status_unavailable");
@@ -247,6 +253,7 @@ export default function App() {
     );
     setLatestOpenaiModels(Array.isArray(latestModelsPayload?.models) ? latestModelsPayload.models : []);
     setResolvedOpenaiCapabilities(capabilityResolutionPayload);
+    setCapabilityDiagnostics(capabilityDiagnosticsPayload);
     setError("");
     if (!providerSetupDirty && providerCredentialsPayload?.credentials?.project_name) {
       setOpenaiProjectName(providerCredentialsPayload.credentials.project_name);
@@ -735,6 +742,28 @@ export default function App() {
       setError(message);
     } finally {
       setSavingBulkManualPricing(false);
+    }
+  }
+
+  async function runAdminAction(action, endpoint, body = {}) {
+    if (runningAdminAction) {
+      return;
+    }
+    setRunningAdminAction(action);
+    setAdminActionState("");
+    setError("");
+    try {
+      const payload = await apiAdminPost(endpoint, body);
+      setAdminActionState(`${action}: ${String(payload?.status || "ok")}`);
+      const diagnosticsPayload = await apiAdminGet("/api/capabilities/diagnostics");
+      setCapabilityDiagnostics(diagnosticsPayload);
+      await loadStatus();
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setAdminActionState(`${action}: failed`);
+      setError(message);
+    } finally {
+      setRunningAdminAction("");
     }
   }
 
@@ -1487,6 +1516,88 @@ export default function App() {
               </button>
             </div>
           </article>
+          {capabilityDiagnostics ? (
+            <article className="card diagnostics-card">
+              <CardHeader
+                title="Admin Capability Diagnostics"
+                subtitle="Model capability visibility and manual refresh controls"
+              />
+              <div className="state-grid">
+                <span>Discovered Models</span>
+                <code>
+                  {(capabilityDiagnostics?.discovered_models?.models || []).map((model) => model.model_id).join(", ") || "none"}
+                </code>
+                <span>Enabled Models</span>
+                <code>
+                  {(capabilityDiagnostics?.enabled_models?.models || [])
+                    .filter((model) => model?.enabled)
+                    .map((model) => model.model_id)
+                    .join(", ") || "none"}
+                </code>
+                <span>Capability Catalog</span>
+                <code>
+                  {(capabilityDiagnostics?.capability_catalog?.entries || []).map((entry) => entry.model_id).join(", ") || "none"}
+                </code>
+                <span>Classification Model</span>
+                <code>{capabilityDiagnostics?.classification_model || "unavailable"}</code>
+                <span>Last Declaration Result</span>
+                <code>{capabilityDiagnostics?.last_declaration_result?.status || "none"}</code>
+              </div>
+              <div className="row capability-actions">
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() =>
+                    runAdminAction("refresh_model_discovery", "/api/capabilities/providers/refresh", { force_refresh: true })
+                  }
+                  disabled={Boolean(runningAdminAction)}
+                >
+                  {runningAdminAction === "refresh_model_discovery" ? "Refreshing..." : "Refresh Model Discovery"}
+                </button>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() =>
+                    runAdminAction(
+                      "rerun_capability_classification",
+                      "/api/providers/openai/models/classification/refresh",
+                      {}
+                    )
+                  }
+                  disabled={Boolean(runningAdminAction)}
+                >
+                  {runningAdminAction === "rerun_capability_classification" ? "Running..." : "Rerun Capability Classification"}
+                </button>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => runAdminAction("rebuild_node_capabilities", "/api/capabilities/rebuild", {})}
+                  disabled={Boolean(runningAdminAction)}
+                >
+                  {runningAdminAction === "rebuild_node_capabilities" ? "Rebuilding..." : "Rebuild Node Capabilities"}
+                </button>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={() => runAdminAction("redeclare_capabilities", "/api/capabilities/redeclare", { force_refresh: false })}
+                  disabled={Boolean(runningAdminAction)}
+                >
+                  {runningAdminAction === "redeclare_capabilities" ? "Redeclaring..." : "Redeclare To Core"}
+                </button>
+              </div>
+              <p className="muted tiny">
+                Admin action result: <code>{adminActionState || "idle"}</code>
+              </p>
+              <details>
+                <summary>Last Declaration Payload</summary>
+                <pre className="json-block">{JSON.stringify(capabilityDiagnostics?.last_declaration_payload || {}, null, 2)}</pre>
+              </details>
+              <details>
+                <summary>Last Declaration Result</summary>
+                <pre className="json-block">{JSON.stringify(capabilityDiagnostics?.last_declaration_result || {}, null, 2)}</pre>
+              </details>
+            </article>
+          ) : null}
           <article className="card diagnostics-card">
             <details>
               <summary>Diagnostics</summary>

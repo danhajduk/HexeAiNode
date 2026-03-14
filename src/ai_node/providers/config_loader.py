@@ -40,55 +40,62 @@ class ProviderConfigLoader:
         providers: dict[str, ProviderSettings] = {}
 
         for provider_id in enabled:
-            upper = provider_id.upper().replace("-", "_")
-            timeout = float(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_TIMEOUT_SECONDS") or "20")
-            retries = int(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_RETRY_COUNT") or "1")
-            if provider_id == "openai":
-                api_key_env = "OPENAI_API_KEY"
-                stored_openai = self._openai_credentials()
-                providers[provider_id] = ProviderSettings(
-                    provider_id=provider_id,
-                    provider_type="cloud",
-                    enabled=True,
-                    api_key_env=api_key_env,
-                    api_key=(
-                        _first_non_empty_string(
-                            str(os.environ.get(api_key_env) or "").strip() or None,
-                            (
-                                stored_openai.get("api_token") or stored_openai.get("api_key")
-                                if isinstance(stored_openai, dict)
-                                else None
-                            ),
-                        )
-                    ),
-                    default_model_id=(
-                        _first_non_empty_string(
-                            str(os.environ.get("SYNTHIA_OPENAI_DEFAULT_MODEL_ID") or "").strip() or None,
-                            (
-                                (stored_openai.get("selected_model_ids") or [None])[0]
-                                if isinstance(stored_openai, dict)
-                                else None
-                            ),
-                            stored_openai.get("default_model_id") if isinstance(stored_openai, dict) else None,
-                        )
-                    ),
-                    base_url=str(os.environ.get("SYNTHIA_OPENAI_BASE_URL") or "https://api.openai.com/v1").strip(),
-                    timeout_seconds=max(timeout, 1.0),
-                    retry_count=max(retries, 0),
-                )
-                continue
-            providers[provider_id] = ProviderSettings(
-                provider_id=provider_id,
-                provider_type="local",
-                enabled=True,
-                timeout_seconds=max(timeout, 1.0),
-                retry_count=max(retries, 0),
-            )
+            settings = self.load_provider_settings(provider_id=provider_id, enabled=True)
+            if settings is not None:
+                providers[provider_id] = settings
 
         return ProviderRuntimeConfig(
             enabled_providers=sorted(set(enabled)),
             default_provider=default_provider,
             providers=providers,
+        )
+
+    def load_provider_settings(self, *, provider_id: str, enabled: bool) -> ProviderSettings | None:
+        normalized_provider_id = str(provider_id or "").strip().lower()
+        if not normalized_provider_id:
+            return None
+        upper = normalized_provider_id.upper().replace("-", "_")
+        timeout = float(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_TIMEOUT_SECONDS") or "20")
+        retries = int(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_RETRY_COUNT") or "1")
+        if normalized_provider_id == "openai":
+            api_key_env = "OPENAI_API_KEY"
+            stored_openai = self._openai_credentials()
+            return ProviderSettings(
+                provider_id=normalized_provider_id,
+                provider_type="cloud",
+                enabled=bool(enabled),
+                api_key_env=api_key_env,
+                api_key=(
+                    _first_non_empty_string(
+                        str(os.environ.get(api_key_env) or "").strip() or None,
+                        (
+                            stored_openai.get("api_token") or stored_openai.get("api_key")
+                            if isinstance(stored_openai, dict)
+                            else None
+                        ),
+                    )
+                ),
+                default_model_id=(
+                    _first_non_empty_string(
+                        str(os.environ.get("SYNTHIA_OPENAI_DEFAULT_MODEL_ID") or "").strip() or None,
+                        (
+                            (stored_openai.get("selected_model_ids") or [None])
+                            if isinstance(stored_openai, dict)
+                            else [None]
+                        )[0],
+                        stored_openai.get("default_model_id") if isinstance(stored_openai, dict) else None,
+                    )
+                ),
+                base_url=str(os.environ.get("SYNTHIA_OPENAI_BASE_URL") or "https://api.openai.com/v1").strip(),
+                timeout_seconds=max(timeout, 1.0),
+                retry_count=max(retries, 0),
+            )
+        return ProviderSettings(
+            provider_id=normalized_provider_id,
+            provider_type="local",
+            enabled=bool(enabled),
+            timeout_seconds=max(timeout, 1.0),
+            retry_count=max(retries, 0),
         )
 
     def _enabled_from_selection_store(self) -> list[str]:
