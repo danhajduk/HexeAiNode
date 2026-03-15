@@ -1,8 +1,10 @@
 import logging
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from ai_node.providers.model_capability_catalog import ProviderModelCapabilityEntry
 from ai_node.providers.model_feature_schema import create_default_feature_flags
@@ -80,7 +82,6 @@ class _FakeOpenAIAdapter:
                             "coding_strength": "high",
                             "speed_tier": "medium",
                             "cost_tier": "medium",
-                            "recommended_for": ["chat", "classification"],
                             "feature_flags": feature_flags,
                         }
                     ]
@@ -88,6 +89,17 @@ class _FakeOpenAIAdapter:
             ),
             latency_ms=1.0,
         )
+
+
+class _FakePricingCatalogService:
+    def __init__(self):
+        self.last_model_ids = None
+        self.last_force = None
+
+    async def refresh(self, *, force=False, model_ids=None, execute_batch=None):
+        self.last_force = force
+        self.last_model_ids = list(model_ids or [])
+        return {"status": "manual_only", "model_ids": self.last_model_ids}
 
 
 class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
@@ -262,11 +274,12 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 provider_enabled_models_path=str(Path(tmp) / "provider_enabled_models.json"),
             )
             runtime._provider_model_capabilities_store.save(  # noqa: SLF001
-                classification_model="gpt-5-mini",
+                classification_model="deterministic_rules",
                 entries=[
                     ProviderModelCapabilityEntry(
                         model_id="gpt-5-mini",
                         family="llm",
+                        text_generation=True,
                         reasoning=True,
                         tool_calling=True,
                         structured_output=True,
@@ -274,7 +287,6 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
                         coding_strength="high",
                         speed_tier="medium",
                         cost_tier="medium",
-                        recommended_for=["coding"],
                     )
                 ],
             )
@@ -348,10 +360,88 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             catalog_payload = runtime.openai_model_catalog_payload()
             self.assertEqual([item["model_id"] for item in catalog_payload["models"]], ["gpt-5-mini"])
             capabilities_payload = runtime.openai_model_capabilities_payload()
-            self.assertEqual(capabilities_payload["classification_model"], "gpt-5-mini")
+            self.assertEqual(capabilities_payload["classification_model"], "deterministic_rules")
             features_payload = runtime.openai_model_features_payload()
             self.assertEqual(features_payload["entries"][0]["model_id"], "gpt-5-mini")
             self.assertTrue(features_payload["entries"][0]["features"]["chat"])
+
+    async def test_refresh_pricing_uses_filtered_catalog_models(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            os.environ, {"SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED": "true"}, clear=False
+        ):
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["openai"]),
+                provider_credentials_store=_CredentialsStore(),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                provider_model_catalog_path=str(Path(tmp) / "provider_models.json"),
+                provider_enabled_models_path=str(Path(tmp) / "provider_enabled_models.json"),
+            )
+            runtime._build_adapter = lambda **_kwargs: _FakeOpenAIAdapter()  # noqa: SLF001
+            runtime._pricing_catalog_service = _FakePricingCatalogService()  # noqa: SLF001
+            runtime._openai_model_catalog_store.save_from_model_ids(  # noqa: SLF001
+                model_ids=["gpt-5-mini", "gpt-5-pro", "gpt-4o", "whisper-1"]
+            )
+            runtime.save_openai_enabled_models(model_ids=["gpt-5-mini"])
+
+            await runtime.refresh_pricing(force=True)
+
+            self.assertEqual(runtime._pricing_catalog_service.last_model_ids, ["gpt-5-mini", "gpt-5-pro", "whisper-1"])  # noqa: SLF001
+            self.assertTrue(runtime._pricing_catalog_service.last_force)  # noqa: SLF001
+
+    async def test_rerun_openai_capabilities_scopes_to_filtered_catalog_models(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            os.environ, {"SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED": "true"}, clear=False
+        ):
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["openai"]),
+                provider_credentials_store=_CredentialsStore(),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                provider_model_catalog_path=str(Path(tmp) / "provider_models.json"),
+                provider_enabled_models_path=str(Path(tmp) / "provider_enabled_models.json"),
+            )
+            runtime._build_adapter = lambda **_kwargs: _FakeOpenAIAdapter()  # noqa: SLF001
+            runtime._openai_model_catalog_store.save_from_model_ids(  # noqa: SLF001
+                model_ids=["gpt-5-mini", "gpt-5-pro", "gpt-4o", "whisper-1"]
+            )
+            runtime.save_openai_enabled_models(model_ids=["gpt-5-mini"])
+
+            captured = {"classified_model_ids": [], "priced_model_ids": []}
+
+            async def _capture_classification(*, models):
+                captured["classified_model_ids"] = [str(getattr(entry, "model_id", "")).lower() for entry in models]
+
+            async def _capture_pricing(*, adapter, model_ids, force):
+                _ = adapter
+                _ = force
+                captured["priced_model_ids"] = [str(model_id or "").lower() for model_id in model_ids]
+
+            runtime._refresh_openai_model_capabilities = _capture_classification  # type: ignore[method-assign]  # noqa: SLF001
+            runtime._refresh_openai_pricing = _capture_pricing  # type: ignore[method-assign]  # noqa: SLF001
+
+            await runtime.rerun_openai_model_capabilities()
+
+            self.assertEqual(captured["classified_model_ids"], ["gpt-5-mini", "gpt-5-pro", "whisper-1"])
+            self.assertEqual(captured["priced_model_ids"], ["gpt-5-mini", "gpt-5-pro", "whisper-1"])
+
+    async def test_refresh_pricing_returns_manual_only_when_api_fetch_disabled(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            os.environ, {"SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED": "false"}, clear=False
+        ):
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["openai"]),
+                provider_credentials_store=_CredentialsStore(),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                provider_model_catalog_path=str(Path(tmp) / "provider_models.json"),
+            )
+            payload = await runtime.refresh_pricing(force=True)
+            self.assertEqual(payload.get("status"), "manual_only")
+            self.assertIn("openai_api_pricing_fetch_disabled", payload.get("notes", []))
 
 
 if __name__ == "__main__":

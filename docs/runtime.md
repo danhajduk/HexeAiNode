@@ -12,6 +12,33 @@
 - capability and governance flows use explicit result classification for retryable versus rejected failures
 - provider capability refresh runs on a background interval when enabled
 
+## OpenAI Provider Runtime Behavior
+
+- model capability classification is deterministic and local (`classification_model = deterministic_rules`)
+- canonical capability classifications are stored in `providers/openai/provider_model_classifications.json`
+- the filtered representative UI catalog is returned by `/api/providers/openai/models/catalog` as `ui_models`; the full normalized filtered catalog remains available as `models`
+- provider pricing refresh uses a section-based pipeline:
+  1. fetch official source text (`pricing.md` primary, HTML fallback)
+  2. normalize source text and cache normalized output
+  3. split source into canonical sections (`text_tokens`, `audio_tokens`, `image_generation`, `video`, `other_models`, `embeddings`, `moderation`, and related sections)
+  4. extract family-specific source blocks from those sections
+  5. run family-scoped extraction prompts against filtered target model IDs only
+  6. validate each family output independently and merge successful families
+  7. persist canonical pricing snapshot
+- giant single-prompt extraction was replaced by family prompts to reduce schema drift, avoid irrelevant context per request, and improve partial failure isolation
+- malformed family outputs are rejected without failing the whole refresh when other families succeed
+- failed families preserve last-known-good family entries with `fallback_used` status when possible
+- pricing schema uses `null` for non-applicable fields instead of `0.0` placeholders (for example, STT/TTS token fields)
+- live OpenAI API pricing extraction is disabled by default and `POST /api/providers/openai/pricing/refresh` returns `status = manual_only` until `SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED=true`
+- optional manual pricing overrides are loaded from `providers/openai/provider_model_pricing_overrides.json`
+- section-level diagnostics are cached for admin/debug visibility (target models, section source, prompt used, raw result, validation result)
+- the provider setup UI reads family-aware pricing from the saved catalog: token models show input/output token prices, and non-token families use `normalized_price` + `normalized_unit`
+
+## Capability Declaration Gate
+
+- capability declaration is manual (`POST /api/capabilities/declare`) and is not auto-triggered by provider/config refresh endpoints
+- declaration is blocked until enabled OpenAI models are present, classified, and priced
+
 ## Registration And Trust Assumptions
 
 - onboarding depends on bootstrap MQTT plus Core HTTP APIs

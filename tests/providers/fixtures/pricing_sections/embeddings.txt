@@ -1,0 +1,4 @@
+## Embeddings
+
+text-embedding-3-small
+$0.10 / 1M tokens

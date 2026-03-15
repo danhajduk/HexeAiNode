@@ -290,7 +290,6 @@ class _FakeProviderRuntimeManager:
                 "coding_strength": "medium",
                 "speed_tier": "medium",
                 "cost_tier": "medium",
-                "recommended_for": ["classification", "reasoning"],
             },
             "enabled_models": [
                 {
@@ -590,28 +589,8 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             client.last_manifest["declared_task_families"],
             ["task.classification", "task.reasoning", "task.speech_to_text", "task.summarization"],
         )
-        self.assertEqual(client.last_manifest["provider_metadata"][0]["classification_model"], "gpt-5-mini")
-        self.assertEqual(
-            client.last_manifest["provider_metadata"][0]["task_families"],
-            ["task.classification", "task.reasoning", "task.speech_to_text"],
-        )
-        self.assertEqual(client.last_manifest["provider_metadata"][0]["provider"], "openai")
-        self.assertEqual(
-            client.last_manifest["provider_metadata"][0]["feature_union"],
-            {"reasoning": True, "chat": True, "speech_to_text": True},
-        )
-        self.assertEqual(
-            client.last_manifest["provider_metadata"][0]["resolved_tasks"],
-            ["task.reasoning", "task.classification", "task.summarization", "task.speech_to_text"],
-        )
-        self.assertEqual(client.last_manifest["provider_metadata"][0]["capability_graph_version"], "1.0")
-        self.assertEqual(
-            client.last_manifest["enabled_models"],
-            [
-                {"provider_id": "openai", "model_id": "gpt-5-mini"},
-                {"provider_id": "openai", "model_id": "whisper-1"},
-            ],
-        )
+        self.assertNotIn("provider_metadata", client.last_manifest)
+        self.assertNotIn("enabled_models", client.last_manifest)
 
     async def test_declaration_integration_includes_resolved_tasks_and_provider_intelligence(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
@@ -639,15 +618,8 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
 
         resolved_tasks = runtime_manager.node_capabilities_payload()["enabled_task_capabilities"]
         self.assertTrue(set(resolved_tasks).issubset(set(client.last_manifest["declared_task_families"])))
-        self.assertEqual(
-            client.last_manifest["provider_metadata"][0]["resolved_tasks"],
-            resolved_tasks,
-        )
-        self.assertEqual(
-            client.last_manifest["provider_metadata"][0]["feature_union"],
-            runtime_manager.node_capabilities_payload()["feature_union"],
-        )
-        self.assertEqual(client.last_manifest["provider_metadata"][0]["capability_graph_version"], "1.0")
+        self.assertNotIn("provider_metadata", client.last_manifest)
+        self.assertNotIn("enabled_models", client.last_manifest)
         self.assertIsInstance(client.last_provider_intelligence_report, dict)
         self.assertEqual(client.last_provider_intelligence_report["providers"][0]["provider_id"], "openai")
 
@@ -747,6 +719,37 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         result = await runner.submit_once()
         self.assertEqual(result["status"], "accepted")
         self.assertEqual(lifecycle.get_state(), NodeLifecycleState.DEGRADED)
+
+    async def test_emit_workflow_status_telemetry_publishes_workflow_payload(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
+        lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        telemetry = _FakeTelemetryPublisher()
+        runner = CapabilityDeclarationRunner(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("capability-runner-test"),
+            trust_store=_FakeTrustStore(),
+            provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
+            node_id="node-001",
+            capability_state_store=_FakeCapabilityStateStore(),
+            governance_state_store=_FakeGovernanceStateStore(),
+            capability_client=_FakeClientAccepted(),
+            governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
+            telemetry_publisher=telemetry,
+            phase2_state_store=_FakePhase2StateStore(),
+        )
+        result = await runner.emit_workflow_status_telemetry(
+            workflow_request="openai_model_classification_refresh",
+            workflow_status="done",
+            details={"status": "refreshed"},
+        )
+        self.assertTrue(result["published"])
+        self.assertIsNotNone(telemetry.last)
+        self.assertEqual(telemetry.last["payload"]["event_type"], "workflow_request")
+        self.assertEqual(telemetry.last["payload"]["workflow_request"], "openai_model_classification_refresh")
+        self.assertEqual(telemetry.last["payload"]["workflow_status"], "done")
 
 
 if __name__ == "__main__":

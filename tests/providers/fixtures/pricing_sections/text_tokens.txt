@@ -1,0 +1,18 @@
+## Text tokens
+
+gpt-5-mini
+Input: $0.25 / 1M tokens
+Cached input: $0.025 / 1M tokens
+Output: $2.00 / 1M tokens
+
+gpt-5-nano
+Input: $0.05 / 1M tokens
+Output: $0.40 / 1M tokens
+
+gpt-5.4
+Input: $1.25 / 1M tokens
+Output: $10.00 / 1M tokens
+
+gpt-5.4-pro
+Input: $3.00 / 1M tokens
+Output: $15.00 / 1M tokens

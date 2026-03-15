@@ -1,0 +1,194 @@
+{
+  "extracted_sections": {
+    "audio_realtime_target_rows": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "embeddings_target_rows": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "image_generation_target_rows": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "moderation_target_rows": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "stt_tts_other_target_rows": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "text_tokens_target_rows": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "video_generation_target_rows": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    }
+  },
+  "family_diagnostics": {
+    "embeddings_moderation_pricing_extraction_prompt": {
+      "extraction_prompt_used": {
+        "system_prompt": "Follow the provided user prompt exactly. Return JSON only.",
+        "user_prompt": "Prompt Family: embeddings_moderation_pricing_extraction_prompt\nExtract pricing only for embeddings and moderation models from the provided section.\n\nYou are extracting OpenAI pricing from official pricing page text.\n\nReturn JSON ONLY.\nDo not explain anything.\nDo not infer prices not present in the provided text.\nIf a model is not found, omit it.\n\nTarget models:\n- omni-moderation-2024-09-26\n- text-embedding-3-small\n\n\nReturn one JSON object with this schema:\n\n{\n  \"models\": [\n    {\n      \"model_id\": \"string\",\n      \"pricing_basis\": \"per_1m_tokens | per_1m_characters | per_image | per_second | per_minute\",\n      \"input_price\": 0.0,\n      \"cached_input_price\": 0.0,\n      \"output_price\": 0.0,\n      \"normalized_price\": 0.0,\n      \"normalized_unit\": \"string\",\n      \"notes\": \"string\"\n    }\n  ]\n}\n\nNormalization rules:\n- For llm / embeddings / realtime:\n  - pricing_basis = per_1m_tokens\n  - set input_price / cached_input_price / output_price from the page if available\n  - normalized_price = output_price if no better normalized price is needed\n  - normalized_unit = \"per_1m_tokens\"\n\n- For text_to_speech:\n  - if the page gives characters pricing, use pricing_basis = per_1m_characters\n  - if the page gives minute pricing, use pricing_basis = per_minute\n  - normalized_price = exact listed price\n  - normalized_unit = exact listed unit\n\n- For speech_to_text:\n  - pricing_basis = per_minute\n  - normalized_price = listed minute price\n  - normalized_unit = \"per_minute\"\n\n- For image_generation:\n  - pricing_basis = per_image\n  - normalized_price = medium quality 1024x1536 price if available\n  - normalized_unit = \"medium_1024x1536_per_image\"\n\n- For video_generation:\n  - pricing_basis = per_second\n  - normalized_price = listed price per second for the model\n  - normalized_unit = \"per_second\"\n\nUse only values explicitly present in the provided text.\n\nPricing page text:\n\n\n\nReturn JSON only using this schema:\n{\n  \"models\": [\n    {\n      \"model_id\": \"string\",\n      \"family\": \"llm|embeddings|realtime_voice|text_to_speech|speech_to_text|image_generation|video_generation|moderation\",\n      \"pricing_basis\": \"per_1m_tokens|per_1m_characters|per_image|per_second|per_minute\",\n      \"input_price\": \"number|null\",\n      \"cached_input_price\": \"number|null\",\n      \"output_price\": \"number|null\",\n      \"normalized_price\": \"number|null\",\n      \"normalized_unit\": \"string\",\n      \"notes\": [\"string\"]\n    }\n  ]\n}"
+      },
+      "normalized_source_snippet": "",
+      "raw_extraction_result": "{\n  \"models\": []\n}",
+      "source_section_name": "embeddings+moderation",
+      "target_models": [
+        "omni-moderation-2024-09-26",
+        "text-embedding-3-small"
+      ],
+      "validation_result": {
+        "reason": "pricing_entries_empty",
+        "status": "failed"
+      }
+    },
+    "image_generation_pricing_extraction_prompt": {
+      "extraction_prompt_used": {
+        "system_prompt": "Follow the provided user prompt exactly. Return JSON only.",
+        "user_prompt": "Prompt Family: image_generation_pricing_extraction_prompt\nExtract pricing only for image generation models from the provided section.\n\nYou are extracting OpenAI pricing from official pricing page text.\n\nReturn JSON ONLY.\nDo not explain anything.\nDo not infer prices not present in the provided text.\nIf a model is not found, omit it.\n\nTarget models:\n- gpt-image-1-mini\n- gpt-image-1.5\n\n\nReturn one JSON object with this schema:\n\n{\n  \"models\": [\n    {\n      \"model_id\": \"string\",\n      \"pricing_basis\": \"per_1m_tokens | per_1m_characters | per_image | per_second | per_minute\",\n      \"input_price\": 0.0,\n      \"cached_input_price\": 0.0,\n      \"output_price\": 0.0,\n      \"normalized_price\": 0.0,\n      \"normalized_unit\": \"string\",\n      \"notes\": \"string\"\n    }\n  ]\n}\n\nNormalization rules:\n- For llm / embeddings / realtime:\n  - pricing_basis = per_1m_tokens\n  - set input_price / cached_input_price / output_price from the page if available\n  - normalized_price = output_price if no better normalized price is needed\n  - normalized_unit = \"per_1m_tokens\"\n\n- For text_to_speech:\n  - if the page gives characters pricing, use pricing_basis = per_1m_characters\n  - if the page gives minute pricing, use pricing_basis = per_minute\n  - normalized_price = exact listed price\n  - normalized_unit = exact listed unit\n\n- For speech_to_text:\n  - pricing_basis = per_minute\n  - normalized_price = listed minute price\n  - normalized_unit = \"per_minute\"\n\n- For image_generation:\n  - pricing_basis = per_image\n  - normalized_price = medium quality 1024x1536 price if available\n  - normalized_unit = \"medium_1024x1536_per_image\"\n\n- For video_generation:\n  - pricing_basis = per_second\n  - normalized_price = listed price per second for the model\n  - normalized_unit = \"per_second\"\n\nUse only values explicitly present in the provided text.\n\nPricing page text:\n\n\n\nReturn JSON only using this schema:\n{\n  \"models\": [\n    {\n      \"model_id\": \"string\",\n      \"family\": \"llm|embeddings|realtime_voice|text_to_speech|speech_to_text|image_generation|video_generation|moderation\",\n      \"pricing_basis\": \"per_1m_tokens|per_1m_characters|per_image|per_second|per_minute\",\n      \"input_price\": \"number|null\",\n      \"cached_input_price\": \"number|null\",\n      \"output_price\": \"number|null\",\n      \"normalized_price\": \"number|null\",\n      \"normalized_unit\": \"string\",\n      \"notes\": [\"string\"]\n    }\n  ]\n}"
+      },
+      "normalized_source_snippet": "",
+      "raw_extraction_result": "{\n  \"models\": []\n}",
+      "source_section_name": "image_generation",
+      "target_models": [
+        "gpt-image-1-mini",
+        "gpt-image-1.5"
+      ],
+      "validation_result": {
+        "reason": "pricing_entries_empty",
+        "status": "failed"
+      }
+    },
+    "llm_pricing_extraction_prompt": {
+      "extraction_prompt_used": {
+        "system_prompt": "Follow the provided user prompt exactly. Return JSON only.",
+        "user_prompt": "Prompt Family: llm_pricing_extraction_prompt\nExtract pricing only for LLM models from the provided text token section.\n\nYou are extracting OpenAI pricing from official pricing page text.\n\nReturn JSON ONLY.\nDo not explain anything.\nDo not infer prices not present in the provided text.\nIf a model is not found, omit it.\n\nTarget models:\n- gpt-5-mini\n- gpt-5-nano\n- gpt-5.4\n- gpt-5.4-pro\n\n\nReturn one JSON object with this schema:\n\n{\n  \"models\": [\n    {\n      \"model_id\": \"string\",\n      \"pricing_basis\": \"per_1m_tokens | per_1m_characters | per_image | per_second | per_minute\",\n      \"input_price\": 0.0,\n      \"cached_input_price\": 0.0,\n      \"output_price\": 0.0,\n      \"normalized_price\": 0.0,\n      \"normalized_unit\": \"string\",\n      \"notes\": \"string\"\n    }\n  ]\n}\n\nNormalization rules:\n- For llm / embeddings / realtime:\n  - pricing_basis = per_1m_tokens\n  - set input_price / cached_input_price / output_price from the page if available\n  - normalized_price = output_price if no better normalized price is needed\n  - normalized_unit = \"per_1m_tokens\"\n\n- For text_to_speech:\n  - if the page gives characters pricing, use pricing_basis = per_1m_characters\n  - if the page gives minute pricing, use pricing_basis = per_minute\n  - normalized_price = exact listed price\n  - normalized_unit = exact listed unit\n\n- For speech_to_text:\n  - pricing_basis = per_minute\n  - normalized_price = listed minute price\n  - normalized_unit = \"per_minute\"\n\n- For image_generation:\n  - pricing_basis = per_image\n  - normalized_price = medium quality 1024x1536 price if available\n  - normalized_unit = \"medium_1024x1536_per_image\"\n\n- For video_generation:\n  - pricing_basis = per_second\n  - normalized_price = listed price per second for the model\n  - normalized_unit = \"per_second\"\n\nUse only values explicitly present in the provided text.\n\nPricing page text:\n# Pricing\n\nPricingTable,\nTextTokenPricingTables,\nImagePricingTable,\nwithDataSharing,\n} from \"./pricing.jsx\";\n\n\nReturn JSON only using this schema:\n{\n  \"models\": [\n    {\n      \"model_id\": \"string\",\n      \"family\": \"llm|embeddings|realtime_voice|text_to_speech|speech_to_text|image_generation|video_generation|moderation\",\n      \"pricing_basis\": \"per_1m_tokens|per_1m_characters|per_image|per_second|per_minute\",\n      \"input_price\": \"number|null\",\n      \"cached_input_price\": \"number|null\",\n      \"output_price\": \"number|null\",\n      \"normalized_price\": \"number|null\",\n      \"normalized_unit\": \"string\",\n      \"notes\": [\"string\"]\n    }\n  ]\n}"
+      },
+      "normalized_source_snippet": "# Pricing\n\nPricingTable,\nTextTokenPricingTables,\nImagePricingTable,\nwithDataSharing,\n} from \"./pricing.jsx\";",
+      "raw_extraction_result": "{\n  \"models\": []\n}",
+      "source_section_name": "text_tokens",
+      "target_models": [
+        "gpt-5-mini",
+        "gpt-5-nano",
+        "gpt-5.4",
+        "gpt-5.4-pro"
+      ],
+      "validation_result": {
+        "reason": "pricing_entries_empty",
+        "status": "failed"
+      }
+    },
+    "realtime_audio_pricing_extraction_prompt": {
+      "extraction_prompt_used": {
+        "system_prompt": "Follow the provided user prompt exactly. Return JSON only.",
+        "user_prompt": "Prompt Family: realtime_audio_pricing_extraction_prompt\nExtract pricing only for realtime/audio models from the provided section.\n\nYou are extracting OpenAI pricing from official pricing page text.\n\nReturn JSON ONLY.\nDo not explain anything.\nDo not infer prices not present in the provided text.\nIf a model is not found, omit it.\n\nTarget models:\n- gpt-realtime-1.5\n- gpt-realtime-mini\n\n\nReturn one JSON object with this schema:\n\n{\n  \"models\": [\n    {\n      \"model_id\": \"string\",\n      \"pricing_basis\": \"per_1m_tokens | per_1m_characters | per_image | per_second | per_minute\",\n      \"input_price\": 0.0,\n      \"cached_input_price\": 0.0,\n      \"output_price\": 0.0,\n      \"normalized_price\": 0.0,\n      \"normalized_unit\": \"string\",\n      \"notes\": \"string\"\n    }\n  ]\n}\n\nNormalization rules:\n- For llm / embeddings / realtime:\n  - pricing_basis = per_1m_tokens\n  - set input_price / cached_input_price / output_price from the page if available\n  - normalized_price = output_price if no better normalized price is needed\n  - normalized_unit = \"per_1m_tokens\"\n\n- For text_to_speech:\n  - if the page gives characters pricing, use pricing_basis = per_1m_characters\n  - if the page gives minute pricing, use pricing_basis = per_minute\n  - normalized_price = exact listed price\n  - normalized_unit = exact listed unit\n\n- For speech_to_text:\n  - pricing_basis = per_minute\n  - normalized_price = listed minute price\n  - normalized_unit = \"per_minute\"\n\n- For image_generation:\n  - pricing_basis = per_image\n  - normalized_price = medium quality 1024x1536 price if available\n  - normalized_unit = \"medium_1024x1536_per_image\"\n\n- For video_generation:\n  - pricing_basis = per_second\n  - normalized_price = listed price per second for the model\n  - normalized_unit = \"per_second\"\n\nUse only values explicitly present in the provided text.\n\nPricing page text:\n\n\n\nReturn JSON only using this schema:\n{\n  \"models\": [\n    {\n      \"model_id\": \"string\",\n      \"family\": \"llm|embeddings|realtime_voice|text_to_speech|speech_to_text|image_generation|video_generation|moderation\",\n      \"pricing_basis\": \"per_1m_tokens|per_1m_characters|per_image|per_second|per_minute\",\n      \"input_price\": \"number|null\",\n      \"cached_input_price\": \"number|null\",\n      \"output_price\": \"number|null\",\n      \"normalized_price\": \"number|null\",\n      \"normalized_unit\": \"string\",\n      \"notes\": [\"string\"]\n    }\n  ]\n}"
+      },
+      "normalized_source_snippet": "",
+      "raw_extraction_result": "{\n  \"models\": []\n}",
+      "source_section_name": "audio_tokens+transcription_and_speech_generation",
+      "target_models": [
+        "gpt-realtime-1.5",
+        "gpt-realtime-mini"
+      ],
+      "validation_result": {
+        "reason": "pricing_entries_empty",
+        "status": "failed"
+      }
+    },
+    "stt_tts_other_pricing_extraction_prompt": {
+      "extraction_prompt_used": {
+        "system_prompt": "Follow the provided user prompt exactly. Return JSON only.",
+        "user_prompt": "Prompt Family: stt_tts_other_pricing_extraction_prompt\nExtract pricing only for speech-to-text and text-to-speech models from the provided section.\n\nYou are extracting OpenAI pricing from official pricing page text.\n\nReturn JSON ONLY.\nDo not explain anything.\nDo not infer prices not present in the provided text.\nIf a model is not found, omit it.\n\nTarget models:\n- tts-1-hd\n- whisper-1\n\n\nReturn one JSON object with this schema:\n\n{\n  \"models\": [\n    {\n      \"model_id\": \"string\",\n      \"pricing_basis\": \"per_1m_tokens | per_1m_characters | per_image | per_second | per_minute\",\n      \"input_price\": 0.0,\n      \"cached_input_price\": 0.0,\n      \"output_price\": 0.0,\n      \"normalized_price\": 0.0,\n      \"normalized_unit\": \"string\",\n      \"notes\": \"string\"\n    }\n  ]\n}\n\nNormalization rules:\n- For llm / embeddings / realtime:\n  - pricing_basis = per_1m_tokens\n  - set input_price / cached_input_price / output_price from the page if available\n  - normalized_price = output_price if no better normalized price is needed\n  - normalized_unit = \"per_1m_tokens\"\n\n- For text_to_speech:\n  - if the page gives characters pricing, use pricing_basis = per_1m_characters\n  - if the page gives minute pricing, use pricing_basis = per_minute\n  - normalized_price = exact listed price\n  - normalized_unit = exact listed unit\n\n- For speech_to_text:\n  - pricing_basis = per_minute\n  - normalized_price = listed minute price\n  - normalized_unit = \"per_minute\"\n\n- For image_generation:\n  - pricing_basis = per_image\n  - normalized_price = medium quality 1024x1536 price if available\n  - normalized_unit = \"medium_1024x1536_per_image\"\n\n- For video_generation:\n  - pricing_basis = per_second\n  - normalized_price = listed price per second for the model\n  - normalized_unit = \"per_second\"\n\nUse only values explicitly present in the provided text.\n\nPricing page text:\n\n\n\nReturn JSON only using this schema:\n{\n  \"models\": [\n    {\n      \"model_id\": \"string\",\n      \"family\": \"llm|embeddings|realtime_voice|text_to_speech|speech_to_text|image_generation|video_generation|moderation\",\n      \"pricing_basis\": \"per_1m_tokens|per_1m_characters|per_image|per_second|per_minute\",\n      \"input_price\": \"number|null\",\n      \"cached_input_price\": \"number|null\",\n      \"output_price\": \"number|null\",\n      \"normalized_price\": \"number|null\",\n      \"normalized_unit\": \"string\",\n      \"notes\": [\"string\"]\n    }\n  ]\n}"
+      },
+      "normalized_source_snippet": "",
+      "raw_extraction_result": "{\n  \"models\": []\n}",
+      "source_section_name": "other_models+transcription_and_speech_generation",
+      "target_models": [
+        "tts-1-hd",
+        "whisper-1"
+      ],
+      "validation_result": {
+        "reason": "pricing_entries_empty",
+        "status": "failed"
+      }
+    },
+    "video_pricing_extraction_prompt": {
+      "extraction_prompt_used": {
+        "system_prompt": "Follow the provided user prompt exactly. Return JSON only.",
+        "user_prompt": "Prompt Family: video_pricing_extraction_prompt\nExtract pricing only for video generation models from the provided section.\n\nYou are extracting OpenAI pricing from official pricing page text.\n\nReturn JSON ONLY.\nDo not explain anything.\nDo not infer prices not present in the provided text.\nIf a model is not found, omit it.\n\nTarget models:\n- sora-2\n\n\nReturn one JSON object with this schema:\n\n{\n  \"models\": [\n    {\n      \"model_id\": \"string\",\n      \"pricing_basis\": \"per_1m_tokens | per_1m_characters | per_image | per_second | per_minute\",\n      \"input_price\": 0.0,\n      \"cached_input_price\": 0.0,\n      \"output_price\": 0.0,\n      \"normalized_price\": 0.0,\n      \"normalized_unit\": \"string\",\n      \"notes\": \"string\"\n    }\n  ]\n}\n\nNormalization rules:\n- For llm / embeddings / realtime:\n  - pricing_basis = per_1m_tokens\n  - set input_price / cached_input_price / output_price from the page if available\n  - normalized_price = output_price if no better normalized price is needed\n  - normalized_unit = \"per_1m_tokens\"\n\n- For text_to_speech:\n  - if the page gives characters pricing, use pricing_basis = per_1m_characters\n  - if the page gives minute pricing, use pricing_basis = per_minute\n  - normalized_price = exact listed price\n  - normalized_unit = exact listed unit\n\n- For speech_to_text:\n  - pricing_basis = per_minute\n  - normalized_price = listed minute price\n  - normalized_unit = \"per_minute\"\n\n- For image_generation:\n  - pricing_basis = per_image\n  - normalized_price = medium quality 1024x1536 price if available\n  - normalized_unit = \"medium_1024x1536_per_image\"\n\n- For video_generation:\n  - pricing_basis = per_second\n  - normalized_price = listed price per second for the model\n  - normalized_unit = \"per_second\"\n\nUse only values explicitly present in the provided text.\n\nPricing page text:\n\n\n\nReturn JSON only using this schema:\n{\n  \"models\": [\n    {\n      \"model_id\": \"string\",\n      \"family\": \"llm|embeddings|realtime_voice|text_to_speech|speech_to_text|image_generation|video_generation|moderation\",\n      \"pricing_basis\": \"per_1m_tokens|per_1m_characters|per_image|per_second|per_minute\",\n      \"input_price\": \"number|null\",\n      \"cached_input_price\": \"number|null\",\n      \"output_price\": \"number|null\",\n      \"normalized_price\": \"number|null\",\n      \"normalized_unit\": \"string\",\n      \"notes\": [\"string\"]\n    }\n  ]\n}"
+      },
+      "normalized_source_snippet": "",
+      "raw_extraction_result": "{\"models\": []}",
+      "source_section_name": "video",
+      "target_models": [
+        "sora-2"
+      ],
+      "validation_result": {
+        "reason": "pricing_entries_empty",
+        "status": "failed"
+      }
+    }
+  },
+  "fetch_status": "primary_markdown",
+  "fetched_at": "2026-03-15T06:39:49.533199+00:00",
+  "sections": {
+    "audio_tokens": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "embeddings": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "image_generation": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "image_tokens": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "moderation": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "other_models": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "text_tokens": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "transcription_and_speech_generation": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    },
+    "video": {
+      "line_count": 0,
+      "text": "",
+      "text_length": 0
+    }
+  },
+  "source_url": "https://developers.openai.com/api/docs/pricing.md"
+}

@@ -12,6 +12,7 @@ from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES
 from ai_node.config.bootstrap_config import create_bootstrap_config
 from ai_node.execution.gateway import ExecutionGateway
 from ai_node.config.provider_credentials_config import summarize_provider_credentials
+from ai_node.providers.openai_model_catalog import select_representative_openai_model_ids
 from ai_node.prompts.registration import apply_probation_transition, create_prompt_service_registration
 from ai_node.config.task_capability_selection_config import create_task_capability_selection_config
 from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
@@ -150,6 +151,8 @@ class NodeControlState:
                 and trusted_context.get("operational_mqtt_port") is not None
             ),
         }
+        openai_ready, openai_blockers, openai_flags = self._openai_declaration_readiness(provider_config=provider_config)
+        readiness_flags.update(openai_flags)
         blocking_reasons: list[str] = []
         if not readiness_flags["trust_state_valid"]:
             blocking_reasons.append("missing_or_invalid_trust_state")
@@ -161,6 +164,7 @@ class NodeControlState:
             blocking_reasons.append("missing_or_invalid_task_capability_selection")
         if not readiness_flags["core_runtime_context_valid"]:
             blocking_reasons.append("missing_or_invalid_trusted_runtime_context")
+        blocking_reasons.extend(openai_blockers)
 
         lifecycle_state = self._lifecycle.get_state()
         declaration_allowed = (
@@ -196,6 +200,71 @@ class NodeControlState:
                 NodeLifecycleState.PENDING_APPROVAL.value,
                 NodeLifecycleState.TRUSTED.value,
             ],
+        }
+
+    def _openai_declaration_readiness(self, *, provider_config: dict | None) -> tuple[bool, list[str], dict]:
+        providers = provider_config.get("providers") if isinstance(provider_config, dict) else None
+        enabled_providers = providers.get("enabled") if isinstance(providers, dict) else []
+        enabled_provider_set = {str(item or "").strip().lower() for item in enabled_providers if str(item or "").strip()}
+        if "openai" not in enabled_provider_set:
+            return True, [], {
+                "openai_enabled_models_ready": True,
+                "openai_classification_ready": True,
+                "openai_pricing_ready": True,
+            }
+
+        blockers: list[str] = []
+
+        enabled_payload = self.openai_enabled_models_payload()
+        enabled_models_raw = enabled_payload.get("models") if isinstance(enabled_payload, dict) else []
+        enabled_model_ids = sorted(
+            {
+                str(item.get("model_id") or "").strip().lower()
+                for item in (enabled_models_raw if isinstance(enabled_models_raw, list) else [])
+                if isinstance(item, dict) and bool(item.get("enabled")) and str(item.get("model_id") or "").strip()
+            }
+        )
+        if not enabled_model_ids:
+            blockers.append("openai_enabled_models_required_before_declare")
+
+        capability_payload = self.openai_provider_model_capabilities_payload()
+        classified_entries = capability_payload.get("entries") if isinstance(capability_payload, dict) else []
+        classified_ids = {
+            str(item.get("model_id") or "").strip().lower()
+            for item in (classified_entries if isinstance(classified_entries, list) else [])
+            if isinstance(item, dict) and str(item.get("model_id") or "").strip()
+        }
+        missing_classification = sorted(set(enabled_model_ids) - classified_ids)
+        if missing_classification:
+            blockers.append("openai_enabled_models_not_classified")
+
+        pricing_diag = self.openai_pricing_diagnostics_payload()
+        pricing_state = str(pricing_diag.get("refresh_state") or "").strip().lower() if isinstance(pricing_diag, dict) else ""
+        pricing_state_ready = pricing_state in {"ok", "manual", "failed_preserved"}
+        if not pricing_state_ready:
+            blockers.append("openai_pricing_refresh_not_completed")
+
+        priced_ids: set[str] = set()
+        if (
+            self._provider_runtime_manager is not None
+            and hasattr(self._provider_runtime_manager, "openai_pricing_catalog_payload")
+        ):
+            pricing_catalog = self._provider_runtime_manager.openai_pricing_catalog_payload()
+            entries = pricing_catalog.get("entries") if isinstance(pricing_catalog, dict) else []
+            priced_ids = {
+                str(item.get("model_id") or "").strip().lower()
+                for item in (entries if isinstance(entries, list) else [])
+                if isinstance(item, dict) and str(item.get("model_id") or "").strip()
+            }
+        missing_pricing = sorted(set(enabled_model_ids) - priced_ids) if enabled_model_ids else []
+        if missing_pricing:
+            blockers.append("openai_enabled_models_missing_pricing")
+
+        ready = not blockers
+        return ready, blockers, {
+            "openai_enabled_models_ready": bool(enabled_model_ids),
+            "openai_classification_ready": not missing_classification and bool(enabled_model_ids),
+            "openai_pricing_ready": pricing_state_ready and not missing_pricing and bool(enabled_model_ids),
         }
 
     def _load_identity(self) -> None:
@@ -597,9 +666,14 @@ class NodeControlState:
                     "enabled": bool(item.get("enabled")),
                 }
             )
+        selected_ui_ids = select_representative_openai_model_ids(
+            [str(item.get("model_id") or "").strip().lower() for item in normalized]
+        )
+        ui_models = [item for item in normalized if str(item.get("model_id") or "").strip().lower() in selected_ui_ids]
         return {
             "provider_id": "openai",
             "models": normalized,
+            "ui_models": ui_models,
             "source": str(payload.get("source") or "provider_model_catalog").strip() if isinstance(payload, dict) else "provider_model_catalog",
             "generated_at": str(payload.get("generated_at") or datetime.now(timezone.utc).isoformat()).strip()
             if isinstance(payload, dict)
@@ -716,6 +790,7 @@ class NodeControlState:
                 "classification_model": None,
                 "updated_at": None,
                 "capabilities": {
+                    "text_generation": False,
                     "reasoning": False,
                     "vision": False,
                     "image_generation": False,
@@ -725,10 +800,11 @@ class NodeControlState:
                     "tool_calling": False,
                     "structured_output": False,
                     "long_context": False,
-                    "coding_strength": "low",
-                    "speed_tier": "low",
+                    "coding_strength": "none",
+                    "speed_tier": "slow",
                     "cost_tier": "low",
-                    "recommended_for": [],
+                    "embeddings": False,
+                    "moderation": False,
                 },
                 "enabled_models": [],
             }
@@ -887,6 +963,23 @@ class NodeControlState:
             return {"status": "skipped", "reason": "capability_redeclaration_not_configured"}
         return await self._capability_runner.redeclare_if_needed(reason=reason, force=force)
 
+    async def notify_workflow_request(self, *, workflow_request: str, workflow_status: str, details: dict | None = None) -> dict | None:
+        if self._capability_runner is None or not hasattr(self._capability_runner, "emit_workflow_status_telemetry"):
+            return None
+        try:
+            return await self._capability_runner.emit_workflow_status_telemetry(
+                workflow_request=workflow_request,
+                workflow_status=workflow_status,
+                details=details,
+            )
+        except Exception as exc:
+            if hasattr(self._logger, "warning"):
+                self._logger.warning(
+                    "[workflow-request-telemetry-failed] %s",
+                    {"workflow_request": workflow_request, "workflow_status": workflow_status, "error": str(exc)},
+                )
+            return None
+
     async def rebuild_node_capabilities(self) -> dict:
         if self._provider_runtime_manager is not None and hasattr(self._provider_runtime_manager, "rebuild_node_capabilities"):
             payload = self._provider_runtime_manager.rebuild_node_capabilities()
@@ -915,6 +1008,12 @@ class NodeControlState:
             capability_graph = load_task_graph()
         except Exception as exc:
             capability_graph = {"error": str(exc)}
+        pricing_catalog = (
+            self._provider_runtime_manager.openai_pricing_catalog_payload()
+            if self._provider_runtime_manager is not None and hasattr(self._provider_runtime_manager, "openai_pricing_catalog_payload")
+            else {"entries": [], "source": "openai_pricing_catalog", "generated_at": self._now_iso()}
+        )
+        pricing_diagnostics = self.openai_pricing_diagnostics_payload()
         return {
             "admin": True,
             "generated_at": self._now_iso(),
@@ -929,6 +1028,8 @@ class NodeControlState:
                 or node_capabilities.get("resolved_tasks")
                 or []
             ),
+            "pricing_catalog": pricing_catalog,
+            "pricing_diagnostics": pricing_diagnostics,
             "node_capabilities": node_capabilities,
             "classification_model": resolved.get("classification_model"),
             "last_declaration_payload": capability_status.get("last_manifest_payload"),
@@ -1252,8 +1353,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     async def post_provider_config(payload: ProviderSelectionRequest):
         try:
             response = state.update_provider_selection(openai_enabled=payload.openai_enabled)
-            redeclare = await state.redeclare_capabilities(reason="provider_configuration_changed", force=False)
-            return {**response, "redeclare": redeclare}
+            return {**response, "declaration": {"status": "pending_manual", "reason": "provider_configuration_changed"}}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1308,8 +1408,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     async def post_openai_enabled_models(payload: OpenAIEnabledModelsRequest):
         try:
             response = state.save_openai_enabled_models(model_ids=payload.model_ids)
-            redeclare = await state.redeclare_capabilities(reason="enabled_models_changed", force=False)
-            return {**response, "redeclare": redeclare}
+            return {**response, "declaration": {"status": "pending_manual", "reason": "enabled_models_changed"}}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1328,8 +1427,19 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.post("/api/providers/openai/pricing/refresh")
     async def post_openai_pricing_refresh(payload: OpenAIPricingRefreshRequest):
         try:
-            return await state.refresh_openai_pricing(force_refresh=payload.force_refresh)
+            response = await state.refresh_openai_pricing(force_refresh=payload.force_refresh)
+            await state.notify_workflow_request(
+                workflow_request="openai_pricing_refresh",
+                workflow_status="done",
+                details={"force_refresh": payload.force_refresh, "status": response.get("status")},
+            )
+            return response
         except ValueError as exc:
+            await state.notify_workflow_request(
+                workflow_request="openai_pricing_refresh",
+                workflow_status="stopped",
+                details={"force_refresh": payload.force_refresh, "error": str(exc)},
+            )
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/providers/openai/models/classification/refresh")
@@ -1337,9 +1447,23 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         try:
             require_admin(x_synthia_admin_token)
             response = await state.rerun_openai_model_capabilities()
-            redeclare = await state.redeclare_capabilities(reason="capability_catalog_refresh", force=False)
-            return {**response, "redeclare": redeclare}
+            payload = {**response, "declaration": {"status": "pending_manual", "reason": "capability_catalog_refresh"}}
+            await state.notify_workflow_request(
+                workflow_request="openai_model_classification_refresh",
+                workflow_status="done",
+                details={
+                    "status": payload.get("status"),
+                    "classification_model": payload.get("classification_model"),
+                    "entry_count": len(payload.get("entries") or []),
+                },
+            )
+            return payload
         except ValueError as exc:
+            await state.notify_workflow_request(
+                workflow_request="openai_model_classification_refresh",
+                workflow_status="stopped",
+                details={"error": str(exc)},
+            )
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/providers/openai/pricing/manual")
@@ -1378,8 +1502,19 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     async def post_capability_rebuild(x_synthia_admin_token: str | None = Header(default=None)):
         try:
             require_admin(x_synthia_admin_token)
-            return await state.rebuild_node_capabilities()
+            response = await state.rebuild_node_capabilities()
+            await state.notify_workflow_request(
+                workflow_request="node_capability_rebuild",
+                workflow_status="done",
+                details={"status": response.get("status"), "resolved_task_count": len(response.get("resolved_tasks") or [])},
+            )
+            return response
         except ValueError as exc:
+            await state.notify_workflow_request(
+                workflow_request="node_capability_rebuild",
+                workflow_status="stopped",
+                details={"error": str(exc)},
+            )
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/capabilities/redeclare")
@@ -1412,9 +1547,19 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         try:
             require_admin(x_synthia_admin_token)
             response = await state.refresh_provider_capabilities(force_refresh=payload.force_refresh)
-            redeclare = await state.redeclare_capabilities(reason="provider_capability_refresh", force=False)
-            return {**response, "redeclare": redeclare}
+            result = {**response, "declaration": {"status": "pending_manual", "reason": "provider_capability_refresh"}}
+            await state.notify_workflow_request(
+                workflow_request="provider_capability_refresh",
+                workflow_status="done",
+                details={"force_refresh": payload.force_refresh, "status": result.get("status"), "changed": result.get("changed")},
+            )
+            return result
         except ValueError as exc:
+            await state.notify_workflow_request(
+                workflow_request="provider_capability_refresh",
+                workflow_status="stopped",
+                details={"force_refresh": payload.force_refresh, "error": str(exc)},
+            )
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/node/recover")

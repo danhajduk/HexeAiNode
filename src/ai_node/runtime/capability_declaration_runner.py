@@ -205,8 +205,6 @@ class CapabilityDeclarationRunner:
             if self._provider_runtime_manager is not None and hasattr(self._provider_runtime_manager, "openai_resolved_capabilities_payload")
             else None
         )
-        enabled_models = []
-        provider_metadata = []
         derived_task_families: list[str] = []
         resolved_node_tasks: list[str] = []
         resolved_node_capabilities = (
@@ -214,49 +212,8 @@ class CapabilityDeclarationRunner:
             if self._provider_runtime_manager is not None and hasattr(self._provider_runtime_manager, "node_capabilities_payload")
             else None
         )
-        node_feature_union = (
-            resolved_node_capabilities.get("feature_union")
-            if isinstance(resolved_node_capabilities, dict)
-            else {}
-        )
-        node_resolved_tasks = (
-            list(
-                resolved_node_capabilities.get("enabled_task_capabilities")
-                or resolved_node_capabilities.get("resolved_tasks")
-                or []
-            )
-            if isinstance(resolved_node_capabilities, dict)
-            else []
-        )
-        node_capability_graph_version = (
-            str(resolved_node_capabilities.get("capability_graph_version") or "1.0").strip()
-            if isinstance(resolved_node_capabilities, dict)
-            else "1.0"
-        )
         if isinstance(resolved_provider_capabilities, dict):
-            enabled_models = [
-                {
-                    "provider_id": "openai",
-                    "model_id": item.get("model_id"),
-                }
-                for item in resolved_provider_capabilities.get("enabled_models") or []
-                if isinstance(item, dict) and str(item.get("model_id") or "").strip()
-            ]
             derived_task_families = derive_declared_task_families(resolved_capabilities=resolved_provider_capabilities)
-            provider_metadata.append(
-                {
-                    "provider": "openai",
-                    "provider_id": "openai",
-                    "classification_model": resolved_provider_capabilities.get("classification_model"),
-                    "enabled_model_ids": list(resolved_provider_capabilities.get("enabled_model_ids") or []),
-                    "resolved_capabilities": resolved_provider_capabilities.get("capabilities") or {},
-                    "task_families": list(resolved_provider_capabilities.get("task_families") or derived_task_families),
-                    "enabled_models": list(resolved_provider_capabilities.get("enabled_model_ids") or []),
-                    "feature_union": node_feature_union,
-                    "resolved_tasks": node_resolved_tasks,
-                    "capability_graph_version": node_capability_graph_version,
-                }
-            )
         if isinstance(resolved_node_capabilities, dict):
             resolved_node_tasks = list(
                 resolved_node_capabilities.get("enabled_task_capabilities")
@@ -283,8 +240,6 @@ class CapabilityDeclarationRunner:
             enabled_providers=providers.get("enabled"),
             node_features=create_node_feature_declarations(),
             environment_hints=collect_environment_hints(),
-            provider_metadata=provider_metadata,
-            enabled_models=enabled_models,
         )
 
     async def submit_once(self) -> dict:
@@ -920,7 +875,14 @@ class CapabilityDeclarationRunner:
         }
         self._phase2_state_store.save(payload)
 
-    async def _emit_status_telemetry(self, *, trust_state: dict, lifecycle_state: str, overall_status: str) -> dict | None:
+    async def _emit_status_telemetry(
+        self,
+        *,
+        trust_state: dict,
+        lifecycle_state: str,
+        overall_status: str,
+        extra_payload: dict | None = None,
+    ) -> dict | None:
         if self._telemetry_publisher is None or not hasattr(self._telemetry_publisher, "publish_status"):
             return None
         payload = {
@@ -936,6 +898,8 @@ class CapabilityDeclarationRunner:
                 else None
             ),
         }
+        if isinstance(extra_payload, dict):
+            payload.update(extra_payload)
         payload.update(self._prompt_service_summary())
         result = await self._telemetry_publisher.publish_status(
             trust_state=trust_state,
@@ -948,6 +912,28 @@ class CapabilityDeclarationRunner:
                 {"source": "trusted_status_telemetry", "reason": result.get("last_error") or "telemetry_publish_failed"},
             )
         return result
+
+    async def emit_workflow_status_telemetry(self, *, workflow_request: str, workflow_status: str, details: dict | None = None) -> dict | None:
+        if self._trust_store is None or not hasattr(self._trust_store, "load"):
+            return None
+        trust_state = self._trust_store.load()
+        if not isinstance(trust_state, dict):
+            return None
+        normalized_request = str(workflow_request or "").strip()
+        normalized_status = str(workflow_status or "").strip().lower()
+        if not normalized_request or not normalized_status:
+            return None
+        return await self._emit_status_telemetry(
+            trust_state=trust_state,
+            lifecycle_state=self._lifecycle.get_state().value,
+            overall_status=f"workflow_{normalized_status}",
+            extra_payload={
+                "event_type": "workflow_request",
+                "workflow_request": normalized_request,
+                "workflow_status": normalized_status,
+                "workflow_details": details if isinstance(details, dict) else {},
+            },
+        )
 
 
 def _build_governance_payload(*, governance_payload: dict, trust_state: dict) -> dict:

@@ -1,0 +1,92 @@
+{
+  "models": [
+    {
+      "model_id": "gpt-5-mini",
+      "family": "llm",
+      "pricing_basis": "per_1m_tokens",
+      "input_price": 0.25,
+      "cached_input_price": 0.025,
+      "output_price": 2.0,
+      "normalized_price": 2.0,
+      "normalized_unit": "per_1m_tokens",
+      "notes": ["fixture_ai"]
+    },
+    {
+      "model_id": "gpt-image-1.5",
+      "family": "image_generation",
+      "pricing_basis": "per_image",
+      "input_price": 0.08,
+      "cached_input_price": null,
+      "output_price": 0.08,
+      "normalized_price": 0.08,
+      "normalized_unit": "medium_1024x1536_per_image",
+      "notes": ["fixture_ai"]
+    },
+    {
+      "model_id": "sora-2",
+      "family": "video_generation",
+      "pricing_basis": "per_second",
+      "input_price": 0.35,
+      "cached_input_price": null,
+      "output_price": 0.35,
+      "normalized_price": 0.35,
+      "normalized_unit": "per_second",
+      "notes": ["fixture_ai"]
+    },
+    {
+      "model_id": "whisper-1",
+      "family": "speech_to_text",
+      "pricing_basis": "per_minute",
+      "input_price": 0.006,
+      "cached_input_price": null,
+      "output_price": 0.006,
+      "normalized_price": 0.006,
+      "normalized_unit": "per_minute",
+      "notes": ["fixture_ai"]
+    },
+    {
+      "model_id": "tts-1",
+      "family": "text_to_speech",
+      "pricing_basis": "per_1m_characters",
+      "input_price": 15.0,
+      "cached_input_price": null,
+      "output_price": 15.0,
+      "normalized_price": 15.0,
+      "normalized_unit": "per_1m_characters",
+      "notes": ["fixture_ai"]
+    },
+    {
+      "model_id": "text-embedding-3-small",
+      "family": "embeddings",
+      "pricing_basis": "per_1m_tokens",
+      "input_price": 0.1,
+      "cached_input_price": null,
+      "output_price": 0.1,
+      "normalized_price": 0.1,
+      "normalized_unit": "per_1m_tokens",
+      "notes": ["fixture_ai"]
+    },
+    {
+      "model_id": "omni-moderation-stable",
+      "family": "moderation",
+      "pricing_basis": "per_1m_tokens",
+      "input_price": 0.12,
+      "cached_input_price": 0.01,
+      "output_price": 0.5,
+      "normalized_price": 0.5,
+      "normalized_unit": "per_1m_tokens",
+      "notes": ["fixture_ai"]
+    },
+    {
+      "model_id": "gpt-realtime-mini",
+      "family": "realtime",
+      "pricing_basis": "per_1m_tokens",
+      "input_price": 0.6,
+      "cached_input_price": 0.06,
+      "output_price": 2.4,
+      "normalized_price": 2.4,
+      "normalized_unit": "per_1m_tokens",
+      "notes": ["fixture_ai"]
+    }
+  ]
+}

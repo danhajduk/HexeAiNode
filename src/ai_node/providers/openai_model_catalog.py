@@ -50,8 +50,6 @@ def classify_openai_model_family(model_id: str) -> str | None:
     normalized = _normalize_string(model_id).lower()
     if _is_filtered_out(normalized):
         return None
-    if re.fullmatch(r"gpt-\d+(?:\.\d+)?(?:-(?:pro|mini|nano))?", normalized):
-        return "llm"
     if re.fullmatch(r"gpt-image-[a-z0-9.-]+(?:-mini)?", normalized):
         return "image_generation"
     if re.fullmatch(r"sora-[a-z0-9.-]+", normalized):
@@ -62,11 +60,48 @@ def classify_openai_model_family(model_id: str) -> str | None:
         return "speech_to_text"
     if re.fullmatch(r"tts(?:-hd)?-[a-z0-9.-]+", normalized):
         return "text_to_speech"
-    if re.fullmatch(r"text-embedding-[a-z0-9.-]+-small", normalized):
+    if re.fullmatch(r"text-embedding-[a-z0-9.-]+", normalized):
         return "embeddings"
     if re.fullmatch(r"omni-moderation-[a-z0-9.-]+", normalized):
         return "moderation"
+    if normalized.startswith("gpt-"):
+        return "llm"
     return None
+
+
+def _extract_numbers(value: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in re.findall(r"\d+", value))
+
+
+def _pick_best(candidates: list[str]) -> str | None:
+    if not candidates:
+        return None
+    return sorted(candidates, key=lambda item: (_extract_numbers(item), item), reverse=True)[0]
+
+
+def select_representative_openai_model_ids(model_ids: list[str]) -> set[str]:
+    ids = sorted({str(model_id or "").strip().lower() for model_id in model_ids if str(model_id or "").strip()})
+    selected: set[str] = set()
+
+    def choose(predicate):
+        chosen = _pick_best([item for item in ids if predicate(item)])
+        if chosen:
+            selected.add(chosen)
+
+    choose(lambda item: re.fullmatch(r"gpt-\d+(?:\.\d+)?", item) is not None)
+    choose(lambda item: re.fullmatch(r"gpt-\d+(?:\.\d+)?-pro", item) is not None)
+    choose(lambda item: re.fullmatch(r"gpt-\d+(?:\.\d+)?-mini", item) is not None)
+    choose(lambda item: re.fullmatch(r"gpt-\d+(?:\.\d+)?-nano", item) is not None)
+    choose(lambda item: re.fullmatch(r"gpt-image-[a-z0-9.-]+", item) is not None and not item.endswith("-mini"))
+    choose(lambda item: re.fullmatch(r"gpt-image-[a-z0-9.-]+-mini", item) is not None)
+    choose(lambda item: re.fullmatch(r"gpt-realtime-[a-z0-9.-]+", item) is not None and item != "gpt-realtime-mini")
+    choose(lambda item: item in {"gpt-realtime-mini", "gpt-relatime-mini"})
+    choose(lambda item: re.fullmatch(r"sora-[a-z0-9.-]+", item) is not None and "pro" not in item)
+    choose(lambda item: re.fullmatch(r"tts(?:-hd)?-[a-z0-9.-]+", item) is not None and "pro" not in item)
+    choose(lambda item: re.fullmatch(r"whisper-[a-z0-9.-]+", item) is not None)
+    choose(lambda item: re.fullmatch(r"text-embedding-[a-z0-9.-]+", item) is not None)
+    choose(lambda item: re.fullmatch(r"omni-moderation-[a-z0-9.-]+", item) is not None)
+    return selected
 
 
 def build_openai_provider_model_catalog(*, model_ids: list[str], existing_snapshot: OpenAIProviderModelCatalogSnapshot | None = None) -> OpenAIProviderModelCatalogSnapshot:
@@ -83,12 +118,15 @@ def build_openai_provider_model_catalog(*, model_ids: list[str], existing_snapsh
             continue
         seen.add(normalized)
         existing = existing_by_id.get(normalized)
+        enabled = bool(existing.enabled) if existing is not None else False
+        if family == "moderation":
+            enabled = True
         entries.append(
             OpenAIProviderModelCatalogEntry(
                 model_id=normalized,
                 family=family,
                 discovered_at=existing.discovered_at if existing is not None else discovered_at,
-                enabled=bool(existing.enabled) if existing is not None else False,
+                enabled=enabled,
             )
         )
     entries.sort(key=lambda item: (item.family, item.model_id))

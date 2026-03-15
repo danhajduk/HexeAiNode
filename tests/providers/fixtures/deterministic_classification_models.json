@@ -1,0 +1,16 @@
+{
+  "discovered_at": "2026-03-14T00:00:00Z",
+  "models": [
+    {"model_id": "gpt-5.4", "family": "llm"},
+    {"model_id": "gpt-5.4-pro", "family": "llm"},
+    {"model_id": "gpt-5-mini", "family": "llm"},
+    {"model_id": "gpt-5-nano", "family": "llm"},
+    {"model_id": "gpt-image-1.5", "family": "image_generation"},
+    {"model_id": "gpt-realtime-mini", "family": "realtime_voice"},
+    {"model_id": "whisper-1", "family": "speech_to_text"},
+    {"model_id": "tts-1", "family": "text_to_speech"},
+    {"model_id": "text-embedding-3-small", "family": "embeddings"},
+    {"model_id": "omni-moderation-2024-09-26", "family": "moderation"},
+    {"model_id": "sora-2", "family": "video_generation"}
+  ]
+}

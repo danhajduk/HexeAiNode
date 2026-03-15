@@ -1,0 +1,6 @@
+## Video
+
+sora-2
+standard: $0.12 per second
+batch: $0.06 per second
+1080p output

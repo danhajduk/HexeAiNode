@@ -32,6 +32,7 @@ class CapabilityResolutionTests(unittest.TestCase):
                 ProviderModelCapabilityEntry(
                     model_id="gpt-5-mini",
                     family="llm",
+                    text_generation=True,
                     reasoning=True,
                     tool_calling=True,
                     structured_output=True,
@@ -39,16 +40,15 @@ class CapabilityResolutionTests(unittest.TestCase):
                     coding_strength="high",
                     speed_tier="medium",
                     cost_tier="medium",
-                    recommended_for=["coding", "automation"],
                 ),
                 ProviderModelCapabilityEntry(
                     model_id="gpt-4o",
                     family="llm",
+                    text_generation=True,
                     vision=True,
                     coding_strength="medium",
-                    speed_tier="high",
+                    speed_tier="fast",
                     cost_tier="low",
-                    recommended_for=["vision_analysis", "chat"],
                 ),
             ],
         )
@@ -61,12 +61,9 @@ class CapabilityResolutionTests(unittest.TestCase):
         self.assertTrue(payload["capabilities"]["reasoning"])
         self.assertTrue(payload["capabilities"]["vision"])
         self.assertEqual(payload["capabilities"]["coding_strength"], "high")
-        self.assertEqual(payload["capabilities"]["speed_tier"], "high")
+        self.assertEqual(payload["capabilities"]["speed_tier"], "fast")
         self.assertEqual(payload["capabilities"]["cost_tier"], "medium")
-        self.assertEqual(
-            payload["capabilities"]["recommended_for"],
-            ["automation", "chat", "coding", "vision_analysis"],
-        )
+        self.assertTrue(payload["capabilities"]["text_generation"])
 
     def test_derive_declared_task_families_only_from_enabled_models(self):
         resolved = {
@@ -83,7 +80,9 @@ class CapabilityResolutionTests(unittest.TestCase):
                 "coding_strength": "high",
                 "speed_tier": "medium",
                 "cost_tier": "medium",
-                "recommended_for": ["classification", "coding", "summarization"],
+                "text_generation": True,
+                "embeddings": False,
+                "moderation": False,
             },
             "enabled_models": [
                 {
@@ -123,9 +122,11 @@ class CapabilityResolutionTests(unittest.TestCase):
                 "structured_output": False,
                 "long_context": False,
                 "coding_strength": "low",
-                "speed_tier": "low",
+                "speed_tier": "slow",
                 "cost_tier": "low",
-                "recommended_for": [],
+                "text_generation": False,
+                "embeddings": False,
+                "moderation": False,
             },
             "enabled_models": [
                 {"model_id": "text-embedding-3-small", "family": "embeddings"},

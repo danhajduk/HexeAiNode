@@ -163,11 +163,14 @@ def _build_provider_intelligence_request_payload(*, node_id: str, report: dict) 
     normalized_node_id = _require_non_empty_string(node_id, "node_id")
     structured = _structured_payload_from_runtime_report(report=report)
     if structured is not None:
+        provider_intelligence = _provider_intelligence_list_from_structured(structured=structured)
         payload = {
             "node_id": normalized_node_id,
-            "provider_intelligence": structured,
+            "provider_intelligence": provider_intelligence,
             "node_available": True,
         }
+        if structured.get("metrics_snapshot"):
+            payload["metrics_snapshot"] = structured.get("metrics_snapshot")
         if structured.get("observed_at"):
             payload["observed_at"] = structured.get("observed_at")
         return payload
@@ -290,3 +293,38 @@ def _compatibility_payload_from_discovery_report(*, report: dict) -> dict:
     if isinstance(report.get("metrics_snapshot"), dict):
         payload["metrics_snapshot"] = report.get("metrics_snapshot")
     return payload
+
+
+def _provider_intelligence_list_from_structured(*, structured: dict) -> list[dict]:
+    providers = structured.get("providers") if isinstance(structured.get("providers"), list) else []
+    models = structured.get("models") if isinstance(structured.get("models"), list) else []
+    out: list[dict] = []
+    for provider in providers:
+        if not isinstance(provider, dict):
+            continue
+        provider_id = str(provider.get("provider_id") or "").strip().lower()
+        if not provider_id:
+            continue
+        available_models = []
+        for model in models:
+            if not isinstance(model, dict):
+                continue
+            if str(model.get("provider_id") or "").strip().lower() != provider_id:
+                continue
+            model_id = str(model.get("model_id") or "").strip()
+            if not model_id:
+                continue
+            pricing: dict = {}
+            if isinstance(model.get("pricing_input_tokens"), (int, float)):
+                pricing["input_per_1m_tokens"] = float(model["pricing_input_tokens"])
+            if isinstance(model.get("pricing_output_tokens"), (int, float)):
+                pricing["output_per_1m_tokens"] = float(model["pricing_output_tokens"])
+            available_models.append(
+                {
+                    "model_id": model_id,
+                    "pricing": pricing,
+                    "latency_metrics": {},
+                }
+            )
+        out.append({"provider": provider_id, "available_models": available_models})
+    return out

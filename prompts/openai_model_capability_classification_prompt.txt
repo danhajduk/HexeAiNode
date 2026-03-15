@@ -1,0 +1,60 @@
+You are extracting OpenAI pricing from official pricing page text.
+
+Return JSON ONLY.
+Do not explain anything.
+Do not infer prices not present in the provided text.
+If a model is not found, omit it.
+
+Target models:
+{{MODEL_LIST}}
+
+
+Return one JSON object with this schema:
+
+{
+  "models": [
+    {
+      "model_id": "string",
+      "pricing_basis": "per_1m_tokens | per_1m_characters | per_image | per_second | per_minute",
+      "input_price": 0.0,
+      "cached_input_price": 0.0,
+      "output_price": 0.0,
+      "normalized_price": 0.0,
+      "normalized_unit": "string",
+      "notes": "string"
+    }
+  ]
+}
+
+Normalization rules:
+- For llm / embeddings / realtime:
+  - pricing_basis = per_1m_tokens
+  - set input_price / cached_input_price / output_price from the page if available
+  - normalized_price = output_price if no better normalized price is needed
+  - normalized_unit = "per_1m_tokens"
+
+- For text_to_speech:
+  - if the page gives characters pricing, use pricing_basis = per_1m_characters
+  - if the page gives minute pricing, use pricing_basis = per_minute
+  - normalized_price = exact listed price
+  - normalized_unit = exact listed unit
+
+- For speech_to_text:
+  - pricing_basis = per_minute
+  - normalized_price = listed minute price
+  - normalized_unit = "per_minute"
+
+- For image_generation:
+  - pricing_basis = per_image
+  - normalized_price = medium quality 1024x1536 price if available
+  - normalized_unit = "medium_1024x1536_per_image"
+
+- For video_generation:
+  - pricing_basis = per_second
+  - normalized_price = listed price per second for the model
+  - normalized_unit = "per_second"
+
+Use only values explicitly present in the provided text.
+
+Pricing page text:
+{{PRICING_PAGE_TEXT}}

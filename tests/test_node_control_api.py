@@ -12,10 +12,15 @@ class NodeControlApiTests(unittest.TestCase):
     class _FakeProviderRuntimeManager:
         def __init__(self):
             self.refresh_calls = 0
+            self.openai_reload_calls = 0
 
         async def refresh(self):
             self.refresh_calls += 1
             return {"providers": []}
+
+        async def refresh_openai_models_from_saved_credentials(self):
+            self.openai_reload_calls += 1
+            return {"status": "refreshed", "provider_id": "openai", "classification_model": "gpt-5-mini"}
 
         async def refresh_pricing(self, *, force: bool):
             return {"status": "manual_only", "changed": False, "notes": ["live_pricing_scrape_disabled"]}
@@ -337,7 +342,8 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(payload["credentials"]["project_name"], "ops-user")
             self.assertEqual(runtime_manager.refresh_calls, 0)
             asyncio.run(state.refresh_provider_models_after_openai_credentials_save())
-            self.assertEqual(runtime_manager.refresh_calls, 1)
+            self.assertEqual(runtime_manager.refresh_calls, 0)
+            self.assertEqual(runtime_manager.openai_reload_calls, 1)
 
     def test_latest_provider_models_payload_returns_latest_three(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -405,6 +411,71 @@ class NodeControlApiTests(unittest.TestCase):
             )
             payload = state.status_payload()
             self.assertTrue(payload["capability_setup"]["declaration_allowed"])
+
+    def test_capability_declaration_gate_blocks_when_openai_enabled_models_are_not_classified_and_priced(self):
+        class _OpenAiIncompleteRuntimeManager:
+            def openai_enabled_models_payload(self):
+                return {
+                    "provider_id": "openai",
+                    "models": [{"model_id": "gpt-5-mini", "enabled": True}],
+                    "source": "provider_enabled_models",
+                    "generated_at": "2026-03-14T00:00:00Z",
+                }
+
+            def openai_model_capabilities_payload(self):
+                return {
+                    "provider_id": "openai",
+                    "classification_model": "deterministic_rules",
+                    "entries": [],
+                    "source": "provider_model_classifications",
+                    "generated_at": "2026-03-14T00:00:00Z",
+                }
+
+            def pricing_diagnostics_payload(self):
+                return {
+                    "configured": True,
+                    "refresh_state": "missing",
+                    "stale": True,
+                    "entry_count": 0,
+                    "unknown_models": [],
+                    "last_error": None,
+                }
+
+            def openai_pricing_catalog_payload(self):
+                return {
+                    "source": "openai_pricing_catalog",
+                    "generated_at": "2026-03-14T00:00:00Z",
+                    "entries": [],
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED, {"source": "test"})
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING, {"source": "test"})
+            provider_selection_store = self._FakeProviderSelectionStore()
+            provider_selection_store.payload["providers"]["enabled"] = ["openai"]
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(),
+                node_identity_store=self._FakeNodeIdentityStore({"node_id": "node-001"}),
+                provider_selection_store=provider_selection_store,
+                provider_runtime_manager=_OpenAiIncompleteRuntimeManager(),
+                task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
+                trust_state_store=self._FakeTrustStateStore(),
+                startup_mode="trusted_resume",
+                trusted_runtime_context={
+                    "paired_core_id": "core-main",
+                    "core_api_endpoint": "http://10.0.0.100:9001",
+                    "operational_mqtt_host": "10.0.0.100",
+                    "operational_mqtt_port": 1883,
+                },
+            )
+            payload = state.status_payload()
+            self.assertFalse(payload["capability_setup"]["declaration_allowed"])
+            self.assertIn("openai_enabled_models_not_classified", payload["capability_setup"]["blocking_reasons"])
+            self.assertIn("openai_pricing_refresh_not_completed", payload["capability_setup"]["blocking_reasons"])
 
     def test_prompt_service_registration_probation_and_execution_authorization(self):
         with tempfile.TemporaryDirectory() as tmp:

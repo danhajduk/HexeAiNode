@@ -17,41 +17,21 @@
     },
     {
       "enabled": true,
-      "model_id": "gpt-image-1.5",
-      "selected_at": "2026-03-14T02:27:42.846972+00:00"
-    },
-    {
-      "enabled": true,
-      "model_id": "sora-2",
-      "selected_at": "2026-03-14T02:27:44.882219+00:00"
-    },
-    {
-      "enabled": true,
-      "model_id": "gpt-realtime-mini",
-      "selected_at": "2026-03-14T02:27:46.768629+00:00"
-    },
-    {
-      "enabled": true,
-      "model_id": "whisper-1",
-      "selected_at": "2026-03-14T02:27:47.981880+00:00"
-    },
-    {
-      "enabled": true,
       "model_id": "tts-1",
       "selected_at": "2026-03-14T02:27:50.406417+00:00"
     },
     {
       "enabled": true,
-      "model_id": "text-embedding-3-small",
-      "selected_at": "2026-03-14T02:27:52.278102+00:00"
+      "model_id": "omni-moderation-2024-09-26",
+      "selected_at": "2026-03-14T02:27:54.434014+00:00"
     },
     {
       "enabled": true,
-      "model_id": "omni-moderation-2024-09-26",
-      "selected_at": "2026-03-14T02:27:54.434014+00:00"
+      "model_id": "gpt-image-1-mini",
+      "selected_at": "2026-03-15T06:42:52.771209+00:00"
     }
   ],
   "provider_id": "openai",
   "schema_version": "1.0",
-  "updated_at": "2026-03-14T02:27:54.434014+00:00"
+  "updated_at": "2026-03-15T06:43:14.146911+00:00"
 }

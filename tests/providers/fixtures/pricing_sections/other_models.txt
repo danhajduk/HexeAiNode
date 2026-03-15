@@ -1,0 +1,10 @@
+## Other models
+
+whisper-1
+$0.006 per minute
+
+tts-1
+$15 per 1M characters
+
+tts-1-hd
+$30 per 1M characters

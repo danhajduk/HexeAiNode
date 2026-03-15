@@ -1,0 +1,9 @@
+{
+  "text_tokens": "text_tokens.txt",
+  "audio_tokens": "audio_tokens.txt",
+  "image_generation": "image_generation.txt",
+  "video": "video.txt",
+  "other_models": "other_models.txt",
+  "embeddings": "embeddings.txt",
+  "moderation": "moderation.txt"
+}

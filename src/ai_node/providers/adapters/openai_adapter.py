@@ -142,6 +142,8 @@ class OpenAIProviderAdapter(ProviderAdapter):
     async def execute_prompt(self, request: UnifiedExecutionRequest) -> UnifiedExecutionResponse:
         started = time.perf_counter()
         model = str(request.requested_model or "").strip() or self._default_model_id
+        # Classification calls are batch-oriented and often exceed the regular request timeout.
+        request_timeout = max(self._timeout_seconds, 90.0) if request.task_family == "task.classification.text" else self._timeout_seconds
         messages = list(request.messages or [])
         if not messages:
             if request.system_prompt:
@@ -159,7 +161,7 @@ class OpenAIProviderAdapter(ProviderAdapter):
             payload["max_tokens"] = request.max_tokens
 
         try:
-            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+            async with httpx.AsyncClient(timeout=request_timeout) as client:
                 response = await client.post(f"{self._base_url}/chat/completions", headers=self._headers(), json=payload)
             self._metrics["calls"] += 1
             data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}

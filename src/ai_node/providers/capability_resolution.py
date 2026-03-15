@@ -1,14 +1,11 @@
 from ai_node.providers.model_capability_catalog import ProviderModelCapabilitiesSnapshot
 
 
-_TIER_ORDER = {"low": 0, "medium": 1, "high": 2}
-
-
-def _best_tier(values: list[str], *, default: str = "low") -> str:
+def _best_tier(values: list[str], *, default: str, order: dict[str, int]) -> str:
     best = default
-    best_rank = _TIER_ORDER.get(default, 0)
+    best_rank = order.get(default, 0)
     for value in values:
-        rank = _TIER_ORDER.get(str(value or "").strip().lower(), -1)
+        rank = order.get(str(value or "").strip().lower(), -1)
         if rank > best_rank:
             best = str(value or "").strip().lower()
             best_rank = rank
@@ -22,13 +19,13 @@ def resolve_enabled_model_capabilities(*, snapshot: ProviderModelCapabilitiesSna
     if snapshot is not None:
         entries = [entry for entry in snapshot.entries if entry.model_id in enabled_set]
     families = sorted({entry.family for entry in entries if str(entry.family or "").strip()})
-    recommended = sorted({item for entry in entries for item in entry.recommended_for})
     return {
         "provider_id": "openai",
         "enabled_model_ids": normalized_enabled,
         "classification_model": snapshot.classification_model if snapshot is not None else None,
         "updated_at": snapshot.updated_at if snapshot is not None else None,
         "capabilities": {
+            "text_generation": any(entry.text_generation for entry in entries),
             "reasoning": any(entry.reasoning for entry in entries),
             "vision": any(entry.vision for entry in entries),
             "image_generation": any(entry.image_generation for entry in entries),
@@ -40,10 +37,21 @@ def resolve_enabled_model_capabilities(*, snapshot: ProviderModelCapabilitiesSna
             "long_context": any(entry.long_context for entry in entries),
             "embeddings": "embeddings" in families,
             "moderation": "moderation" in families,
-            "coding_strength": _best_tier([entry.coding_strength for entry in entries], default="low"),
-            "speed_tier": _best_tier([entry.speed_tier for entry in entries], default="low"),
-            "cost_tier": _best_tier([entry.cost_tier for entry in entries], default="low"),
-            "recommended_for": recommended,
+            "coding_strength": _best_tier(
+                [entry.coding_strength for entry in entries],
+                default="none",
+                order={"none": 0, "low": 1, "medium": 2, "high": 3},
+            ),
+            "speed_tier": _best_tier(
+                [entry.speed_tier for entry in entries],
+                default="slow",
+                order={"slow": 0, "medium": 1, "fast": 2},
+            ),
+            "cost_tier": _best_tier(
+                [entry.cost_tier for entry in entries],
+                default="low",
+                order={"low": 0, "medium": 1, "high": 2},
+            ),
         },
         "enabled_models": [entry.model_dump() for entry in entries],
     }

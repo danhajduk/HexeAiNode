@@ -210,3 +210,26 @@ Task 216: Add declaration integration tests - Completed on 03/13/2026 21:18
 Task 197: Add tests for model filtering - Completed on 03/13/2026 20:46
 Task 198: Add tests for capability classification schema - Completed on 03/13/2026 20:46
 Task 199: Introduce model feature classification schema - Completed on 03/13/2026 20:46
+Task 231: Add OpenAI pricing source fetcher - Completed on 03/14/2026 18:16
+Task 232: Add pricing source normalization - Completed on 03/14/2026 18:19
+Task 233: Split pricing source into canonical sections - Completed on 03/14/2026 18:20
+Task 234: Add section extractor for text token pricing - Completed on 03/14/2026 18:21
+Task 235: Add section extractor for audio/realtime pricing - Completed on 03/14/2026 18:22
+Task 236: Add section extractor for image generation pricing - Completed on 03/14/2026 18:23
+Task 237: Add section extractor for video pricing - Completed on 03/14/2026 18:24
+Task 238: Add section extractor for STT/TTS/other model pricing - Completed on 03/14/2026 18:24
+Task 239: Add section extractor for embeddings pricing - Completed on 03/14/2026 18:25
+Task 240: Add section extractor for moderation pricing - Completed on 03/14/2026 18:26
+Task 241: Create family-specific pricing extraction prompts - Completed on 03/14/2026 18:28
+Task 242: Update pricing schema to use null for non-applicable fields - Completed on 03/14/2026 18:29
+Task 243: Define family-specific pricing extraction rules - Completed on 03/14/2026 18:31
+Task 244: Implement family-based pricing extraction pipeline - Completed on 03/14/2026 18:31
+Task 245: Add extracted pricing validation by family - Completed on 03/14/2026 18:36
+Task 246: Add partial success merge logic for pricing extraction - Completed on 03/14/2026 18:37
+Task 247: Persist section-level diagnostics - Completed on 03/14/2026 18:39
+Task 248: Add pricing extraction test fixtures by section - Completed on 03/14/2026 18:40
+Task 249: Add unit tests for section splitting - Completed on 03/14/2026 18:41
+Task 250: Add unit tests for family-specific extraction prompts - Completed on 03/14/2026 18:42
+Task 251: Add integration test for end-to-end pricing refresh - Completed on 03/14/2026 18:43
+Task 252: Update provider setup and refresh UI for section-based pricing extraction - Completed on 03/14/2026 18:46
+Task 253: Document section-based pricing extraction architecture - Completed on 03/14/2026 18:47

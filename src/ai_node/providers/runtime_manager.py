@@ -32,6 +32,7 @@ from ai_node.providers.openai_catalog import (
 from ai_node.providers.openai_model_catalog import (
     DEFAULT_OPENAI_PROVIDER_MODEL_CATALOG_PATH,
     OpenAIProviderModelCatalogStore,
+    select_representative_openai_model_ids,
 )
 from ai_node.config.provider_enabled_models_config import (
     DEFAULT_PROVIDER_ENABLED_MODELS_PATH,
@@ -136,7 +137,19 @@ class ProviderRuntimeManager:
                 model_catalog_snapshot = self._openai_model_catalog_store.save_from_model_ids(
                     model_ids=[getattr(model, "model_id", "") for model in models]
                 )
-                await self._refresh_openai_model_capabilities(adapter=adapter, models=model_catalog_snapshot.models)
+                processing_model_ids = self._openai_processing_model_ids(
+                    catalog_model_ids=[entry.model_id for entry in model_catalog_snapshot.models]
+                )
+                scoped_models = [
+                    entry for entry in model_catalog_snapshot.models if entry.model_id in set(processing_model_ids)
+                ]
+                await self._refresh_openai_model_capabilities(models=scoped_models)
+                if self._openai_api_pricing_fetch_enabled():
+                    await self._refresh_openai_pricing(
+                        adapter=adapter,
+                        model_ids=processing_model_ids,
+                        force=False,
+                    )
                 merged_models, provider_unknown_models = self._pricing_catalog_service.merge_model_capabilities(models)
                 models = merged_models
                 unknown_models.extend(provider_unknown_models)
@@ -159,7 +172,34 @@ class ProviderRuntimeManager:
         return payload
 
     async def refresh_pricing(self, *, force: bool) -> dict:
-        return await self._pricing_catalog_service.refresh(force=force)
+        if not self._openai_api_pricing_fetch_enabled():
+            return {
+                "status": "manual_only",
+                "changed": False,
+                "notes": ["openai_api_pricing_fetch_disabled"],
+            }
+        settings = (
+            self._loader.load_provider_settings(provider_id="openai", enabled=True)
+            if hasattr(self._loader, "load_provider_settings")
+            else None
+        )
+        if settings is None or not str(settings.api_key or "").strip():
+            return await self._pricing_catalog_service.refresh(force=force)
+        adapter = self._build_adapter(provider_id="openai", settings=settings)
+        model_catalog_snapshot = self._openai_model_catalog_store.load()
+        if model_catalog_snapshot is None or not model_catalog_snapshot.models:
+            models = await adapter.list_models()
+            model_catalog_snapshot = self._openai_model_catalog_store.save_from_model_ids(
+                model_ids=[getattr(model, "model_id", "") for model in models]
+            )
+        model_ids = self._openai_processing_model_ids(
+            catalog_model_ids=[entry.model_id for entry in model_catalog_snapshot.models]
+        )
+        return await self._pricing_catalog_service.refresh(
+            force=force,
+            model_ids=model_ids,
+            execute_batch=self._build_pricing_execute_batch(adapter=adapter),
+        )
 
     def save_manual_openai_pricing(
         self,
@@ -319,6 +359,16 @@ class ProviderRuntimeManager:
             "source": "provider_enabled_models",
         }
 
+    def _openai_processing_model_ids(self, *, catalog_model_ids: list[str]) -> list[str]:
+        normalized_catalog: list[str] = []
+        for model_id in catalog_model_ids:
+            normalized = str(model_id or "").strip().lower()
+            if normalized and normalized not in normalized_catalog:
+                normalized_catalog.append(normalized)
+        selected = select_representative_openai_model_ids(normalized_catalog)
+        scoped = sorted(model_id for model_id in normalized_catalog if model_id in selected)
+        return scoped or normalized_catalog
+
     def openai_resolved_capabilities_payload(self) -> dict:
         enabled_snapshot = self._provider_enabled_models_store.load()
         capabilities_snapshot = self._provider_model_capabilities_store.load()
@@ -389,7 +439,17 @@ class ProviderRuntimeManager:
             model_catalog_snapshot = self._openai_model_catalog_store.save_from_model_ids(
                 model_ids=[getattr(model, "model_id", "") for model in models]
             )
-        await self._refresh_openai_model_capabilities(adapter=adapter, models=model_catalog_snapshot.models)
+        processing_model_ids = self._openai_processing_model_ids(
+            catalog_model_ids=[entry.model_id for entry in model_catalog_snapshot.models]
+        )
+        scoped_models = [entry for entry in model_catalog_snapshot.models if entry.model_id in set(processing_model_ids)]
+        await self._refresh_openai_model_capabilities(models=scoped_models)
+        if self._openai_api_pricing_fetch_enabled():
+            await self._refresh_openai_pricing(
+                adapter=adapter,
+                model_ids=processing_model_ids,
+                force=True,
+            )
         return {"status": "refreshed", **self.openai_model_capabilities_payload()}
 
     async def refresh_openai_models_from_saved_credentials(self) -> dict:
@@ -408,7 +468,17 @@ class ProviderRuntimeManager:
         model_catalog_snapshot = self._openai_model_catalog_store.save_from_model_ids(
             model_ids=[getattr(model, "model_id", "") for model in models]
         )
-        await self._refresh_openai_model_capabilities(adapter=adapter, models=model_catalog_snapshot.models)
+        processing_model_ids = self._openai_processing_model_ids(
+            catalog_model_ids=[entry.model_id for entry in model_catalog_snapshot.models]
+        )
+        scoped_models = [entry for entry in model_catalog_snapshot.models if entry.model_id in set(processing_model_ids)]
+        await self._refresh_openai_model_capabilities(models=scoped_models)
+        if self._openai_api_pricing_fetch_enabled():
+            await self._refresh_openai_pricing(
+                adapter=adapter,
+                model_ids=processing_model_ids,
+                force=True,
+            )
         unknown_models: list[str] = []
         if self._pricing_catalog_service is not None:
             models, unknown_models = self._pricing_catalog_service.merge_model_capabilities(models)
@@ -422,7 +492,15 @@ class ProviderRuntimeManager:
             "unknown_priced_models": sorted(set(item for item in unknown_models if item)),
         }
 
-    async def _refresh_openai_model_capabilities(self, *, adapter: OpenAIProviderAdapter, models: list) -> None:
+    def _openai_api_pricing_fetch_enabled(self) -> bool:
+        raw = str(os.environ.get("SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED", "")).strip().lower()
+        if raw in {"1", "true", "yes", "on"}:
+            return True
+        if raw in {"0", "false", "no", "off", ""}:
+            return False
+        return False
+
+    async def _refresh_openai_model_capabilities(self, *, models: list) -> None:
         if not models:
             self._provider_model_capabilities_store.save(classification_model=None, entries=[])
             self._provider_model_feature_catalog_store.save_entries(
@@ -432,22 +510,9 @@ class ProviderRuntimeManager:
             )
             return
 
-        async def execute_batch(model_id: str, system_prompt: str, user_prompt: str) -> str:
-            response = await adapter.execute_prompt(
-                UnifiedExecutionRequest(
-                    task_family="task.classification.text",
-                    system_prompt=system_prompt,
-                    prompt=user_prompt,
-                    requested_model=model_id,
-                    temperature=0,
-                )
-            )
-            return response.output_text
-
         classifier = OpenAIModelCapabilityClassifier(
             logger=self._logger,
             store=self._provider_model_capabilities_store,
-            execute_batch=execute_batch,
         )
         try:
             snapshot = await classifier.classify_and_save(models=models)
@@ -468,12 +533,39 @@ class ProviderRuntimeManager:
                     }
                     for entry in snapshot.entries
                 ],
-                classified_at=snapshot.updated_at,
+                classified_at=snapshot.classified_at or snapshot.updated_at,
             )
             self._resolve_and_persist_node_capabilities()
         except Exception as exc:
             if hasattr(self._logger, "warning"):
                 self._logger.warning("[provider-model-capability-classification-failed] %s", {"error": str(exc).strip() or type(exc).__name__})
+
+    def _build_pricing_execute_batch(self, *, adapter: OpenAIProviderAdapter):
+        async def execute_batch(model_id: str, system_prompt: str, user_prompt: str) -> str:
+            response = await adapter.execute_prompt(
+                UnifiedExecutionRequest(
+                    task_family="task.classification.text",
+                    system_prompt=system_prompt,
+                    prompt=user_prompt,
+                    requested_model=model_id,
+                )
+            )
+            return response.output_text
+
+        return execute_batch
+
+    async def _refresh_openai_pricing(self, *, adapter: OpenAIProviderAdapter, model_ids: list[str], force: bool) -> None:
+        if self._pricing_catalog_service is None:
+            return
+        try:
+            await self._pricing_catalog_service.refresh(
+                force=force,
+                model_ids=model_ids,
+                execute_batch=self._build_pricing_execute_batch(adapter=adapter),
+            )
+        except Exception as exc:
+            if hasattr(self._logger, "warning"):
+                self._logger.warning("[openai-pricing-refresh-failed] %s", {"error": str(exc).strip() or type(exc).__name__})
 
     def _resolve_and_persist_node_capabilities(self) -> None:
         try:
@@ -515,6 +607,14 @@ class ProviderRuntimeManager:
 
     def pricing_diagnostics_payload(self) -> dict:
         return self._pricing_catalog_service.diagnostics_payload()
+
+    def openai_pricing_catalog_payload(self) -> dict:
+        if self._pricing_catalog_service is None or not hasattr(self._pricing_catalog_service, "load_snapshot"):
+            return {"entries": [], "source": "openai_pricing_catalog", "generated_at": _iso_now()}
+        snapshot = self._pricing_catalog_service.load_snapshot()
+        if snapshot is None:
+            return {"entries": [], "source": "openai_pricing_catalog", "generated_at": _iso_now()}
+        return {"source": "openai_pricing_catalog", "generated_at": _iso_now(), **snapshot.model_dump()}
 
     def _build_adapter(self, *, provider_id: str, settings):
         if provider_id == "openai":

@@ -23,6 +23,38 @@ This document covers the architecture implemented in this repository only.
 5. Capability activation uses Core HTTP APIs, local persistence, operational MQTT readiness, and trusted status telemetry.
 6. Provider runtime components manage model discovery, provider health, metrics persistence, and execution routing.
 
+## OpenAI Classification And Pricing
+
+Implemented behavior in this repository:
+
+1. OpenAI model capability classification is deterministic and local.
+2. Runtime capability classification does not call an OpenAI classifier model.
+3. Canonical deterministic classifications are persisted in `providers/openai/provider_model_classifications.json`.
+4. `/api/providers/openai/models/catalog` returns both the full normalized filtered catalog and a representative `ui_models` subset used by the provider setup page.
+5. Pricing refresh fetches official OpenAI pricing page content from `https://developers.openai.com/api/docs/pricing` when live API pricing fetch is enabled.
+6. Source text is normalized and split into canonical pricing sections.
+7. Section-specific family extractors build focused source blocks per model family.
+8. Family-scoped prompts are run against filtered target models (not the full model list).
+9. Family outputs are validated independently, then merged into a canonical catalog.
+10. On family failure, last-known-good family pricing is preserved when available.
+11. Manual pricing overrides are merged from `providers/openai/provider_model_pricing_overrides.json`.
+12. Canonical pricing is persisted in `providers/openai/provider_model_pricing.json`.
+
+Provider setup flow after OpenAI credential save:
+
+1. fetch `/v1/models`
+2. filter supported models
+3. derive representative UI model IDs for the provider setup page
+4. classify models locally with deterministic rules
+5. persist canonical classifications
+6. derive feature flags from canonical classifications
+7. show filtered representative models in the provider setup UI with family-aware capability and pricing cards
+8. allow model enable/disable and selection from filtered catalog
+9. save manual pricing locally, or fetch official pricing text and extract by family when live pricing refresh is enabled
+10. persist canonical pricing + diagnostics artifacts
+11. resolve node tasks from enabled model features
+12. manually declare capabilities to Core after readiness checks pass
+
 ## Communication With Core
 
 - HTTP: registration/onboarding, capability declaration, governance sync

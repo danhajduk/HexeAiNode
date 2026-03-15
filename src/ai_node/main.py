@@ -162,7 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--openai-pricing-catalog-path",
-        default=os.environ.get("SYNTHIA_OPENAI_PRICING_CATALOG_PATH", "data/openai_pricing_catalog.json"),
+        default=os.environ.get("SYNTHIA_OPENAI_PRICING_CATALOG_PATH", "providers/openai/provider_model_pricing.json"),
         help="Path to persisted OpenAI pricing catalog cache",
     )
     parser.add_argument(
@@ -226,7 +226,7 @@ def run(
     provider_capability_report_path: str = ".run/provider_capability_report.json",
     prompt_service_state_path: str = ".run/prompt_service_state.json",
     provider_capability_refresh_interval_seconds: int = 14400,
-    openai_pricing_catalog_path: str = "data/openai_pricing_catalog.json",
+    openai_pricing_catalog_path: str = "providers/openai/provider_model_pricing.json",
     openai_pricing_refresh_interval_seconds: int = 86400,
     openai_pricing_stale_tolerance_seconds: int = 172800,
     finalize_poll_interval_seconds: float = 2.0,

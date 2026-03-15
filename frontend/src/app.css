@@ -149,6 +149,10 @@
   background: hsl(var(--color-surface, var(--color-bg)));
 }
 
+.capability-badge-muted {
+  opacity: 0.8;
+}
+
 .capability-summary-card {
   margin-top: 16px;
 }

@@ -1,39 +1,31 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Awaitable, Callable
 
 from pydantic import BaseModel, Field
 
-from ai_node.providers.model_feature_schema import (
-    MODEL_FEATURE_KEYS,
-    create_default_feature_flags,
-    normalize_feature_flags,
+from ai_node.providers.model_feature_schema import create_default_feature_flags
+from ai_node.providers.openai_model_catalog import (
+    OpenAIProviderModelCatalogEntry,
+    classify_openai_model_family,
+    select_representative_openai_model_ids,
 )
-from ai_node.providers.openai_model_catalog import OpenAIProviderModelCatalogEntry
 
 
-DEFAULT_PROVIDER_MODEL_CAPABILITIES_PATH = "data/provider_model_capabilities.json"
-PROVIDER_MODEL_CAPABILITIES_SCHEMA_VERSION = "1.0"
-RECOMMENDED_FOR_OPTIONS = [
-    "chat",
-    "agents",
-    "automation",
-    "reasoning",
-    "coding",
-    "structured_extraction",
-    "summarization",
-    "classification",
-    "vision_analysis",
+DEFAULT_PROVIDER_MODEL_CAPABILITIES_PATH = "providers/openai/provider_model_classifications.json"
+LEGACY_PROVIDER_MODEL_CAPABILITIES_PATH = "data/provider_model_capabilities.json"
+PROVIDER_MODEL_CAPABILITIES_SCHEMA_VERSION = "2.0"
+_DETERMINISTIC_CLASSIFICATION_MODEL = "deterministic_rules"
+_CANONICAL_FAMILIES = {
+    "llm",
     "image_generation",
-    "speech_recognition",
-    "speech_generation",
+    "video_generation",
     "realtime_voice",
+    "speech_to_text",
+    "text_to_speech",
     "embeddings",
     "moderation",
-]
-_TIER_OPTIONS = {"low", "medium", "high"}
-_CODING_STRENGTH_OPTIONS = {"low", "medium", "high"}
+}
 
 
 def _iso_now() -> str:
@@ -47,6 +39,7 @@ def _normalize_string(value: object) -> str:
 class ProviderModelCapabilityEntry(BaseModel):
     model_id: str
     family: str
+    text_generation: bool = False
     reasoning: bool = False
     vision: bool = False
     image_generation: bool = False
@@ -56,248 +49,331 @@ class ProviderModelCapabilityEntry(BaseModel):
     tool_calling: bool = False
     structured_output: bool = False
     long_context: bool = False
-    coding_strength: str = "low"
+    coding_strength: str = "none"
     speed_tier: str = "medium"
     cost_tier: str = "medium"
-    recommended_for: list[str] = Field(default_factory=list)
     feature_flags: dict[str, bool] = Field(default_factory=create_default_feature_flags)
+    discovered_at: str | None = None
+    classification_source: str = _DETERMINISTIC_CLASSIFICATION_MODEL
 
 
 class ProviderModelCapabilitiesSnapshot(BaseModel):
     schema_version: str = PROVIDER_MODEL_CAPABILITIES_SCHEMA_VERSION
     provider_id: str = "openai"
     updated_at: str = Field(default_factory=_iso_now)
-    classification_model: str | None = None
+    classified_at: str | None = None
+    classification_model: str | None = _DETERMINISTIC_CLASSIFICATION_MODEL
     entries: list[ProviderModelCapabilityEntry] = Field(default_factory=list)
 
 
-def select_openai_classification_model(models: list[OpenAIProviderModelCatalogEntry]) -> str | None:
-    llm_models = [entry.model_id for entry in models if entry.family == "llm"]
-    if not llm_models:
-        return None
-
-    def rank(model_id: str) -> tuple[int, int, int, str]:
-        normalized = _normalize_string(model_id).lower()
-        if normalized.endswith("-nano"):
-            return (0, 0, 0, normalized)
-        if normalized.endswith("-mini"):
-            return (1, 0, 0, normalized)
-        if normalized.endswith("-pro"):
-            return (3, 0, 0, normalized)
-        major = 999
-        minor = 999
-        version = normalized.removeprefix("gpt-").split("-", 1)[0]
-        if version:
-            pieces = version.split(".", 1)
-            try:
-                major = int(pieces[0])
-            except ValueError:
-                major = 999
-            if len(pieces) > 1:
-                try:
-                    minor = int(pieces[1])
-                except ValueError:
-                    minor = 999
-        return (2, major, minor, normalized)
-
-    return sorted(llm_models, key=rank)[0]
-
-
-def build_openai_capability_classification_prompt(*, models: list[OpenAIProviderModelCatalogEntry], classification_model: str) -> tuple[str, str]:
-    model_lines = "\n".join(f"- {item.model_id} ({item.family})" for item in models)
-    allowed = ", ".join(RECOMMENDED_FOR_OPTIONS)
-    feature_keys = ", ".join(MODEL_FEATURE_KEYS)
-    system_prompt = (
-        "You are a model capability classifier for Synthia. "
-        "Return JSON only. No markdown, no prose, no code fences. "
-        "For each model, classify capabilities conservatively and keep recommended_for within the allowed vocabulary."
-    )
-    user_prompt = (
-        f"Classification model: {classification_model}\n"
-        "Return a JSON object with key 'models' containing one entry per input model.\n"
-        "Each entry must include: model_id, family, reasoning, vision, image_generation, audio_input, "
-        "audio_output, realtime, tool_calling, structured_output, long_context, coding_strength, speed_tier, "
-        "cost_tier, recommended_for, feature_flags.\n"
-        f"feature_flags must be an object with these boolean keys: {feature_keys}.\n"
-        "coding_strength must be one of: low, medium, high.\n"
-        "speed_tier must be one of: low, medium, high.\n"
-        "cost_tier must be one of: low, medium, high.\n"
-        f"recommended_for allowed values: {allowed}.\n"
-        "Use booleans for capability flags and a list of strings for recommended_for.\n"
-        "Input models:\n"
-        f"{model_lines}\n"
-    )
-    return system_prompt, user_prompt
-
-
-def _strip_json_fence(value: str) -> str:
-    text = _normalize_string(value)
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        return "\n".join(lines).strip()
-    return text
-
-
-def validate_provider_model_capability_payload(*, payload: object, expected_models: list[OpenAIProviderModelCatalogEntry]) -> list[ProviderModelCapabilityEntry]:
-    if not isinstance(payload, dict):
-        raise ValueError("classification_payload_invalid")
-    raw_models = payload.get("models")
-    if not isinstance(raw_models, list):
-        raise ValueError("classification_models_missing")
-    expected_map = {entry.model_id: entry.family for entry in expected_models}
-    validated: list[ProviderModelCapabilityEntry] = []
-    seen: set[str] = set()
-    for item in raw_models:
-        if not isinstance(item, dict):
-            raise ValueError("classification_entry_invalid")
-        model_id = _normalize_string(item.get("model_id")).lower()
-        if model_id not in expected_map or model_id in seen:
-            raise ValueError(f"classification_model_unexpected:{model_id or 'missing'}")
-        family = _normalize_string(item.get("family")).lower() or expected_map[model_id]
-        entry = ProviderModelCapabilityEntry.model_validate(
+def _defaults_for_family(family: str) -> dict:
+    base = {
+        "text_generation": False,
+        "reasoning": False,
+        "vision": False,
+        "image_generation": False,
+        "audio_input": False,
+        "audio_output": False,
+        "realtime": False,
+        "tool_calling": False,
+        "structured_output": False,
+        "long_context": False,
+    }
+    if family == "llm":
+        base.update(
             {
-                **item,
-                "model_id": model_id,
-                "family": family,
-                "recommended_for": sorted(set(str(value).strip() for value in item.get("recommended_for") or [] if str(value).strip())),
+                "text_generation": True,
+                "reasoning": True,
+                "vision": True,
+                "tool_calling": True,
+                "structured_output": True,
+                "long_context": True,
             }
         )
-        entry.feature_flags = _resolve_model_feature_flags(raw_entry=item, entry=entry)
-        if entry.family != expected_map[model_id]:
-            raise ValueError(f"classification_family_mismatch:{model_id}")
-        if entry.coding_strength not in _CODING_STRENGTH_OPTIONS:
-            raise ValueError(f"classification_coding_strength_invalid:{model_id}")
-        if entry.speed_tier not in _TIER_OPTIONS:
-            raise ValueError(f"classification_speed_tier_invalid:{model_id}")
-        if entry.cost_tier not in _TIER_OPTIONS:
-            raise ValueError(f"classification_cost_tier_invalid:{model_id}")
-        invalid_recommended = [value for value in entry.recommended_for if value not in RECOMMENDED_FOR_OPTIONS]
-        if invalid_recommended:
-            raise ValueError(f"classification_recommended_for_invalid:{model_id}")
-        validated.append(entry)
+    elif family == "image_generation":
+        base["image_generation"] = True
+    elif family == "realtime_voice":
+        base.update(
+            {
+                "text_generation": True,
+                "reasoning": True,
+                "audio_input": True,
+                "audio_output": True,
+                "realtime": True,
+                "tool_calling": True,
+                "structured_output": True,
+            }
+        )
+    elif family == "speech_to_text":
+        base["audio_input"] = True
+    elif family == "text_to_speech":
+        base["audio_output"] = True
+    return base
+
+
+def _tier_heuristics(*, model_id: str, family: str) -> tuple[str, str, str]:
+    normalized = _normalize_string(model_id).lower()
+
+    if family == "llm":
+        coding_strength = "medium"
+    else:
+        coding_strength = "none"
+
+    speed_tier = "medium"
+    cost_tier = "medium"
+
+    if normalized.endswith("-pro"):
+        if family == "llm":
+            coding_strength = "high"
+        speed_tier = "slow"
+        cost_tier = "high"
+    elif normalized.endswith("-mini"):
+        if family == "llm":
+            coding_strength = "medium"
+        speed_tier = "fast"
+        cost_tier = "low"
+    elif normalized.endswith("-nano"):
+        if family == "llm":
+            coding_strength = "low"
+        speed_tier = "fast"
+        cost_tier = "low"
+    elif family in {"embeddings", "moderation", "speech_to_text", "text_to_speech"}:
+        speed_tier = "fast"
+        cost_tier = "low"
+
+    return coding_strength, speed_tier, cost_tier
+
+
+def _resolve_model_feature_flags(*, entry: ProviderModelCapabilityEntry) -> dict[str, bool]:
+    feature_flags = create_default_feature_flags()
+    family = entry.family
+
+    if family == "llm":
+        feature_flags.update(
+            {
+                "chat": True,
+                "classification": True,
+                "information_extraction": True,
+                "instruction_following": True,
+                "summarization": True,
+                "translation": True,
+                "sentiment_analysis": True,
+                "reasoning": bool(entry.reasoning),
+                "long_context": bool(entry.long_context),
+                "planning": bool(entry.reasoning),
+                "structured_output": bool(entry.structured_output),
+                "json_output": bool(entry.structured_output),
+                "schema_output": bool(entry.structured_output),
+                "tool_calling": bool(entry.tool_calling),
+                "function_calling": bool(entry.tool_calling),
+            }
+        )
+        if entry.coding_strength in {"medium", "high"}:
+            feature_flags["code_generation"] = True
+            feature_flags["code_review"] = True
+        if entry.coding_strength in {"low", "medium", "high"}:
+            feature_flags["code_explanation"] = True
+        if entry.coding_strength in {"medium", "high"} and entry.reasoning:
+            feature_flags["code_debugging"] = True
+        if entry.vision:
+            feature_flags["vision_input"] = True
+            feature_flags["image_understanding"] = True
+            feature_flags["document_understanding"] = True
+    elif family == "image_generation":
+        feature_flags["image_generation"] = True
+    elif family == "realtime_voice":
+        feature_flags["realtime_interaction"] = True
+        feature_flags["audio_input"] = True
+        feature_flags["audio_output"] = True
+        feature_flags["voice_conversation"] = True
+        feature_flags["streaming_output"] = True
+        feature_flags["low_latency"] = True
+    elif family == "speech_to_text":
+        feature_flags["audio_input"] = True
+        feature_flags["speech_to_text"] = True
+    elif family == "text_to_speech":
+        feature_flags["audio_output"] = True
+        feature_flags["text_to_speech"] = True
+    elif family == "embeddings":
+        feature_flags["embeddings"] = True
+        feature_flags["semantic_search"] = True
+        feature_flags["document_indexing"] = True
+        feature_flags["knowledge_retrieval"] = True
+    elif family == "moderation":
+        feature_flags["moderation"] = True
+        feature_flags["policy_check"] = True
+
+    return feature_flags
+
+
+def _build_entry(*, model_id: str, family: str, discovered_at: str | None = None) -> ProviderModelCapabilityEntry:
+    defaults = _defaults_for_family(family)
+    coding_strength, speed_tier, cost_tier = _tier_heuristics(model_id=model_id, family=family)
+    entry = ProviderModelCapabilityEntry(
+        model_id=model_id,
+        family=family,
+        text_generation=defaults["text_generation"],
+        reasoning=defaults["reasoning"],
+        vision=defaults["vision"],
+        image_generation=defaults["image_generation"],
+        audio_input=defaults["audio_input"],
+        audio_output=defaults["audio_output"],
+        realtime=defaults["realtime"],
+        tool_calling=defaults["tool_calling"],
+        structured_output=defaults["structured_output"],
+        long_context=defaults["long_context"],
+        coding_strength=coding_strength,
+        speed_tier=speed_tier,
+        cost_tier=cost_tier,
+        discovered_at=discovered_at,
+        classification_source=_DETERMINISTIC_CLASSIFICATION_MODEL,
+    )
+    entry.feature_flags = _resolve_model_feature_flags(entry=entry)
+    return entry
+
+
+def _filter_models_for_classification(*, models: list[OpenAIProviderModelCatalogEntry]) -> list[OpenAIProviderModelCatalogEntry]:
+    selected_ids = select_representative_openai_model_ids(
+        [str(item.model_id or "").strip().lower() for item in models]
+    )
+    seen: set[str] = set()
+    filtered: list[OpenAIProviderModelCatalogEntry] = []
+    for item in models:
+        model_id = _normalize_string(item.model_id).lower()
+        family = _normalize_string(item.family).lower()
+        if not model_id or not family or model_id in seen or model_id not in selected_ids:
+            continue
         seen.add(model_id)
-    if seen != set(expected_map):
-        raise ValueError("classification_models_incomplete")
-    validated.sort(key=lambda item: item.model_id)
-    return validated
+        filtered.append(item)
+    filtered.sort(key=lambda item: (item.family, item.model_id))
+    return filtered
 
 
-def _resolve_model_feature_flags(*, raw_entry: dict, entry: ProviderModelCapabilityEntry) -> dict[str, bool]:
-    raw_feature_flags = raw_entry.get("feature_flags")
-    if isinstance(raw_feature_flags, dict):
-        return normalize_feature_flags(feature_flags=raw_feature_flags)
-
-    # Backward-compatible derivation for models classified before explicit feature flags.
-    normalized = create_default_feature_flags()
-    recommended = set(entry.recommended_for)
-    family = str(entry.family or "").strip().lower()
-    is_coding = entry.coding_strength in {"medium", "high"}
-
-    normalized["chat"] = family == "llm" or "chat" in recommended
-    normalized["reasoning"] = bool(entry.reasoning)
-    normalized["instruction_following"] = family == "llm"
-    normalized["classification"] = "classification" in recommended
-    normalized["summarization"] = "summarization" in recommended
-    normalized["information_extraction"] = bool(entry.structured_output)
-    normalized["translation"] = "translation" in recommended
-    normalized["sentiment_analysis"] = "sentiment_analysis" in recommended
-    normalized["long_context"] = bool(entry.long_context)
-
-    normalized["structured_output"] = bool(entry.structured_output)
-    normalized["json_output"] = bool(entry.structured_output)
-    normalized["schema_output"] = bool(entry.structured_output)
-    normalized["tool_calling"] = bool(entry.tool_calling)
-    normalized["function_calling"] = bool(entry.tool_calling)
-    normalized["planning"] = bool(entry.reasoning)
-    normalized["automation_commands"] = bool(entry.tool_calling)
-    normalized["environment_control"] = bool(entry.tool_calling)
-
-    normalized["code_generation"] = is_coding
-    normalized["code_review"] = is_coding
-    normalized["code_debugging"] = is_coding
-    normalized["code_explanation"] = is_coding
-
-    normalized["vision_input"] = bool(entry.vision)
-    normalized["image_understanding"] = bool(entry.vision)
-    normalized["document_understanding"] = bool(entry.vision)
-    normalized["ocr"] = bool(entry.vision)
-    normalized["object_detection"] = bool(entry.vision)
-
-    normalized["image_generation"] = bool(entry.image_generation)
-    normalized["image_editing"] = bool(entry.image_generation)
-    normalized["image_variation"] = bool(entry.image_generation)
-
-    normalized["audio_input"] = bool(entry.audio_input)
-    normalized["speech_to_text"] = bool(entry.audio_input) or family == "speech_to_text"
-    normalized["audio_output"] = bool(entry.audio_output)
-    normalized["text_to_speech"] = bool(entry.audio_output) or family == "text_to_speech"
-    normalized["voice_conversation"] = bool(entry.realtime and (entry.audio_input or entry.audio_output))
-    normalized["audio_analysis"] = bool(entry.audio_input)
-
-    normalized["realtime_interaction"] = bool(entry.realtime)
-    normalized["streaming_output"] = bool(entry.realtime)
-    normalized["low_latency"] = bool(entry.realtime)
-
-    normalized["embeddings"] = family == "embeddings" or "embeddings" in recommended
-    normalized["semantic_search"] = normalized["embeddings"]
-    normalized["document_indexing"] = normalized["embeddings"]
-    normalized["knowledge_retrieval"] = normalized["embeddings"]
-
-    normalized["moderation"] = family == "moderation" or "moderation" in recommended
-    normalized["policy_check"] = normalized["moderation"]
-    return normalized
+def build_deterministic_entries(*, models: list[OpenAIProviderModelCatalogEntry]) -> list[ProviderModelCapabilityEntry]:
+    filtered_models = _filter_models_for_classification(models=models)
+    entries = [
+        _build_entry(model_id=item.model_id, family=item.family, discovered_at=item.discovered_at)
+        for item in filtered_models
+        if _normalize_string(item.model_id) and _normalize_string(item.family)
+    ]
+    entries.sort(key=lambda item: item.model_id)
+    return entries
 
 
 class ProviderModelCapabilitiesStore:
-    def __init__(self, *, path: str = DEFAULT_PROVIDER_MODEL_CAPABILITIES_PATH, logger) -> None:
+    def __init__(
+        self,
+        *,
+        path: str = DEFAULT_PROVIDER_MODEL_CAPABILITIES_PATH,
+        logger,
+        legacy_path: str = LEGACY_PROVIDER_MODEL_CAPABILITIES_PATH,
+    ) -> None:
         self._path = Path(path)
+        self._legacy_path = Path(legacy_path)
         self._logger = logger
 
-    def load(self) -> ProviderModelCapabilitiesSnapshot | None:
-        if not self._path.exists():
-            return None
+    def _parse_snapshot(self, payload: dict) -> ProviderModelCapabilitiesSnapshot | None:
         try:
-            payload = json.loads(self._path.read_text(encoding="utf-8"))
             return ProviderModelCapabilitiesSnapshot.model_validate(payload)
         except Exception:
             return None
+
+    def _migrate_legacy_payload(self, payload: dict) -> ProviderModelCapabilitiesSnapshot | None:
+        legacy_entries = payload.get("entries") if isinstance(payload, dict) else None
+        if not isinstance(legacy_entries, list):
+            return None
+        discovered_at = str(payload.get("classified_at") or payload.get("updated_at") or _iso_now()).strip() or _iso_now()
+        entries: list[ProviderModelCapabilityEntry] = []
+        seen: set[str] = set()
+        for item in legacy_entries:
+            if not isinstance(item, dict):
+                continue
+            model_id = _normalize_string(item.get("model_id")).lower()
+            if not model_id or model_id in seen:
+                continue
+            family = classify_openai_model_family(model_id)
+            if family is None:
+                raw_family = _normalize_string(item.get("family")).lower()
+                if raw_family in _CANONICAL_FAMILIES:
+                    family = raw_family
+            if family is None:
+                continue
+            entries.append(_build_entry(model_id=model_id, family=family, discovered_at=discovered_at))
+            seen.add(model_id)
+
+        snapshot = ProviderModelCapabilitiesSnapshot(
+            updated_at=_iso_now(),
+            classified_at=discovered_at,
+            classification_model=_DETERMINISTIC_CLASSIFICATION_MODEL,
+            entries=sorted(entries, key=lambda entry: entry.model_id),
+        )
+        self.save_snapshot(snapshot=snapshot)
+        return snapshot
+
+    def load(self) -> ProviderModelCapabilitiesSnapshot | None:
+        if self._path.exists():
+            try:
+                payload = json.loads(self._path.read_text(encoding="utf-8"))
+            except Exception:
+                return None
+            snapshot = self._parse_snapshot(payload)
+            if snapshot is not None:
+                return snapshot
+
+        if not self._legacy_path.exists():
+            return None
+        try:
+            legacy_payload = json.loads(self._legacy_path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        return self._migrate_legacy_payload(legacy_payload)
 
     def payload(self) -> dict:
         snapshot = self.load()
         if snapshot is None:
             return {
                 "provider_id": "openai",
-                "classification_model": None,
+                "classification_model": _DETERMINISTIC_CLASSIFICATION_MODEL,
                 "generated_at": _iso_now(),
+                "classified_at": None,
                 "entries": [],
-                "source": "provider_model_capabilities",
+                "source": "provider_model_classifications",
             }
         return {
             "provider_id": snapshot.provider_id,
             "classification_model": snapshot.classification_model,
             "generated_at": snapshot.updated_at,
+            "classified_at": snapshot.classified_at or snapshot.updated_at,
             "entries": [entry.model_dump() for entry in snapshot.entries],
-            "source": "provider_model_capabilities",
+            "source": "provider_model_classifications",
         }
 
-    def save(self, *, classification_model: str | None, entries: list[ProviderModelCapabilityEntry]) -> ProviderModelCapabilitiesSnapshot:
-        snapshot = ProviderModelCapabilitiesSnapshot(
-            classification_model=_normalize_string(classification_model) or None,
-            updated_at=_iso_now(),
-            entries=entries,
-        )
+    def save_snapshot(self, *, snapshot: ProviderModelCapabilitiesSnapshot) -> ProviderModelCapabilitiesSnapshot:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(snapshot.model_dump(), indent=2, sort_keys=True), encoding="utf-8")
+        tmp_path = self._path.with_suffix(f"{self._path.suffix}.tmp")
+        tmp_path.write_text(json.dumps(snapshot.model_dump(), indent=2, sort_keys=True), encoding="utf-8")
+        tmp_path.replace(self._path)
         if hasattr(self._logger, "info"):
             self._logger.info(
                 "[provider-model-capabilities-saved] %s",
-                {"path": str(self._path), "entries": len(entries), "classification_model": snapshot.classification_model},
+                {
+                    "path": str(self._path),
+                    "entries": len(snapshot.entries),
+                    "classification_model": snapshot.classification_model,
+                },
             )
         return snapshot
+
+    def save(self, *, classification_model: str | None, entries: list[ProviderModelCapabilityEntry]) -> ProviderModelCapabilitiesSnapshot:
+        timestamp = _iso_now()
+        _ = classification_model
+        snapshot = ProviderModelCapabilitiesSnapshot(
+            classification_model=_DETERMINISTIC_CLASSIFICATION_MODEL,
+            updated_at=timestamp,
+            classified_at=timestamp,
+            entries=entries,
+        )
+        return self.save_snapshot(snapshot=snapshot)
 
 
 class OpenAIModelCapabilityClassifier:
@@ -306,21 +382,17 @@ class OpenAIModelCapabilityClassifier:
         *,
         logger,
         store: ProviderModelCapabilitiesStore,
-        execute_batch: Callable[[str, str, str], Awaitable[str]],
+        **_kwargs,
     ) -> None:
         self._logger = logger
         self._store = store
-        self._execute_batch = execute_batch
 
-    async def classify_and_save(self, *, models: list[OpenAIProviderModelCatalogEntry]) -> ProviderModelCapabilitiesSnapshot | None:
-        classification_model = select_openai_classification_model(models)
-        if classification_model is None:
-            return self._store.save(classification_model=None, entries=[])
-        system_prompt, user_prompt = build_openai_capability_classification_prompt(
-            models=models,
-            classification_model=classification_model,
-        )
-        raw_output = await self._execute_batch(classification_model, system_prompt, user_prompt)
-        parsed = json.loads(_strip_json_fence(raw_output))
-        validated = validate_provider_model_capability_payload(payload=parsed, expected_models=models)
-        return self._store.save(classification_model=classification_model, entries=validated)
+    async def classify_and_save(self, *, models: list[OpenAIProviderModelCatalogEntry]) -> ProviderModelCapabilitiesSnapshot:
+        entries = build_deterministic_entries(models=models)
+        snapshot = self._store.save(classification_model=_DETERMINISTIC_CLASSIFICATION_MODEL, entries=entries)
+        if hasattr(self._logger, "info"):
+            self._logger.info(
+                "[provider-model-capability-classification-deterministic] %s",
+                {"count": len(snapshot.entries)},
+            )
+        return snapshot

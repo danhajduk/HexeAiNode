@@ -77,6 +77,9 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.payload = payload
 
     class _FakeCapabilityRunner:
+        def __init__(self):
+            self.workflow_notifications = []
+
         async def submit_once(self):
             return {"status": "accepted"}
 
@@ -103,6 +106,16 @@ class NodeControlFastApiTests(unittest.TestCase):
                     "last_sync_time": "2026-03-11T00:00:00+00:00",
                 },
             }
+
+        async def emit_workflow_status_telemetry(self, *, workflow_request: str, workflow_status: str, details=None):
+            self.workflow_notifications.append(
+                {
+                    "workflow_request": workflow_request,
+                    "workflow_status": workflow_status,
+                    "details": details if isinstance(details, dict) else {},
+                }
+            )
+            return {"published": True, "last_error": None}
 
     class _FakeTrustStateStore:
         def load(self):
@@ -265,7 +278,6 @@ class NodeControlFastApiTests(unittest.TestCase):
                         "coding_strength": "high",
                         "speed_tier": "medium",
                         "cost_tier": "medium",
-                        "recommended_for": ["chat", "coding"],
                     }
                 ],
                 "source": "provider_model_capabilities",
@@ -328,7 +340,6 @@ class NodeControlFastApiTests(unittest.TestCase):
                     "coding_strength": "high",
                     "speed_tier": "medium",
                     "cost_tier": "medium",
-                    "recommended_for": ["chat", "coding"],
                 },
                 "enabled_models": [
                     {
@@ -346,7 +357,6 @@ class NodeControlFastApiTests(unittest.TestCase):
                         "coding_strength": "high",
                         "speed_tier": "medium",
                         "cost_tier": "medium",
-                        "recommended_for": ["chat", "coding"],
                     }
                 ],
             }
@@ -367,6 +377,7 @@ class NodeControlFastApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
             runtime_manager = self._FakeProviderRuntimeManager()
+            capability_runner = self._FakeCapabilityRunner()
             state = NodeControlState(
                 lifecycle=lifecycle,
                 config_path=str(Path(tmp) / "bootstrap_config.json"),
@@ -374,7 +385,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 provider_selection_store=self._FakeProviderSelectionStore(),
                 provider_credentials_store=self._FakeProviderCredentialsStore(),
                 task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
-                capability_runner=self._FakeCapabilityRunner(),
+                capability_runner=capability_runner,
                 provider_runtime_manager=runtime_manager,
                 service_manager=self._FakeServiceManager(),
                 prompt_service_state_store=self._FakePromptServiceStateStore(),
@@ -438,6 +449,7 @@ class NodeControlFastApiTests(unittest.TestCase):
             model_catalog_response = client.get("/api/providers/openai/models/catalog")
             self.assertEqual(model_catalog_response.status_code, 200)
             self.assertEqual(model_catalog_response.json()["models"][1]["family"], "moderation")
+            self.assertIn("ui_models", model_catalog_response.json())
 
             model_capabilities_response = client.get("/api/providers/openai/models/capabilities")
             self.assertEqual(model_capabilities_response.status_code, 200)
@@ -530,12 +542,12 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(provider_refresh_response.json()["status"], "refreshed")
             self.assertTrue(provider_refresh_response.json()["changed"])
             self.assertEqual(provider_refresh_response.json()["openai_model_reload"]["classification_model"], "gpt-5-mini")
-            self.assertEqual(provider_refresh_response.json()["redeclare"]["reason"], "provider_capability_refresh")
+            self.assertEqual(provider_refresh_response.json()["declaration"]["reason"], "provider_capability_refresh")
             self.assertEqual(runtime_manager.openai_reload_calls, 2)
 
             classification_refresh_response = client.post("/api/providers/openai/models/classification/refresh")
             self.assertEqual(classification_refresh_response.status_code, 200)
-            self.assertEqual(classification_refresh_response.json()["redeclare"]["reason"], "capability_catalog_refresh")
+            self.assertEqual(classification_refresh_response.json()["declaration"]["reason"], "capability_catalog_refresh")
 
             capability_rebuild_response = client.post("/api/capabilities/rebuild")
             self.assertEqual(capability_rebuild_response.status_code, 200)
@@ -604,6 +616,13 @@ class NodeControlFastApiTests(unittest.TestCase):
             debug_metrics_response = client.get("/debug/providers/metrics")
             self.assertEqual(debug_metrics_response.status_code, 200)
             self.assertEqual(debug_metrics_response.json()["providers"]["openai"]["totals"]["total_requests"], 1)
+            self.assertTrue(
+                any(
+                    item["workflow_request"] == "openai_model_classification_refresh"
+                    and item["workflow_status"] == "done"
+                    for item in capability_runner.workflow_notifications
+                )
+            )
 
     def test_capability_declare_succeeds_when_capability_setup_is_ready(self):
         with tempfile.TemporaryDirectory() as tmp:

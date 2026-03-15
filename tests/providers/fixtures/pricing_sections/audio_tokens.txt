@@ -1,0 +1,9 @@
+## Audio tokens
+
+gpt-realtime-1.5
+Input: $4.00 / 1M tokens
+Output: $16.00 / 1M tokens
+
+gpt-realtime-mini
+Input: $0.60 / 1M tokens
+Output: $2.40 / 1M tokens
