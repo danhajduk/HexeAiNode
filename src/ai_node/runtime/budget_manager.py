@@ -1,13 +1,15 @@
 import math
-from datetime import datetime, timezone
+from datetime import datetime
+
+from ai_node.time_utils import local_now, local_now_iso
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return local_now()
 
 
 def _now_iso() -> str:
-    return _now().isoformat()
+    return local_now_iso()
 
 
 def _parse_iso(value: object) -> datetime | None:

@@ -1,7 +1,7 @@
 from copy import deepcopy
-from datetime import datetime, timezone
 
 from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES
+from ai_node.time_utils import local_now_iso
 
 
 VALID_PROMPT_LIFECYCLE_STATES = {"probation", "active", "restricted", "suspended", "retired", "expired"}
@@ -10,7 +10,7 @@ VALID_PROMPT_PRIVACY_CLASSES = {"public", "internal", "restricted", "sensitive"}
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return local_now_iso()
 
 
 def _non_empty(value: object, *, name: str) -> str:

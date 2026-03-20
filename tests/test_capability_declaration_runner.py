@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.capability_declaration_runner import CapabilityDeclarationRunner
+from ai_node.time_utils import local_now_iso
 
 
 class _FakeTrustStore:
@@ -431,8 +432,8 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             governance_state_store=_FakeGovernanceStateStore(
                 existing={
                     "policy_version": "1.0",
-                    "issued_timestamp": datetime.now(timezone.utc).isoformat(),
-                    "synced_at": datetime.now(timezone.utc).isoformat(),
+                    "issued_timestamp": local_now_iso(),
+                    "synced_at": local_now_iso(),
                     "refresh_expectations": {"recommended_interval_seconds": 900, "max_stale_seconds": 3600},
                 }
             ),
@@ -513,7 +514,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
         lifecycle.transition_to(NodeLifecycleState.TRUSTED)
         lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
-        now = datetime.now(timezone.utc).isoformat()
+        now = local_now_iso()
         runner = CapabilityDeclarationRunner(
             lifecycle=lifecycle,
             logger=logging.getLogger("capability-runner-test"),

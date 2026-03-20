@@ -1,6 +1,5 @@
 import json
 from copy import deepcopy
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -14,13 +13,14 @@ from ai_node.prompts.registration import (
     normalize_prompt_privacy_class,
     normalize_provider_preferences,
 )
+from ai_node.time_utils import local_now_iso
 
 
 PROMPT_SERVICE_STATE_SCHEMA_VERSION = "2.0"
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return local_now_iso()
 
 
 def _is_non_empty_string(value: object) -> bool:

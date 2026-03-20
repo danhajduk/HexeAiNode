@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+
+from ai_node.time_utils import local_now_iso
 
 
 EXECUTION_LIFECYCLE_STATES = (
@@ -19,7 +20,7 @@ _TERMINAL_EXECUTION_LIFECYCLE_STATES = {"completed", "failed", "degraded", "reje
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return local_now_iso()
 
 
 def _normalize_string(value: object) -> str | None:

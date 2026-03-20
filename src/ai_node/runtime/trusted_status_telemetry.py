@@ -1,8 +1,9 @@
 import asyncio
-from datetime import datetime, timezone
 import json
 
 import paho.mqtt.client as mqtt
+
+from ai_node.time_utils import local_now_iso
 
 
 class PahoTelemetryAdapter:
@@ -84,7 +85,7 @@ class TrustedStatusTelemetryPublisher:
         topic = f"synthia/nodes/{node_id}/status"
         result = dict(payload)
         result["node_id"] = node_id
-        result["timestamp"] = datetime.now(timezone.utc).isoformat()
+        result["timestamp"] = local_now_iso()
 
         published, error = await self._mqtt_adapter.publish_json(
             host=host,
@@ -101,7 +102,7 @@ class TrustedStatusTelemetryPublisher:
             "published": bool(published),
             "last_error": error if not published else None,
             "last_topic": topic,
-            "last_published_at": datetime.now(timezone.utc).isoformat(),
+            "last_published_at": local_now_iso(),
         }
         if hasattr(self._logger, "info"):
             self._logger.info(

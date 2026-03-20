@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
+from ai_node.time_utils import ensure_local_timezone, local_now
+
 
 def _parse_iso_timestamp(value: object):
     if not isinstance(value, str) or not value.strip():
@@ -12,12 +14,13 @@ def _parse_iso_timestamp(value: object):
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return ensure_local_timezone(parsed)
 
 
 def evaluate_governance_freshness(governance_bundle: dict | None, *, now: datetime | None = None) -> dict:
-    now_utc = now.astimezone(timezone.utc) if isinstance(now, datetime) else datetime.now(timezone.utc)
+    now_local = ensure_local_timezone(now) if isinstance(now, datetime) else local_now()
+    now_utc = now_local.astimezone(timezone.utc)
     if not isinstance(governance_bundle, dict):
         return {
             "state": "unknown",
@@ -51,15 +54,16 @@ def evaluate_governance_freshness(governance_bundle: dict | None, *, now: dateti
             "reason": "invalid_synced_at",
         }
 
-    next_refresh_due_at = sync_dt + timedelta(seconds=max(recommended_interval_seconds, 1))
-    max_stale_at = sync_dt + timedelta(seconds=max(max_stale_seconds, 1))
-    state = "fresh" if now_utc <= max_stale_at else "stale"
+    sync_utc = sync_dt.astimezone(timezone.utc)
+    next_refresh_due_at_utc = sync_utc + timedelta(seconds=max(recommended_interval_seconds, 1))
+    max_stale_at_utc = sync_utc + timedelta(seconds=max(max_stale_seconds, 1))
+    state = "fresh" if now_utc <= max_stale_at_utc else "stale"
     return {
         "state": state,
         "active_governance_version": policy_version,
         "issued_timestamp": issued_timestamp,
         "last_sync_time": sync_dt.isoformat(),
-        "next_refresh_due_at": next_refresh_due_at.isoformat(),
-        "max_stale_at": max_stale_at.isoformat(),
+        "next_refresh_due_at": next_refresh_due_at_utc.astimezone().isoformat(),
+        "max_stale_at": max_stale_at_utc.astimezone().isoformat(),
         "reason": None,
     }

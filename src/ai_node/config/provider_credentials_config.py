@@ -1,10 +1,10 @@
 import json
 import os
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
 
+from ai_node.time_utils import local_now_iso
 
 PROVIDER_CREDENTIALS_SCHEMA_VERSION = "1.0"
 _TOKEN_FORMAT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9._-]+)+$")
@@ -12,7 +12,7 @@ _PROJECT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$")
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return local_now_iso()
 
 
 def _normalize_string(value: object) -> str | None:

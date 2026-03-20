@@ -333,7 +333,7 @@ class OnboardingRuntime:
             "operational_mqtt_host": effective_operational_mqtt_host,
             "operational_mqtt_port": parsed["operational_mqtt_port"],
             "bootstrap_mqtt_host": bootstrap_mqtt_host,
-            "registration_timestamp": datetime.now(timezone.utc).isoformat(),
+            "registration_timestamp": datetime.now().astimezone().isoformat(),
         }
         self._trust_store.save(trust_state)
         self._lifecycle.transition_to(NodeLifecycleState.TRUSTED)

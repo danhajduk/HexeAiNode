@@ -24,6 +24,7 @@ from ai_node.runtime.service_manager import NullServiceManager
 from ai_node.runtime.capability_resolver import load_task_graph
 from ai_node.runtime.execution_telemetry import ExecutionTelemetryPublisher
 from ai_node.runtime.task_execution_service import TaskExecutionService
+from ai_node.time_utils import local_now_iso
 
 
 class CapabilityDeclarationPrerequisiteError(ValueError):
@@ -399,7 +400,7 @@ class NodeControlState:
 
     @staticmethod
     def _now_iso() -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return local_now_iso()
 
     def status_payload(self) -> dict:
         self._rehydrate_trusted_state()
@@ -945,7 +946,7 @@ class NodeControlState:
                 "provider_id": "openai",
                 "models": [],
                 "source": "provider_model_catalog",
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": local_now_iso(),
             }
         payload = self._provider_runtime_manager.openai_model_catalog_payload()
         raw_models = payload.get("models") if isinstance(payload, dict) and isinstance(payload.get("models"), list) else []
@@ -974,9 +975,9 @@ class NodeControlState:
             "models": normalized,
             "ui_models": ui_models,
             "source": str(payload.get("source") or "provider_model_catalog").strip() if isinstance(payload, dict) else "provider_model_catalog",
-            "generated_at": str(payload.get("generated_at") or datetime.now(timezone.utc).isoformat()).strip()
+            "generated_at": str(payload.get("generated_at") or local_now_iso()).strip()
             if isinstance(payload, dict)
-            else datetime.now(timezone.utc).isoformat(),
+            else local_now_iso(),
         }
 
     def openai_provider_model_capabilities_payload(self) -> dict:
@@ -985,7 +986,7 @@ class NodeControlState:
                 "provider_id": "openai",
                 "classification_model": None,
                 "entries": [],
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": local_now_iso(),
                 "source": "provider_model_capabilities",
             }
         payload = self._provider_runtime_manager.openai_model_capabilities_payload()
@@ -994,9 +995,9 @@ class NodeControlState:
             "provider_id": "openai",
             "classification_model": payload.get("classification_model") if isinstance(payload, dict) else None,
             "entries": entries,
-            "generated_at": str(payload.get("generated_at") or datetime.now(timezone.utc).isoformat()).strip()
+            "generated_at": str(payload.get("generated_at") or local_now_iso()).strip()
             if isinstance(payload, dict)
-            else datetime.now(timezone.utc).isoformat(),
+            else local_now_iso(),
             "source": str(payload.get("source") or "provider_model_capabilities").strip()
             if isinstance(payload, dict)
             else "provider_model_capabilities",
@@ -1006,7 +1007,7 @@ class NodeControlState:
         if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "openai_model_features_payload"):
             return {
                 "schema_version": "1.0",
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": local_now_iso(),
                 "entries": [],
                 "source": "provider_model_features",
             }
@@ -1014,7 +1015,7 @@ class NodeControlState:
         if not isinstance(payload, dict):
             return {
                 "schema_version": "1.0",
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": local_now_iso(),
                 "entries": [],
                 "source": "provider_model_features",
             }
@@ -1029,7 +1030,7 @@ class NodeControlState:
                 "feature_union": {},
                 "resolved_tasks": [],
                 "enabled_task_capabilities": [],
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": local_now_iso(),
                 "source": "node_capabilities",
             }
         payload = self._provider_runtime_manager.node_capabilities_payload()
@@ -1041,7 +1042,7 @@ class NodeControlState:
                 "feature_union": {},
                 "resolved_tasks": [],
                 "enabled_task_capabilities": [],
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": local_now_iso(),
                 "source": "node_capabilities",
             }
         return payload
@@ -1051,7 +1052,7 @@ class NodeControlState:
             return {
                 "provider_id": "openai",
                 "models": [],
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": local_now_iso(),
                 "source": "provider_enabled_models",
             }
         payload = self._provider_runtime_manager.openai_enabled_models_payload()
@@ -1059,9 +1060,9 @@ class NodeControlState:
         return {
             "provider_id": "openai",
             "models": models,
-            "generated_at": str(payload.get("generated_at") or datetime.now(timezone.utc).isoformat()).strip()
+            "generated_at": str(payload.get("generated_at") or local_now_iso()).strip()
             if isinstance(payload, dict)
-            else datetime.now(timezone.utc).isoformat(),
+            else local_now_iso(),
             "source": str(payload.get("source") or "provider_enabled_models").strip()
             if isinstance(payload, dict)
             else "provider_enabled_models",
@@ -1171,9 +1172,9 @@ class NodeControlState:
             "source": str(payload.get("source") or "provider_capability_report").strip()
             if isinstance(payload, dict)
             else "provider_capability_report",
-            "generated_at": str(payload.get("generated_at") or datetime.now(timezone.utc).isoformat()).strip()
+            "generated_at": str(payload.get("generated_at") or local_now_iso()).strip()
             if isinstance(payload, dict)
-            else datetime.now(timezone.utc).isoformat(),
+            else local_now_iso(),
         }
 
     async def refresh_openai_pricing(self, *, force_refresh: bool) -> dict:

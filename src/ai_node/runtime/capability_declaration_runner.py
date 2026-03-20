@@ -19,6 +19,7 @@ from ai_node.governance.freshness import evaluate_governance_freshness
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.operational_mqtt_readiness import OperationalMqttReadinessChecker
 from ai_node.runtime.trusted_status_telemetry import TrustedStatusTelemetryPublisher
+from ai_node.time_utils import local_now, local_now_iso
 
 
 class CapabilityDeclarationRunner:
@@ -325,7 +326,7 @@ class CapabilityDeclarationRunner:
         )
         self._status = "in_progress"
         self._last_error = None
-        self._last_submitted_at = datetime.now(timezone.utc).isoformat()
+        self._last_submitted_at = local_now_iso()
 
         result = await self._capability_client.submit_manifest(
             core_api_endpoint=str(trust_state.get("core_api_endpoint") or "").strip(),
@@ -358,7 +359,7 @@ class CapabilityDeclarationRunner:
                 "acceptance_timestamp": str(
                     result.payload.get("accepted_at")
                     or result.payload.get("acceptance_timestamp")
-                    or datetime.now(timezone.utc).isoformat()
+                    or local_now_iso()
                 ).strip(),
                 "accepted_profile_id": str(
                     result.payload.get("accepted_profile_id")
@@ -541,7 +542,7 @@ class CapabilityDeclarationRunner:
                         "retryable": result.retryable,
                         "error": result.error,
                     }
-                    self._provider_intelligence_last_submitted_at = datetime.now(timezone.utc).isoformat()
+                    self._provider_intelligence_last_submitted_at = local_now_iso()
                 else:
                     core_submission = {"submitted": False, "reason": "unchanged"}
             else:
@@ -588,7 +589,7 @@ class CapabilityDeclarationRunner:
             node_id=self._node_id,
             capability_manifest=manifest,
         )
-        self._last_submitted_at = datetime.now(timezone.utc).isoformat()
+        self._last_submitted_at = local_now_iso()
         self._last_manifest_payload = manifest
         self._last_manifest_summary = {
             "task_families": list(manifest.get("declared_task_families") or []),
@@ -609,7 +610,7 @@ class CapabilityDeclarationRunner:
                 "acceptance_timestamp": str(
                     result.payload.get("accepted_at")
                     or result.payload.get("acceptance_timestamp")
-                    or datetime.now(timezone.utc).isoformat()
+                    or local_now_iso()
                 ).strip(),
                 "raw_response": result.payload,
                 "submitted_manifest": manifest,
@@ -942,7 +943,7 @@ class CapabilityDeclarationRunner:
 
 
 def _build_governance_payload(*, governance_payload: dict, trust_state: dict) -> dict:
-    now = datetime.now(timezone.utc).isoformat()
+    now = local_now_iso()
     policy_version = str(
         governance_payload.get("policy_version")
         or governance_payload.get("baseline_policy_version")

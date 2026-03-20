@@ -1,8 +1,8 @@
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import BaseModel, Field
+from ai_node.time_utils import local_now_iso
 
 
 PROVIDER_ENABLED_MODELS_SCHEMA_VERSION = "1.0"
@@ -10,7 +10,7 @@ DEFAULT_PROVIDER_ENABLED_MODELS_PATH = "data/provider_enabled_models.json"
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return local_now_iso()
 
 
 def _normalize_string(value: object) -> str:

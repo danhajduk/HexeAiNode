@@ -1,6 +1,5 @@
-from datetime import datetime, timezone
-
 from ai_node.runtime.trusted_status_telemetry import TrustedStatusTelemetryPublisher
+from ai_node.time_utils import local_now_iso
 
 
 EXECUTION_TELEMETRY_EVENTS = {
@@ -53,7 +52,7 @@ class ExecutionTelemetryPublisher:
         trust_payload = trust_state if isinstance(trust_state, dict) else {}
         enriched_payload = {
             "event_type": normalized_event,
-            "emitted_at": datetime.now(timezone.utc).isoformat(),
+            "emitted_at": local_now_iso(),
             **(payload if isinstance(payload, dict) else {}),
         }
         return await self._status_publisher.publish_status(

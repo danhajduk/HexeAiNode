@@ -3,13 +3,14 @@ import json
 import os
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from statistics import mean
 
 import httpx
 
 from ai_node.config.provider_credentials_config import ProviderCredentialsStore
 from ai_node.providers.openai_catalog import get_openai_model_pricing
+from ai_node.time_utils import local_now, local_now_iso
 
 
 PROVIDER_INTELLIGENCE_SCHEMA_VERSION = "1.0"
@@ -18,7 +19,7 @@ _LATENCY_SAMPLE_WINDOW = 20
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return local_now_iso()
 
 
 def _is_non_empty_string(value: object) -> bool:
@@ -242,7 +243,7 @@ class ProviderIntelligenceService:
             generated_time = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
         except Exception:
             return False
-        age_seconds = (datetime.now(timezone.utc) - generated_time).total_seconds()
+        age_seconds = (local_now() - generated_time).total_seconds()
         return age_seconds < self._refresh_interval_seconds
 
     async def _discover_openai(self, previous: dict | None) -> dict:

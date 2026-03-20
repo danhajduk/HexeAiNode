@@ -116,7 +116,7 @@ class OperationalMqttReadinessChecker:
     def _update_result(self, *, ready: bool, error: str | None, endpoint: dict) -> dict:
         self._status = {
             "ready": bool(ready),
-            "last_attempt_at": datetime.now(timezone.utc).isoformat(),
+            "last_attempt_at": datetime.now().astimezone().isoformat(),
             "last_error": None if ready else (error or "unknown_error"),
             "endpoint": endpoint,
         }

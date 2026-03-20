@@ -1,8 +1,9 @@
 import json
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
+
+from ai_node.time_utils import local_now_iso
 
 
 REQUIRED_NODE_IDENTITY_FIELDS = (
@@ -51,7 +52,7 @@ def validate_node_identity(data: object) -> Tuple[bool, Optional[str]]:
 def create_node_identity() -> dict:
     return {
         "node_id": str(uuid.uuid4()),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": local_now_iso(),
         "id_format": "uuidv4",
     }
 
@@ -111,7 +112,7 @@ class NodeIdentityStore:
             raise ValueError("node_id is required")
         identity = {
             "node_id": node_id.strip(),
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": local_now_iso(),
             "id_format": id_format,
         }
         self.save(identity)

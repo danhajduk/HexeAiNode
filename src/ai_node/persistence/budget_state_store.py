@@ -1,7 +1,8 @@
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
+
+from ai_node.time_utils import local_now_iso
 
 
 BUDGET_STATE_SCHEMA_VERSION = "1.0"
@@ -10,7 +11,7 @@ VALID_GRANT_STATUS = {"active", "expired"}
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return local_now_iso()
 
 
 def _is_non_empty_string(value: object) -> bool:

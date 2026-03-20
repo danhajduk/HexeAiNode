@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Optional
+
+from ai_node.time_utils import local_now_iso
 
 
 PHASE1_ALLOWED_STATUS_EVENTS = {
@@ -37,7 +38,7 @@ class StatusEmitter:
 
         event = StatusEvent(
             status=status,
-            emitted_at=datetime.now(tz=timezone.utc).isoformat(),
+            emitted_at=local_now_iso(),
             detail=detail or None,
         )
         await self._sink.emit(

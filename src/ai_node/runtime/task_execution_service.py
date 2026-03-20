@@ -1,5 +1,4 @@
 import time
-from datetime import datetime, timezone
 
 from ai_node.execution.gateway import ExecutionGateway
 from ai_node.execution.failure_codes import classify_failure_code
@@ -17,10 +16,11 @@ from ai_node.runtime.task_handlers import (
     SummarizationTaskHandler,
 )
 from ai_node.runtime.task_router import TaskRouter
+from ai_node.time_utils import local_now_iso
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return local_now_iso()
 
 
 class TaskExecutionService:
