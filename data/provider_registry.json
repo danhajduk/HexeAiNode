@@ -6,7 +6,7 @@
         "auth_valid": true,
         "availability": "available",
         "last_error": null,
-        "last_successful_check": "2026-03-19T23:28:30.056008+00:00",
+        "last_successful_check": "2026-03-20T02:59:16.180769+00:00",
         "provider_id": "openai",
         "reachable": true
       },

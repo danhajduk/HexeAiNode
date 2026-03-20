@@ -777,6 +777,42 @@ class CapabilityDeclarationRunner:
             "operational_mqtt_readiness": readiness_result,
         }
 
+    async def resume_or_refresh_on_startup(self) -> dict:
+        resume_result = await self.resume_operational_if_ready()
+        if resume_result.get("resumed"):
+            return resume_result
+        if resume_result.get("reason") != "governance_not_fresh":
+            return resume_result
+        if not isinstance(self._accepted_profile, dict):
+            return resume_result
+
+        governance_refresh = await self.refresh_governance_once()
+        if governance_refresh.get("status") != "synced":
+            return {
+                "resumed": False,
+                "reason": "governance_refresh_failed",
+                "target_state": self._lifecycle.get_state().value,
+                "resume_result": resume_result,
+                "governance_refresh": governance_refresh,
+            }
+
+        resumed_after_refresh = await self.resume_operational_if_ready()
+        if resumed_after_refresh.get("resumed"):
+            return {
+                **resumed_after_refresh,
+                "reason": "governance_refreshed_on_startup",
+                "initial_resume_result": resume_result,
+                "governance_refresh": governance_refresh,
+            }
+        return {
+            "resumed": False,
+            "reason": "governance_refreshed_but_resume_blocked",
+            "target_state": self._lifecycle.get_state().value,
+            "initial_resume_result": resume_result,
+            "governance_refresh": governance_refresh,
+            "resume_result": resumed_after_refresh,
+        }
+
     def _persist_phase2_state(self) -> None:
         if self._phase2_state_store is None or not hasattr(self._phase2_state_store, "save"):
             return

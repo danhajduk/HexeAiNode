@@ -9,9 +9,34 @@
       "enabled": true,
       "model_id": "gpt-5-nano",
       "selected_at": "2026-03-14T02:27:38.015336+00:00"
+    },
+    {
+      "enabled": true,
+      "model_id": "gpt-5.4-mini",
+      "selected_at": "2026-03-20T02:52:14.105223+00:00"
+    },
+    {
+      "enabled": true,
+      "model_id": "gpt-5.4-nano",
+      "selected_at": "2026-03-20T02:52:15.395967+00:00"
+    },
+    {
+      "enabled": true,
+      "model_id": "gpt-5.4",
+      "selected_at": "2026-03-20T02:52:16.680131+00:00"
+    },
+    {
+      "enabled": true,
+      "model_id": "gpt-image-1-mini",
+      "selected_at": "2026-03-20T02:52:20.843527+00:00"
+    },
+    {
+      "enabled": true,
+      "model_id": "omni-moderation-2024-09-26",
+      "selected_at": "2026-03-20T02:52:24.906327+00:00"
     }
   ],
   "provider_id": "openai",
   "schema_version": "1.0",
-  "updated_at": "2026-03-20T01:34:16.781360+00:00"
+  "updated_at": "2026-03-20T02:52:24.906327+00:00"
 }

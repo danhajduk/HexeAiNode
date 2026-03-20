@@ -580,6 +580,56 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["reason"], "accepted_capability_missing")
         self.assertEqual(lifecycle.get_state(), NodeLifecycleState.CAPABILITY_SETUP_PENDING)
 
+    async def test_resume_or_refresh_on_startup_refreshes_stale_governance_and_resumes(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
+        lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        stale_time = "2026-03-11T00:00:00+00:00"
+        runner = CapabilityDeclarationRunner(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("capability-runner-test"),
+            trust_store=_FakeTrustStore(),
+            provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
+            node_id="node-001",
+            capability_state_store=_FakeCapabilityStateStore(
+                existing={
+                    "schema_version": "1.0",
+                    "accepted_declaration_version": "1.0",
+                    "acceptance_timestamp": stale_time,
+                    "accepted_profile_id": "cap-1",
+                    "core_restrictions": {},
+                    "core_notes": None,
+                    "raw_response": {"status": "accepted"},
+                }
+            ),
+            governance_state_store=_FakeGovernanceStateStore(
+                existing={
+                    "schema_version": "1.0",
+                    "policy_version": "1.0",
+                    "issued_timestamp": stale_time,
+                    "synced_at": stale_time,
+                    "refresh_expectations": {"recommended_interval_seconds": 900, "max_stale_seconds": 3600},
+                    "generic_node_class_rules": {},
+                    "feature_gating_defaults": {},
+                    "telemetry_expectations": {},
+                    "raw_response": {},
+                }
+            ),
+            capability_client=_FakeClientAccepted(),
+            governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
+            telemetry_publisher=_FakeTelemetryPublisher(),
+            phase2_state_store=_FakePhase2StateStore(),
+        )
+
+        result = await runner.resume_or_refresh_on_startup()
+
+        self.assertTrue(result["resumed"])
+        self.assertEqual(result["reason"], "governance_refreshed_on_startup")
+        self.assertEqual(result["governance_refresh"]["status"], "synced")
+        self.assertEqual(lifecycle.get_state(), NodeLifecycleState.OPERATIONAL)
+
     async def test_governance_sync_retry_moves_to_retry_pending(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
         lifecycle.transition_to(NodeLifecycleState.TRUSTED)

@@ -385,7 +385,7 @@ def run(
     )
     if startup_mode == "trusted_resume":
         try:
-            resume_result = asyncio.run(capability_runner.resume_operational_if_ready())
+            resume_result = asyncio.run(capability_runner.resume_or_refresh_on_startup())
             LOGGER.info("[startup-resume] %s", resume_result)
         except Exception:
             LOGGER.exception("[startup-resume] failed to evaluate trusted startup resume")
