@@ -415,76 +415,16 @@ class CapabilityDeclarationRunner:
 
             readiness_result = await self._operational_readiness_checker.check_once(trust_state=trust_state)
             if not readiness_result.get("ready"):
-                last_error = str(readiness_result.get("last_error") or "operational_mqtt_not_ready")
-                if self._is_operational_mqtt_auth_failure(last_error):
-                    self._lifecycle.transition_to(
-                        NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING,
+                self._last_error = str(readiness_result.get("last_error") or "operational_mqtt_not_ready")
+                if hasattr(self._logger, "warning"):
+                    self._logger.warning(
+                        "[operational-mqtt-readiness-warning] %s",
                         {
-                            "source": "operational_mqtt_readiness",
-                            "error": last_error,
-                            "retryable": True,
-                            "warning": "soft_fail_mqtt_auth",
+                            "node_id": self._node_id,
+                            "error": self._last_error,
+                            "action": "operational_transition_continues",
                         },
                     )
-                    if hasattr(self._logger, "warning"):
-                        self._logger.warning(
-                            "[operational-mqtt-readiness-soft-fail] %s",
-                            {
-                                "node_id": self._node_id,
-                                "error": last_error,
-                                "action": "kept_out_of_degraded",
-                            },
-                        )
-                    self._status = "accepted_with_warning"
-                    self._last_error = last_error
-                    return {
-                        "status": "accepted_with_warning",
-                        "retryable": True,
-                        "error": last_error,
-                        "warning": "operational_mqtt_auth_not_ready",
-                        "result": {"phase": "operational_mqtt_readiness"},
-                        "accepted_profile": accepted_payload,
-                        "governance_bundle": governance_payload,
-                        "provider_capability_report": self._provider_report_payload(),
-                        "provider_intelligence_status": provider_intelligence_status,
-                        "operational_mqtt_readiness": readiness_result,
-                    }
-                self._lifecycle.transition_to(
-                    NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING,
-                    {
-                        "source": "operational_mqtt_readiness",
-                        "error": readiness_result.get("last_error"),
-                        "retryable": True,
-                    },
-                )
-                self._lifecycle.transition_to(
-                    NodeLifecycleState.DEGRADED,
-                    {
-                        "source": "operational_mqtt_readiness",
-                        "reason": readiness_result.get("last_error") or "operational_mqtt_not_ready",
-                    },
-                )
-                self._diag.degraded_recovery(
-                    {
-                        "node_id": self._node_id,
-                        "event": "degraded",
-                        "source": "operational_mqtt_readiness",
-                        "error": readiness_result.get("last_error"),
-                    }
-                )
-                self._status = "retry_pending"
-                self._last_error = last_error
-                return {
-                    "status": "retryable_failure",
-                    "retryable": True,
-                    "error": self._last_error,
-                    "result": {"phase": "operational_mqtt_readiness"},
-                    "accepted_profile": accepted_payload,
-                    "governance_bundle": governance_payload,
-                    "provider_capability_report": self._provider_report_payload(),
-                    "provider_intelligence_status": provider_intelligence_status,
-                    "operational_mqtt_readiness": readiness_result,
-                }
 
             self._lifecycle.transition_to(
                 NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED,
@@ -500,7 +440,6 @@ class CapabilityDeclarationRunner:
                 overall_status="operational",
             )
             self._status = "accepted"
-            self._last_error = None
             self._persist_phase2_state()
             return {
                 "status": "accepted",
@@ -593,6 +532,11 @@ class CapabilityDeclarationRunner:
         }
 
     async def redeclare_if_needed(self, *, reason: str, force: bool = False) -> dict:
+        if self._lifecycle.get_state() in {
+            NodeLifecycleState.CAPABILITY_SETUP_PENDING,
+            NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING,
+        }:
+            return await self.submit_once()
         if not isinstance(self._accepted_profile, dict):
             return {"status": "skipped", "reason": "capability_not_accepted"}
         trust_state = self._trust_store.load() if self._trust_store is not None else None
@@ -746,7 +690,7 @@ class CapabilityDeclarationRunner:
         )
         governance_fresh = self._governance_status.get("state") == "fresh"
         operational_ready = bool(readiness.get("ready"))
-        if self._accepted_profile and governance_fresh and operational_ready:
+        if self._accepted_profile and governance_fresh:
             target_state = NodeLifecycleState.OPERATIONAL
 
         self._lifecycle.transition_to(
@@ -805,12 +749,7 @@ class CapabilityDeclarationRunner:
 
         readiness_result = await self._operational_readiness_checker.check_once(trust_state=trust_state)
         if not readiness_result.get("ready"):
-            return {
-                "resumed": False,
-                "reason": "operational_mqtt_not_ready",
-                "target_state": state.value,
-                "operational_mqtt_readiness": readiness_result,
-            }
+            self._last_error = str(readiness_result.get("last_error") or "operational_mqtt_not_ready")
 
         self._lifecycle.transition_to(
             NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS,
@@ -825,7 +764,6 @@ class CapabilityDeclarationRunner:
             {"source": "startup_resume"},
         )
         self._status = "accepted"
-        self._last_error = None
         await self._emit_status_telemetry(
             trust_state=trust_state,
             lifecycle_state=NodeLifecycleState.OPERATIONAL.value,
@@ -906,11 +844,17 @@ class CapabilityDeclarationRunner:
             node_id=self._node_id,
             payload=payload,
         )
-        if not result.get("published") and self._lifecycle.get_state() != NodeLifecycleState.DEGRADED:
-            self._lifecycle.transition_to(
-                NodeLifecycleState.DEGRADED,
-                {"source": "trusted_status_telemetry", "reason": result.get("last_error") or "telemetry_publish_failed"},
-            )
+        if not result.get("published"):
+            self._last_error = str(result.get("last_error") or "telemetry_publish_failed")
+            if hasattr(self._logger, "warning"):
+                self._logger.warning(
+                    "[trusted-status-telemetry-warning] %s",
+                    {
+                        "node_id": self._node_id,
+                        "error": self._last_error,
+                        "action": "lifecycle_unchanged",
+                    },
+                )
         return result
 
     async def emit_workflow_status_telemetry(self, *, workflow_request: str, workflow_status: str, details: dict | None = None) -> dict | None:

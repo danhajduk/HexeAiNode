@@ -346,6 +346,89 @@ class ProviderRuntimeManager:
     def openai_enabled_models_payload(self) -> dict:
         return self._provider_enabled_models_store.payload()
 
+    def openai_usable_models_payload(self) -> dict:
+        enabled_snapshot = self._provider_enabled_models_store.load()
+        selected_model_ids = [entry.model_id for entry in enabled_snapshot.models] if enabled_snapshot is not None else []
+        classified_snapshot = self._provider_model_capabilities_store.load()
+        classified_ids = {
+            str(entry.model_id or "").strip().lower()
+            for entry in (classified_snapshot.entries if classified_snapshot is not None else [])
+            if str(entry.model_id or "").strip()
+        }
+        registry_models = {
+            str(model.model_id or "").strip().lower(): model.model_dump()
+            for model in self._registry.list_models_by_provider("openai")
+            if str(model.model_id or "").strip()
+        }
+        usable_model_ids: list[str] = []
+        blocked_models: list[dict] = []
+        for model_id in selected_model_ids:
+            normalized_model_id = str(model_id or "").strip().lower()
+            blockers: list[str] = []
+            if normalized_model_id not in classified_ids:
+                blockers.append("not_classified")
+            registry_model = registry_models.get(normalized_model_id)
+            model_status = str((registry_model or {}).get("status") or "").strip().lower()
+            if model_status not in {"available", "degraded"}:
+                blockers.append("not_available")
+            if blockers:
+                blocked_models.append(
+                    {
+                        "model_id": model_id,
+                        "blockers": blockers,
+                        "status": model_status or "unknown",
+                    }
+                )
+                continue
+            usable_model_ids.append(model_id)
+        return {
+            "provider_id": "openai",
+            "selected_model_ids": selected_model_ids,
+            "usable_model_ids": usable_model_ids,
+            "blocked_models": blocked_models,
+            "generated_at": _iso_now(),
+            "source": "provider_enabled_models",
+        }
+
+    def provider_selection_context_payload(self) -> dict:
+        config = self._loader.load()
+        enabled_providers = list(config.enabled_providers or [])
+        default_model_by_provider: dict[str, str | None] = {}
+        provider_retry_count: dict[str, int] = {}
+        provider_health: dict[str, dict] = {}
+        available_models_by_provider: dict[str, list[str]] = {}
+        usable_models_by_provider: dict[str, list[str]] = {}
+
+        for provider_id in enabled_providers:
+            settings = config.providers.get(provider_id)
+            default_model_by_provider[provider_id] = settings.default_model_id if settings is not None else None
+            provider_retry_count[provider_id] = max(int(settings.retry_count), 0) if settings is not None else 0
+            provider_health[provider_id] = self._registry.get_provider_health(provider_id) or {}
+            available_models = [
+                str(model.model_id or "").strip()
+                for model in self._registry.list_models_by_provider(provider_id)
+                if str(model.model_id or "").strip() and str(model.status or "").strip().lower() in {"available", "degraded"}
+            ]
+            available_models_by_provider[provider_id] = available_models
+            usable_models_by_provider[provider_id] = list(available_models)
+
+        openai_usable = self.openai_usable_models_payload()
+        openai_usable_ids = [str(item or "").strip() for item in list(openai_usable.get("usable_model_ids") or []) if str(item or "").strip()]
+        if openai_usable_ids:
+            usable_models_by_provider["openai"] = openai_usable_ids
+
+        return {
+            "enabled_providers": enabled_providers,
+            "default_provider": config.default_provider,
+            "default_model_by_provider": default_model_by_provider,
+            "provider_retry_count": provider_retry_count,
+            "provider_health": provider_health,
+            "available_models_by_provider": available_models_by_provider,
+            "usable_models_by_provider": usable_models_by_provider,
+            "generated_at": _iso_now(),
+            "source": "provider_runtime_manager",
+        }
+
     def openai_model_features_payload(self) -> dict:
         return self._provider_model_feature_catalog_store.payload()
 
@@ -370,10 +453,12 @@ class ProviderRuntimeManager:
         return scoped or normalized_catalog
 
     def openai_resolved_capabilities_payload(self) -> dict:
-        enabled_snapshot = self._provider_enabled_models_store.load()
         capabilities_snapshot = self._provider_model_capabilities_store.load()
-        enabled_model_ids = [entry.model_id for entry in enabled_snapshot.models] if enabled_snapshot is not None else []
+        usable_payload = self.openai_usable_models_payload()
+        enabled_model_ids = list(usable_payload.get("usable_model_ids") or [])
         payload = resolve_enabled_model_capabilities(snapshot=capabilities_snapshot, enabled_model_ids=enabled_model_ids)
+        payload["selected_model_ids"] = list(usable_payload.get("selected_model_ids") or [])
+        payload["blocked_models"] = list(usable_payload.get("blocked_models") or [])
         payload["task_families"] = derive_declared_task_families(resolved_capabilities=payload)
         return payload
 
@@ -569,14 +654,16 @@ class ProviderRuntimeManager:
 
     def _resolve_and_persist_node_capabilities(self) -> None:
         try:
-            enabled_snapshot = self._provider_enabled_models_store.load()
-            enabled_models = [entry.model_id for entry in enabled_snapshot.models] if enabled_snapshot is not None else []
+            usable_payload = self.openai_usable_models_payload()
+            enabled_models = list(usable_payload.get("usable_model_ids") or [])
             task_graph = load_task_graph(path=self._task_graph_path)
             payload = resolve_node_capabilities(
                 enabled_models=enabled_models,
                 model_feature_catalog=self._provider_model_feature_catalog_store.payload(),
                 task_graph=task_graph,
             )
+            payload["selected_models"] = list(usable_payload.get("selected_model_ids") or [])
+            payload["blocked_models"] = list(usable_payload.get("blocked_models") or [])
             payload["enabled_task_capabilities"] = list(payload.get("resolved_tasks") or [])
             payload["generated_at"] = _iso_now()
             payload["source"] = "node_capabilities"

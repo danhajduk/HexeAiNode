@@ -43,7 +43,7 @@ degraded -> operational (after recovery)
 ## Transition Notes
 
 - `trusted -> capability_setup_pending`: trust established; post-trust setup/handoff not yet complete.
-- `capability_setup_pending -> operational`: node completes required readiness path.
+- `capability_setup_pending -> operational`: Core has accepted capabilities and issued governance for the active node profile.
 - `degraded` is non-terminal and should recover without re-onboarding when trust remains valid.
 
 ## Restart Behavior

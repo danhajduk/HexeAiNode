@@ -402,6 +402,7 @@ def run(
         provider_credentials_store=provider_credentials_store,
         task_capability_selection_store=task_capability_selection_store,
         trust_state_store=trust_state_store,
+        governance_state_store=governance_state_store,
         prompt_service_state_store=prompt_service_state_store,
         provider_runtime_manager=provider_runtime_manager,
         service_manager=service_manager,

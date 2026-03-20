@@ -21,7 +21,7 @@ Registration is API-only. MQTT is not used for registration transactions.
 ```text
 AI Node
   -> receives valid bootstrap payload
-  -> calls register endpoint over HTTP API
+  -> calls onboarding session endpoint over HTTP API
 Core
   -> creates pending node entry
 Operator
@@ -37,14 +37,19 @@ AI Node
 The endpoint URL is composed from validated bootstrap fields:
 
 ```text
-{api_base}{onboarding_endpoints.register}
+{api_base}{onboarding_endpoints.register_session}
 ```
 
 Example:
 
 ```text
-http://192.168.1.50:9001/api/nodes/register
+http://192.168.1.50:9001/api/system/nodes/onboarding/sessions
 ```
+
+Legacy compatibility:
+
+- if `onboarding_endpoints.register_session` is absent, AI Node may fall back to `onboarding_endpoints.ai_node_register`
+- if both canonical and profile-specific aliases are absent, AI Node may fall back to legacy `onboarding_endpoints.register`
 
 ## Registration Request Payload
 

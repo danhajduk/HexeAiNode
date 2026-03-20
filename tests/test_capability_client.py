@@ -134,6 +134,85 @@ class CapabilityClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(provider_intelligence[0]["available_models"][0]["pricing"]["input_per_1m_tokens"], 0.15)
         self.assertIn("metrics_snapshot", adapter.last_payload)
 
+    async def test_submit_provider_intelligence_filters_unavailable_models_from_available_models(self):
+        adapter = _FakeHttpAdapter(200, {"status": "accepted"})
+        client = CapabilityDeclarationClient(logger=logging.getLogger("capability-client-test"), http_adapter=adapter)
+
+        await client.submit_provider_intelligence(
+            core_api_endpoint="http://10.0.0.100:9001",
+            trust_token="secret",
+            node_id="node-001",
+            provider_intelligence_report={
+                "generated_at": "2026-03-12T00:00:00Z",
+                "providers": [
+                    {
+                        "provider_id": "openai",
+                        "availability": "available",
+                        "models": [
+                            {"model_id": "gpt-4o-mini", "status": "available", "pricing_input": 0.15, "pricing_output": 0.60},
+                            {"model_id": "gpt-5-pro", "status": "unavailable", "pricing_input": None, "pricing_output": None},
+                        ],
+                    }
+                ],
+            },
+        )
+
+        provider_intelligence = adapter.last_payload["provider_intelligence"]
+        self.assertEqual([item["model_id"] for item in provider_intelligence[0]["available_models"]], ["gpt-4o-mini"])
+
+    async def test_submit_provider_intelligence_keeps_degraded_models_and_excludes_blocked_models(self):
+        adapter = _FakeHttpAdapter(200, {"status": "accepted"})
+        client = CapabilityDeclarationClient(logger=logging.getLogger("capability-client-test"), http_adapter=adapter)
+
+        await client.submit_provider_intelligence(
+            core_api_endpoint="http://10.0.0.100:9001",
+            trust_token="secret",
+            node_id="node-001",
+            provider_intelligence_report={
+                "generated_at": "2026-03-12T00:00:00Z",
+                "providers": [
+                    {
+                        "provider_id": "openai",
+                        "availability": "available",
+                        "models": [
+                            {
+                                "model_id": "gpt-5-mini",
+                                "status": "available",
+                                "pricing_input": 0.25,
+                                "pricing_output": 2.0,
+                                "latency_metrics": {"p95_latency": 140.0},
+                            },
+                            {
+                                "model_id": "gpt-5.4",
+                                "status": "degraded",
+                                "pricing_input": 1.25,
+                                "pricing_output": 10.0,
+                                "latency_metrics": {"p95_latency": 420.0},
+                            },
+                            {
+                                "model_id": "gpt-5-pro",
+                                "status": "unavailable",
+                                "pricing_input": None,
+                                "pricing_output": None,
+                                "latency_metrics": {"p95_latency": None},
+                            },
+                        ],
+                    }
+                ],
+            },
+        )
+
+        provider_intelligence = adapter.last_payload["provider_intelligence"]
+        self.assertEqual(
+            [item["model_id"] for item in provider_intelligence[0]["available_models"]],
+            ["gpt-5-mini", "gpt-5.4"],
+        )
+        metrics_models = adapter.last_payload["metrics_snapshot"]["providers"][0]["models"]
+        self.assertEqual(
+            metrics_models[1]["latency_metrics"]["p95_latency"],
+            420.0,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

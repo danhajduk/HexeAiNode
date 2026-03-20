@@ -1,4 +1,4 @@
-from ai_node.bootstrap.bootstrap_parser import build_registration_url
+from ai_node.bootstrap.bootstrap_parser import build_registration_url, resolve_registration_endpoint_path
 from ai_node.diagnostics.onboarding_logger import OnboardingDiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 
@@ -36,12 +36,10 @@ class RegistrationClient:
 
         resolved_url = bootstrap_payload.get("registration_url")
         if not resolved_url:
+            register_path = resolve_registration_endpoint_path(bootstrap_payload.get("onboarding_endpoints"))
             resolved_url = build_registration_url(
                 _require_non_empty_string(bootstrap_payload.get("api_base"), "api_base"),
-                _require_non_empty_string(
-                    bootstrap_payload.get("onboarding_endpoints", {}).get("register"),
-                    "onboarding_endpoints.register",
-                ),
+                _require_non_empty_string(register_path, "registration_endpoint_path"),
             )
         if not (resolved_url.startswith("http://") or resolved_url.startswith("https://")):
             raise ValueError("registration URL must be http/https")

@@ -202,7 +202,7 @@ export default function App() {
   const [pendingApprovalUrl, setPendingApprovalUrl] = useState("");
   const [nodeId, setNodeId] = useState("");
   const [mqttHost, setMqttHost] = useState("");
-  const [nodeName, setNodeName] = useState("main-ai-node");
+  const [nodeName, setNodeName] = useState("Main AI Node");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [restarting, setRestarting] = useState(false);
@@ -211,8 +211,6 @@ export default function App() {
   const [selectedTaskFamilies, setSelectedTaskFamilies] = useState(TASK_CAPABILITY_OPTIONS);
   const [savingProvider, setSavingProvider] = useState(false);
   const [declaringCapabilities, setDeclaringCapabilities] = useState(false);
-  const [showCapabilitySetupPopup, setShowCapabilitySetupPopup] = useState(false);
-  const [capabilityPopupDismissed, setCapabilityPopupDismissed] = useState(false);
   const [restartingServiceTarget, setRestartingServiceTarget] = useState("");
   const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
   const [providerCredentials, setProviderCredentials] = useState(null);
@@ -432,17 +430,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (backendStatus === "capability_setup_pending" && !capabilityPopupDismissed) {
-      setShowCapabilitySetupPopup(true);
-      return;
-    }
-    if (backendStatus !== "capability_setup_pending") {
-      setShowCapabilitySetupPopup(false);
-      setCapabilityPopupDismissed(false);
-    }
-  }, [backendStatus, capabilityPopupDismissed]);
-
-  useEffect(() => {
     if (!selectedOpenaiModelIds.length && latestOpenaiModels.length) {
       const savedModels = Array.isArray(providerCredentials?.credentials?.selected_model_ids)
         ? providerCredentials.credentials.selected_model_ids
@@ -567,6 +554,21 @@ export default function App() {
     : Array.isArray(resolvedNodeCapabilities?.resolved_tasks)
       ? resolvedNodeCapabilities.resolved_tasks
       : [];
+  const usableResolvedModelIds = Array.isArray(resolvedNodeCapabilities?.enabled_models)
+    ? resolvedNodeCapabilities.enabled_models
+    : Array.isArray(resolvedOpenaiCapabilities?.enabled_models)
+      ? resolvedOpenaiCapabilities.enabled_models.map((entry) => entry?.model_id).filter(Boolean)
+      : [];
+  const blockedResolvedModels = Array.isArray(resolvedNodeCapabilities?.blocked_models)
+    ? resolvedNodeCapabilities.blocked_models
+    : Array.isArray(resolvedOpenaiCapabilities?.blocked_models)
+      ? resolvedOpenaiCapabilities.blocked_models
+      : [];
+  const blockedResolvedModelMap = Object.fromEntries(
+    blockedResolvedModels
+      .filter((entry) => entry && typeof entry === "object" && entry.model_id)
+      .map((entry) => [entry.model_id, entry])
+  );
   const classifierModelUsed =
     openaiModelFeatures.find((entry) => entry?.classification_model)?.classification_model ||
     resolvedOpenaiCapabilities?.classification_model ||
@@ -1057,92 +1059,6 @@ export default function App() {
           </article>
         </section>
       ) : null}
-      {showCapabilitySetupPopup ? (
-        <section className="modal-overlay" role="dialog" aria-modal="true" aria-label="Capability setup required">
-          <article className="card modal-card">
-            <CardHeader title="Capability Setup Required" subtitle="Complete required inputs to continue onboarding." />
-            <div className="state-grid">
-              <span>Node ID</span>
-              <code>{nodeId || "unavailable"}</code>
-              <span>Core ID</span>
-              <code>{uiState.coreConnection.pairedCoreId || "unavailable"}</code>
-              <span>Core API</span>
-              <code>{uiState.coreConnection.coreApiEndpoint || "unavailable"}</code>
-            </div>
-            <form className="setup-form" onSubmit={onSaveProviderSelection}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={openaiEnabled}
-                  onChange={(event) => setOpenaiEnabled(event.target.checked)}
-                />{" "}
-                Enable OpenAI on this node
-              </label>
-              <div className="state-grid">
-                <span>Task Capabilities</span>
-                <code>{selectedTaskFamilies.join(", ") || "none_selected"}</code>
-              </div>
-              {renderTaskCapabilityToggles("modal")}
-              <div className="row">
-                <button className="btn btn-primary" type="submit" disabled={savingProvider}>
-                  {savingProvider ? "Saving..." : "Save Setup Selection"}
-                </button>
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={onDeclareCapabilities}
-                  disabled={declaringCapabilities || !capabilityDeclareAllowed}
-                >
-                  {declaringCapabilities ? "Declaring..." : "Declare Capabilities"}
-                </button>
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={() => {
-                    setShowCapabilitySetupPopup(false);
-                    setCapabilityPopupDismissed(true);
-                  }}
-                >
-                  Dismiss
-                </button>
-              </div>
-            </form>
-            {setupBlockingReasons.length ? (
-              <p className="warning tiny">
-                Blocking: <code>{setupBlockingReasons.join(", ")}</code>
-              </p>
-            ) : (
-              <p className="muted tiny">Setup is ready. Declare capabilities to continue.</p>
-            )}
-            <div className="modal-capability-data">
-              <h3>Capability Data</h3>
-              <div className="state-grid">
-                <span>Capability Status</span>
-                <code>{uiState.capabilitySummary.capabilityStatus || "unknown"}</code>
-                <span>Task Families</span>
-                <code>{uiState.capabilitySummary.selectedTaskFamilies.join(", ") || "none"}</code>
-                <span>Enabled Providers</span>
-                <code>{uiState.capabilitySummary.enabledProviders.join(", ") || "none"}</code>
-                <span>Governance Policy</span>
-                <code>{uiState.capabilitySummary.governancePolicyVersion || "unknown"}</code>
-                <span>Declare Allowed</span>
-                <StatusBadge value={capabilityDeclareAllowed ? "ready" : "blocked"} />
-                <span>Trust Ready</span>
-                <StatusBadge value={setupReadinessFlags.trust_state_valid ? "ready" : "blocked"} />
-                <span>Identity Ready</span>
-                <StatusBadge value={setupReadinessFlags.node_identity_valid ? "ready" : "blocked"} />
-                <span>Provider Ready</span>
-                <StatusBadge value={setupReadinessFlags.provider_selection_valid ? "ready" : "blocked"} />
-                <span>Task Capability Ready</span>
-                <StatusBadge value={setupReadinessFlags.task_capability_selection_valid ? "ready" : "blocked"} />
-                <span>Runtime Context</span>
-                <StatusBadge value={setupReadinessFlags.core_runtime_context_valid ? "ready" : "blocked"} />
-              </div>
-            </div>
-          </article>
-        </section>
-      ) : null}
-      {null}
       {!isProviderSetupRoute ? (
         <section className="card hero">
         <h1>Synthia AI Node</h1>
@@ -1305,11 +1221,16 @@ export default function App() {
                           (() => {
                             const capabilityEntry = openaiCapabilityById[model.model_id] || null;
                             const pricingEntry = openaiModelPriceById[model.model_id] || null;
+                            const blockedEntry = blockedResolvedModelMap[model.model_id] || null;
                             const capabilityBadges = getCapabilityBadges(capabilityEntry);
                             const pricingRows = getModelPricingRows(pricingEntry);
                             const statusBadges = [
                               selectedOpenaiModelIds.includes(model.model_id) ? "Selected" : null,
-                              enabledOpenaiModelIds.includes(model.model_id) ? "Enabled" : null,
+                              enabledOpenaiModelIds.includes(model.model_id) ? "Enabled selection" : null,
+                              usableResolvedModelIds.includes(model.model_id) ? "Usable" : null,
+                              blockedEntry && Array.isArray(blockedEntry.blockers) && blockedEntry.blockers.length
+                                ? `Blocked: ${blockedEntry.blockers.join(",")}`
+                                : null,
                               pricingEntry?.pricing_status ? formatTierLabel(pricingEntry.pricing_status) : null,
                             ].filter(Boolean);
                             return (
@@ -1323,7 +1244,17 @@ export default function App() {
                           >
                             <div className="model-card-header">
                               <strong>{model.model_id}</strong>
-                              <StatusBadge value={enabledOpenaiModelIds.includes(model.model_id) ? "enabled" : "available"} />
+                              <StatusBadge
+                                value={
+                                  usableResolvedModelIds.includes(model.model_id)
+                                    ? "ready"
+                                    : blockedEntry
+                                      ? "blocked"
+                                      : enabledOpenaiModelIds.includes(model.model_id)
+                                        ? "enabled"
+                                        : "available"
+                                }
+                              />
                             </div>
                             <div className="capability-badge-list">
                               <span className="capability-badge">{formatModelFamily(capabilityEntry?.family || model.family)}</span>
@@ -1492,13 +1423,16 @@ export default function App() {
         <section className="card setup-card">
           <h2>Setup Node</h2>
           <p className="muted">
-            Node is <code>UNCONFIGURED</code>. Enter bootstrap MQTT host to begin onboarding.
+            Node is <code>UNCONFIGURED</code>. Enter the bootstrap MQTT host and a friendly name to begin onboarding.
           </p>
           {nodeId ? (
             <p className="muted tiny">
               This node identity is fixed for onboarding: <code>{nodeId}</code>
             </p>
           ) : null}
+          <p className="muted tiny">
+            Friendly name is sent to Core as <code>node_name</code>. Spaces are allowed.
+          </p>
           <form onSubmit={onSubmit} className="setup-form">
             <label>
               MQTT Host
@@ -1510,11 +1444,11 @@ export default function App() {
               />
             </label>
             <label>
-              Node Name
+              Friendly Node Name
               <input
                 value={nodeName}
                 onChange={(event) => setNodeName(event.target.value)}
-                placeholder="main-ai-node"
+                placeholder="Main AI Node"
                 required
               />
             </label>
@@ -1697,8 +1631,16 @@ export default function App() {
           <article className="card capability-summary-card">
             <CardHeader title="Resolved Node Capabilities" subtitle="Capability graph output from enabled model features." />
             <div className="state-grid">
-              <span>Enabled Models</span>
-              <code>{(resolvedNodeCapabilities?.enabled_models || enabledOpenaiModelIds).join(", ") || "none_enabled"}</code>
+              <span>Usable Models</span>
+              <code>{usableResolvedModelIds.join(", ") || "none_usable"}</code>
+              <span>Blocked Models</span>
+              <code>
+                {blockedResolvedModels
+                  .map((entry) =>
+                    `${entry?.model_id || "unknown"}${Array.isArray(entry?.blockers) && entry.blockers.length ? ` (${entry.blockers.join(",")})` : ""}`
+                  )
+                  .join(", ") || "none_blocked"}
+              </code>
               <span>Classifier Model Used</span>
               <code>{classifierModelUsed}</code>
             </div>
@@ -1852,7 +1794,7 @@ export default function App() {
                 <button
                   className="btn btn-primary"
                   type="button"
-                  onClick={() => runAdminAction("redeclare_capabilities", "/api/capabilities/redeclare", { force_refresh: false })}
+                  onClick={() => runAdminAction("redeclare_capabilities", "/api/capabilities/redeclare", { force_refresh: true })}
                   disabled={Boolean(runningAdminAction)}
                 >
                   {runningAdminAction === "redeclare_capabilities" ? "Redeclaring..." : "Redeclare Capabilities To Core"}

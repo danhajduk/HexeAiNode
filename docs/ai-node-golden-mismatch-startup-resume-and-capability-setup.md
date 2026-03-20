@@ -1,6 +1,6 @@
 # AI Node Golden Mismatch Report - Trusted Startup Resume and Capability Setup Contract
 
-Status: Open
+Status: Resolved
 Generated: 2026-03-12
 Scope:
 - Local runtime code: `src/ai_node/main.py`, `src/ai_node/runtime/capability_declaration_runner.py`, `src/ai_node/runtime/node_control_api.py`
@@ -11,6 +11,13 @@ Scope:
 
 - Total findings: 2
 - Highest-risk drift: trusted startup can now fast-path to operational in code, but golden lifecycle docs do not yet document this conditional path.
+
+Resolution note:
+
+- As of 2026-03-19, the canonical Core docs under `docs/Core-Documents` now cover:
+  - trusted startup fast-path continuation
+  - readiness/lifecycle compatibility wording for `operational_ready`
+  - node-local setup payload boundary
 
 ## Finding 1: Trusted startup fast-path operational resume missing in golden docs
 

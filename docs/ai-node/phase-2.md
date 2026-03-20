@@ -2,7 +2,7 @@
 
 Status: Active
 Implementation status: Implemented (core scope) + Partially implemented (Phase 2 extension scaffolding)
-Last updated: 2026-03-12
+Last updated: 2026-03-19
 
 ## Goal
 Allow nodes to declare their AI capabilities and receive governance policies.
@@ -46,13 +46,18 @@ Core implemented lifecycle path:
 
 Additional implemented runtime behavior:
 
-- trusted startup can fast-path to operational when accepted capability + fresh governance + operational MQTT readiness already exist
-- temporary failures in declaration/governance/readiness/telemetry can move node to `degraded`
+- trusted startup can fast-path to operational when accepted capability + fresh governance already exist
+- temporary failures in capability declaration or governance sync can move node to `degraded`
+- operational MQTT readiness and trusted telemetry publish status are retained as runtime health signals after acceptance rather than post-acceptance lifecycle gates
 - deterministic recovery path (`POST /api/node/recover`) returns to:
-  - `operational` when prerequisites are complete
+  - `operational` when accepted capability + fresh governance are present
   - `capability_setup_pending` otherwise
 
-## Phase 2 Extension (Implemented Scaffold)
+## Phase Boundary Note
+
+Per `docs/Core-Documents/nodes/node-capability-activation-architecture.md`, Phase 2 covers capability declaration, governance issuance/refresh, operational status, and lifecycle/governance telemetry only.
+
+## Prompt / Execution Scaffold (Out Of Phase 2 Core Scope)
 
 Node-local scaffolding now exists for next-phase prompt controls:
 
@@ -60,7 +65,7 @@ Node-local scaffolding now exists for next-phase prompt controls:
 - probation transitions
 - execution authorization endpoint with deny-by-default behavior for unregistered prompts
 
-This extension is implemented locally and documented in node-control API contract, but Core-side prompt registry/policy integration remains future scope.
+This scaffold is implemented locally and documented in the node-control API contract, but it aligns with the Core roadmap's prompt-governance phase rather than the Core Phase 2 baseline. It should not be used as the criterion for calling Phase 2 complete.
 
 ## See Also
 

@@ -51,6 +51,7 @@ This is the canonical source-of-truth contract for:
 - Request:
   - `mqtt_host: string`
   - `node_name: string`
+    Human-friendly node label sent to Core. Spaces are allowed; only a non-empty value is required.
 - Success: updated node status payload.
 - Error:
   - `400` for invalid lifecycle/input.
@@ -517,6 +518,27 @@ Current enforcement model:
 - deny while prompt is in probation
 - deny when requested task family mismatches registered task family
 - allow only for registered prompt IDs with matching task family and non-probation status
+
+### Direct execution request
+
+- `POST /api/execution/direct`
+- Request:
+  - canonical `TaskExecutionRequest` payload
+  - includes broader existing fields such as `prompt_id`, `requested_provider`, `requested_model`, `constraints`, `timeout_s`, `trace_id`, and optional `lease_id`
+- Response:
+  - canonical `TaskExecutionResult` payload
+  - terminal result is returned directly for completed, rejected, failed, degraded, or unsupported execution
+- Error:
+  - `400` when direct execution runtime wiring is not configured
+  - `422` when request validation fails before execution starts
+
+Execution behavior:
+
+- reuses the shared `TaskExecutionService`
+- enforces prompt authorization when `prompt_id` is present
+- validates against the existing broader declared/accepted task families
+- resolves provider/model from current local usable provider state
+- applies governance before and after provider resolution
 
 ## Provider Debug Endpoints
 

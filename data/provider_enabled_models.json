@@ -2,36 +2,16 @@
   "models": [
     {
       "enabled": true,
-      "model_id": "gpt-5.4",
-      "selected_at": "2026-03-14T02:27:35.733882+00:00"
-    },
-    {
-      "enabled": true,
-      "model_id": "gpt-5-nano",
-      "selected_at": "2026-03-14T02:27:38.015336+00:00"
-    },
-    {
-      "enabled": true,
       "model_id": "gpt-5-mini",
       "selected_at": "2026-03-14T02:27:39.771239+00:00"
     },
     {
       "enabled": true,
-      "model_id": "tts-1",
-      "selected_at": "2026-03-14T02:27:50.406417+00:00"
-    },
-    {
-      "enabled": true,
-      "model_id": "omni-moderation-2024-09-26",
-      "selected_at": "2026-03-14T02:27:54.434014+00:00"
-    },
-    {
-      "enabled": true,
-      "model_id": "gpt-image-1-mini",
-      "selected_at": "2026-03-15T06:42:52.771209+00:00"
+      "model_id": "gpt-5-nano",
+      "selected_at": "2026-03-14T02:27:38.015336+00:00"
     }
   ],
   "provider_id": "openai",
   "schema_version": "1.0",
-  "updated_at": "2026-03-15T06:43:14.146911+00:00"
+  "updated_at": "2026-03-20T01:34:16.781360+00:00"
 }

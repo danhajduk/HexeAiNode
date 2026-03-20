@@ -15,7 +15,7 @@ from ai_node.trust.trust_store import TrustStateStore
 
 def _is_loopback_host(value: object) -> bool:
     host = str(value or "").strip().lower()
-    return host in {"127.0.0.1", "localhost", "::1"}
+    return host in {"127.0.0.1", "localhost", "0.0.0.0", "::1"}
 
 
 class HttpxJsonAdapter:

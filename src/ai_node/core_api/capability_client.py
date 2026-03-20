@@ -276,6 +276,8 @@ def _compatibility_payload_from_discovery_report(*, report: dict) -> dict:
             model_id = str(model_entry.get("id") or model_entry.get("model_id") or "").strip()
             if not model_id:
                 continue
+            if str(model_entry.get("status") or "available").strip().lower() not in {"available", "degraded"}:
+                continue
             pricing = model_entry.get("pricing")
             latency = model_entry.get("latency_metrics")
             available_models.append(
@@ -313,6 +315,8 @@ def _provider_intelligence_list_from_structured(*, structured: dict) -> list[dic
                 continue
             model_id = str(model.get("model_id") or "").strip()
             if not model_id:
+                continue
+            if str(model.get("status") or "available").strip().lower() not in {"available", "degraded"}:
                 continue
             pricing: dict = {}
             if isinstance(model.get("pricing_input_tokens"), (int, float)):

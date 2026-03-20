@@ -233,3 +233,42 @@ Task 250: Add unit tests for family-specific extraction prompts - Completed on 0
 Task 251: Add integration test for end-to-end pricing refresh - Completed on 03/14/2026 18:43
 Task 252: Update provider setup and refresh UI for section-based pricing extraction - Completed on 03/14/2026 18:46
 Task 253: Document section-based pricing extraction architecture - Completed on 03/14/2026 18:47
+Task 254: Update the local Phase 2 validation checklist to match current lifecycle, telemetry, and recovery behavior - Completed on 03/19/2026 16:44
+Task 255: Update local Phase 2 docs to reflect operational readiness as runtime health instead of a post-acceptance lifecycle blocker - Completed on 03/19/2026 16:44
+Task 258: Decide and document whether prompt registration, probation, and execution authorization remain Phase 2 extension scaffolding or required Phase 2 completion scope - Completed on 03/19/2026 16:44
+Task 260: Add or refresh Phase 2 completion-gate verification commands and evidence in local docs - Completed on 03/19/2026 16:44
+Task 256: Run and document a live end-to-end Phase 2 validation pass against Core - Completed on 03/19/2026 16:45
+Task 259: If Phase 2 extension scope is required, align prompt/probation/authorization APIs with canonical Core docs - Completed on 03/19/2026 16:46
+Task 262: Validate and document selected-but-incomplete OpenAI models as visible locally but unavailable for routing and declaration - Completed on 03/19/2026 16:46
+Task 263: Add or refresh mixed usable-and-blocked model integration coverage for provider-intelligence submission - Completed on 03/19/2026 16:46
+Task 264: Validate and document that saved manual pricing overrides are never overwritten by later refreshes - Completed on 03/19/2026 16:46
+Task 267: Update local Phase 4 docs to reflect filtered usable-model declaration, blocked-model handling, and pricing override preservation - Completed on 03/19/2026 16:46
+Task 268: Document the boundary between node-side Phase 4 completion and remaining Core-side routing and policy work - Completed on 03/19/2026 16:46
+Task 266: Audit the UI for consistent selected, usable, and blocked model presentation across all provider and capability views - Completed on 03/19/2026 16:48
+Task 261: Run a live end-to-end Phase 4 validation pass confirming only usable models are submitted to Core as available models - Completed on 03/19/2026 17:07
+Task 257: Resolve golden-doc drift for trusted startup fast-path and capability setup payload shape - Completed on 03/19/2026 17:12
+Task 265: Verify provider metrics payloads are persisted and exposed in the form Core expects for routing inputs - Completed on 03/19/2026 17:12
+Task 267: Create Phase 3 Architecture Document - Completed on 03/19/2026 17:23
+Task 268: Define Canonical Task Request Envelope - Completed on 03/19/2026 17:25
+Task 269: Define Canonical Task Result Envelope - Completed on 03/19/2026 17:29
+Task 270: Define Task Family Vocabulary v1 - Completed on 03/19/2026 17:29
+Task 271: Implement Task Family Validation - Completed on 03/19/2026 17:29
+Task 272: Define Provider Selection Policy - Completed on 03/19/2026 17:32
+Task 273: Implement Provider Resolver - Completed on 03/19/2026 17:37
+Task 274: Define Execution Lifecycle States - Completed on 03/19/2026 17:38
+Task 275: Implement Task Execution Service - Completed on 03/19/2026 17:41
+Task 276: Implement Task Router - Completed on 03/19/2026 17:43
+Task 277: Define Handler Pipeline - Completed on 03/19/2026 17:44
+Task 278: Implement Baseline Task Handlers - Completed on 03/19/2026 17:48
+Task 279: Implement Provider Abstraction Layer - Completed on 03/19/2026 17:50
+Task 280: Define Governance Enforcement in Execution - Completed on 03/19/2026 17:52
+Task 281: Implement Scheduler Lease Integration - Completed on 03/19/2026 17:54
+Task 282: Implement Lease Execution Mode - Completed on 03/19/2026 17:57
+Task 283: Implement Direct Execution Mode - Completed on 03/19/2026 18:03
+Task 284: Define Input Validation Rules - Completed on 03/19/2026 18:03
+Task 285: Define Failure Code Taxonomy - Completed on 03/19/2026 18:03
+Task 286: Implement Degraded Mode Behavior - Completed on 03/19/2026 18:20
+Task 287: Extend Telemetry for Task Execution - Completed on 03/19/2026 18:25
+Task 288: Implement Execution Metrics - Completed on 03/19/2026 18:29
+Task 289: Implement Observability Hooks - Completed on 03/19/2026 18:32
+Task 290: Implement Contract Tests - Completed on 03/19/2026 18:34

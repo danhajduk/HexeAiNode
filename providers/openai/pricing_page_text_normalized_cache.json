@@ -1,7 +1,7 @@
 {
   "fetch_status": "primary_markdown",
-  "fetched_at": "2026-03-15T06:39:49.533199+00:00",
+  "fetched_at": "2026-03-19T23:46:46.612539+00:00",
   "source_url": "https://developers.openai.com/api/docs/pricing.md",
-  "text": "# Pricing\n\nPricingTable,\nTextTokenPricingTables,\nImagePricingTable,\nwithDataSharing,\n} from \"./pricing.jsx\";",
-  "text_length": 108
+  "text": "<section><p>gpt-5-mini Input $0.25 Output $2.00</p></section>",
+  "text_length": 61
 }

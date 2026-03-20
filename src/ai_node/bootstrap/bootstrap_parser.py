@@ -20,6 +20,13 @@ REQUIRED_FIELDS = (
 )
 
 
+REGISTRATION_ENDPOINT_KEYS = (
+    "register_session",
+    "ai_node_register",
+    "register",
+)
+
+
 def _is_non_empty_string(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
@@ -37,13 +44,25 @@ def parse_bootstrap_payload(raw_payload: object) -> Tuple[bool, object]:
         return False, "invalid_json"
 
 
+def resolve_registration_endpoint_path(onboarding_endpoints: object) -> str:
+    if not isinstance(onboarding_endpoints, dict):
+        raise ValueError("onboarding_endpoints is required")
+
+    for key in REGISTRATION_ENDPOINT_KEYS:
+        candidate = onboarding_endpoints.get(key)
+        if _is_non_empty_string(candidate):
+            return str(candidate).strip()
+
+    raise ValueError("onboarding_endpoints.register_session (or legacy register) is required")
+
+
 def build_registration_url(api_base: str, register_path: str) -> str:
     api = str(api_base or "").strip()
     path = str(register_path or "").strip()
     if not _is_non_empty_string(api):
         raise ValueError("api_base is required")
     if not _is_non_empty_string(path):
-        raise ValueError("onboarding_endpoints.register is required")
+        raise ValueError("registration endpoint path is required")
 
     parsed = urlparse(api)
     if not parsed.scheme or not parsed.netloc:
@@ -73,10 +92,6 @@ def validate_bootstrap_payload(
     if any(field not in payload for field in REQUIRED_FIELDS):
         return False, "missing_required_fields"
 
-    register = payload.get("onboarding_endpoints", {}).get("register")
-    if not _is_non_empty_string(register):
-        return False, "missing_register_endpoint"
-
     topic = str(payload["topic"]).strip()
     bootstrap_version = int(payload["bootstrap_version"])
     core_id = str(payload["core_id"]).strip()
@@ -87,7 +102,10 @@ def validate_bootstrap_payload(
     mqtt_port = int(payload["mqtt_port"])
     onboarding_mode = str(payload["onboarding_mode"]).strip()
     emitted_at = str(payload["emitted_at"]).strip()
-    register_endpoint = str(register).strip()
+    try:
+        register_endpoint = resolve_registration_endpoint_path(payload.get("onboarding_endpoints"))
+    except ValueError:
+        return False, "missing_register_endpoint"
 
     if topic != expected_topic:
         return False, "invalid_topic"
@@ -120,8 +138,9 @@ def validate_bootstrap_payload(
         "api_base": api_base,
         "mqtt_host": mqtt_host,
         "mqtt_port": mqtt_port,
-        "onboarding_endpoints": {"register": register_endpoint},
+        "onboarding_endpoints": payload["onboarding_endpoints"],
         "onboarding_mode": onboarding_mode,
         "emitted_at": emitted_at,
+        "registration_endpoint_path": register_endpoint,
         "registration_url": registration_url,
     }

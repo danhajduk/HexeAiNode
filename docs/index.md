@@ -17,7 +17,7 @@
 
 ## Integration With Synthia Core
 
-- [Core References](./core-references.md): canonical platform documents and local symlink hints.
+- [Core References](./core-references.md): canonical platform documents and `docs/Core-Documents` symlink hints.
 - [Documentation Policy](./README.md): what stays in this repo versus what belongs in Core.
 
 ## Operations

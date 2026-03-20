@@ -5,6 +5,7 @@ from ai_node.bootstrap.bootstrap_client import BootstrapClient
 from ai_node.bootstrap.bootstrap_parser import (
     build_registration_url,
     parse_bootstrap_payload,
+    resolve_registration_endpoint_path,
     validate_bootstrap_payload,
 )
 from ai_node.config.bootstrap_config import create_bootstrap_config
@@ -73,7 +74,10 @@ class Phase1ABootstrapTests(unittest.IsolatedAsyncioTestCase):
             "api_base": "http://192.168.1.50:9001",
             "mqtt_host": "192.168.1.50",
             "mqtt_port": 1884,
-            "onboarding_endpoints": {"register": "/api/nodes/register"},
+            "onboarding_endpoints": {
+                "register_session": "/api/system/nodes/onboarding/sessions",
+                "register": "/api/nodes/register",
+            },
             "onboarding_mode": "api",
             "emitted_at": "2026-03-11T18:21:00Z",
         }
@@ -81,7 +85,14 @@ class Phase1ABootstrapTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(parsed_ok)
         valid_ok, valid_value = validate_bootstrap_payload(parsed_value)
         self.assertTrue(valid_ok)
-        self.assertEqual(valid_value["registration_url"], "http://192.168.1.50:9001/api/nodes/register")
+        self.assertEqual(
+            valid_value["registration_endpoint_path"],
+            "/api/system/nodes/onboarding/sessions",
+        )
+        self.assertEqual(
+            valid_value["registration_url"],
+            "http://192.168.1.50:9001/api/system/nodes/onboarding/sessions",
+        )
 
         invalid_ok, invalid_error = validate_bootstrap_payload({**sample, "onboarding_mode": "mqtt"})
         self.assertFalse(invalid_ok)
@@ -95,12 +106,28 @@ class Phase1ABootstrapTests(unittest.IsolatedAsyncioTestCase):
 
     def test_build_registration_url(self):
         self.assertEqual(
-            build_registration_url("http://core.local:9001", "/api/nodes/register"),
-            "http://core.local:9001/api/nodes/register",
+            build_registration_url("http://core.local:9001", "/api/system/nodes/onboarding/sessions"),
+            "http://core.local:9001/api/system/nodes/onboarding/sessions",
         )
         self.assertEqual(
-            build_registration_url("http://core.local:9001/api/", "nodes/register"),
-            "http://core.local:9001/api/nodes/register",
+            build_registration_url("http://core.local:9001/api/", "system/nodes/onboarding/sessions"),
+            "http://core.local:9001/api/system/nodes/onboarding/sessions",
+        )
+
+    def test_resolve_registration_endpoint_path_prefers_canonical_endpoint(self):
+        self.assertEqual(
+            resolve_registration_endpoint_path(
+                {
+                    "register_session": "/api/system/nodes/onboarding/sessions",
+                    "ai_node_register": "/api/system/ai-nodes/onboarding/sessions",
+                    "register": "/api/nodes/register",
+                }
+            ),
+            "/api/system/nodes/onboarding/sessions",
+        )
+        self.assertEqual(
+            resolve_registration_endpoint_path({"register": "/api/nodes/register"}),
+            "/api/nodes/register",
         )
 
     async def test_bootstrap_client_discovers_core_payload(self):
@@ -126,7 +153,7 @@ class Phase1ABootstrapTests(unittest.IsolatedAsyncioTestCase):
             "api_base": "http://192.168.1.50:9001",
             "mqtt_host": "192.168.1.50",
             "mqtt_port": 1884,
-            "onboarding_endpoints": {"register": "/api/nodes/register"},
+            "onboarding_endpoints": {"register_session": "/api/system/nodes/onboarding/sessions"},
             "onboarding_mode": "api",
             "emitted_at": "2026-03-11T18:21:00Z",
         }

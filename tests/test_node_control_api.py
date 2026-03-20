@@ -4,7 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
+from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
 from ai_node.runtime.node_control_api import NodeControlState
 
 
@@ -13,10 +15,22 @@ class NodeControlApiTests(unittest.TestCase):
         def __init__(self):
             self.refresh_calls = 0
             self.openai_reload_calls = 0
+            self.last_execution_request = None
 
         async def refresh(self):
             self.refresh_calls += 1
             return {"providers": []}
+
+        async def execute(self, request):
+            self.last_execution_request = request
+            return UnifiedExecutionResponse(
+                provider_id=str(request.requested_provider or "openai"),
+                model_id=str(request.requested_model or "gpt-5-mini"),
+                output_text="mock:hello world",
+                usage=UnifiedExecutionUsage(prompt_tokens=2, completion_tokens=4, total_tokens=6),
+                latency_ms=12.5,
+                estimated_cost=0.001,
+            )
 
         async def refresh_openai_models_from_saved_credentials(self):
             self.openai_reload_calls += 1
@@ -46,6 +60,54 @@ class NodeControlApiTests(unittest.TestCase):
                 "unknown_models": [],
                 "last_error": None,
                 "notes": ["live_pricing_scrape_disabled"],
+            }
+
+        def provider_selection_context_payload(self):
+            return {
+                "enabled_providers": ["openai"],
+                "default_provider": "openai",
+                "default_model_by_provider": {"openai": "gpt-5-mini"},
+                "provider_retry_count": {"openai": 1},
+                "provider_health": {"openai": {"availability": "available"}},
+                "available_models_by_provider": {"openai": ["gpt-5-mini"]},
+                "usable_models_by_provider": {"openai": ["gpt-5-mini"]},
+            }
+
+        def node_capabilities_payload(self):
+            return {
+                "schema_version": "1.0",
+                "capability_graph_version": "1.0",
+                "enabled_models": ["gpt-5-mini"],
+                "feature_union": {"classification": True},
+                "resolved_tasks": ["task.classification.text"],
+                "enabled_task_capabilities": ["task.classification.text"],
+                "generated_at": "2026-03-13T00:00:00Z",
+                "source": "node_capabilities",
+            }
+
+        def metrics_snapshot(self):
+            return {
+                "providers": {
+                    "openai": {
+                        "models": {
+                            "gpt-5-mini": {
+                                "avg_latency": 15.0,
+                                "p95_latency": 20.0,
+                                "total_requests": 20,
+                                "successful_requests": 19,
+                                "failed_requests": 1,
+                                "failure_classes": {"TimeoutError": 1},
+                                "success_rate": 0.95,
+                            }
+                        },
+                        "totals": {
+                            "total_requests": 20,
+                            "successful_requests": 19,
+                            "failed_requests": 1,
+                            "success_rate": 0.95,
+                        },
+                    }
+                }
             }
 
     class _FakeBootstrapRunner:
@@ -169,6 +231,8 @@ class NodeControlApiTests(unittest.TestCase):
 
         def status_payload(self):
             return {
+                "accepted_profile": {"declared_task_families": ["task.classification.text"]},
+                "governance_bundle": {"generic_node_class_rules": {"allow_task_families": ["classification"]}},
                 "provider_capability_report": {
                     "providers": [
                         {
@@ -219,6 +283,73 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(payload["identity_state"], "valid")
             self.assertEqual(payload["node_id"], "123e4567-e89b-42d3-a456-426614174000")
 
+    def test_execute_direct_returns_completed_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            runtime_manager = self._FakeProviderRuntimeManager()
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_runtime_manager=runtime_manager,
+                capability_runner=self._FakeCapabilityRunner(),
+                task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
+                prompt_service_state_store=self._FakePromptServiceStateStore(),
+            )
+
+            result = asyncio.run(
+                state.execute_direct(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-001",
+                            "task_family": "task.classification.text",
+                            "requested_by": "service.alpha",
+                            "requested_provider": "openai",
+                            "requested_model": "gpt-5-mini",
+                            "inputs": {"text": "hello"},
+                            "timeout_s": 45,
+                            "trace_id": "trace-001",
+                        }
+                    )
+                )
+            )
+
+            self.assertEqual(result["status"], "completed")
+            self.assertEqual(result["provider_used"], "openai")
+            self.assertEqual(result["model_used"], "gpt-5-mini")
+            self.assertIsNotNone(runtime_manager.last_execution_request)
+
+            observability = state.execution_observability_payload()
+            self.assertTrue(observability["configured"])
+            self.assertEqual(len(observability["recent_history"]), 1)
+            self.assertEqual(observability["recent_history"][0]["state"], "completed")
+            self.assertEqual(observability["provider_usage"]["openai"]["total_requests"], 20)
+            self.assertEqual(observability["model_usage"]["openai:gpt-5-mini"]["success_rate"], 0.95)
+
+    def test_execute_direct_requires_runtime_manager(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+            )
+
+            with self.assertRaisesRegex(ValueError, "direct execution is not configured"):
+                asyncio.run(
+                    state.execute_direct(
+                        request=TaskExecutionRequest.model_validate(
+                            {
+                                "task_id": "task-002",
+                                "task_family": "task.classification.text",
+                                "requested_by": "service.alpha",
+                                "inputs": {"text": "hello"},
+                                "trace_id": "trace-002",
+                            }
+                        )
+                    )
+                )
+
     def test_initiate_onboarding_persists_config_and_moves_state(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "bootstrap_config.json"
@@ -239,6 +370,26 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(lifecycle.get_state(), NodeLifecycleState.BOOTSTRAP_CONNECTING)
             self.assertEqual(len(runner.calls), 1)
             self.assertEqual(runner.calls[0]["topic"], "synthia/bootstrap/core")
+
+    def test_initiate_onboarding_preserves_friendly_node_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bootstrap_config.json"
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            runner = self._FakeBootstrapRunner()
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(path),
+                logger=logging.getLogger("node-control-test"),
+                bootstrap_runner=runner,
+            )
+
+            state.initiate_onboarding(
+                mqtt_host="10.0.0.100",
+                node_name="Main AI Node",
+            )
+
+            self.assertEqual(runner.calls[0]["node_name"], "Main AI Node")
+            self.assertIn('"node_name": "Main AI Node"', path.read_text(encoding="utf-8"))
 
     def test_existing_config_load_moves_state_to_bootstrap_connecting(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -412,7 +563,7 @@ class NodeControlApiTests(unittest.TestCase):
             payload = state.status_payload()
             self.assertTrue(payload["capability_setup"]["declaration_allowed"])
 
-    def test_capability_declaration_gate_blocks_when_openai_enabled_models_are_not_classified_and_priced(self):
+    def test_capability_declaration_gate_blocks_when_no_openai_models_are_usable(self):
         class _OpenAiIncompleteRuntimeManager:
             def openai_enabled_models_payload(self):
                 return {
@@ -474,8 +625,7 @@ class NodeControlApiTests(unittest.TestCase):
             )
             payload = state.status_payload()
             self.assertFalse(payload["capability_setup"]["declaration_allowed"])
-            self.assertIn("openai_enabled_models_not_classified", payload["capability_setup"]["blocking_reasons"])
-            self.assertIn("openai_pricing_refresh_not_completed", payload["capability_setup"]["blocking_reasons"])
+            self.assertIn("openai_usable_models_required_before_declare", payload["capability_setup"]["blocking_reasons"])
 
     def test_prompt_service_registration_probation_and_execution_authorization(self):
         with tempfile.TemporaryDirectory() as tmp:

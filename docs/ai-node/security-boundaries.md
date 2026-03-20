@@ -53,9 +53,16 @@ Allowed payload fields:
 - `api_base`
 - `mqtt_host`
 - `mqtt_port`
-- `onboarding_endpoints.register`
+- `onboarding_endpoints.register_session`
 - `onboarding_mode`
 - `emitted_at`
+
+Compatibility metadata that may also appear:
+
+- `onboarding_endpoints.registrations`
+- `onboarding_endpoints.register`
+- `onboarding_endpoints.ai_node_register`
+- `onboarding_contract`
 
 Validation constraints:
 

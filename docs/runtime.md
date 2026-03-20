@@ -4,7 +4,7 @@
 
 - without trust state, the node starts from `unconfigured` and enters bootstrap onboarding when configured
 - with valid trust state, startup resumes through `trusted -> capability_setup_pending`
-- trusted resume may continue to operational when accepted capability, fresh governance, and operational MQTT readiness are already valid
+- trusted resume may continue to operational when accepted capability and fresh governance are already valid
 
 ## Reconnect And Retry Behavior
 
@@ -31,13 +31,16 @@
 - pricing schema uses `null` for non-applicable fields instead of `0.0` placeholders (for example, STT/TTS token fields)
 - live OpenAI API pricing extraction is disabled by default and `POST /api/providers/openai/pricing/refresh` returns `status = manual_only` until `SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED=true`
 - optional manual pricing overrides are loaded from `providers/openai/provider_model_pricing_overrides.json`
+- manual pricing saves are persisted into the overrides store so later refreshes do not overwrite saved operator prices
 - section-level diagnostics are cached for admin/debug visibility (target models, section source, prompt used, raw result, validation result)
 - the provider setup UI reads family-aware pricing from the saved catalog: token models show input/output token prices, and non-token families use `normalized_price` + `normalized_unit`
 
 ## Capability Declaration Gate
 
 - capability declaration is manual (`POST /api/capabilities/declare`) and is not auto-triggered by provider/config refresh endpoints
-- declaration is blocked until enabled OpenAI models are present, classified, and priced
+- declaration is blocked until at least one enabled OpenAI model is usable for declaration
+- selected OpenAI models that are missing classification or pricing remain visible locally but are treated as unavailable for routing/declaration payloads
+- provider intelligence submission excludes unavailable models from `available_models` so Core routing inputs reflect only usable models
 
 ## Registration And Trust Assumptions
 
@@ -51,9 +54,13 @@
 - `GET /api/node/status` exposes lifecycle, trusted runtime context, capability setup state, capability runtime state, and service status
 - trusted status telemetry publishes over operational MQTT only
 
+## Runtime Health
+
+- operational MQTT readiness is tracked as runtime health and telemetry context; it is not the lifecycle criterion for entering `operational`
+
 ## Degraded Behavior
 
-- temporary capability submission, governance sync, operational readiness, or telemetry failures can transition the node to `degraded`
+- temporary capability submission, governance sync, or telemetry failures can transition the node to `degraded`
 - recovery is explicit through the control API and startup resume logic
 
 ## Shutdown Behavior

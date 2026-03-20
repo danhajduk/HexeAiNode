@@ -44,7 +44,7 @@ Phase 1 excludes AI execution and provider runtime features.
   - `api_base`
   - `mqtt_host`
   - `mqtt_port`
-  - `onboarding_endpoints.register`
+  - `onboarding_endpoints.register_session`
   - `onboarding_mode`
   - `emitted_at`
 

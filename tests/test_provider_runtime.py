@@ -290,12 +290,19 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     )
                 ],
             )
+            runtime._registry.register_provider(provider_id="openai", adapter=MockProviderAdapter(provider_id="openai"))  # noqa: SLF001
+            runtime._registry.set_models_for_provider(  # noqa: SLF001
+                provider_id="openai",
+                models=[ModelCapability(model_id="gpt-5-mini", display_name="gpt-5-mini", status="available")],
+            )
             runtime.save_openai_enabled_models(model_ids=["gpt-5-mini"])
 
             enabled_payload = runtime.openai_enabled_models_payload()
+            usable_payload = runtime.openai_usable_models_payload()
             resolved_payload = runtime.openai_resolved_capabilities_payload()
 
             self.assertEqual(enabled_payload["models"][0]["model_id"], "gpt-5-mini")
+            self.assertEqual(usable_payload["usable_model_ids"], ["gpt-5-mini"])
             self.assertTrue(resolved_payload["capabilities"]["reasoning"])
             self.assertEqual(resolved_payload["capabilities"]["coding_strength"], "high")
 
@@ -332,6 +339,22 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 classification_model="gpt-5-mini",
                 entries=[{"model_id": "gpt-5-mini", "features": {"reasoning": True, "chat": True}}],
             )
+            runtime._provider_model_capabilities_store.save(  # noqa: SLF001
+                classification_model="gpt-5-mini",
+                entries=[
+                    ProviderModelCapabilityEntry(
+                        model_id="gpt-5-mini",
+                        family="llm",
+                        text_generation=True,
+                        reasoning=True,
+                    )
+                ],
+            )
+            runtime._registry.register_provider(provider_id="openai", adapter=MockProviderAdapter(provider_id="openai"))  # noqa: SLF001
+            runtime._registry.set_models_for_provider(  # noqa: SLF001
+                provider_id="openai",
+                models=[ModelCapability(model_id="gpt-5-mini", display_name="gpt-5-mini", status="available")],
+            )
 
             runtime.save_openai_enabled_models(model_ids=["gpt-5-mini"])
 
@@ -339,6 +362,41 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             payload = runtime.node_capabilities_payload()
             self.assertEqual(payload["enabled_models"], ["gpt-5-mini"])
             self.assertEqual(payload["enabled_task_capabilities"], ["task.chat", "task.reasoning"])
+
+    async def test_usable_models_exclude_unavailable_selected_models(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["openai"]),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                provider_model_capabilities_path=str(Path(tmp) / "provider_model_capabilities.json"),
+                provider_enabled_models_path=str(Path(tmp) / "provider_enabled_models.json"),
+            )
+            runtime._provider_model_capabilities_store.save(  # noqa: SLF001
+                classification_model="deterministic_rules",
+                entries=[
+                    ProviderModelCapabilityEntry(
+                        model_id="gpt-5-mini",
+                        family="llm",
+                        text_generation=True,
+                    )
+                ],
+            )
+            runtime._registry.register_provider(provider_id="openai", adapter=MockProviderAdapter(provider_id="openai"))  # noqa: SLF001
+            runtime._registry.set_models_for_provider(  # noqa: SLF001
+                provider_id="openai",
+                models=[
+                    ModelCapability(model_id="gpt-5-mini", display_name="gpt-5-mini", status="available"),
+                    ModelCapability(model_id="gpt-5-pro", display_name="gpt-5-pro", status="unavailable"),
+                ],
+            )
+
+            runtime.save_openai_enabled_models(model_ids=["gpt-5-mini", "gpt-5-pro"])
+
+            usable_payload = runtime.openai_usable_models_payload()
+            self.assertEqual(usable_payload["usable_model_ids"], ["gpt-5-mini"])
+            self.assertEqual(usable_payload["blocked_models"][0]["model_id"], "gpt-5-pro")
 
     async def test_refresh_openai_models_runs_filtered_classification_and_saves_feature_catalog(self):
         with tempfile.TemporaryDirectory() as tmp:

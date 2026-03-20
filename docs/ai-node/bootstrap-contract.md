@@ -70,9 +70,16 @@ Required fields:
 - `api_base`
 - `mqtt_host`
 - `mqtt_port`
-- `onboarding_endpoints.register`
+- `onboarding_endpoints.register_session`
 - `onboarding_mode`
 - `emitted_at`
+
+Compatibility fields that may also be present:
+
+- `onboarding_endpoints.registrations`
+- `onboarding_endpoints.register`
+- `onboarding_endpoints.ai_node_register`
+- `onboarding_contract`
 
 Example payload:
 
@@ -87,9 +94,13 @@ Example payload:
   "mqtt_host": "192.168.1.50",
   "mqtt_port": 1884,
   "onboarding_endpoints": {
-    "register": "/api/nodes/register"
+    "register_session": "/api/system/nodes/onboarding/sessions",
+    "registrations": "/api/system/nodes/registrations",
+    "register": "/api/nodes/register",
+    "ai_node_register": "/api/system/ai-nodes/onboarding/sessions"
   },
   "onboarding_mode": "api",
+  "onboarding_contract": "global-node-v1",
   "emitted_at": "2026-03-11T18:21:00Z"
 }
 ```
@@ -123,7 +134,7 @@ When a node receives bootstrap payload it must validate:
 - `bootstrap_version` is supported
 - `onboarding_mode == "api"`
 - `api_base` is non-empty
-- `onboarding_endpoints.register` is non-empty
+- `onboarding_endpoints.register_session` is non-empty
 
 If validation fails, node must ignore the message and continue listening.
 
@@ -141,7 +152,8 @@ An untrusted node sequence:
 2. Subscribe to `synthia/bootstrap/core`.
 3. Wait for valid Core bootstrap payload.
 4. Validate payload fields and constraints.
-5. Build registration URL from `api_base` + `onboarding_endpoints.register`.
+5. Build registration URL from `api_base` + `onboarding_endpoints.register_session`.
+6. Fall back to legacy bootstrap endpoint aliases only when the canonical key is absent.
 6. Begin registration over API.
 
 The node must never:

@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
+from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
 from ai_node.runtime.node_control_api import NodeControlState, create_node_control_app
 
 
@@ -98,8 +99,10 @@ class NodeControlFastApiTests(unittest.TestCase):
         def status_payload(self):
             return {
                 "status": "idle",
+                "accepted_profile": {"declared_task_families": ["task.classification.text", "task.summarization.text"]},
                 "last_manifest_payload": {"manifest_version": "1.0"},
                 "last_declaration_result": {"status": "accepted"},
+                "governance_bundle": {"generic_node_class_rules": {"allow_task_families": ["classification", "summarization"]}},
                 "governance_status": {
                     "state": "fresh",
                     "active_governance_version": "1.0",
@@ -166,10 +169,22 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.refresh_calls = 0
             self.openai_reload_calls = 0
             self.rebuild_calls = 0
+            self.last_execution_request = None
 
         async def refresh(self):
             self.refresh_calls += 1
             return {"providers": []}
+
+        async def execute(self, request):
+            self.last_execution_request = request
+            return UnifiedExecutionResponse(
+                provider_id=str(request.requested_provider or "openai"),
+                model_id=str(request.requested_model or "gpt-5-mini"),
+                output_text="mock:hello world",
+                usage=UnifiedExecutionUsage(prompt_tokens=2, completion_tokens=4, total_tokens=6),
+                latency_ms=12.5,
+                estimated_cost=0.001,
+            )
 
         async def refresh_openai_models_from_saved_credentials(self):
             self.openai_reload_calls += 1
@@ -200,6 +215,17 @@ class NodeControlFastApiTests(unittest.TestCase):
                     "enabled_models": ["gpt-5-mini"],
                     "enabled_task_capabilities": ["task.reasoning", "task.classification"],
                 },
+            }
+
+        def provider_selection_context_payload(self):
+            return {
+                "enabled_providers": ["openai"],
+                "default_provider": "openai",
+                "default_model_by_provider": {"openai": "gpt-5-mini"},
+                "provider_retry_count": {"openai": 1},
+                "provider_health": {"openai": {"availability": "available"}},
+                "available_models_by_provider": {"openai": ["gpt-5-mini"]},
+                "usable_models_by_provider": {"openai": ["gpt-5-mini"]},
             }
 
         def pricing_diagnostics_payload(self):
@@ -596,6 +622,24 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertFalse(exec_denied_response.json()["allowed"])
             self.assertEqual(exec_denied_response.json()["reason"], "prompt_in_probation")
 
+            direct_exec_response = client.post(
+                "/api/execution/direct",
+                json={
+                    "task_id": "task-001",
+                    "prompt_id": "prompt.alpha",
+                    "task_family": "task.classification.text",
+                    "requested_by": "service.alpha",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5-mini",
+                    "inputs": {"text": "hello world"},
+                    "timeout_s": 45,
+                    "trace_id": "trace-001",
+                },
+            )
+            self.assertEqual(direct_exec_response.status_code, 200)
+            self.assertEqual(direct_exec_response.json()["status"], "rejected")
+            self.assertEqual(direct_exec_response.json()["error_code"], "prompt_in_probation")
+
             services_status_response = client.get("/api/services/status")
             self.assertEqual(services_status_response.status_code, 200)
             self.assertEqual(services_status_response.json()["services"]["backend"], "running")
@@ -616,6 +660,12 @@ class NodeControlFastApiTests(unittest.TestCase):
             debug_metrics_response = client.get("/debug/providers/metrics")
             self.assertEqual(debug_metrics_response.status_code, 200)
             self.assertEqual(debug_metrics_response.json()["providers"]["openai"]["totals"]["total_requests"], 1)
+
+            debug_execution_response = client.get("/debug/execution")
+            self.assertEqual(debug_execution_response.status_code, 200)
+            self.assertTrue(debug_execution_response.json()["configured"])
+            self.assertIn("active_tasks", debug_execution_response.json())
+            self.assertIn("recent_history", debug_execution_response.json())
             self.assertTrue(
                 any(
                     item["workflow_request"] == "openai_model_classification_refresh"
@@ -710,6 +760,45 @@ class NodeControlFastApiTests(unittest.TestCase):
                     os.environ.pop("SYNTHIA_ADMIN_TOKEN", None)
                 else:
                     os.environ["SYNTHIA_ADMIN_TOKEN"] = old_admin_token
+
+    def test_direct_execution_endpoint_executes_supported_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
+            runtime_manager = self._FakeProviderRuntimeManager()
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                provider_selection_store=self._FakeProviderSelectionStore(),
+                task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
+                capability_runner=self._FakeCapabilityRunner(),
+                provider_runtime_manager=runtime_manager,
+                prompt_service_state_store=self._FakePromptServiceStateStore(),
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            response = client.post(
+                "/api/execution/direct",
+                json={
+                    "task_id": "task-200",
+                    "task_family": "task.classification.text",
+                    "requested_by": "service.alpha",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5-mini",
+                    "inputs": {"text": "hello direct"},
+                    "timeout_s": 45,
+                    "trace_id": "trace-200",
+                },
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["status"], "completed")
+            self.assertEqual(response.json()["provider_used"], "openai")
+            self.assertEqual(response.json()["model_used"], "gpt-5-mini")
+            self.assertEqual(response.json()["output"]["text"], "mock:hello world")
+            self.assertIsNotNone(runtime_manager.last_execution_request)
+            self.assertEqual(runtime_manager.last_execution_request.requested_model, "gpt-5-mini")
 
 
 if __name__ == "__main__":

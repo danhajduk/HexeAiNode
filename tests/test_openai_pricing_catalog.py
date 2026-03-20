@@ -854,6 +854,48 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(merged_models[0].pricing_input, 3.0)
             self.assertEqual(merged_models[0].pricing_output, 15.0)
 
+    async def test_manual_pricing_persists_across_refresh(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = OpenAIPricingCatalogService(
+                logger=logging.getLogger("openai-pricing-test"),
+                catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
+                overrides_path=str(Path(tmp) / "provider_model_pricing_overrides.json"),
+                fetcher=_FakeFetcher(html="<section><p>gpt-5-mini Input $0.50 Output $4.00</p></section>"),
+            )
+            service.save_manual_pricing(
+                model_id="gpt-5-mini",
+                input_price_per_1m=0.25,
+                output_price_per_1m=2.0,
+            )
+
+            async def execute(_model: str, _system_prompt: str, user_prompt: str) -> str:
+                if "Prompt Family: llm_pricing_extraction_prompt" in user_prompt:
+                    return json.dumps(
+                        {
+                            "models": [
+                                {
+                                    "model_id": "gpt-5-mini",
+                                    "family": "llm",
+                                    "pricing_basis": "per_1m_tokens",
+                                    "input_price": 0.50,
+                                    "output_price": 4.0,
+                                    "normalized_price": 4.0,
+                                    "normalized_unit": "per_1m_tokens",
+                                }
+                            ]
+                        }
+                    )
+                return json.dumps({"models": []})
+
+            refresh = await service.refresh(force=True, model_ids=["gpt-5-mini"], execute_batch=execute)
+
+            self.assertEqual(refresh["status"], "refreshed")
+            pricing = get_openai_model_pricing("gpt-5-mini", pricing_service=service)
+            self.assertEqual(pricing["input_per_1m_tokens"], 0.25)
+            self.assertEqual(pricing["output_per_1m_tokens"], 2.0)
+            overrides_payload = json.loads(Path(tmp, "provider_model_pricing_overrides.json").read_text(encoding="utf-8"))
+            self.assertEqual(overrides_payload["models"][0]["model_id"], "gpt-5-mini")
+
     def test_validation_rejects_empty_entry_sets(self):
         is_valid, error = validate_openai_pricing_entries([])
         self.assertFalse(is_valid)

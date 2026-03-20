@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 from typing import Callable, Optional
 
@@ -6,6 +7,13 @@ import paho.mqtt.client as mqtt
 
 from ai_node.bootstrap.bootstrap_parser import validate_bootstrap_payload
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
+
+
+def _build_bootstrap_client_id(node_name: str) -> str:
+    normalized = re.sub(r"[^A-Za-z0-9_-]+", "-", str(node_name or "").strip()).strip("-").lower()
+    if not normalized:
+        normalized = "ai-node"
+    return f"bootstrap-{normalized}"[:23]
 
 
 class BootstrapMqttRunner:
@@ -28,7 +36,7 @@ class BootstrapMqttRunner:
         with self._lock:
             self._stop_locked()
 
-            client = mqtt.Client(client_id=node_name, clean_session=True)
+            client = mqtt.Client(client_id=_build_bootstrap_client_id(node_name), clean_session=True)
             client.on_connect = self._on_connect
             client.on_message = self._on_message
             client.user_data_set({"topic": topic})

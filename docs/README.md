@@ -28,8 +28,8 @@ Synthia Core owns:
 
 ## Local Core Docs Convenience
 
-`docs/core/` may exist locally as a symlink to the Synthia Core `docs/` directory, but it is not part of this repository's committed contract.
+`docs/Core-Documents/` exists locally as a symlink to the Synthia Core `docs/` directory, but it is not part of this repository's committed contract.
 
 - Canonical references must always use the Synthia Core GitHub links listed in [core-references.md](./core-references.md).
 - Local symlink paths are provided only as developer convenience.
-- The docs in this repo must stay readable on GitHub even when `docs/core/` does not exist.
+- The docs in this repo must stay readable on GitHub even when `docs/Core-Documents/` does not exist.

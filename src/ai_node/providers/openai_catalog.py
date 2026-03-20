@@ -910,6 +910,23 @@ def _load_pricing_overrides(*, path: str) -> dict[str, dict]:
     return overrides
 
 
+def _save_pricing_overrides(*, path: str, overrides: dict[str, dict]) -> None:
+    payload_path = Path(path)
+    payload_path.parent.mkdir(parents=True, exist_ok=True)
+    normalized_models = []
+    for model_id in sorted(overrides):
+        item = overrides.get(model_id)
+        if not isinstance(item, dict):
+            continue
+        normalized_item = dict(item)
+        normalized_item["model_id"] = model_id
+        normalized_models.append(normalized_item)
+    payload = {"schema_version": "1.0", "models": normalized_models}
+    temp_path = payload_path.with_suffix(f"{payload_path.suffix}.tmp")
+    temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    temp_path.replace(payload_path)
+
+
 def _apply_overrides(*, entries: list[OpenAIPricingEntry], overrides: dict[str, dict], source_url: str, extracted_at: str) -> list[OpenAIPricingEntry]:
     if not overrides:
         return entries
@@ -991,6 +1008,12 @@ class OpenAIPricingCatalogService:
         prompt_sent_path: str | None = None,
     ) -> None:
         self._logger = logger
+        resolved_overrides_path = overrides_path
+        if (
+            overrides_path == DEFAULT_OPENAI_PRICING_OVERRIDES_PATH
+            and catalog_path != DEFAULT_OPENAI_PRICING_CATALOG_PATH
+        ):
+            resolved_overrides_path = str(Path(catalog_path).with_name(Path(DEFAULT_OPENAI_PRICING_OVERRIDES_PATH).name))
         self._source_urls = source_urls or get_configured_openai_pricing_source_urls()
         self._refresh_interval_seconds = int(refresh_interval_seconds)
         self._stale_tolerance_seconds = int(stale_tolerance_seconds)
@@ -1000,7 +1023,7 @@ class OpenAIPricingCatalogService:
         )
         self._parser = parser or OpenAIPricingPageParser()
         self._store = store or OpenAIPricingCatalogStore(path=catalog_path, logger=logger)
-        self._overrides_path = overrides_path
+        self._overrides_path = resolved_overrides_path
         self._text_cache_path = Path(text_cache_path)
         self._normalized_text_cache_path = Path(normalized_text_cache_path)
         self._sections_cache_path = Path(sections_cache_path)
@@ -1874,6 +1897,8 @@ class OpenAIPricingCatalogService:
         if input_price_per_1m is None and output_price_per_1m is None:
             raise ValueError("at least one manual price is required")
         previous = self.load_snapshot()
+        existing_overrides = _load_pricing_overrides(path=self._overrides_path)
+        existing_override = existing_overrides.get(normalized_model_id)
         entries = list(previous.entries) if previous is not None else []
         existing = next((entry for entry in entries if entry.model_id == normalized_model_id), None)
         family = _normalize_family(None, model_id=normalized_model_id)
@@ -1921,6 +1946,21 @@ class OpenAIPricingCatalogService:
             sections_cache_path=str(self._sections_cache_path),
         )
         self._store.save(snapshot)
+        override_payload = {
+            "model_id": normalized_model_id,
+            "family": family,
+            "pricing_basis": "per_1m_tokens",
+            "input_price": input_price,
+            "output_price": output_price,
+            "normalized_price": manual_entry.normalized_price,
+            "normalized_unit": "per_1m_tokens",
+        }
+        if isinstance(existing_override, dict):
+            merged_override = dict(existing_override)
+            merged_override.update({key: value for key, value in override_payload.items() if value is not None})
+            override_payload = merged_override
+        existing_overrides[normalized_model_id] = override_payload
+        _save_pricing_overrides(path=self._overrides_path, overrides=existing_overrides)
         return {"status": "manual_saved", "changed": True, "snapshot": snapshot.model_dump(), "model_id": normalized_model_id}
 
     def get_pricing_entry(self, model_id: str) -> OpenAIPricingEntry | None:
@@ -1953,6 +1993,7 @@ class OpenAIPricingCatalogService:
                             "base_model_id": resolve_openai_base_model_id(getattr(model, "model_id", "")),
                             "pricing_status": "scrape_failed" if snapshot is None else "unknown",
                             "pricing_notes": ["pricing_not_found"],
+                            "status": "unavailable",
                         }
                     )
                 )
@@ -1961,6 +2002,12 @@ class OpenAIPricingCatalogService:
             pricing_input = pricing_entry.input_price if pricing_entry.pricing_basis == "per_1m_tokens" else None
             pricing_output = pricing_entry.output_price if pricing_entry.pricing_basis == "per_1m_tokens" else None
             cached_input = pricing_entry.cached_input_price if pricing_entry.pricing_basis == "per_1m_tokens" else None
+            pricing_status = "stale" if stale else pricing_entry.extraction_status
+            model_status = getattr(model, "status", "available")
+            if pricing_status == "stale":
+                model_status = "degraded"
+            elif pricing_status not in {"ok", "manual"}:
+                model_status = "unavailable"
 
             merged.append(
                 model.model_copy(
@@ -1971,13 +2018,14 @@ class OpenAIPricingCatalogService:
                         "cached_pricing_input": cached_input,
                         "batch_pricing_input": None,
                         "batch_pricing_output": None,
-                        "pricing_status": "stale" if stale else pricing_entry.extraction_status,
+                        "pricing_status": pricing_status,
                         "pricing_source_url": pricing_entry.source_url,
                         "pricing_scraped_at": pricing_entry.extracted_at,
                         "pricing_notes": list(pricing_entry.notes) + [
                             f"pricing_basis:{pricing_entry.pricing_basis}",
                             f"normalized:{pricing_entry.normalized_unit}={pricing_entry.normalized_price}",
                         ],
+                        "status": model_status,
                     }
                 )
             )

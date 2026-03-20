@@ -1,7 +1,7 @@
 # Synthia AI Node - Phase 2 Review and Handoff
 
 Status: Active
-Last updated: 2026-03-11
+Last updated: 2026-03-19
 
 ## Scope Review
 
@@ -14,7 +14,7 @@ Reviewed implementation areas:
 - capability declaration build/submit/acceptance
 - accepted capability profile persistence
 - governance sync and freshness tracking
-- operational MQTT readiness gating
+- operational MQTT readiness health reporting
 - trusted status telemetry
 - degraded and deterministic recovery
 - phase2 consolidated state persistence
@@ -26,7 +26,7 @@ Reviewed implementation areas:
 
 - Trusted nodes resume into `capability_setup_pending` without re-entering bootstrap onboarding.
 - Startup now performs a readiness-based fast path check:
-  - resumes to `operational` when accepted capability + fresh governance + operational MQTT readiness are already valid
+  - resumes to `operational` when accepted capability + fresh governance are already valid
   - otherwise remains in `capability_setup_pending`
 - Startup context is exposed in control status payload for diagnostics.
 
@@ -45,14 +45,15 @@ Reviewed implementation areas:
 ### 4) Operational readiness and telemetry
 
 - Operational MQTT readiness is verified with trust-issued operational credentials.
-- Operational transition is blocked until readiness succeeds.
+- Operational MQTT readiness is exposed as runtime health and error context after acceptance.
 - Trusted status telemetry is published via operational MQTT channel, not bootstrap MQTT.
+- Telemetry publish failures are retained as warnings / last-error context instead of overriding accepted operational lifecycle state.
 
 ### 5) Degraded and recovery behavior
 
-- Temporary failures in capability submit, governance sync, operational readiness, or telemetry publish can transition to `degraded`.
+- Temporary failures in capability submit or governance sync can transition to `degraded`.
 - Recovery path is explicit (`POST /api/node/recover`) and deterministic:
-  - to `operational` when accepted capability + fresh governance + ready operational MQTT
+  - to `operational` when accepted capability + fresh governance are present
   - otherwise to `capability_setup_pending`
 
 ### 6) Persisted Phase 2 state
@@ -71,9 +72,9 @@ Reviewed implementation areas:
 - Governance sync endpoint contract is implemented with defensive normalization; final Core contract hardening may still require schema tightening.
 - Trusted telemetry currently emits baseline status payloads for node state visibility; richer operational telemetry channels are deferred.
 - Degraded recovery is currently manual trigger (`/api/node/recover`), not yet automated policy-driven recovery orchestration.
-- Prompt/service registration and probation are now scaffolded in node-control APIs with persisted local state and execution authorization gate checks; Core-side registry integration is still pending.
+- Prompt/service registration and probation are now scaffolded in node-control APIs with persisted local state and execution authorization gate checks; per the Core roadmap, this remains next-phase work rather than Phase 2 completion scope.
 
-### Deferred edge cases (intentionally out of Phase 2 scope)
+### Deferred edge cases (intentionally out of Phase 2 core scope)
 
 - Prompt/service registration workflow
 - Prompt probation lifecycle

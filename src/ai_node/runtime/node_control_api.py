@@ -11,14 +11,18 @@ from pydantic import BaseModel
 from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES
 from ai_node.config.bootstrap_config import create_bootstrap_config
 from ai_node.execution.gateway import ExecutionGateway
+from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.config.provider_credentials_config import summarize_provider_credentials
 from ai_node.providers.openai_model_catalog import select_representative_openai_model_ids
 from ai_node.prompts.registration import apply_probation_transition, create_prompt_service_registration
 from ai_node.config.task_capability_selection_config import create_task_capability_selection_config
 from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
+from ai_node.runtime.provider_resolver import ProviderResolver
 from ai_node.runtime.service_manager import NullServiceManager
 from ai_node.runtime.capability_resolver import load_task_graph
+from ai_node.runtime.execution_telemetry import ExecutionTelemetryPublisher
+from ai_node.runtime.task_execution_service import TaskExecutionService
 
 
 class CapabilityDeclarationPrerequisiteError(ValueError):
@@ -42,10 +46,12 @@ class NodeControlState:
         provider_credentials_store=None,
         task_capability_selection_store=None,
         trust_state_store=None,
+        governance_state_store=None,
         prompt_service_state_store=None,
         execution_gateway=None,
         provider_runtime_manager=None,
         service_manager=None,
+        task_execution_service=None,
         provider_refresh_interval_seconds: int = 900,
         startup_mode: str = "bootstrap_onboarding",
         trusted_runtime_context: dict | None = None,
@@ -61,10 +67,12 @@ class NodeControlState:
         self._provider_credentials_store = provider_credentials_store
         self._task_capability_selection_store = task_capability_selection_store
         self._trust_state_store = trust_state_store
+        self._governance_state_store = governance_state_store
         self._prompt_service_state_store = prompt_service_state_store
         self._execution_gateway = execution_gateway or ExecutionGateway()
         self._provider_runtime_manager = provider_runtime_manager
         self._service_manager = service_manager or NullServiceManager()
+        self._task_execution_service = task_execution_service
         self._provider_refresh_interval_seconds = max(int(provider_refresh_interval_seconds), 60)
         self._provider_refresh_task: asyncio.Task | None = None
         self._startup_mode = startup_mode
@@ -235,36 +243,33 @@ class NodeControlState:
             if isinstance(item, dict) and str(item.get("model_id") or "").strip()
         }
         missing_classification = sorted(set(enabled_model_ids) - classified_ids)
-        if missing_classification:
-            blockers.append("openai_enabled_models_not_classified")
 
         pricing_diag = self.openai_pricing_diagnostics_payload()
         pricing_state = str(pricing_diag.get("refresh_state") or "").strip().lower() if isinstance(pricing_diag, dict) else ""
         pricing_state_ready = pricing_state in {"ok", "manual", "failed_preserved"}
-        if not pricing_state_ready:
-            blockers.append("openai_pricing_refresh_not_completed")
-
-        priced_ids: set[str] = set()
-        if (
-            self._provider_runtime_manager is not None
-            and hasattr(self._provider_runtime_manager, "openai_pricing_catalog_payload")
-        ):
-            pricing_catalog = self._provider_runtime_manager.openai_pricing_catalog_payload()
-            entries = pricing_catalog.get("entries") if isinstance(pricing_catalog, dict) else []
-            priced_ids = {
-                str(item.get("model_id") or "").strip().lower()
-                for item in (entries if isinstance(entries, list) else [])
-                if isinstance(item, dict) and str(item.get("model_id") or "").strip()
-            }
-        missing_pricing = sorted(set(enabled_model_ids) - priced_ids) if enabled_model_ids else []
-        if missing_pricing:
-            blockers.append("openai_enabled_models_missing_pricing")
+        usable_model_ids: list[str] = []
+        blocked_models = []
+        if self._provider_runtime_manager is not None and hasattr(self._provider_runtime_manager, "openai_usable_models_payload"):
+            usable_payload = self._provider_runtime_manager.openai_usable_models_payload()
+            usable_model_ids = list(usable_payload.get("usable_model_ids") or [])
+            blocked_models = list(usable_payload.get("blocked_models") or [])
+        usable_model_set = {str(item or "").strip().lower() for item in usable_model_ids if str(item or "").strip()}
+        missing_pricing = sorted(
+            item.get("model_id")
+            for item in blocked_models
+            if isinstance(item, dict)
+            and "not_available" in list(item.get("blockers") or [])
+            and str(item.get("model_id") or "").strip()
+        )
+        if enabled_model_ids and not usable_model_set:
+            blockers.append("openai_usable_models_required_before_declare")
 
         ready = not blockers
         return ready, blockers, {
             "openai_enabled_models_ready": bool(enabled_model_ids),
             "openai_classification_ready": not missing_classification and bool(enabled_model_ids),
             "openai_pricing_ready": pricing_state_ready and not missing_pricing and bool(enabled_model_ids),
+            "openai_usable_models_ready": bool(usable_model_set),
         }
 
     def _load_identity(self) -> None:
@@ -530,6 +535,99 @@ class NodeControlState:
             "prompt_id": result.prompt_id,
             "task_family": result.task_family,
         }
+
+    def _accepted_capability_profile_payload(self) -> dict:
+        payload = (
+            self._capability_runner.status_payload()
+            if self._capability_runner is not None and hasattr(self._capability_runner, "status_payload")
+            else {}
+        )
+        accepted = payload.get("accepted_profile") if isinstance(payload, dict) else {}
+        return accepted if isinstance(accepted, dict) else {}
+
+    def _governance_bundle_payload(self) -> dict:
+        capability_payload = (
+            self._capability_runner.status_payload()
+            if self._capability_runner is not None and hasattr(self._capability_runner, "status_payload")
+            else {}
+        )
+        governance = capability_payload.get("governance_bundle") if isinstance(capability_payload, dict) else None
+        if isinstance(governance, dict):
+            return governance
+        if self._governance_state_store is not None and hasattr(self._governance_state_store, "load"):
+            stored = self._governance_state_store.load()
+            if isinstance(stored, dict):
+                return stored
+        return {}
+
+    def _governance_status_payload(self) -> dict:
+        capability_payload = (
+            self._capability_runner.status_payload()
+            if self._capability_runner is not None and hasattr(self._capability_runner, "status_payload")
+            else {}
+        )
+        status = capability_payload.get("governance_status") if isinstance(capability_payload, dict) else {}
+        return status if isinstance(status, dict) else {}
+
+    def _trust_state_payload(self) -> dict:
+        if self._trust_state_store is None or not hasattr(self._trust_state_store, "load"):
+            return {}
+        payload = self._trust_state_store.load()
+        return payload if isinstance(payload, dict) else {}
+
+    def _declared_task_families_payload(self) -> list[str]:
+        accepted_profile = self._accepted_capability_profile_payload()
+        accepted_families = accepted_profile.get("declared_task_families") if isinstance(accepted_profile, dict) else []
+        if isinstance(accepted_families, list) and accepted_families:
+            return [str(item).strip() for item in accepted_families if str(item).strip()]
+        node_capabilities = self.node_capabilities_payload()
+        resolved = (
+            node_capabilities.get("enabled_task_capabilities")
+            or node_capabilities.get("resolved_tasks")
+            or []
+        )
+        if isinstance(resolved, list) and resolved:
+            return [str(item).strip() for item in resolved if str(item).strip()]
+        configured = (
+            self._task_capability_selection_config.get("selected_task_families")
+            if isinstance(self._task_capability_selection_config, dict)
+            else []
+        )
+        return [str(item).strip() for item in configured if str(item).strip()]
+
+    def _get_task_execution_service(self) -> TaskExecutionService:
+        if self._task_execution_service is not None:
+            return self._task_execution_service
+        if self._provider_runtime_manager is None:
+            raise ValueError("direct execution is not configured")
+        provider_resolver = ProviderResolver(runtime_manager=self._provider_runtime_manager, logger=self._logger)
+        telemetry_publisher = None
+        if self._node_id:
+            telemetry_publisher = ExecutionTelemetryPublisher(
+                logger=self._logger,
+                node_id=self._node_id,
+                trust_state_provider=self._trust_state_payload,
+            )
+        self._task_execution_service = TaskExecutionService(
+            provider_runtime_manager=self._provider_runtime_manager,
+            provider_resolver=provider_resolver,
+            logger=self._logger,
+            execution_gateway=self._execution_gateway,
+            prompt_services_state_provider=lambda: (
+                self._prompt_service_state if isinstance(self._prompt_service_state, dict) else {}
+            ),
+            declared_task_families_provider=self._declared_task_families_payload,
+            accepted_capability_profile_provider=self._accepted_capability_profile_payload,
+            governance_bundle_provider=self._governance_bundle_payload,
+            governance_status_provider=self._governance_status_payload,
+            execution_telemetry_publisher=telemetry_publisher,
+        )
+        return self._task_execution_service
+
+    async def execute_direct(self, *, request: TaskExecutionRequest) -> dict:
+        service = self._get_task_execution_service()
+        result = await service.execute(request)
+        return result.model_dump(mode="json")
 
     def restart_service(self, *, target: str) -> dict:
         if self._service_manager is None or not hasattr(self._service_manager, "restart"):
@@ -1121,6 +1219,86 @@ class NodeControlState:
         snapshot = self._provider_runtime_manager.metrics_snapshot()
         return {"configured": True, **(snapshot if isinstance(snapshot, dict) else {"providers": {}})}
 
+    def execution_observability_payload(self) -> dict:
+        service = self._task_execution_service
+        if service is None and self._provider_runtime_manager is not None:
+            try:
+                service = self._get_task_execution_service()
+            except Exception:
+                service = None
+        if service is None or not hasattr(service, "lifecycle_tracker"):
+            return {
+                "configured": False,
+                "active_tasks": [],
+                "recent_history": [],
+                "failure_reasons": {},
+                "provider_usage": {},
+                "model_usage": {},
+            }
+
+        lifecycle_tracker = service.lifecycle_tracker
+        active_payload = (
+            lifecycle_tracker.active_payload()
+            if hasattr(lifecycle_tracker, "active_payload")
+            else {"active_tasks": [], "active_count": 0}
+        )
+        history_payload = (
+            lifecycle_tracker.history_payload()
+            if hasattr(lifecycle_tracker, "history_payload")
+            else {"history": [], "history_count": 0}
+        )
+        metrics_payload = self.debug_provider_metrics_payload()
+        providers = metrics_payload.get("providers") if isinstance(metrics_payload, dict) else {}
+        failure_reasons: dict[str, int] = {}
+        provider_usage: dict[str, dict] = {}
+        model_usage: dict[str, dict] = {}
+
+        if isinstance(providers, dict):
+            for provider_id, provider_payload in providers.items():
+                if not isinstance(provider_payload, dict):
+                    continue
+                provider_models = provider_payload.get("models")
+                provider_totals = provider_payload.get("totals")
+                if isinstance(provider_totals, dict):
+                    provider_usage[str(provider_id)] = {
+                        "total_requests": int(provider_totals.get("total_requests") or 0),
+                        "successful_requests": int(provider_totals.get("successful_requests") or 0),
+                        "failed_requests": int(provider_totals.get("failed_requests") or 0),
+                        "success_rate": provider_totals.get("success_rate"),
+                    }
+                if not isinstance(provider_models, dict):
+                    continue
+                for model_id, model_payload in provider_models.items():
+                    if not isinstance(model_payload, dict):
+                        continue
+                    failure_classes = model_payload.get("failure_classes")
+                    if isinstance(failure_classes, dict):
+                        for reason, count in failure_classes.items():
+                            key = str(reason or "").strip()
+                            if not key:
+                                continue
+                            failure_reasons[key] = failure_reasons.get(key, 0) + int(count or 0)
+                    model_usage_key = f"{provider_id}:{model_id}"
+                    model_usage[model_usage_key] = {
+                        "provider_id": str(provider_id),
+                        "model_id": str(model_id),
+                        "total_requests": int(model_payload.get("total_requests") or 0),
+                        "successful_requests": int(model_payload.get("successful_requests") or 0),
+                        "failed_requests": int(model_payload.get("failed_requests") or 0),
+                        "success_rate": model_payload.get("success_rate"),
+                        "avg_latency": model_payload.get("avg_latency"),
+                        "p95_latency": model_payload.get("p95_latency"),
+                    }
+
+        return {
+            "configured": True,
+            "active_tasks": list(active_payload.get("active_tasks") or []),
+            "recent_history": list(history_payload.get("history") or []),
+            "failure_reasons": failure_reasons,
+            "provider_usage": provider_usage,
+            "model_usage": model_usage,
+        }
+
     def recover_from_degraded(self) -> dict:
         if self._capability_runner is None or not hasattr(self._capability_runner, "recover_from_degraded"):
             raise ValueError("degraded recovery is not configured")
@@ -1600,6 +1778,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def post_execution_authorize(payload: ExecutionAuthorizeRequest):
         return state.authorize_execution(prompt_id=payload.prompt_id, task_family=payload.task_family)
 
+    @app.post("/api/execution/direct")
+    async def post_execution_direct(payload: TaskExecutionRequest):
+        try:
+            return await state.execute_direct(request=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/api/services/status")
     def get_services_status():
         return state.service_status_payload()
@@ -1622,6 +1807,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/debug/providers/metrics")
     def get_debug_provider_metrics():
         return state.debug_provider_metrics_payload()
+
+    @app.get("/debug/execution")
+    def get_debug_execution():
+        return state.execution_observability_payload()
 
     @app.get("/api/capabilities/diagnostics")
     def get_capability_diagnostics(x_synthia_admin_token: str | None = Header(default=None)):

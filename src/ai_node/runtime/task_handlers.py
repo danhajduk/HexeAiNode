@@ -1,0 +1,68 @@
+from ai_node.execution.input_validation import validate_and_normalize_task_inputs
+from ai_node.providers.models import UnifiedExecutionRequest
+
+
+CLASSIFICATION_TASK_FAMILIES = (
+    "task.classification",
+    "task.classification.text",
+    "task.classification.email",
+    "task.classification.image",
+)
+
+SUMMARIZATION_TASK_FAMILIES = (
+    "task.summarization",
+    "task.summarization.text",
+    "task.summarization.email",
+    "task.summarization.event",
+)
+
+
+def _build_unified_execution_request(*, request, resolution, normalized_inputs) -> UnifiedExecutionRequest:
+    return UnifiedExecutionRequest(
+        task_family=request.task_family,
+        prompt=normalized_inputs.prompt,
+        system_prompt=normalized_inputs.system_prompt,
+        messages=normalized_inputs.messages,
+        requested_provider=resolution.provider_id,
+        requested_model=resolution.model_id,
+        temperature=normalized_inputs.temperature,
+        max_tokens=normalized_inputs.max_tokens,
+        metadata={
+            "task_id": request.task_id,
+            "requested_by": request.requested_by,
+            "trace_id": request.trace_id,
+            "prompt_id": request.prompt_id,
+            "lease_id": request.lease_id,
+            **(normalized_inputs.metadata if isinstance(normalized_inputs.metadata, dict) else {}),
+        },
+    )
+
+
+class ClassificationTaskHandler:
+    def __init__(self, *, task_executor) -> None:
+        self._task_executor = task_executor
+
+    async def __call__(self, *, request, resolution):
+        normalized_inputs = validate_and_normalize_task_inputs(task_family=request.task_family, inputs=request.inputs)
+        return await self._task_executor.execute_classification(
+            _build_unified_execution_request(
+                request=request,
+                resolution=resolution,
+                normalized_inputs=normalized_inputs,
+            )
+        )
+
+
+class SummarizationTaskHandler:
+    def __init__(self, *, task_executor) -> None:
+        self._task_executor = task_executor
+
+    async def __call__(self, *, request, resolution):
+        normalized_inputs = validate_and_normalize_task_inputs(task_family=request.task_family, inputs=request.inputs)
+        return await self._task_executor.execute_summarization(
+            _build_unified_execution_request(
+                request=request,
+                resolution=resolution,
+                normalized_inputs=normalized_inputs,
+            )
+        )
