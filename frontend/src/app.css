@@ -6,8 +6,49 @@
   padding: 24px;
 }
 
-.hero {
+.app-header {
+  display: grid;
+  gap: 16px;
   margin-bottom: 16px;
+}
+
+.app-header-top,
+.app-header-bottom,
+.app-header-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.app-header-top {
+  padding-bottom: 12px;
+  border-bottom: 1px solid hsl(var(--color-border));
+}
+
+.app-header-top h1 {
+  margin: 0;
+}
+
+.app-header-bottom {
+  align-items: flex-start;
+}
+
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.app-header-meta {
+  justify-content: flex-start;
+}
+
+.app-header-theme-btn {
+  min-width: 120px;
 }
 
 .provider-page-shell {
@@ -28,18 +69,6 @@
   overflow: hidden;
 }
 
-.setup-shell-summary-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-top: 12px;
-  gap: 12px;
-}
-
-.setup-shell-summary-item {
-  display: grid;
-  gap: 6px;
-  align-content: start;
-}
-
 .setup-shell-layout {
   display: grid;
   grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
@@ -52,15 +81,39 @@
   min-height: 100%;
 }
 
+.setup-main-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.setup-shell-main-card {
+  display: grid;
+  gap: 10px;
+}
+
+.setup-shell-summary-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.setup-shell-summary-pill {
+  display: grid;
+  gap: 6px;
+  min-width: 170px;
+  padding: 10px 12px;
+  border: 1px solid hsl(var(--color-border));
+  border-radius: var(--radius-sm);
+  background: hsl(var(--color-bg));
+}
+
 .setup-shell-panel {
   display: grid;
   gap: 16px;
 }
 
 .setup-shell-footer {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid hsl(var(--color-border));
   display: grid;
   gap: 12px;
 }
@@ -603,7 +656,6 @@ h2 {
 }
 
 @media (max-width: 1100px) {
-  .setup-shell-summary-grid,
   .node-health-strip-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -615,6 +667,15 @@ h2 {
 }
 
 @media (max-width: 800px) {
+  .app-header-top,
+  .app-header-bottom {
+    align-items: flex-start;
+  }
+
+  .app-header-actions {
+    justify-content: flex-start;
+  }
+
   .setup-shell-actions {
     align-items: flex-start;
   }

@@ -301,3 +301,5 @@ Task 316: Refactor Current Monolithic Page Into Feature Modules - Completed on 0
 Task 317: Add Frontend Tests for UI Mode and State Rendering - Completed on 03/19/2026 19:52
 Task 318: Update AI-Node UI Documentation - Completed on 03/19/2026 19:52
 Task 319: Run Validation and Regression Pass - Completed on 03/19/2026 19:52
+Task 320: Redesign the header layout - Completed on 03/19/2026 20:11
+Task 321: Redesign the setup page layout - Completed on 03/19/2026 20:11

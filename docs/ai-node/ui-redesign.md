@@ -49,6 +49,15 @@ Supported routes:
 - `#/dashboard/activity`
 - `#/dashboard/diagnostics`
 
+## Header Layout
+
+The shared page header now follows a simple two-row structure:
+
+- row 1: `Synthia Ai-Node` title on the left and lifecycle status pill on the right
+- row 2: theme control on the left and utility actions on the right
+
+Secondary metadata stays compact beneath that header instead of dominating the page.
+
 ## Setup Flow
 
 Setup mode keeps stage-focused content and grouped actions:
@@ -56,6 +65,11 @@ Setup mode keeps stage-focused content and grouped actions:
 - current step actions
 - secondary actions
 - reset and recovery actions
+
+The setup page now uses a split layout:
+
+- left rail: setup progress
+- right column: setup complete banner when present, node setup summary pills, and the active setup shell content
 
 When onboarding reaches an operational-ready state while the user is still on the setup route, the UI now shows a deliberate completion handoff instead of forcing an abrupt dashboard jump.
 

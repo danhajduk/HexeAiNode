@@ -78,7 +78,7 @@ function ThemeToggle() {
   }
 
   return (
-    <button className="btn btn-primary" onClick={toggleTheme}>
+    <button className="btn app-header-theme-btn" onClick={toggleTheme}>
       Theme: {theme}
     </button>
   );
@@ -1061,8 +1061,8 @@ export default function App() {
   const setupSummaryItems = [
     { label: "Lifecycle", value: <StatusBadge value={uiState.lifecycle.current} /> },
     { label: "Trust", value: <StatusBadge value={uiState.lifecycle.trustStatus} /> },
-    { label: "Core", value: <code>{uiState.coreConnection.pairedCoreId || "not_paired"}</code> },
     { label: "Governance", value: <StatusBadge value={uiState.runtimeHealth.governanceFreshness} /> },
+    { label: "Core", value: <StatusBadge value={uiState.coreConnection.pairedCoreId ? "paired" : "not_paired"} /> },
   ];
 
   function renderProviderSetupContent() {
@@ -1615,40 +1615,40 @@ export default function App() {
         </section>
       ) : null}
       {!isProviderSetupRoute ? (
-        <section className="card hero">
-        <h1>Synthia AI Node</h1>
-        <p className="muted">Node setup and onboarding controls</p>
-        <div className="row">
-          <ThemeToggle />
-          <span className="pill">{backendStatus}</span>
-          <button className="btn" onClick={onRestartSetup} disabled={restarting}>
-            {restarting ? "Restarting..." : "Restart Setup"}
-          </button>
-          {isPendingApproval && pendingApprovalUrl ? (
-            <a className="btn btn-primary" href={pendingApprovalUrl} target="_blank" rel="noreferrer">
-              Approve In Core
-            </a>
+        <section className="card app-header">
+          <div className="app-header-top">
+            <div>
+              <h1>Synthia Ai-Node</h1>
+            </div>
+            <StatusBadge value={backendStatus} />
+          </div>
+          <div className="app-header-bottom">
+            <ThemeToggle />
+            <div className="app-header-actions">
+              <button className="btn" onClick={onRestartSetup} disabled={restarting}>
+                {restarting ? "Restarting..." : "Restart Setup"}
+              </button>
+              {isPendingApproval && pendingApprovalUrl ? (
+                <a className="btn btn-primary" href={pendingApprovalUrl} target="_blank" rel="noreferrer">
+                  Approve In Core
+                </a>
+              ) : null}
+              <button className="btn" onClick={onCopyNodeId} disabled={!nodeId}>
+                {copied ? "Copied ID" : "Copy Node ID"}
+              </button>
+            </div>
+          </div>
+          <div className="app-header-meta">
+            <span className="muted tiny">API: <code>{getApiBase()}</code></span>
+            <span className="muted tiny">Updated: <code>{uiState.meta.lastUpdatedAt || "never"}</code></span>
+            <span className="muted tiny">Node: <code>{nodeId || "unavailable"}</code></span>
+          </div>
+          {uiState.meta.partialFailures?.length ? (
+            <p className="warning tiny">
+              Partial data unavailable: <code>{uiState.meta.partialFailures.join(", ")}</code>
+            </p>
           ) : null}
-        </div>
-        <p className="muted tiny">API: {getApiBase()}</p>
-        <p className="muted tiny">
-          Last update: <code>{uiState.meta.lastUpdatedAt || "never"}</code> | Refresh:{" "}
-          <code>{REFRESH_INTERVAL_MS / 1000}s</code>
-        </p>
-        {uiState.meta.partialFailures?.length ? (
-          <p className="warning tiny">
-            Partial data unavailable: <code>{uiState.meta.partialFailures.join(", ")}</code>
-          </p>
-        ) : null}
-        <div className="row">
-          <span className="muted tiny">
-            Unique ID: <code>{nodeId || "unavailable"}</code>
-          </span>
-          <button className="btn" onClick={onCopyNodeId} disabled={!nodeId}>
-            {copied ? "Copied" : "Copy Unique ID"}
-          </button>
-        </div>
-        {error ? <p className="error">{error}</p> : null}
+          {error ? <p className="error">{error}</p> : null}
         </section>
       ) : null}
 
