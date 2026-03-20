@@ -151,9 +151,13 @@ class BudgetManager:
             if isinstance(reservations, dict):
                 active_reservations += len(reservations)
         provider_budgets = []
-        for usage in provider_budget_usage.values():
-            if not isinstance(usage, dict):
-                continue
+        for provider_id, settings in self._provider_budget_settings_map().items():
+            usage = self._provider_budget_status_entry(
+                state=state,
+                provider_budget_usage=provider_budget_usage,
+                provider_id=provider_id,
+                settings=settings,
+            )
             reservations = usage.get("reservations") if isinstance(usage, dict) else {}
             if isinstance(reservations, dict):
                 active_reservations += len(reservations)
@@ -487,13 +491,44 @@ class BudgetManager:
         return applicable
 
     def _provider_budget_settings(self, *, provider_id: str) -> dict | None:
+        settings_map = self._provider_budget_settings_map()
+        settings = settings_map.get(_normalize_string(provider_id))
+        return settings if isinstance(settings, dict) and settings.get("max_cost_cents") is not None else None
+
+    def _provider_budget_settings_map(self) -> dict[str, dict]:
         runtime = self._provider_runtime_manager
         if runtime is None or not hasattr(runtime, "provider_selection_context_payload"):
-            return None
+            return {}
         payload = runtime.provider_selection_context_payload()
         budgets = payload.get("provider_budget_limits") if isinstance(payload, dict) else {}
-        settings = budgets.get(_normalize_string(provider_id)) if isinstance(budgets, dict) else None
-        return settings if isinstance(settings, dict) and settings.get("max_cost_cents") is not None else None
+        if not isinstance(budgets, dict):
+            return {}
+        normalized: dict[str, dict] = {}
+        for provider_id, settings in budgets.items():
+            normalized_provider_id = _normalize_string(provider_id)
+            if not normalized_provider_id or not isinstance(settings, dict) or settings.get("max_cost_cents") is None:
+                continue
+            normalized[normalized_provider_id] = settings
+        return normalized
+
+    def _provider_budget_status_entry(self, *, state: dict, provider_budget_usage: dict, provider_id: str, settings: dict) -> dict:
+        period = _normalize_string(settings.get("period")).lower() or "monthly"
+        period_start, period_end = self._provider_budget_period_window(period=period)
+        usage_key = f"{provider_id}:{period}:{period_start}"
+        usage = provider_budget_usage.get(usage_key) if isinstance(provider_budget_usage, dict) else None
+        if isinstance(usage, dict):
+            return usage
+        return {
+            "provider_id": provider_id,
+            "period": period,
+            "period_start": period_start,
+            "period_end": period_end,
+            "budget_limit_cents": _normalize_int(settings.get("max_cost_cents"), default=0),
+            "used_cost_cents": 0,
+            "reserved_cost_cents": 0,
+            "reservations": {},
+            "updated_at": state.get("updated_at") or _now_iso(),
+        }
 
     def _provider_budget_period_window(self, *, period: str) -> tuple[str, str]:
         now = _now()

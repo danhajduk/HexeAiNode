@@ -207,6 +207,26 @@ class BudgetManagerTests(unittest.TestCase):
             self.assertEqual(payload["provider_budgets"][0]["period_start"], "2026-03-16T00:00:00-07:00")
             self.assertEqual(payload["provider_budgets"][0]["period_end"], "2026-03-22T23:59:59.999999-07:00")
 
+    def test_status_payload_includes_configured_provider_budget_before_usage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-manager-test"))
+            manager = BudgetManager(
+                store=store,
+                logger=logging.getLogger("budget-manager-test"),
+                provider_runtime_manager=_FakeRuntimeManager(
+                    provider_budget_limits={"openai": {"max_cost_cents": 2500, "period": "monthly"}}
+                ),
+            )
+
+            payload = manager.status_payload()
+
+            self.assertEqual(len(payload["provider_budgets"]), 1)
+            self.assertEqual(payload["provider_budgets"][0]["provider_id"], "openai")
+            self.assertEqual(payload["provider_budgets"][0]["budget_limit_cents"], 2500)
+            self.assertEqual(payload["provider_budgets"][0]["remaining_cost_cents"], 2500)
+            self.assertEqual(payload["provider_budgets"][0]["used_cost_cents"], 0)
+            self.assertEqual(payload["provider_budgets"][0]["reserved_cost_cents"], 0)
+
     def test_provider_budget_can_deny_before_core_policy_exists(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-manager-test"))

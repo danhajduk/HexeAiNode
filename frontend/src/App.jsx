@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getTheme, setTheme } from "./theme/theme";
 import { apiAdminGet, apiAdminPost, apiGet, apiPost, getApiBase } from "./api";
 import { buildDashboardUiState } from "./uiStateModel";
-import { CardHeader, StatusBadge } from "./components/uiPrimitives";
+import { CardHeader, SeverityIndicator, StatusBadge } from "./components/uiPrimitives";
 import { IdentityScreen } from "./features/node-ui/IdentityScreen";
 import { resolveUiMode } from "./features/node-ui/uiModeResolver";
 import { buildOperationalRoute, buildSetupRoute, resolveOperationalSection } from "./features/node-ui/uiRoutes";
@@ -158,6 +158,81 @@ function formatBudgetPeriod(value) {
   return "not_set";
 }
 
+function formatBudgetCurrency(cents) {
+  const normalized = Number(cents);
+  if (!Number.isFinite(normalized)) {
+    return "$0.00";
+  }
+  return `$${(normalized / 100).toFixed(2)}`;
+}
+
+function formatProviderLabel(providerId) {
+  const normalized = String(providerId || "").trim().toLowerCase();
+  if (!normalized) {
+    return "Provider";
+  }
+  if (normalized === "openai") {
+    return "OpenAI";
+  }
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function summarizeProviderBudgets({ providerConfig, budgetState }) {
+  const configuredLimits = providerConfig?.config?.providers?.budget_limits;
+  const configuredEntries =
+    configuredLimits && typeof configuredLimits === "object" ? Object.entries(configuredLimits) : [];
+  const budgetEntries = Array.isArray(budgetState?.provider_budgets) ? budgetState.provider_budgets : [];
+  const budgetByProvider = new Map();
+
+  budgetEntries.forEach((entry) => {
+    const providerId = String(entry?.provider_id || "").trim().toLowerCase();
+    if (!providerId) {
+      return;
+    }
+    budgetByProvider.set(providerId, entry);
+  });
+
+  return configuredEntries
+    .map(([providerId, settings]) => {
+      const normalizedProviderId = String(providerId || "").trim().toLowerCase();
+      const configuredBudget = Number(settings?.max_cost_cents);
+      if (!normalizedProviderId || !Number.isFinite(configuredBudget) || configuredBudget < 0) {
+        return null;
+      }
+      const usage = budgetByProvider.get(normalizedProviderId);
+      const budgetLimitCents = Number(usage?.budget_limit_cents);
+      const remainingCostCents = Number(usage?.remaining_cost_cents);
+      const period = String(usage?.period || settings?.period || "monthly").trim().toLowerCase() || "monthly";
+      return {
+        providerId: normalizedProviderId,
+        period,
+        budgetLimitCents: Number.isFinite(budgetLimitCents) ? budgetLimitCents : configuredBudget,
+        remainingCostCents: Number.isFinite(remainingCostCents) ? remainingCostCents : configuredBudget,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.providerId.localeCompare(right.providerId));
+}
+
+function providerBudgetTone(summary) {
+  const budgetLimitCents = Number(summary?.budgetLimitCents);
+  const remainingCostCents = Number(summary?.remainingCostCents);
+  if (!Number.isFinite(budgetLimitCents) || budgetLimitCents <= 0) {
+    return "meta";
+  }
+  if (!Number.isFinite(remainingCostCents) || remainingCostCents <= 0) {
+    return "danger";
+  }
+  if (remainingCostCents / budgetLimitCents <= 0.2) {
+    return "warning";
+  }
+  return "success";
+}
+
+function formatProviderBudgetPill(summary) {
+  return `${formatProviderLabel(summary?.providerId)} ${formatBudgetCurrency(summary?.remainingCostCents)}/${formatBudgetCurrency(summary?.budgetLimitCents)} ${String(summary?.period || "monthly").toLowerCase()}`;
+}
+
 function formatModelFamily(value) {
   const normalized = String(value || "unknown").trim();
   if (!normalized) {
@@ -263,9 +338,11 @@ export default function App() {
   const [selectedTaskFamilies, setSelectedTaskFamilies] = useState(TASK_CAPABILITY_OPTIONS);
   const [savingProvider, setSavingProvider] = useState(false);
   const [declaringCapabilities, setDeclaringCapabilities] = useState(false);
+  const [redeclaringCapabilities, setRedeclaringCapabilities] = useState(false);
   const [restartingServiceTarget, setRestartingServiceTarget] = useState("");
   const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
   const [providerCredentials, setProviderCredentials] = useState(null);
+  const [providerBudgetSummaries, setProviderBudgetSummaries] = useState([]);
   const [openaiCatalogModels, setOpenaiCatalogModels] = useState([]);
   const [openaiModelCapabilities, setOpenaiModelCapabilities] = useState([]);
   const [enabledOpenaiModelIds, setEnabledOpenaiModelIds] = useState([]);
@@ -321,6 +398,7 @@ export default function App() {
       nodeCapabilitiesResult,
       capabilityConfigResult,
       servicesResult,
+      budgetResult,
       capabilityDiagnosticsResult,
     ] = await Promise.allSettled([
       apiGet("/api/node/status"),
@@ -336,6 +414,7 @@ export default function App() {
       apiGet("/api/capabilities/node/resolved"),
       apiGet("/api/capabilities/config"),
       apiGet("/api/services/status"),
+      apiGet("/api/budgets/state"),
       apiAdminGet("/api/capabilities/diagnostics"),
     ]);
 
@@ -343,6 +422,7 @@ export default function App() {
       setBackendStatus("offline");
       setPendingApprovalUrl("");
       setNodeId("");
+      setProviderBudgetSummaries([]);
       const message = String(nodeResult.reason?.message || nodeResult.reason || "backend offline");
       setError(message);
       setUiState(
@@ -371,6 +451,7 @@ export default function App() {
     const nodeCapabilitiesPayload = nodeCapabilitiesResult.status === "fulfilled" ? nodeCapabilitiesResult.value : null;
     const capabilityConfigPayload = capabilityConfigResult.status === "fulfilled" ? capabilityConfigResult.value : null;
     const servicePayload = servicesResult.status === "fulfilled" ? servicesResult.value : null;
+    const budgetPayload = budgetResult.status === "fulfilled" ? budgetResult.value : null;
     const capabilityDiagnosticsPayload = capabilityDiagnosticsResult.status === "fulfilled" ? capabilityDiagnosticsResult.value : null;
     const partialFailures = [];
     if (governanceResult.status !== "fulfilled") {
@@ -409,6 +490,9 @@ export default function App() {
     if (servicesResult.status !== "fulfilled") {
       partialFailures.push("service_status_unavailable");
     }
+    if (budgetResult.status !== "fulfilled") {
+      partialFailures.push("budget_state_unavailable");
+    }
 
     setBackendStatus(payload.status || "unknown");
     setPendingApprovalUrl(payload.pending_approval_url || "");
@@ -432,6 +516,7 @@ export default function App() {
     setOpenaiModelFeatures(Array.isArray(modelFeaturesPayload?.entries) ? modelFeaturesPayload.entries : []);
     setResolvedNodeCapabilities(nodeCapabilitiesPayload);
     setCapabilityDiagnostics(capabilityDiagnosticsPayload);
+    setProviderBudgetSummaries(summarizeProviderBudgets({ providerConfig: providerPayload, budgetState: budgetPayload }));
     setError("");
     if (!providerSetupDirty && providerCredentialsPayload?.credentials?.project_name) {
       setOpenaiProjectName(providerCredentialsPayload.credentials.project_name);
@@ -443,7 +528,7 @@ export default function App() {
           : []
       );
     }
-    if ((payload.status || "unknown") === "capability_setup_pending" && providerPayload) {
+    if (!providerSetupDirty && providerPayload) {
       const enabledProviders = providerPayload?.config?.providers?.enabled || [];
       const openaiBudgetLimit = providerPayload?.config?.providers?.budget_limits?.openai?.max_cost_cents;
       const openaiBudgetWindow = providerPayload?.config?.providers?.budget_limits?.openai?.period;
@@ -644,6 +729,7 @@ export default function App() {
   const setupReadinessFlags = uiState.capabilitySummary.setupReadinessFlags || {};
   const setupBlockingReasons = uiState.capabilitySummary.setupBlockingReasons || [];
   const capabilityDeclareAllowed = uiState.capabilitySummary.declarationAllowed;
+  const hasAdminToken = Boolean(import.meta.env.VITE_ADMIN_TOKEN);
   const showCorePanel = Boolean(uiState.coreConnection.connected);
   const lifecycleToneClass = `tone-${uiState.lifecycle.tone || "error"}`;
   const onboardingSteps = [
@@ -918,6 +1004,23 @@ function formatTokenHint(value) {
       await loadStatus();
     } finally {
       setDeclaringCapabilities(false);
+    }
+  }
+
+  async function onRedeclareCapabilities() {
+    if (redeclaringCapabilities) {
+      return;
+    }
+    setRedeclaringCapabilities(true);
+    setError("");
+    try {
+      await apiAdminPost("/api/capabilities/redeclare", { force_refresh: true });
+      await loadStatus();
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+    } finally {
+      setRedeclaringCapabilities(false);
     }
   }
 
@@ -1497,9 +1600,19 @@ function formatTokenHint(value) {
         primary: true,
       });
       secondaryActions.push({ label: "Configure OpenAI Provider", onClick: navigateToOpenAiProviderSetup });
+      secondaryActions.push({
+        label: redeclaringCapabilities ? "Redeclaring..." : "Redeclare Capabilities",
+        onClick: onRedeclareCapabilities,
+        disabled: redeclaringCapabilities || !hasAdminToken,
+      });
     }
     if (setupFlow.activeStage === "provider_setup" && isProviderSetupRoute) {
       secondaryActions.push({ label: "Back To Setup Flow", onClick: navigateToSetup });
+      secondaryActions.push({
+        label: redeclaringCapabilities ? "Redeclaring..." : "Redeclare Capabilities",
+        onClick: onRedeclareCapabilities,
+        disabled: redeclaringCapabilities || !hasAdminToken,
+      });
     }
     if (setupFlow.activeStage === "capability_declaration") {
       primaryActions.push({
@@ -1509,6 +1622,11 @@ function formatTokenHint(value) {
         primary: true,
       });
       secondaryActions.push({ label: "Configure Provider", onClick: navigateToOpenAiProviderSetup });
+      secondaryActions.push({
+        label: redeclaringCapabilities ? "Redeclaring..." : "Redeclare Capabilities",
+        onClick: onRedeclareCapabilities,
+        disabled: redeclaringCapabilities || !hasAdminToken,
+      });
     }
     if (setupFlow.activeStage === "governance_sync") {
       primaryActions.push({ label: "Refresh Governance", onClick: onRefreshGovernance, primary: true });
@@ -1595,7 +1713,7 @@ function formatTokenHint(value) {
       { label: "Configure OpenAI Provider", onClick: navigateToOpenAiProviderSetup, disabled: !canManageOpenAiCredentials },
       { label: "Refresh Governance", onClick: onRefreshGovernance },
       { label: refreshingLatestModels ? "Refreshing Models..." : "Refresh Provider Models", onClick: refreshOpenAiModels, disabled: refreshingLatestModels },
-      { label: declaringCapabilities ? "Redeclaring..." : "Redeclare Capabilities", onClick: onDeclareCapabilities, disabled: declaringCapabilities || !capabilityDeclareAllowed },
+      { label: redeclaringCapabilities ? "Redeclaring..." : "Redeclare Capabilities", onClick: onRedeclareCapabilities, disabled: redeclaringCapabilities || !hasAdminToken },
     ],
     runtimeActions: [
       { label: restartingServiceTarget === "backend" ? "Restarting Backend..." : "Restart Backend", onClick: () => onRestartService("backend"), disabled: Boolean(restartingServiceTarget) },
@@ -1758,7 +1876,14 @@ function formatTokenHint(value) {
             <div>
               <h1>Synthia Ai-Node</h1>
             </div>
-            <StatusBadge value={backendStatus} />
+            <div className="app-header-status-pills">
+              <StatusBadge value={backendStatus} />
+              {providerBudgetSummaries.map((summary) => (
+                <SeverityIndicator key={summary.providerId} tone={providerBudgetTone(summary)}>
+                  <span className="status-badge">{formatProviderBudgetPill(summary)}</span>
+                </SeverityIndicator>
+              ))}
+            </div>
           </div>
           <div className="app-header-bottom">
             <ThemeToggle />
