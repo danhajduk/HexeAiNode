@@ -48,7 +48,7 @@ class _FakeTaskCapabilitySelectionStore:
             "schema_version": "1.0",
             "selected_task_families": [
                 "task.classification",
-                "task.summarization.text",
+                "task.summarization",
             ],
         }
 
@@ -707,7 +707,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         await runner.submit_once()
         self.assertEqual(
             client.last_manifest["declared_task_families"],
-            ["task.classification", "task.summarization.text"],
+            ["task.classification", "task.summarization"],
         )
 
     async def test_submit_manifest_uses_resolved_provider_task_capabilities_when_available(self):

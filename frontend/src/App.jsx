@@ -41,13 +41,9 @@ const DIAGNOSTIC_ENDPOINTS = [
 ];
 const TASK_CAPABILITY_OPTIONS = [
   "task.classification",
-  "task.classification.email",
-  "task.classification.image",
-  "task.summarization.text",
-  "task.summarization.email",
-  "task.summarization.event",
-  "task.generation.text",
-  "task.generation.image",
+  "task.summarization",
+  "task.chat",
+  "task.image_generation",
 ];
 const OPENAI_TOKEN_FORMAT = /^[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9._-]+)+$/;
 const OPENAI_MODEL_GROUPS = [

@@ -8,7 +8,6 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 
-from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES
 from ai_node.config.bootstrap_config import create_bootstrap_config
 from ai_node.execution.gateway import ExecutionGateway
 from ai_node.execution.task_models import TaskExecutionRequest
@@ -16,7 +15,7 @@ from ai_node.config.provider_credentials_config import summarize_provider_creden
 from ai_node.core_api.trust_status_client import TrustStatusClient
 from ai_node.providers.openai_model_catalog import select_representative_openai_model_ids
 from ai_node.prompts import PromptRegistry
-from ai_node.config.task_capability_selection_config import create_task_capability_selection_config
+from ai_node.config.task_capability_selection_config import DECLARABLE_TASK_FAMILIES, create_task_capability_selection_config
 from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.provider_resolver import ProviderResolver
@@ -128,7 +127,7 @@ class NodeControlState:
         selected = payload.get("selected_task_families")
         if not isinstance(selected, list) or not selected:
             return False
-        canonical = set(CANONICAL_TASK_FAMILIES)
+        canonical = set(DECLARABLE_TASK_FAMILIES)
         return all(isinstance(item, str) and item.strip() in canonical for item in selected)
 
     def _build_capability_setup_contract(self) -> dict:
@@ -209,7 +208,7 @@ class NodeControlState:
                 "configured": task_capability_config is not None,
                 "selected_count": len(selected_task_families),
                 "selected": selected_task_families,
-                "available": list(CANONICAL_TASK_FAMILIES),
+                "available": list(DECLARABLE_TASK_FAMILIES),
             },
             "budget_policy": budget_status,
             "blocking_reasons": blocking_reasons,

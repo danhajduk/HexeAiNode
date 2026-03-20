@@ -199,7 +199,7 @@ class NodeControlApiTests(unittest.TestCase):
                 "schema_version": "1.0",
                 "selected_task_families": [
                     "task.classification",
-                    "task.summarization.text",
+                    "task.summarization",
                 ],
             }
 
@@ -607,7 +607,7 @@ class NodeControlApiTests(unittest.TestCase):
             )
             self.assertEqual(
                 payload["config"]["selected_task_families"],
-                ["task.classification", "task.generation.image"],
+                ["task.classification", "task.image_generation"],
             )
 
     def test_update_openai_credentials_returns_redacted_summary(self):
@@ -749,7 +749,7 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertTrue(payload["capability_setup"]["declaration_allowed"])
             self.assertEqual(
                 payload["capability_setup"]["task_capability_selection"]["selected"],
-                ["task.classification", "task.summarization.text"],
+                ["task.classification", "task.summarization"],
             )
 
     def test_capability_declaration_gate_blocks_when_no_openai_models_are_usable(self):

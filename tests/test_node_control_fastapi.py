@@ -100,7 +100,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "schema_version": "1.0",
                 "selected_task_families": [
                     "task.classification",
-                    "task.summarization.text",
+                    "task.summarization",
                 ],
             }
 

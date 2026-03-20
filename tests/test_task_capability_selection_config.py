@@ -19,6 +19,10 @@ class TaskCapabilitySelectionConfigTests(unittest.TestCase):
         config = create_task_capability_selection_config()
         self.assertTrue(config["selected_task_families"])
         self.assertEqual(config["schema_version"], "1.0")
+        self.assertEqual(
+            config["selected_task_families"],
+            ["task.classification", "task.summarization", "task.chat", "task.image_generation"],
+        )
 
     def test_validate_rejects_unknown_task_family(self):
         is_valid, error = validate_task_capability_selection_config(
@@ -33,7 +37,7 @@ class TaskCapabilitySelectionConfigTests(unittest.TestCase):
         )
         self.assertEqual(
             config["selected_task_families"],
-            ["task.classification", "task.summarization.text"],
+            ["task.classification", "task.summarization"],
         )
 
     def test_store_save_load_round_trip(self):
@@ -44,7 +48,7 @@ class TaskCapabilitySelectionConfigTests(unittest.TestCase):
                 {
                     "selected_task_families": [
                         "task.classification",
-                        "task.summarization.text",
+                        "task.summarization",
                     ]
                 }
             )
@@ -85,7 +89,7 @@ class TaskCapabilitySelectionConfigTests(unittest.TestCase):
                     "schema_version": "1.0",
                     "selected_task_families": [
                         "task.classification",
-                        "task.summarization.text",
+                        "task.summarization",
                     ],
                 },
             )

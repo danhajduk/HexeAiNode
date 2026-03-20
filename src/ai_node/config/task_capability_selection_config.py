@@ -6,6 +6,19 @@ from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES, canonica
 
 
 DEFAULT_TASK_CAPABILITY_SELECTION_SCHEMA_VERSION = "1.0"
+LEGACY_DECLARATION_TASK_FAMILY_ALIASES = {
+    "task.classification.email": "task.classification",
+    "task.classification.image": "task.classification",
+    "task.summarization.text": "task.summarization",
+    "task.summarization.email": "task.summarization",
+    "task.summarization.event": "task.summarization",
+    "task.generation.text": "task.chat",
+    "task.generation.image": "task.image_generation",
+}
+NON_DECLARABLE_TASK_FAMILIES = set(LEGACY_DECLARATION_TASK_FAMILY_ALIASES)
+DECLARABLE_TASK_FAMILIES = tuple(
+    family for family in CANONICAL_TASK_FAMILIES if family not in NON_DECLARABLE_TASK_FAMILIES
+)
 
 
 def _is_non_empty_string(value: object) -> bool:
@@ -19,9 +32,24 @@ def _normalize_string_list(value: object) -> list[str]:
     for item in value:
         if _is_non_empty_string(item):
             canonical = canonicalize_task_family(str(item).strip())
-            if canonical:
-                normalized.append(canonical)
+            declaration_family = LEGACY_DECLARATION_TASK_FAMILY_ALIASES.get(canonical, canonical) if canonical else None
+            if declaration_family:
+                normalized.append(declaration_family)
     return sorted(set(normalized))
+
+
+def _unknown_task_families(selected: list[str]) -> list[str]:
+    allowed = set(DECLARABLE_TASK_FAMILIES)
+    return [item for item in selected if item not in allowed]
+
+
+def default_task_capability_selection() -> list[str]:
+    return [
+        "task.classification",
+        "task.summarization",
+        "task.chat",
+        "task.image_generation",
+    ]
 
 
 def validate_task_capability_selection_config(data: object) -> Tuple[bool, Optional[str]]:
@@ -32,7 +60,7 @@ def validate_task_capability_selection_config(data: object) -> Tuple[bool, Optio
     selected = _normalize_string_list(data.get("selected_task_families"))
     if not selected:
         return False, "missing_selected_task_families"
-    unknown = [item for item in selected if item not in set(CANONICAL_TASK_FAMILIES)]
+    unknown = _unknown_task_families(selected)
     if unknown:
         return False, f"unsupported_task_family:{unknown[0]}"
     return True, None
@@ -40,7 +68,7 @@ def validate_task_capability_selection_config(data: object) -> Tuple[bool, Optio
 
 def create_task_capability_selection_config(input_data: dict | None = None) -> dict:
     raw = input_data if isinstance(input_data, dict) else {}
-    selected = _normalize_string_list(raw.get("selected_task_families")) or list(CANONICAL_TASK_FAMILIES)
+    selected = _normalize_string_list(raw.get("selected_task_families")) or default_task_capability_selection()
     config = {
         "schema_version": DEFAULT_TASK_CAPABILITY_SELECTION_SCHEMA_VERSION,
         "selected_task_families": selected,
