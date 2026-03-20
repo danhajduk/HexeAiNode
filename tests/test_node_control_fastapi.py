@@ -113,11 +113,13 @@ class NodeControlFastApiTests(unittest.TestCase):
     class _FakeCapabilityRunner:
         def __init__(self):
             self.workflow_notifications = []
+            self.redeclare_calls = []
 
         async def submit_once(self):
             return {"status": "accepted"}
 
         async def redeclare_if_needed(self, *, reason: str, force: bool = False):
+            self.redeclare_calls.append({"reason": reason, "force": force})
             return {"status": "accepted", "reason": reason, "force": force}
 
         async def refresh_governance_once(self):
@@ -206,6 +208,8 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.openai_reload_calls = 0
             self.rebuild_calls = 0
             self.last_execution_request = None
+            self._enabled_models = ["gpt-5-mini"]
+            self._resolved_tasks = ["task.chat", "task.reasoning"]
 
         async def refresh(self):
             self.refresh_calls += 1
@@ -366,13 +370,20 @@ class NodeControlFastApiTests(unittest.TestCase):
             return {
                 "provider_id": "openai",
                 "models": [
-                    {"model_id": "gpt-5-mini", "enabled": True, "selected_at": "2026-03-13T00:00:00Z"},
+                    {"model_id": model_id, "enabled": True, "selected_at": "2026-03-13T00:00:00Z"}
+                    for model_id in self._enabled_models
                 ],
                 "source": "provider_enabled_models",
                 "generated_at": "2026-03-13T00:00:00Z",
             }
 
         def save_openai_enabled_models(self, *, model_ids: list[str]):
+            self._enabled_models = list(model_ids)
+            self._resolved_tasks = (
+                ["task.chat", "task.reasoning", "task.vision_analysis"]
+                if "gpt-5-pro" in model_ids
+                else ["task.chat", "task.reasoning"]
+            )
             return {
                 "provider_id": "openai",
                 "models": [
@@ -427,10 +438,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             return {
                 "schema_version": "1.0",
                 "capability_graph_version": "1.0",
-                "enabled_models": ["gpt-5-mini"],
+                "enabled_models": list(self._enabled_models),
                 "feature_union": {"chat": True, "reasoning": True},
-                "resolved_tasks": ["task.chat", "task.reasoning"],
-                "enabled_task_capabilities": ["task.chat", "task.reasoning"],
+                "resolved_tasks": list(self._resolved_tasks),
+                "enabled_task_capabilities": list(self._resolved_tasks),
                 "generated_at": "2026-03-13T00:00:00Z",
                 "source": "node_capabilities",
             }
@@ -546,6 +557,8 @@ class NodeControlFastApiTests(unittest.TestCase):
             )
             self.assertEqual(enabled_models_set_response.status_code, 200)
             self.assertEqual(len(enabled_models_set_response.json()["models"]), 2)
+            self.assertFalse(enabled_models_set_response.json()["task_surface_changed"])
+            self.assertEqual(enabled_models_set_response.json()["declaration"]["reason"], "enabled_models_no_task_change")
 
             capability_resolution_response = client.get("/api/providers/openai/capability-resolution")
             self.assertEqual(capability_resolution_response.status_code, 200)
@@ -621,6 +634,15 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(provider_refresh_response.json()["openai_model_reload"]["classification_model"], "gpt-5-mini")
             self.assertEqual(provider_refresh_response.json()["declaration"]["reason"], "provider_capability_refresh")
             self.assertEqual(runtime_manager.openai_reload_calls, 2)
+
+            enabled_models_changed_response = client.post(
+                "/api/providers/openai/models/enabled",
+                json={"model_ids": ["gpt-5-mini", "gpt-5-pro"]},
+            )
+            self.assertEqual(enabled_models_changed_response.status_code, 200)
+            self.assertTrue(enabled_models_changed_response.json()["task_surface_changed"])
+            self.assertEqual(enabled_models_changed_response.json()["declaration"]["reason"], "enabled_models_changed")
+            self.assertEqual(capability_runner.redeclare_calls[-1]["reason"], "enabled_models_changed")
 
             classification_refresh_response = client.post("/api/providers/openai/models/classification/refresh")
             self.assertEqual(classification_refresh_response.status_code, 200)

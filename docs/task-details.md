@@ -268,3 +268,83 @@ Task mapping:
 - governance is enforced during execution
 - telemetry reflects execution behavior
 - baseline task families are operational
+
+## Task 367-371
+Original task source: user request on 2026-03-20
+
+Preserved scope:
+- Move provider budget configuration out of the generic setup surface and into provider-specific setup pages/routes using the shape `/setup/provider/<provider-name>`.
+- Support schedule selection for provider budgets instead of amount-only configuration.
+- The supported local provider budget schedule options requested are:
+  - `monthly`
+  - `weekly`
+- Weekly budget periods must be defined as local-time calendar weeks running `Monday` through `Sunday`.
+- Persistence and API contract updates must carry both the provider budget amount and its schedule type.
+- Update the UI and docs so the provider setup flow makes the per-provider budget location and weekly/monthly behavior clear.
+
+Task mapping:
+- Task 367: Move provider budget setup into provider-specific setup routes
+- Task 368: Add monthly/weekly provider budget scheduling model
+- Task 369: Define weekly budget periods as local-time `Monday` through `Sunday`
+- Task 370: Persist amount plus schedule type through config and API contracts
+- Task 371: Update setup UI and documentation for provider budget scheduling
+
+## Task 372-374
+Original task source: user request on 2026-03-20
+
+Preserved scope:
+- Align the AI Node task-family vocabulary with the Core canonical naming for classification work.
+- The explicit requested mapping is:
+  - `task.classification.text` -> `task.classification`
+- Update all relevant local surfaces so the canonical family is used consistently in:
+  - task validation
+  - execution
+  - provider routing
+  - prompt registration / authorization
+  - setup and capability selection flows
+  - API payloads
+  - docs and tests
+- If local persisted state or compatibility surfaces still contain the old value, add a migration or compatibility path so existing nodes do not break during the rename.
+
+Task mapping:
+- Task 372: Align local task-family vocabulary with Core canonical classification naming
+- Task 373: Update execution, routing, prompt, and setup flows to emit/use `task.classification`
+- Task 374: Add migration/compatibility handling for old `task.classification.text` state and remove doc/test drift
+
+## Task 375-378
+Original task source: user request on 2026-03-20
+
+Preserved scope:
+- Prompts are explicitly node-owned and must not be governed by Core.
+- Remove or correct any local documentation, contracts, code assumptions, or queue items that imply Core approves, owns, distributes, or governs prompts for the AI Node.
+- Core’s role for this area is limited to budget/spend authority declarations.
+- The requested Core declaration model is:
+  - “this node may spend up to X for these services/providers/models”
+- Budget handling should therefore be expressed in terms of spend authority scoped by:
+  - service
+  - provider
+  - model
+- This work must not reintroduce Core-managed prompt governance through budget enforcement or API contracts.
+- Diagnostics and docs should make the boundary obvious:
+  - prompts are local to the node
+  - spend authority comes from Core
+
+Task mapping:
+- Task 375: Remove any remaining Core-governs-prompts assumptions
+- Task 376: Define the corrected local/Core budget contract around Core-issued spend authority
+- Task 377: Implement service/provider/model scoped spend-allowance handling without Core prompt governance
+- Task 378: Update diagnostics, API contracts, and docs for the corrected boundary
+
+## Task 379-381
+Original task source: user request on 2026-03-20
+
+Preserved scope:
+- Check whether the node currently tracks changes in available task families after selecting or deselecting provider models.
+- If the enabled-model change alters the resolved task families exposed by the node, the node should automatically re-declare capabilities with Core.
+- If the enabled-model change does not alter the resolved task families, avoid unnecessary redeclaration.
+- Update the enabled-model API response, tests, and docs so operators can tell whether redeclaration was triggered or skipped.
+
+Task mapping:
+- Task 379: Detect resolved task-family changes after enabled-model updates
+- Task 380: Trigger capability redeclaration only when enabled-model changes alter the task surface
+- Task 381: Update API/tests/docs to report redeclaration outcome for enabled-model changes

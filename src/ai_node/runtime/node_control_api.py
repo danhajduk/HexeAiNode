@@ -1074,6 +1074,16 @@ class NodeControlState:
             else "provider_enabled_models",
         }
 
+    @staticmethod
+    def _resolved_task_families_from_capability_payload(payload: dict | None) -> list[str]:
+        if not isinstance(payload, dict):
+            return []
+        resolved = payload.get("enabled_task_capabilities") or payload.get("resolved_tasks") or []
+        if not isinstance(resolved, list):
+            return []
+        normalized = sorted({str(item).strip() for item in resolved if str(item).strip()})
+        return normalized
+
     def save_openai_enabled_models(self, *, model_ids: list[str]) -> dict:
         if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "save_openai_enabled_models"):
             raise ValueError("openai enabled model persistence is not configured")
@@ -1081,6 +1091,26 @@ class NodeControlState:
         return {
             "provider_id": "openai",
             **(payload if isinstance(payload, dict) else {}),
+        }
+
+    async def update_openai_enabled_models_with_redeclaration(self, *, model_ids: list[str]) -> dict:
+        before_payload = self.node_capabilities_payload()
+        before_tasks = self._resolved_task_families_from_capability_payload(before_payload)
+        response = self.save_openai_enabled_models(model_ids=model_ids)
+        after_payload = self.node_capabilities_payload()
+        after_tasks = self._resolved_task_families_from_capability_payload(after_payload)
+        task_surface_changed = before_tasks != after_tasks
+        declaration: dict
+        if task_surface_changed:
+            declaration = await self.redeclare_capabilities(reason="enabled_models_changed", force=False)
+        else:
+            declaration = {"status": "unchanged", "reason": "enabled_models_no_task_change"}
+        return {
+            **response,
+            "task_surface_changed": task_surface_changed,
+            "previous_resolved_tasks": before_tasks,
+            "resolved_tasks": after_tasks,
+            "declaration": declaration,
         }
 
     async def rerun_openai_model_capabilities(self) -> dict:
@@ -1835,9 +1865,25 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.post("/api/providers/openai/models/enabled")
     async def post_openai_enabled_models(payload: OpenAIEnabledModelsRequest):
         try:
-            response = state.save_openai_enabled_models(model_ids=payload.model_ids)
-            return {**response, "declaration": {"status": "pending_manual", "reason": "enabled_models_changed"}}
+            response = await state.update_openai_enabled_models_with_redeclaration(model_ids=payload.model_ids)
+            await state.notify_workflow_request(
+                workflow_request="openai_enabled_models_update",
+                workflow_status="done",
+                details={
+                    "model_count": len(response.get("models") or []),
+                    "task_surface_changed": bool(response.get("task_surface_changed")),
+                    "resolved_task_count": len(response.get("resolved_tasks") or []),
+                    "declaration_status": (response.get("declaration") or {}).get("status"),
+                    "declaration_reason": (response.get("declaration") or {}).get("reason"),
+                },
+            )
+            return response
         except ValueError as exc:
+            await state.notify_workflow_request(
+                workflow_request="openai_enabled_models_update",
+                workflow_status="stopped",
+                details={"error": str(exc)},
+            )
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/providers/openai/capability-resolution")

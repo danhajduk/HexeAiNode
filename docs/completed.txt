@@ -360,3 +360,6 @@ Task 375: Remove any remaining Core-governs-prompts assumptions and define promp
 Task 376: Update the local/Core budget contract so Core only declares spend authority in the form “this node may spend up to X for these services/providers/models” - Completed on 03/20/2026 09:23
 Task 377: Implement provider/service/model scoped spend-allowance handling from Core declarations without introducing Core-managed prompt governance - Completed on 03/20/2026 09:23
 Task 378: Update diagnostics, API contracts, and docs so prompt ownership stays on-node while Core budget declarations are limited to spend authority for services/providers/models - Completed on 03/20/2026 09:23
+Task 379: Detect resolved task-family changes after OpenAI enabled-model updates so the node can tell when provider model toggles changed the declaration surface - Completed on 03/20/2026 09:35
+Task 380: Automatically trigger capability redeclaration when enabled-model changes alter the resolved task families advertised to Core - Completed on 03/20/2026 09:35
+Task 381: Update API/tests/docs so enabled-model updates report whether a redeclaration was triggered or skipped because the task set was unchanged - Completed on 03/20/2026 09:35

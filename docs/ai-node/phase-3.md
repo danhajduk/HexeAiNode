@@ -155,6 +155,12 @@ Current node-local provider budget behavior:
 - supported periods are `monthly` and `weekly`
 - weekly windows use local-time Monday through Sunday boundaries
 
+Current capability-drift behavior after model selection changes:
+
+- updating OpenAI enabled models recomputes resolved node task families immediately
+- the node compares the previous and current resolved task-family sets
+- capability redeclaration is triggered only when that task surface changed
+
 ## Prompt Execution Governance
 
 Status: Implemented baseline

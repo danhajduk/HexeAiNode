@@ -16,6 +16,8 @@ class NodeControlApiTests(unittest.TestCase):
             self.refresh_calls = 0
             self.openai_reload_calls = 0
             self.last_execution_request = None
+            self._enabled_models = ["gpt-5-mini"]
+            self._resolved_tasks = ["task.classification"]
 
         async def refresh(self):
             self.refresh_calls += 1
@@ -77,12 +79,25 @@ class NodeControlApiTests(unittest.TestCase):
             return {
                 "schema_version": "1.0",
                 "capability_graph_version": "1.0",
-                "enabled_models": ["gpt-5-mini"],
+                "enabled_models": list(self._enabled_models),
                 "feature_union": {"classification": True},
-                "resolved_tasks": ["task.classification"],
-                "enabled_task_capabilities": ["task.classification"],
+                "resolved_tasks": list(self._resolved_tasks),
+                "enabled_task_capabilities": list(self._resolved_tasks),
                 "generated_at": "2026-03-13T00:00:00Z",
                 "source": "node_capabilities",
+            }
+
+        def save_openai_enabled_models(self, *, model_ids: list[str]):
+            self._enabled_models = list(model_ids)
+            self._resolved_tasks = ["task.classification", "task.reasoning"] if "gpt-5-pro" in model_ids else ["task.classification"]
+            return {
+                "provider_id": "openai",
+                "models": [
+                    {"model_id": model_id, "enabled": True, "selected_at": "2026-03-13T00:00:00Z"}
+                    for model_id in model_ids
+                ],
+                "source": "provider_enabled_models",
+                "generated_at": "2026-03-13T00:00:00Z",
             }
 
         def metrics_snapshot(self):
@@ -231,8 +246,15 @@ class NodeControlApiTests(unittest.TestCase):
             self.payload = payload
 
     class _FakeCapabilityRunner:
+        def __init__(self):
+            self.redeclare_calls = []
+
         async def submit_once(self):
             return {"status": "accepted"}
+
+        async def redeclare_if_needed(self, *, reason: str, force: bool = False):
+            self.redeclare_calls.append({"reason": reason, "force": force})
+            return {"status": "accepted", "reason": reason, "force": force}
 
         def clear_local_state_for_reonboarding(self):
             self.cleared = True
@@ -743,6 +765,44 @@ class NodeControlApiTests(unittest.TestCase):
             payload = state.status_payload()
             self.assertFalse(payload["capability_setup"]["declaration_allowed"])
             self.assertIn("openai_usable_models_required_before_declare", payload["capability_setup"]["blocking_reasons"])
+
+    def test_enabled_model_update_redeclares_when_resolved_tasks_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            capability_runner = self._FakeCapabilityRunner()
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=capability_runner,
+                provider_runtime_manager=self._FakeProviderRuntimeManager(),
+            )
+
+            payload = asyncio.run(state.update_openai_enabled_models_with_redeclaration(model_ids=["gpt-5-mini", "gpt-5-pro"]))
+
+            self.assertTrue(payload["task_surface_changed"])
+            self.assertEqual(payload["previous_resolved_tasks"], ["task.classification"])
+            self.assertEqual(payload["resolved_tasks"], ["task.classification", "task.reasoning"])
+            self.assertEqual(payload["declaration"]["reason"], "enabled_models_changed")
+            self.assertEqual(len(capability_runner.redeclare_calls), 1)
+
+    def test_enabled_model_update_skips_redeclare_when_resolved_tasks_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            capability_runner = self._FakeCapabilityRunner()
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=capability_runner,
+                provider_runtime_manager=self._FakeProviderRuntimeManager(),
+            )
+
+            payload = asyncio.run(state.update_openai_enabled_models_with_redeclaration(model_ids=["gpt-5-mini"]))
+
+            self.assertFalse(payload["task_surface_changed"])
+            self.assertEqual(payload["declaration"]["reason"], "enabled_models_no_task_change")
+            self.assertEqual(len(capability_runner.redeclare_calls), 0)
 
     def test_prompt_service_registration_probation_and_execution_authorization(self):
         with tempfile.TemporaryDirectory() as tmp:

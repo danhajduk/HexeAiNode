@@ -162,6 +162,21 @@ Current local provider-budget option:
 - Error:
   - `400` when provider credential preference persistence fails.
 
+### Save OpenAI enabled models
+
+- `POST /api/providers/openai/models/enabled`
+- Request:
+  - `model_ids: string[]`
+- Success:
+  - `provider_id: "openai"`
+  - `models[]`
+  - `task_surface_changed: boolean`
+  - `previous_resolved_tasks[]`
+  - `resolved_tasks[]`
+  - `declaration`
+    - auto-runs capability redeclaration when the resolved task-family set changed
+    - returns `status=unchanged` and `reason=enabled_models_no_task_change` when no declaration drift was introduced
+
 ### Read latest OpenAI models
 
 - `GET /api/providers/openai/models/latest?limit=<n>`
