@@ -124,6 +124,11 @@ class NodeControlApiTests(unittest.TestCase):
         def load(self):
             return self._payload
 
+        def load_or_create(self, migration_node_id=None):
+            if self._payload is None and migration_node_id:
+                self._payload = {"node_id": migration_node_id}
+            return self._payload
+
     class _FakeProviderSelectionStore:
         def __init__(self):
             self.payload = {
@@ -353,6 +358,32 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(payload["identity_state"], "valid")
             self.assertEqual(payload["node_id"], "123e4567-e89b-42d3-a456-426614174000")
 
+    def test_status_rehydrates_trusted_identity_and_runtime_context_from_trust_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED, {"source": "test"})
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING, {"source": "test"})
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                node_identity_store=self._FakeNodeIdentityStore(None),
+                trust_state_store=self._FakeTrustStateStore(),
+                provider_selection_store=self._FakeProviderSelectionStore(),
+                task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
+                startup_mode="bootstrap_onboarding",
+                trusted_runtime_context={},
+            )
+
+            payload = state.status_payload()
+
+            self.assertEqual(payload["startup_mode"], "trusted_resume")
+            self.assertEqual(payload["node_id"], "123e4567-e89b-42d3-a456-426614174000")
+            self.assertEqual(payload["identity_state"], "valid")
+            self.assertEqual(payload["trusted_runtime_context"]["paired_core_id"], "core-main")
+            self.assertTrue(payload["capability_setup"]["readiness_flags"]["node_identity_valid"])
+            self.assertTrue(payload["capability_setup"]["readiness_flags"]["core_runtime_context_valid"])
+
     def test_execute_direct_returns_completed_result(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
@@ -522,6 +553,21 @@ class NodeControlApiTests(unittest.TestCase):
 
             disabled_payload = state.update_provider_selection(openai_enabled=False)
             self.assertNotIn("openai", disabled_payload["config"]["providers"]["enabled"])
+
+    def test_update_provider_selection_persists_provider_budget_limits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_selection_store=self._FakeProviderSelectionStore(),
+            )
+            payload = state.update_provider_selection(
+                openai_enabled=True,
+                provider_budget_limits={"openai": {"max_cost_cents": 2500}},
+            )
+            self.assertEqual(payload["config"]["providers"]["budget_limits"]["openai"]["max_cost_cents"], 2500)
 
     def test_update_task_capability_selection_persists_selected_families(self):
         with tempfile.TemporaryDirectory() as tmp:

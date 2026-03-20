@@ -28,6 +28,21 @@ def _normalize_provider_models(value: object) -> dict[str, list[str]]:
     return normalized
 
 
+def _normalize_provider_budget_limits(value: object) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, int] = {}
+    for provider_id, payload in value.items():
+        key = _normalize_string(provider_id).lower()
+        if not key or not isinstance(payload, dict):
+            continue
+        max_cost_cents = payload.get("max_cost_cents")
+        if max_cost_cents is None:
+            continue
+        normalized[key] = max(int(max_cost_cents), 0)
+    return normalized
+
+
 @dataclass(frozen=True)
 class ProviderSelectionPolicyInput:
     enabled_providers: list[str]
@@ -37,7 +52,9 @@ class ProviderSelectionPolicyInput:
     provider_health: dict[str, dict] = field(default_factory=dict)
     usable_models_by_provider: dict[str, list[str]] = field(default_factory=dict)
     provider_retry_count: dict[str, int] = field(default_factory=dict)
+    provider_budget_limits: dict[str, dict] = field(default_factory=dict)
     request_timeout_s: int = 60
+    request_max_cost_cents: int | None = None
     governance_constraints: dict | None = None
 
 
@@ -81,6 +98,7 @@ def build_provider_selection_policy(policy: ProviderSelectionPolicyInput) -> Pro
         _normalize_string(provider_id).lower(): (payload if isinstance(payload, dict) else {})
         for provider_id, payload in (policy.provider_health or {}).items()
     }
+    provider_budget_limits = _normalize_provider_budget_limits(policy.provider_budget_limits)
     usable_models_by_provider = _normalize_provider_models(policy.usable_models_by_provider)
     approved_models_by_provider = _normalize_provider_models(governance.get("approved_models"))
     routing_policy = governance.get("routing_policy_constraints") if isinstance(governance.get("routing_policy_constraints"), dict) else {}
@@ -98,6 +116,9 @@ def build_provider_selection_policy(policy: ProviderSelectionPolicyInput) -> Pro
         availability = str((provider_health.get(candidate) or {}).get("availability") or "unavailable").strip().lower()
         if availability not in {"available", "degraded", ""}:
             continue
+        if policy.request_max_cost_cents is not None and candidate in provider_budget_limits:
+            if int(policy.request_max_cost_cents) > int(provider_budget_limits.get(candidate) or 0):
+                continue
         provider_order.append(candidate)
 
     if not provider_order:

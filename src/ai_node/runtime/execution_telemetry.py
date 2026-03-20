@@ -13,6 +13,11 @@ EXECUTION_TELEMETRY_EVENTS = {
     "provider_selected",
     "provider_fallback",
     "execution_timeout",
+    "budget_policy_refresh",
+    "budget_reservation",
+    "budget_denial",
+    "budget_finalized",
+    "budget_reset",
 }
 
 

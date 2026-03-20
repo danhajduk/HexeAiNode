@@ -24,6 +24,7 @@ Backend runtime:
 - `SYNTHIA_PHASE2_STATE_PATH` default `.run/phase2_state.json`
 - `SYNTHIA_PROVIDER_CAPABILITY_REPORT_PATH` default `.run/provider_capability_report.json`
 - `SYNTHIA_PROMPT_SERVICE_STATE_PATH` default `.run/prompt_service_state.json`
+- `SYNTHIA_BUDGET_STATE_PATH` default `.run/budget_state.json`
 - `SYNTHIA_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS` default `14400`
 - `SYNTHIA_FINALIZE_POLL_INTERVAL_SECONDS` default `2`
 - `SYNTHIA_PROVIDER_REGISTRY_PATH` default `data/provider_registry.json`
@@ -48,7 +49,9 @@ Provider-specific:
 
 - `scripts/stack.env`: local service commands for `bootstrap.sh`
 - `.run/*.json`: persisted node runtime state
+- `.run/provider_selection_config.json`: provider enablement and optional per-provider budget ceiling state
 - `.run/provider_credentials.json`: restricted-permission provider credential store
+- `.run/budget_state.json`: cached budget policy, grant usage, reservations, and recent denial state
 - `data/provider_registry.json`: provider capability snapshot
 - `data/provider_metrics.json`: provider metrics snapshot
 - `providers/openai/provider_model_classifications.json`: canonical deterministic OpenAI model capability classifications
@@ -74,5 +77,6 @@ Provider-specific:
 ## Defaults And Required Values
 
 - Provider selection defaults to OpenAI as a supported cloud provider and starts disabled until configured.
+- Provider selection may also persist optional per-provider budget ceilings in `providers.budget_limits.<provider_id>.max_cost_cents`.
 - Task capability selection defaults to the canonical task family list when created locally.
 - Valid trust state requires node identity, Core pairing metadata, trust token, and operational MQTT credentials.

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES
 from ai_node.config.bootstrap_config import create_bootstrap_config
@@ -49,9 +49,11 @@ class NodeControlState:
         trust_state_store=None,
         governance_state_store=None,
         prompt_service_state_store=None,
+        budget_state_store=None,
         trust_status_client=None,
         execution_gateway=None,
         provider_runtime_manager=None,
+        budget_manager=None,
         service_manager=None,
         task_execution_service=None,
         provider_refresh_interval_seconds: int = 900,
@@ -71,9 +73,11 @@ class NodeControlState:
         self._trust_state_store = trust_state_store
         self._governance_state_store = governance_state_store
         self._prompt_service_state_store = prompt_service_state_store
+        self._budget_state_store = budget_state_store
         self._trust_status_client = trust_status_client or TrustStatusClient(logger=logger)
         self._execution_gateway = execution_gateway or ExecutionGateway()
         self._provider_runtime_manager = provider_runtime_manager
+        self._budget_manager = budget_manager
         self._service_manager = service_manager or NullServiceManager()
         self._task_execution_service = task_execution_service
         self._provider_refresh_interval_seconds = max(int(provider_refresh_interval_seconds), 60)
@@ -89,6 +93,7 @@ class NodeControlState:
         self._node_id = None
         self._identity_state = "unknown"
         self._load_identity()
+        self._rehydrate_trusted_state()
         self._load_provider_selection_config()
         self._load_provider_credentials_summary()
         self._load_task_capability_selection_config()
@@ -136,11 +141,14 @@ class NodeControlState:
             self._task_capability_selection_config if isinstance(self._task_capability_selection_config, dict) else None
         )
         enabled_providers = []
+        provider_budget_limits = {}
         supported_providers = {"cloud": [], "local": [], "future": []}
         selected_task_families = []
+        budget_status = self.budget_state_payload()
         if isinstance(provider_config, dict):
             providers = provider_config.get("providers") if isinstance(provider_config.get("providers"), dict) else {}
             enabled_providers = list(providers.get("enabled") or [])
+            provider_budget_limits = dict(providers.get("budget_limits") or {})
             supported = providers.get("supported") if isinstance(providers.get("supported"), dict) else {}
             supported_providers = {
                 "cloud": list(supported.get("cloud") or []),
@@ -192,6 +200,7 @@ class NodeControlState:
                 "configured": provider_config is not None,
                 "enabled_count": len(enabled_providers),
                 "enabled": enabled_providers,
+                "budget_limits": provider_budget_limits,
                 "supported": supported_providers,
             },
             "task_capability_selection": {
@@ -200,6 +209,7 @@ class NodeControlState:
                 "selected": selected_task_families,
                 "available": list(CANONICAL_TASK_FAMILIES),
             },
+            "budget_policy": budget_status,
             "blocking_reasons": blocking_reasons,
             "declaration_allowed": declaration_allowed,
             "disallowed_transitions": [
@@ -288,6 +298,52 @@ class NodeControlState:
         self._identity_state = "valid"
         self._node_id = payload.get("node_id")
 
+    def _rehydrate_trusted_state(self) -> None:
+        trust_state = (
+            self._trust_state_store.load()
+            if self._trust_state_store is not None and hasattr(self._trust_state_store, "load")
+            else None
+        )
+        if not isinstance(trust_state, dict):
+            return
+
+        trust_node_id = str(trust_state.get("node_id") or "").strip()
+        if (
+            not self._is_non_empty_string(self._node_id)
+            and trust_node_id
+            and self._node_identity_store is not None
+            and hasattr(self._node_identity_store, "load_or_create")
+        ):
+            try:
+                payload = self._node_identity_store.load_or_create(migration_node_id=trust_node_id)
+            except TypeError:
+                payload = self._node_identity_store.load_or_create()
+            if isinstance(payload, dict) and self._is_non_empty_string(payload.get("node_id")):
+                self._node_id = str(payload.get("node_id")).strip()
+                self._identity_state = "valid"
+
+        if not self._is_non_empty_string(self._node_id) and trust_node_id:
+            self._node_id = trust_node_id
+            self._identity_state = "valid"
+
+        if not isinstance(self._trusted_runtime_context, dict):
+            self._trusted_runtime_context = {}
+        if not self._trusted_runtime_context and trust_node_id:
+            self._trusted_runtime_context = {
+                "node_id": trust_node_id,
+                "paired_core_id": str(trust_state.get("paired_core_id") or "").strip(),
+                "core_api_endpoint": str(trust_state.get("core_api_endpoint") or "").strip(),
+                "operational_mqtt_host": str(trust_state.get("operational_mqtt_host") or "").strip(),
+                "operational_mqtt_port": trust_state.get("operational_mqtt_port"),
+                "pairing_timestamp": str(trust_state.get("registration_timestamp") or "").strip(),
+            }
+        if (
+            trust_node_id
+            and self._startup_mode == "bootstrap_onboarding"
+            and self._is_non_empty_string(self._trusted_runtime_context.get("paired_core_id"))
+        ):
+            self._startup_mode = "trusted_resume"
+
     def _load_existing_config(self) -> None:
         if not self._config_path.exists():
             return
@@ -343,6 +399,7 @@ class NodeControlState:
         return datetime.now(timezone.utc).isoformat()
 
     def status_payload(self) -> dict:
+        self._rehydrate_trusted_state()
         self._sync_core_support_status()
         state = self._lifecycle.get_state()
         runtime_context = {}
@@ -501,6 +558,11 @@ class NodeControlState:
         if not isinstance(self._prompt_service_state, dict):
             return {"configured": False, "state": None}
         return {"configured": True, "state": self._prompt_service_state}
+
+    def budget_state_payload(self) -> dict:
+        if self._budget_manager is None:
+            return {"configured": False, "policy_status": "unconfigured", "grant_count": 0, "grants": []}
+        return self._budget_manager.status_payload()
 
     def register_prompt_service(
         self,
@@ -689,6 +751,7 @@ class NodeControlState:
             provider_runtime_manager=self._provider_runtime_manager,
             provider_resolver=provider_resolver,
             logger=self._logger,
+            budget_manager=self._budget_manager,
             execution_gateway=self._execution_gateway,
             prompt_services_state_provider=lambda: (
                 self._prompt_service_state if isinstance(self._prompt_service_state, dict) else {}
@@ -706,13 +769,21 @@ class NodeControlState:
         result = await service.execute(request)
         return result.model_dump(mode="json")
 
+    async def refresh_budget_policy(self) -> dict:
+        if self._budget_manager is None:
+            raise ValueError("budget manager is not configured")
+        return await self._budget_manager.refresh_policy_from_core(
+            trust_state=self._trust_state_payload(),
+            governance_bundle=self._governance_bundle_payload(),
+        )
+
     def restart_service(self, *, target: str) -> dict:
         if self._service_manager is None or not hasattr(self._service_manager, "restart"):
             raise ValueError("service manager is not configured")
         result = self._service_manager.restart(target=target)
         return {"status": "ok", **result, "services": self._service_manager.get_status()}
 
-    def update_provider_selection(self, *, openai_enabled: bool) -> dict:
+    def update_provider_selection(self, *, openai_enabled: bool, provider_budget_limits: dict | None = None) -> dict:
         if self._provider_selection_store is None or not hasattr(self._provider_selection_store, "save"):
             raise ValueError("provider selection store is not configured")
         payload = self._provider_selection_store.load_or_create(openai_enabled=False)
@@ -723,12 +794,31 @@ class NodeControlState:
         else:
             enabled.discard("openai")
         providers["enabled"] = sorted(enabled)
+        normalized_budget_limits: dict[str, dict[str, int]] = {}
+        if isinstance(provider_budget_limits, dict):
+            supported = providers.get("supported") if isinstance(providers.get("supported"), dict) else {}
+            supported_ids = {
+                str(item).strip().lower()
+                for group in ("cloud", "local", "future")
+                for item in list(supported.get(group) or [])
+                if str(item).strip()
+            }
+            for provider_id, limit_payload in provider_budget_limits.items():
+                normalized_provider_id = str(provider_id or "").strip().lower()
+                if normalized_provider_id not in supported_ids or not isinstance(limit_payload, dict):
+                    continue
+                max_cost_cents = limit_payload.get("max_cost_cents")
+                if max_cost_cents in (None, ""):
+                    continue
+                normalized_budget_limits[normalized_provider_id] = {"max_cost_cents": max(int(max_cost_cents), 0)}
+        providers["budget_limits"] = normalized_budget_limits
         self._provider_selection_store.save(payload)
         self._provider_selection_config = payload
         self._phase2_diag.provider_selection(
             {
                 "source": "node_control_api",
                 "enabled_providers": providers["enabled"],
+                "provider_budget_limits": normalized_budget_limits,
             }
         )
         return self.provider_selection_payload()
@@ -1454,7 +1544,10 @@ class OnboardingInitiateRequest(BaseModel):
 
 
 class ProviderSelectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     openai_enabled: bool
+    provider_budget_limits: dict[str, dict[str, int | None]] | None = None
 
 
 class OpenAICredentialsRequest(BaseModel):
@@ -1564,6 +1657,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/capabilities/declare",
                 "/api/governance/status",
                 "/api/governance/refresh",
+                "/api/budgets/state",
+                "/api/budgets/refresh",
                 "/api/capabilities/providers/refresh",
                 "/api/node/recover",
                 "/api/prompts/services",
@@ -1607,7 +1702,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.post("/api/providers/config")
     async def post_provider_config(payload: ProviderSelectionRequest):
         try:
-            response = state.update_provider_selection(openai_enabled=payload.openai_enabled)
+            response = state.update_provider_selection(
+                openai_enabled=payload.openai_enabled,
+                provider_budget_limits=payload.provider_budget_limits,
+            )
             return {**response, "declaration": {"status": "pending_manual", "reason": "provider_configuration_changed"}}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1794,6 +1892,17 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.get("/api/budgets/state")
+    def get_budget_state():
+        return state.budget_state_payload()
+
+    @app.post("/api/budgets/refresh")
+    async def post_budget_refresh():
+        try:
+            return await state.refresh_budget_policy()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post("/api/capabilities/providers/refresh")
     async def post_provider_capability_refresh(
         payload: ProviderCapabilityRefreshRequest,
@@ -1884,6 +1993,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/debug/providers/metrics")
     def get_debug_provider_metrics():
         return state.debug_provider_metrics_payload()
+
+    @app.get("/debug/budgets")
+    def get_debug_budgets():
+        return state.budget_state_payload()
 
     @app.get("/debug/execution")
     def get_debug_execution():

@@ -77,9 +77,44 @@ This is the canonical source-of-truth contract for:
 - `POST /api/providers/config`
 - Request:
   - `openai_enabled: boolean`
+  - optional `provider_budget_limits: { [provider_id]: { max_cost_cents: integer | null } }`
 - Success: updated provider config payload.
 - Error:
   - `400` when provider store is unavailable.
+
+Current local provider-budget option:
+
+- provider config can persist optional per-provider local budget ceilings under `config.providers.budget_limits`
+- current UI exposes this for `openai`
+- this remains node-local setup state and does not replace the Core-issued budget-policy and grant contract
+
+## Budget State
+
+### Read budget state
+
+- `GET /api/budgets/state`
+- Response:
+  - `configured: boolean`
+  - `policy_status`
+  - `budget_policy_version`
+  - `governance_version`
+  - `grant_count`
+  - `active_reservations`
+  - `recent_denials[]`
+  - `grants[]`
+
+### Refresh cached budget policy
+
+- `POST /api/budgets/refresh`
+- Behavior:
+  - refreshes cached policy from governance first
+  - when trusted Core connection data is present, also attempts `GET /api/system/nodes/budgets/policy/current`
+
+### Debug budget inspection
+
+- `GET /debug/budgets`
+- Response:
+  - same budget-state payload used by the normal budget API
 
 ### Read OpenAI credential summary
 
@@ -526,7 +561,7 @@ Current enforcement model:
 - `POST /api/execution/direct`
 - Request:
   - canonical `TaskExecutionRequest` payload
-  - includes broader existing fields such as `prompt_id`, `requested_provider`, `requested_model`, `constraints`, `timeout_s`, `trace_id`, and optional `lease_id`
+  - includes broader existing fields such as `prompt_id`, `service_id`, `customer_id`, `requested_provider`, `requested_model`, `constraints`, `timeout_s`, `trace_id`, and optional `lease_id`
 - Response:
   - canonical `TaskExecutionResult` payload
   - terminal result is returned directly for completed, rejected, failed, degraded, or unsupported execution
@@ -538,6 +573,7 @@ Execution behavior:
 
 - reuses the shared `TaskExecutionService`
 - enforces prompt authorization when `prompt_id` is present
+- enforces cached budget grants when budget policy is active
 - validates against the existing broader declared/accepted task families
 - resolves provider/model from current local usable provider state
 - applies governance before and after provider resolution

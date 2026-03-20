@@ -305,3 +305,29 @@ Task 320: Redesign the header layout - Completed on 03/19/2026 20:11
 Task 321: Redesign the setup page layout - Completed on 03/19/2026 20:11
 Task 322: Remove restart setup button from the header - Completed on 03/19/2026 20:29
 Task 323: Implement Core-driven node removal reset flow - Completed on 03/19/2026 20:29
+Task 324: Define the AI-Node local budget-enforcement contract for Core-issued budget policy and cached grants with `node`, `customer`, and `provider` scope support - Completed on 03/20/2026 08:27
+Task 325: Check Core-Documents for the canonical budget-policy and grant schema and create a Core-doc follow-up ticket only if the exact node hot-path payload is still missing - Completed on 03/20/2026 08:27
+Task 326: Add persistent local storage for Core-issued budget policy snapshots and cached grants on the AI Node - Completed on 03/20/2026 08:27
+Task 327: Add persistent local storage for grant usage summaries, reservation totals, and reset window metadata on the AI Node - Completed on 03/20/2026 08:27
+Task 328: Define the local budget period model for daily, weekly, and monthly reset windows using Core-issued policy data - Completed on 03/20/2026 08:27
+Task 329: Add budget-policy refresh and cache-loading flow using governance and `/api/system/nodes/budgets/policy/*` so the node can keep enforcing cached grants when Core is not on the hot path - Completed on 03/20/2026 08:27
+Task 330: Define canonical request fields needed for budget enforcement, including caller/customer identity, service identity, provider targeting, and optional execution cost constraints - Completed on 03/20/2026 08:27
+Task 331: Extend the task execution request and validation flow to require or normalize the caller identity fields needed for `customer`-scoped budget enforcement - Completed on 03/20/2026 08:27
+Task 332: Define the local money-budget reservation model used before execution dispatch - Completed on 03/20/2026 08:27
+Task 333: Add pre-execution budget reservation checks in the execution service using the applicable cached `node`/`customer`/`provider` grants - Completed on 03/20/2026 08:27
+Task 334: Add post-execution budget finalization flow to convert estimated reservation amounts into actual spend using execution metrics - Completed on 03/20/2026 08:27
+Task 335: Add reservation release behavior for rejected, failed-before-dispatch, timed-out, and cancelled executions - Completed on 03/20/2026 08:27
+Task 336: Add degraded-mode budget behavior for cases where estimated cost exists but final actual cost is unavailable - Completed on 03/20/2026 08:27
+Task 337: Extend governance enforcement to reject execution when no applicable active cached grant exists or the active period budget is exhausted - Completed on 03/20/2026 08:27
+Task 338: Add denial and failure taxonomy for budget enforcement outcomes such as missing_budget_grant, budget_exhausted, reservation_conflict, and budget_state_invalid - Completed on 03/20/2026 08:27
+Task 339: Add concurrency-safe reservation handling to avoid double-spend or overlapping reservation races for the same user budget - Completed on 03/20/2026 08:27
+Task 340: Extend provider selection and execution planning to honor request-side max_cost constraints together with cached `customer` and `provider` budget ceilings - Completed on 03/20/2026 08:27
+Task 341: Expose budget-policy state, remaining grant balance, reservation totals, and reset timing through node diagnostics and observability endpoints - Completed on 03/20/2026 08:27
+Task 342: Add execution telemetry for budget-policy refresh, reservation, denial, finalization, and reset events on the existing trusted telemetry path - Completed on 03/20/2026 08:27
+Task 343: Add local admin/debug APIs to inspect cached grants, current usage, active reservations, and recent budget denials - Completed on 03/20/2026 08:27
+Task 344: Add automated budget reset / rollover handling based on the active grant period and Core-issued timing metadata - Completed on 03/20/2026 08:27
+Task 345: Add tests for reservation math, finalization math, partial usage settlement, and failed execution release behavior - Completed on 03/20/2026 08:27
+Task 346: Add tests for concurrency and double-spend prevention across overlapping execution requests for the same user - Completed on 03/20/2026 08:27
+Task 347: Add tests for budget denial behavior when grants are missing, stale, exhausted, or inconsistent - Completed on 03/20/2026 08:27
+Task 348: Add end-to-end execution tests proving Core-issued cached grants are enforced locally without putting Core in the hot path - Completed on 03/20/2026 08:27
+Task 349: Update Phase 3 documentation and node-control API docs to describe Core-issued budget-policy enforcement, grant scopes, and the removal of prompt-registration dependency from the budget flow - Completed on 03/20/2026 08:27

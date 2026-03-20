@@ -26,6 +26,8 @@ class TaskExecutionRequest(BaseModel):
     prompt_id: str | None = None
     task_family: str
     requested_by: str
+    service_id: str | None = None
+    customer_id: str | None = None
     requested_provider: str | None = None
     requested_model: str | None = None
     inputs: dict[str, Any] = Field(default_factory=dict)
@@ -61,7 +63,7 @@ class TaskExecutionRequest(BaseModel):
     def _validate_requested_by(cls, value: str) -> str:
         return _normalized_non_empty_string(value, field_name="requested_by", max_length=255)
 
-    @field_validator("requested_provider", "requested_model")
+    @field_validator("service_id", "customer_id", "requested_provider", "requested_model")
     @classmethod
     def _validate_optional_selection_string(cls, value: str | None, info) -> str | None:
         if value is None:
@@ -103,6 +105,12 @@ class TaskExecutionRequest(BaseModel):
         if value is None:
             return None
         return _normalized_non_empty_string(value, field_name="lease_id")
+
+    @model_validator(mode="after")
+    def _normalize_identity_fields(self) -> "TaskExecutionRequest":
+        if self.service_id is None:
+            self.service_id = self.requested_by
+        return self
 
 
 class TaskExecutionMetrics(BaseModel):

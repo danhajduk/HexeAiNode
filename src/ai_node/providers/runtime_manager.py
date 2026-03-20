@@ -395,6 +395,7 @@ class ProviderRuntimeManager:
         enabled_providers = list(config.enabled_providers or [])
         default_model_by_provider: dict[str, str | None] = {}
         provider_retry_count: dict[str, int] = {}
+        provider_budget_limits: dict[str, dict[str, int]] = {}
         provider_health: dict[str, dict] = {}
         available_models_by_provider: dict[str, list[str]] = {}
         usable_models_by_provider: dict[str, list[str]] = {}
@@ -403,6 +404,8 @@ class ProviderRuntimeManager:
             settings = config.providers.get(provider_id)
             default_model_by_provider[provider_id] = settings.default_model_id if settings is not None else None
             provider_retry_count[provider_id] = max(int(settings.retry_count), 0) if settings is not None else 0
+            if settings is not None and settings.max_cost_cents is not None:
+                provider_budget_limits[provider_id] = {"max_cost_cents": max(int(settings.max_cost_cents), 0)}
             provider_health[provider_id] = self._registry.get_provider_health(provider_id) or {}
             available_models = [
                 str(model.model_id or "").strip()
@@ -422,6 +425,7 @@ class ProviderRuntimeManager:
             "default_provider": config.default_provider,
             "default_model_by_provider": default_model_by_provider,
             "provider_retry_count": provider_retry_count,
+            "provider_budget_limits": provider_budget_limits,
             "provider_health": provider_health,
             "available_models_by_provider": available_models_by_provider,
             "usable_models_by_provider": usable_models_by_provider,
@@ -442,15 +446,38 @@ class ProviderRuntimeManager:
             "source": "provider_enabled_models",
         }
 
-    def _openai_processing_model_ids(self, *, catalog_model_ids: list[str]) -> list[str]:
+    def _openai_processing_model_ids(
+        self,
+        *,
+        catalog_model_ids: list[str],
+        preserve_model_ids: list[str] | None = None,
+    ) -> list[str]:
         normalized_catalog: list[str] = []
         for model_id in catalog_model_ids:
             normalized = str(model_id or "").strip().lower()
             if normalized and normalized not in normalized_catalog:
                 normalized_catalog.append(normalized)
         selected = select_representative_openai_model_ids(normalized_catalog)
+        selected.update(
+            {
+                str(model_id or "").strip().lower()
+                for model_id in (preserve_model_ids or [])
+                if str(model_id or "").strip()
+            }
+        )
         scoped = sorted(model_id for model_id in normalized_catalog if model_id in selected)
         return scoped or normalized_catalog
+
+    def _openai_selected_model_ids(self) -> list[str]:
+        enabled_snapshot = self._provider_enabled_models_store.load()
+        if enabled_snapshot is None:
+            return []
+        selected_ids: list[str] = []
+        for entry in enabled_snapshot.models:
+            model_id = str(entry.model_id or "").strip().lower()
+            if model_id and model_id not in selected_ids:
+                selected_ids.append(model_id)
+        return selected_ids
 
     def openai_resolved_capabilities_payload(self) -> dict:
         capabilities_snapshot = self._provider_model_capabilities_store.load()
@@ -524,8 +551,10 @@ class ProviderRuntimeManager:
             model_catalog_snapshot = self._openai_model_catalog_store.save_from_model_ids(
                 model_ids=[getattr(model, "model_id", "") for model in models]
             )
+        selected_model_ids = self._openai_selected_model_ids()
         processing_model_ids = self._openai_processing_model_ids(
-            catalog_model_ids=[entry.model_id for entry in model_catalog_snapshot.models]
+            catalog_model_ids=[entry.model_id for entry in model_catalog_snapshot.models],
+            preserve_model_ids=selected_model_ids,
         )
         scoped_models = [entry for entry in model_catalog_snapshot.models if entry.model_id in set(processing_model_ids)]
         await self._refresh_openai_model_capabilities(models=scoped_models)
@@ -553,8 +582,10 @@ class ProviderRuntimeManager:
         model_catalog_snapshot = self._openai_model_catalog_store.save_from_model_ids(
             model_ids=[getattr(model, "model_id", "") for model in models]
         )
+        selected_model_ids = self._openai_selected_model_ids()
         processing_model_ids = self._openai_processing_model_ids(
-            catalog_model_ids=[entry.model_id for entry in model_catalog_snapshot.models]
+            catalog_model_ids=[entry.model_id for entry in model_catalog_snapshot.models],
+            preserve_model_ids=selected_model_ids,
         )
         scoped_models = [entry for entry in model_catalog_snapshot.models if entry.model_id in set(processing_model_ids)]
         await self._refresh_openai_model_capabilities(models=scoped_models)
@@ -600,7 +631,10 @@ class ProviderRuntimeManager:
             store=self._provider_model_capabilities_store,
         )
         try:
-            snapshot = await classifier.classify_and_save(models=models)
+            snapshot = await classifier.classify_and_save(
+                models=models,
+                preserve_model_ids=self._openai_selected_model_ids(),
+            )
             if snapshot is None:
                 self._provider_model_feature_catalog_store.save_entries(
                     provider="openai",

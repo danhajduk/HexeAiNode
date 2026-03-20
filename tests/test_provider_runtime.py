@@ -17,8 +17,8 @@ from ai_node.providers.runtime_manager import ProviderRuntimeManager
 
 
 class _SelectionStore:
-    def __init__(self, enabled: list[str]):
-        self._payload = {"providers": {"enabled": enabled}}
+    def __init__(self, enabled: list[str], budget_limits: dict | None = None):
+        self._payload = {"providers": {"enabled": enabled, "budget_limits": budget_limits or {}}}
 
     def load_or_create(self, **_kwargs):
         return self._payload
@@ -87,6 +87,27 @@ class _FakeOpenAIAdapter:
                     ]
                 }
             ),
+            latency_ms=1.0,
+        )
+
+
+class _FakeRepresentativeCollisionOpenAIAdapter:
+    async def health_check(self):
+        return {"availability": "available"}
+
+    async def list_models(self):
+        return [
+            ModelCapability(model_id="gpt-5.4-mini", display_name="gpt-5.4-mini", created=1741219200, status="available"),
+            ModelCapability(model_id="gpt-5-mini", display_name="gpt-5-mini", created=1741132800, status="available"),
+            ModelCapability(model_id="gpt-5.4-nano", display_name="gpt-5.4-nano", created=1741219201, status="available"),
+            ModelCapability(model_id="gpt-5-nano", display_name="gpt-5-nano", created=1741132801, status="available"),
+        ]
+
+    async def execute_prompt(self, _request):
+        return UnifiedExecutionResponse(
+            provider_id="openai",
+            model_id="gpt-5.4-mini",
+            output_text="{}",
             latency_ms=1.0,
         )
 
@@ -306,6 +327,29 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(resolved_payload["capabilities"]["reasoning"])
             self.assertEqual(resolved_payload["capabilities"]["coding_strength"], "high")
 
+    async def test_provider_selection_context_includes_provider_budget_limits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(
+                    enabled=["openai"],
+                    budget_limits={"openai": {"max_cost_cents": 2500}},
+                ),
+                provider_credentials_store=_CredentialsStore(),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+            )
+            runtime._registry.register_provider(provider_id="openai", adapter=MockProviderAdapter(provider_id="openai"))  # noqa: SLF001
+            runtime._registry.set_provider_health(provider_id="openai", payload={"availability": "available"})  # noqa: SLF001
+            runtime._registry.set_models_for_provider(  # noqa: SLF001
+                provider_id="openai",
+                models=[ModelCapability(model_id="gpt-5-mini", display_name="gpt-5-mini", status="available")],
+            )
+
+            payload = runtime.provider_selection_context_payload()
+
+            self.assertEqual(payload["provider_budget_limits"]["openai"]["max_cost_cents"], 2500)
+
     async def test_save_enabled_models_persists_node_capabilities(self):
         with tempfile.TemporaryDirectory() as tmp:
             graph_path = Path(tmp) / "task_graph.json"
@@ -422,6 +466,33 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             features_payload = runtime.openai_model_features_payload()
             self.assertEqual(features_payload["entries"][0]["model_id"], "gpt-5-mini")
             self.assertTrue(features_payload["entries"][0]["features"]["chat"])
+
+    async def test_refresh_openai_models_preserves_selected_models_in_classification_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["openai"]),
+                provider_credentials_store=_CredentialsStore(),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                provider_model_catalog_path=str(Path(tmp) / "provider_models.json"),
+                provider_model_capabilities_path=str(Path(tmp) / "provider_model_capabilities.json"),
+                provider_model_features_path=str(Path(tmp) / "providers" / "openai" / "provider_model_features.json"),
+                provider_enabled_models_path=str(Path(tmp) / "provider_enabled_models.json"),
+            )
+            runtime._build_adapter = lambda **_kwargs: _FakeRepresentativeCollisionOpenAIAdapter()  # noqa: SLF001
+            runtime.save_openai_enabled_models(model_ids=["gpt-5-mini", "gpt-5-nano"])
+
+            await runtime.refresh_openai_models_from_saved_credentials()
+
+            capabilities_payload = runtime.openai_model_capabilities_payload()
+            classified_ids = [entry["model_id"] for entry in capabilities_payload["entries"]]
+            self.assertIn("gpt-5-mini", classified_ids)
+            self.assertIn("gpt-5-nano", classified_ids)
+
+            usable_payload = runtime.openai_usable_models_payload()
+            self.assertEqual(usable_payload["usable_model_ids"], ["gpt-5-mini", "gpt-5-nano"])
+            self.assertEqual(usable_payload["blocked_models"], [])
 
     async def test_refresh_pricing_uses_filtered_catalog_models(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(

@@ -7,11 +7,43 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
+from ai_node.persistence.budget_state_store import BudgetStateStore
 from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
+from ai_node.runtime.budget_manager import BudgetManager
 from ai_node.runtime.node_control_api import NodeControlState, create_node_control_app
 
 
 class NodeControlFastApiTests(unittest.TestCase):
+    @staticmethod
+    def _active_budget_policy():
+        return {
+            "node_id": "node-001",
+            "service": "service.alpha",
+            "status": "active",
+            "budget_policy_version": "bp-001",
+            "governance_version": "gov-001",
+            "period_start": "2026-03-20T00:00:00+00:00",
+            "period_end": "2099-03-21T00:00:00+00:00",
+            "issued_at": "2026-03-20T00:00:00+00:00",
+            "grants": [
+                {
+                    "grant_id": "grant-node",
+                    "consumer_node_id": "node-001",
+                    "service": "service.alpha",
+                    "period_start": "2026-03-20T00:00:00+00:00",
+                    "period_end": "2099-03-21T00:00:00+00:00",
+                    "limits": {"max_cost_cents": 100},
+                    "status": "active",
+                    "scope_kind": "node",
+                    "subject_id": "node-001",
+                    "governance_version": "gov-001",
+                    "budget_policy_version": "bp-001",
+                    "metadata": {},
+                    "issued_at": "2026-03-20T00:00:00+00:00",
+                }
+            ],
+        }
+
     class _FakeProviderSelectionStore:
         def __init__(self):
             self.payload = {
@@ -19,6 +51,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "providers": {
                     "supported": {"cloud": ["openai"], "local": [], "future": []},
                     "enabled": [],
+                    "budget_limits": {},
                 },
                 "services": {"enabled": [], "future": []},
             }
@@ -102,7 +135,10 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "accepted_profile": {"declared_task_families": ["task.classification.text", "task.summarization.text"]},
                 "last_manifest_payload": {"manifest_version": "1.0"},
                 "last_declaration_result": {"status": "accepted"},
-                "governance_bundle": {"generic_node_class_rules": {"allow_task_families": ["classification", "summarization"]}},
+                "governance_bundle": {
+                    "generic_node_class_rules": {"allow_task_families": ["classification", "summarization"]},
+                    "budget_policy": NodeControlFastApiTests._active_budget_policy(),
+                },
                 "governance_status": {
                     "state": "fresh",
                     "active_governance_version": "1.0",
@@ -438,9 +474,20 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(provider_get_response.status_code, 200)
             self.assertIn("config", provider_get_response.json())
 
-            provider_set_response = client.post("/api/providers/config", json={"openai_enabled": True})
+            budget_state_response = client.get("/api/budgets/state")
+            self.assertEqual(budget_state_response.status_code, 200)
+            self.assertIn("configured", budget_state_response.json())
+
+            provider_set_response = client.post(
+                "/api/providers/config",
+                json={"openai_enabled": True, "provider_budget_limits": {"openai": {"max_cost_cents": 2500}}},
+            )
             self.assertEqual(provider_set_response.status_code, 200)
             self.assertIn("openai", provider_set_response.json()["config"]["providers"]["enabled"])
+            self.assertEqual(
+                provider_set_response.json()["config"]["providers"]["budget_limits"]["openai"]["max_cost_cents"],
+                2500,
+            )
 
             credentials_get_response = client.get("/api/providers/openai/credentials")
             self.assertEqual(credentials_get_response.status_code, 200)
@@ -765,6 +812,11 @@ class NodeControlFastApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
             runtime_manager = self._FakeProviderRuntimeManager()
+            budget_manager = BudgetManager(
+                store=BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("node-control-fastapi-test")),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                provider_runtime_manager=runtime_manager,
+            )
             state = NodeControlState(
                 lifecycle=lifecycle,
                 config_path=str(Path(tmp) / "bootstrap_config.json"),
@@ -773,6 +825,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
                 capability_runner=self._FakeCapabilityRunner(),
                 provider_runtime_manager=runtime_manager,
+                budget_manager=budget_manager,
                 prompt_service_state_store=self._FakePromptServiceStateStore(),
             )
             app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
@@ -799,6 +852,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(response.json()["output"]["text"], "mock:hello world")
             self.assertIsNotNone(runtime_manager.last_execution_request)
             self.assertEqual(runtime_manager.last_execution_request.requested_model, "gpt-5-mini")
+
+            budget_state_response = client.get("/api/budgets/state")
+            self.assertEqual(budget_state_response.status_code, 200)
+            self.assertEqual(budget_state_response.json()["grant_count"], 1)
 
 
 if __name__ == "__main__":

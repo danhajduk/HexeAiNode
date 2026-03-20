@@ -1,9 +1,13 @@
 import logging
+import tempfile
 import unittest
+from pathlib import Path
 
 from ai_node.execution.task_models import TaskExecutionRequest
+from ai_node.persistence.budget_state_store import BudgetStateStore
 from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
 from ai_node.runtime.provider_resolver import ProviderResolutionResult
+from ai_node.runtime.budget_manager import BudgetManager
 from ai_node.runtime.task_execution_service import TaskExecutionService
 
 
@@ -70,6 +74,36 @@ class _FakeExecutionTelemetryPublisher:
     async def publish_event(self, *, event_type: str, payload: dict | None = None):
         self.calls.append({"event_type": event_type, "payload": payload if isinstance(payload, dict) else {}})
         return {"published": True}
+
+
+def _active_budget_policy() -> dict:
+    return {
+        "node_id": "node-001",
+        "service": "service.alpha",
+        "status": "active",
+        "budget_policy_version": "bp-001",
+        "governance_version": "gov-001",
+        "period_start": "2026-03-20T00:00:00+00:00",
+        "period_end": "2099-03-21T00:00:00+00:00",
+        "issued_at": "2026-03-20T00:00:00+00:00",
+        "grants": [
+            {
+                "grant_id": "grant-node",
+                "consumer_node_id": "node-001",
+                "service": "service.alpha",
+                "period_start": "2026-03-20T00:00:00+00:00",
+                "period_end": "2099-03-21T00:00:00+00:00",
+                "limits": {"max_cost_cents": 100},
+                "status": "active",
+                "scope_kind": "node",
+                "subject_id": "node-001",
+                "governance_version": "gov-001",
+                "budget_policy_version": "bp-001",
+                "metadata": {},
+                "issued_at": "2026-03-20T00:00:00+00:00",
+            }
+        ],
+    }
 
 
 class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -173,6 +207,55 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.status, "completed")
         self.assertIn("provider_fallback", [item["event_type"] for item in telemetry.calls])
+
+    async def test_execute_emits_budget_events_when_budget_manager_is_configured(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            budget_manager = BudgetManager(
+                store=BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-test")),
+                logger=logging.getLogger("budget-test"),
+                provider_runtime_manager=_FakeProviderRuntimeManager(),
+            )
+            telemetry = _FakeExecutionTelemetryPublisher()
+            service = TaskExecutionService(
+                provider_runtime_manager=_FakeProviderRuntimeManager(),
+                provider_resolver=_FakeProviderResolver(
+                    ProviderResolutionResult(
+                        allowed=True,
+                        provider_id="openai",
+                        model_id="gpt-5-mini",
+                        provider_order=["openai"],
+                        fallback_provider_ids=[],
+                        model_allowlist_by_provider={"openai": ["gpt-5-mini"]},
+                        timeout_s=45,
+                        retry_count=1,
+                        rejection_reason=None,
+                    )
+                ),
+                logger=logging.getLogger("task-execution-service-test"),
+                budget_manager=budget_manager,
+                declared_task_families_provider=lambda: ["task.classification.text"],
+                accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+                governance_bundle_provider=lambda: {"budget_policy": _active_budget_policy()},
+                execution_telemetry_publisher=telemetry,
+            )
+
+            result = await service.execute(
+                TaskExecutionRequest.model_validate(
+                    {
+                        "task_id": "task-budget-001",
+                        "task_family": "task.classification.text",
+                        "requested_by": "service.alpha",
+                        "service_id": "service.alpha",
+                        "inputs": {"text": "hello world"},
+                        "constraints": {"max_cost_cents": 5},
+                        "trace_id": "trace-budget-001",
+                    }
+                )
+            )
+
+            self.assertEqual(result.status, "completed")
+            self.assertIn("budget_reservation", [item["event_type"] for item in telemetry.calls])
+            self.assertIn("budget_finalized", [item["event_type"] for item in telemetry.calls])
 
     async def test_execute_returns_unsupported_for_non_canonical_family(self):
         service = TaskExecutionService(

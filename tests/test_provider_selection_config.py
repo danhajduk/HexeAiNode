@@ -24,6 +24,15 @@ class ProviderSelectionConfigTests(unittest.TestCase):
         config = create_provider_selection_config({"openai_enabled": True})
         self.assertIn("openai", config["providers"]["enabled"])
 
+    def test_create_persists_provider_budget_limits(self):
+        config = create_provider_selection_config(
+            {
+                "openai_enabled": True,
+                "provider_budget_limits": {"openai": {"max_cost_cents": 2500}},
+            }
+        )
+        self.assertEqual(config["providers"]["budget_limits"]["openai"]["max_cost_cents"], 2500)
+
     def test_validate_rejects_enabled_provider_not_in_supported(self):
         is_valid, error = validate_provider_selection_config(
             {
@@ -37,6 +46,21 @@ class ProviderSelectionConfigTests(unittest.TestCase):
         )
         self.assertFalse(is_valid)
         self.assertEqual(error, "enabled_provider_not_supported")
+
+    def test_validate_rejects_provider_budget_for_unsupported_provider(self):
+        is_valid, error = validate_provider_selection_config(
+            {
+                "schema_version": "1.0",
+                "providers": {
+                    "supported": {"cloud": ["openai"], "local": [], "future": []},
+                    "enabled": ["openai"],
+                    "budget_limits": {"anthropic": {"max_cost_cents": 1000}},
+                },
+                "services": {"enabled": [], "future": []},
+            }
+        )
+        self.assertFalse(is_valid)
+        self.assertEqual(error, "provider_budget_not_supported")
 
     def test_store_save_load_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp:

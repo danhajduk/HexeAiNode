@@ -31,6 +31,15 @@ FAILURE_CODE_TAXONOMY = {
             "governance_violation_model",
         ],
     },
+    "budget_violation": {
+        "canonical_code": "budget_violation",
+        "aliases": [
+            "missing_budget_grant",
+            "budget_exhausted",
+            "reservation_conflict",
+            "budget_state_invalid",
+        ],
+    },
     "invalid_input": {
         "canonical_code": "invalid_input",
         "aliases": ["invalid_input"],
@@ -60,6 +69,8 @@ def classify_failure_code(code: str | None) -> str | None:
             return category
     if normalized.startswith("governance_violation"):
         return "governance_violation"
+    if normalized.startswith("budget_") or normalized in {"missing_budget_grant", "reservation_conflict"}:
+        return "budget_violation"
     if normalized.startswith("invalid_input"):
         return "invalid_input"
     return None

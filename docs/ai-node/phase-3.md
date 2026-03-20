@@ -60,6 +60,8 @@ Fields:
 - `prompt_id: string | null`
 - `task_family: string`
 - `requested_by: string`
+- `service_id: string | null`
+- `customer_id: string | null`
 - `requested_provider: string | null`
 - `requested_model: string | null`
 - `inputs: object`
@@ -73,12 +75,40 @@ Current validation rules:
 
 - required string fields must be non-empty after trimming
 - optional `prompt_id`, `requested_provider`, and `requested_model` are accepted when present
+- `service_id` defaults to `requested_by` when omitted
+- `customer_id` is accepted when present and is used for customer-scoped budget enforcement
 - `task_family` must pass the existing task-family identifier validation rules
 - `inputs` and `constraints` must be objects
 - `timeout_s` must be greater than `0` and no more than `3600`
 - extra fields are rejected
 
 This envelope is now used by the local direct execution API at `POST /api/execution/direct` and by the scheduler lease execution loop.
+
+## Budget Enforcement
+
+Status: Implemented baseline
+
+The node now implements local budget enforcement against cached Core-issued budget policy and grants.
+
+Current behavior:
+
+- reads `budget_policy` from governance when present
+- can refresh cached policy from Core through `/api/system/nodes/budgets/policy/current`
+- persists policy, grant usage, reservations, recent denials, and queued usage summaries locally
+- supports `node`, `customer`, and `provider` grant scopes
+- reserves spend before dispatch using request-side cost ceilings or local pricing estimates
+- finalizes actual spend after successful execution using execution metrics
+- releases reservations for rejected and failed executions before completion
+- emits execution telemetry for:
+  - `budget_reservation`
+  - `budget_denial`
+  - `budget_finalized`
+
+Current admin/debug visibility:
+
+- `GET /api/budgets/state`
+- `POST /api/budgets/refresh`
+- `GET /debug/budgets`
 
 ## Canonical Task Result Envelope
 

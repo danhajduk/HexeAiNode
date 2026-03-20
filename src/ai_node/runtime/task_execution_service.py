@@ -30,6 +30,7 @@ class TaskExecutionService:
         provider_runtime_manager,
         provider_resolver,
         logger,
+        budget_manager=None,
         lifecycle_tracker: ExecutionLifecycleTracker | None = None,
         execution_gateway: ExecutionGateway | None = None,
         task_router: TaskRouter | None = None,
@@ -43,6 +44,7 @@ class TaskExecutionService:
         self._provider_runtime_manager = provider_runtime_manager
         self._provider_resolver = provider_resolver
         self._logger = logger
+        self._budget_manager = budget_manager
         self._task_executor = RuntimeManagerProviderTaskExecutor(provider_runtime_manager=self._provider_runtime_manager)
         self._lifecycle_tracker = lifecycle_tracker or ExecutionLifecycleTracker()
         self._execution_gateway = execution_gateway or ExecutionGateway()
@@ -137,6 +139,7 @@ class TaskExecutionService:
                 requested_provider=request.requested_provider,
                 requested_model=request.requested_model,
                 timeout_s=request.timeout_s,
+                max_cost_cents=self._request_max_cost_cents(request=request),
             ),
             governance_constraints=governance_constraints,
         )
@@ -191,6 +194,44 @@ class TaskExecutionService:
                 model_id=resolution.model_id,
             )
 
+        budget_reservation = None
+        if self._budget_manager is not None:
+            budget_reservation = self._budget_manager.reserve_execution(
+                task_id=request.task_id,
+                request=request,
+                provider_id=str(resolution.provider_id or ""),
+                model_id=str(resolution.model_id or ""),
+                governance_bundle=self._safe_governance_bundle(),
+            )
+            if not budget_reservation.allowed:
+                await self._emit_execution_event(
+                    event_type="budget_denial",
+                    request=request,
+                    provider_id=resolution.provider_id,
+                    model_id=resolution.model_id,
+                    details={"reason": budget_reservation.reason},
+                )
+                return self._terminal_result(
+                    request=request,
+                    started=started,
+                    state="rejected",
+                    error_code=str(budget_reservation.reason or "missing_budget_grant"),
+                    error_message=str(budget_reservation.reason or "missing_budget_grant"),
+                    provider_id=resolution.provider_id,
+                    model_id=resolution.model_id,
+                )
+            await self._emit_execution_event(
+                event_type="budget_reservation",
+                request=request,
+                provider_id=resolution.provider_id,
+                model_id=resolution.model_id,
+                details={
+                    "reservation_id": budget_reservation.reservation_id,
+                    "reserved_cost_cents": budget_reservation.reserved_cost_cents,
+                    "grant_ids": budget_reservation.applied_grant_ids,
+                },
+            )
+
         self._lifecycle_tracker.update(
             task_id=request.task_id,
             state="queued_local",
@@ -221,6 +262,8 @@ class TaskExecutionService:
         except ValueError as exc:
             failure_reason = str(exc)
             failure_category = classify_failure_code(failure_reason)
+            if budget_reservation is not None and self._budget_manager is not None:
+                self._budget_manager.release_execution(task_id=request.task_id, reason=failure_reason)
             return self._terminal_result(
                 request=request,
                 started=started,
@@ -235,6 +278,8 @@ class TaskExecutionService:
         except Exception as exc:
             failure_reason = str(exc).strip() or "internal_execution_error"
             failure_category = classify_failure_code(failure_reason)
+            if budget_reservation is not None and self._budget_manager is not None:
+                self._budget_manager.release_execution(task_id=request.task_id, reason=failure_reason)
             return self._terminal_result(
                 request=request,
                 started=started,
@@ -264,7 +309,7 @@ class TaskExecutionService:
             details={"finish_reason": response.finish_reason},
         )
         metric_context = self._provider_metric_context(provider_id=response.provider_id, model_id=response.model_id)
-        return TaskExecutionResult.model_validate(
+        result = TaskExecutionResult.model_validate(
             {
                 "task_id": request.task_id,
                 "status": "completed",
@@ -285,6 +330,20 @@ class TaskExecutionService:
                 "completed_at": completed_at,
             }
         )
+        if budget_reservation is not None and self._budget_manager is not None:
+            budget_result = self._budget_manager.finalize_execution(
+                task_id=request.task_id,
+                metrics=result.metrics,
+                status="completed",
+            )
+            await self._emit_execution_event(
+                event_type="budget_finalized",
+                request=request,
+                provider_id=response.provider_id,
+                model_id=response.model_id,
+                details=budget_result,
+            )
+        return result
 
     def _authorize_prompt_if_present(self, *, request: TaskExecutionRequest):
         if not request.prompt_id:
@@ -320,6 +379,18 @@ class TaskExecutionService:
         constraints = request.constraints if isinstance(request.constraints, dict) else {}
         governance = constraints.get("governance") if isinstance(constraints.get("governance"), dict) else {}
         return governance
+
+    @staticmethod
+    def _request_max_cost_cents(*, request: TaskExecutionRequest) -> int | None:
+        constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        budget = constraints.get("budget") if isinstance(constraints.get("budget"), dict) else {}
+        if budget.get("max_cost_cents") is not None:
+            return max(int(budget.get("max_cost_cents")), 0)
+        if constraints.get("max_cost_cents") is not None:
+            return max(int(constraints.get("max_cost_cents")), 0)
+        if constraints.get("max_cost_usd") is not None:
+            return max(int(float(constraints.get("max_cost_usd")) * 100), 0)
+        return None
 
     @staticmethod
     def _build_unified_request(*, request: TaskExecutionRequest, resolution) -> UnifiedExecutionRequest:

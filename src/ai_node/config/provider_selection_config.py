@@ -30,6 +30,24 @@ def _collect_supported_providers(payload: dict) -> set[str]:
     return {item for item in all_supported if item}
 
 
+def _normalize_provider_budget_limits(value: object) -> dict[str, dict[str, int]]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, dict[str, int]] = {}
+    for provider_id, raw_limit in value.items():
+        normalized_provider_id = str(provider_id or "").strip().lower()
+        if not normalized_provider_id or not isinstance(raw_limit, dict):
+            continue
+        max_cost_cents = raw_limit.get("max_cost_cents")
+        if max_cost_cents in (None, ""):
+            continue
+        normalized_cost = int(max_cost_cents)
+        if normalized_cost < 0:
+            raise ValueError("provider_budget_limit_must_be_non_negative")
+        normalized[normalized_provider_id] = {"max_cost_cents": normalized_cost}
+    return normalized
+
+
 def validate_provider_selection_config(data: object) -> Tuple[bool, Optional[str]]:
     if not isinstance(data, dict):
         return False, "invalid_provider_selection_config_object"
@@ -54,6 +72,12 @@ def validate_provider_selection_config(data: object) -> Tuple[bool, Optional[str
     supported_set = _collect_supported_providers(data)
     if any(provider not in supported_set for provider in enabled_providers):
         return False, "enabled_provider_not_supported"
+    try:
+        budget_limits = _normalize_provider_budget_limits(providers.get("budget_limits"))
+    except (TypeError, ValueError):
+        return False, "invalid_provider_budget_limits"
+    if any(provider not in supported_set for provider in budget_limits):
+        return False, "provider_budget_not_supported"
 
     services = data.get("services")
     if not isinstance(services, dict):
@@ -76,6 +100,7 @@ def create_provider_selection_config(input_data: dict | None = None) -> dict:
     enabled_providers = _normalize_string_list(raw.get("enabled_providers"))
     if openai_enabled and DEFAULT_OPENAI_PROVIDER not in enabled_providers:
         enabled_providers.append(DEFAULT_OPENAI_PROVIDER)
+    budget_limits = _normalize_provider_budget_limits(raw.get("provider_budget_limits"))
 
     config = {
         "schema_version": DEFAULT_PROVIDER_SELECTION_SCHEMA_VERSION,
@@ -86,6 +111,7 @@ def create_provider_selection_config(input_data: dict | None = None) -> dict:
                 "future": sorted(set(future_supported)),
             },
             "enabled": sorted(set(enabled_providers)),
+            "budget_limits": budget_limits,
         },
         "services": {
             "enabled": sorted(set(_normalize_string_list(raw.get("enabled_services")))),

@@ -25,6 +25,7 @@ class TaskExecutionRequestTests(unittest.TestCase):
         self.assertEqual(payload.priority, "normal")
         self.assertEqual(payload.timeout_s, 45)
         self.assertIsNone(payload.lease_id)
+        self.assertEqual(payload.service_id, "service.alpha")
 
     def test_accepts_optional_lease_id(self):
         payload = TaskExecutionRequest.model_validate(
@@ -41,6 +42,22 @@ class TaskExecutionRequestTests(unittest.TestCase):
         )
 
         self.assertEqual(payload.lease_id, "lease-123")
+
+    def test_accepts_customer_id(self):
+        payload = TaskExecutionRequest.model_validate(
+            {
+                "task_id": "task-customer-001",
+                "task_family": "task.summarization.text",
+                "requested_by": "service.alpha",
+                "customer_id": "customer-001",
+                "inputs": {"text": "meeting notes"},
+                "priority": "high",
+                "timeout_s": 120,
+                "trace_id": "trace-customer-001",
+            }
+        )
+
+        self.assertEqual(payload.customer_id, "customer-001")
 
     def test_rejects_invalid_task_family_shape(self):
         with self.assertRaises(ValidationError) as context:

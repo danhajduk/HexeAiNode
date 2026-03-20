@@ -15,6 +15,7 @@ class ProviderSettings:
     base_url: str | None = None
     timeout_seconds: float = 20.0
     retry_count: int = 1
+    max_cost_cents: int | None = None
 
 
 @dataclass
@@ -57,6 +58,9 @@ class ProviderConfigLoader:
         upper = normalized_provider_id.upper().replace("-", "_")
         timeout = float(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_TIMEOUT_SECONDS") or "20")
         retries = int(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_RETRY_COUNT") or "1")
+        provider_budget_limits = self._provider_budget_limits()
+        provider_budget = provider_budget_limits.get(normalized_provider_id) if isinstance(provider_budget_limits, dict) else None
+        max_cost_cents = provider_budget.get("max_cost_cents") if isinstance(provider_budget, dict) else None
         if normalized_provider_id == "openai":
             api_key_env = "OPENAI_API_KEY"
             stored_openai = self._openai_credentials()
@@ -89,6 +93,7 @@ class ProviderConfigLoader:
                 base_url=str(os.environ.get("SYNTHIA_OPENAI_BASE_URL") or "https://api.openai.com/v1").strip(),
                 timeout_seconds=max(timeout, 1.0),
                 retry_count=max(retries, 0),
+                max_cost_cents=int(max_cost_cents) if max_cost_cents is not None else None,
             )
         return ProviderSettings(
             provider_id=normalized_provider_id,
@@ -96,6 +101,7 @@ class ProviderConfigLoader:
             enabled=bool(enabled),
             timeout_seconds=max(timeout, 1.0),
             retry_count=max(retries, 0),
+            max_cost_cents=int(max_cost_cents) if max_cost_cents is not None else None,
         )
 
     def _enabled_from_selection_store(self) -> list[str]:
@@ -123,6 +129,18 @@ class ProviderConfigLoader:
             return {}
         openai_payload = providers.get("openai")
         return openai_payload if isinstance(openai_payload, dict) else {}
+
+    def _provider_budget_limits(self) -> dict:
+        if self._provider_selection_store is None or not hasattr(self._provider_selection_store, "load_or_create"):
+            return {}
+        payload = self._provider_selection_store.load_or_create(openai_enabled=False)
+        if not isinstance(payload, dict):
+            return {}
+        providers = payload.get("providers")
+        if not isinstance(providers, dict):
+            return {}
+        limits = providers.get("budget_limits")
+        return limits if isinstance(limits, dict) else {}
 
 
 def _first_non_empty_string(*values: str | None) -> str | None:

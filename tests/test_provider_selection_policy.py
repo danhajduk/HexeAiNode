@@ -95,6 +95,25 @@ class ProviderSelectionPolicyTests(unittest.TestCase):
         self.assertEqual(decision.provider_order, [])
         self.assertEqual(decision.rejection_reason, "no_eligible_provider_available")
 
+    def test_filters_providers_exceeding_request_cost_ceiling(self):
+        decision = build_provider_selection_policy(
+            ProviderSelectionPolicyInput(
+                enabled_providers=["openai", "local"],
+                default_provider="openai",
+                provider_health={
+                    "openai": {"availability": "available"},
+                    "local": {"availability": "available"},
+                },
+                provider_budget_limits={
+                    "openai": {"max_cost_cents": 5},
+                    "local": {"max_cost_cents": 20},
+                },
+                request_max_cost_cents=10,
+            )
+        )
+
+        self.assertEqual(decision.provider_order, ["local"])
+
 
 if __name__ == "__main__":
     unittest.main()

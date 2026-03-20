@@ -243,6 +243,7 @@ export default function App() {
   const [restarting, setRestarting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [openaiEnabled, setOpenaiEnabled] = useState(false);
+  const [openaiBudgetCents, setOpenaiBudgetCents] = useState("");
   const [selectedTaskFamilies, setSelectedTaskFamilies] = useState(TASK_CAPABILITY_OPTIONS);
   const [savingProvider, setSavingProvider] = useState(false);
   const [declaringCapabilities, setDeclaringCapabilities] = useState(false);
@@ -428,7 +429,9 @@ export default function App() {
     }
     if ((payload.status || "unknown") === "capability_setup_pending" && providerPayload) {
       const enabledProviders = providerPayload?.config?.providers?.enabled || [];
+      const openaiBudgetLimit = providerPayload?.config?.providers?.budget_limits?.openai?.max_cost_cents;
       setOpenaiEnabled(enabledProviders.includes("openai"));
+      setOpenaiBudgetCents(Number.isFinite(openaiBudgetLimit) ? String(openaiBudgetLimit) : "");
     }
     if ((payload.status || "unknown") === "capability_setup_pending" && capabilityConfigPayload) {
       const selected = capabilityConfigPayload?.config?.selected_task_families || [];
@@ -703,8 +706,17 @@ export default function App() {
         existing.delete(taskFamily);
       }
       return TASK_CAPABILITY_OPTIONS.filter((item) => existing.has(item));
-    });
+  });
+}
+
+function formatTokenHint(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized || normalized === "not_saved") {
+    return "not_saved";
   }
+  const suffix = normalized.replace(/\*/g, "").slice(-5) || normalized.slice(-5);
+  return `********${suffix}`;
+}
 
   async function persistOpenAiPreferences(nextSelectedModelIds, { refreshModels = false } = {}) {
     setSavingModelPreference(true);
@@ -799,7 +811,19 @@ export default function App() {
     setSavingProvider(true);
     setError("");
     try {
-      await apiPost("/api/providers/config", { openai_enabled: openaiEnabled });
+      const trimmedBudget = String(openaiBudgetCents || "").trim();
+      const parsedBudget = trimmedBudget === "" ? null : Number.parseInt(trimmedBudget, 10);
+      if (parsedBudget !== null && (!Number.isFinite(parsedBudget) || parsedBudget < 0)) {
+        throw new Error("openai budget must be a non-negative whole number of cents");
+      }
+      await apiPost("/api/providers/config", {
+        openai_enabled: openaiEnabled,
+        provider_budget_limits: {
+          openai: {
+            max_cost_cents: parsedBudget,
+          },
+        },
+      });
       await apiPost("/api/capabilities/config", { selected_task_families: selectedTaskFamilies });
       await loadStatus();
     } catch (err) {
@@ -1307,6 +1331,7 @@ export default function App() {
         return (
           <SetupProviderPanel
             openaiEnabled={openaiEnabled}
+            openaiBudgetCents={Number.parseInt(openaiBudgetCents || "", 10)}
             selectedTaskFamilies={selectedTaskFamilies}
             setupReadinessFlags={setupReadinessFlags}
           >
@@ -1321,6 +1346,17 @@ export default function App() {
                     onChange={(event) => setOpenaiEnabled(event.target.checked)}
                   />{" "}
                   Enable OpenAI on this node
+                </label>
+                <label>
+                  OpenAI Budget Limit (cents)
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={openaiBudgetCents}
+                    onChange={(event) => setOpenaiBudgetCents(event.target.value)}
+                    placeholder="Optional provider ceiling"
+                  />
                 </label>
                 <div className="state-grid">
                   <span>Task Capabilities</span>
@@ -1544,7 +1580,7 @@ export default function App() {
       providerHint:
         !canManageOpenAiCredentials
           ? "Available after capability registration completes with OpenAI enabled."
-          : `Saved token: ${openaiCredentialSummary.api_token_hint || "not_saved"} | Default model: ${
+          : `Saved token: ${formatTokenHint(openaiCredentialSummary.api_token_hint)} | Default model: ${
               openaiCredentialSummary.default_model_id || "not_selected"
             }`,
     },
@@ -1655,7 +1691,6 @@ export default function App() {
             </div>
           </div>
           <div className="app-header-meta">
-            <span className="muted tiny">API: <code>{getApiBase()}</code></span>
             <span className="muted tiny">Updated: <code>{formatLocalTimestamp(uiState.meta.lastUpdatedAt) || "never"}</code></span>
             <span className="muted tiny">Node: <code>{nodeId || "unavailable"}</code></span>
           </div>

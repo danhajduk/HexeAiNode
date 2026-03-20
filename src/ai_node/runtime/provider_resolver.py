@@ -16,6 +16,7 @@ class ProviderResolutionRequest:
     requested_provider: str | None = None
     requested_model: str | None = None
     timeout_s: int = 60
+    max_cost_cents: int | None = None
 
 
 @dataclass(frozen=True)
@@ -51,7 +52,9 @@ class ProviderResolver:
                 provider_health=context.get("provider_health") or {},
                 usable_models_by_provider=context.get("usable_models_by_provider") or {},
                 provider_retry_count=context.get("provider_retry_count") or {},
+                provider_budget_limits=context.get("provider_budget_limits") or {},
                 request_timeout_s=request.timeout_s,
+                request_max_cost_cents=request.max_cost_cents,
                 governance_constraints=governance_constraints,
             )
         )

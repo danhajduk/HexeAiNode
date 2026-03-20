@@ -218,6 +218,50 @@ Task mapping:
   - Test valid task execution, unsupported task rejection, provider fallback, governance enforcement, lease lifecycle, lease expiration handling, telemetry emission.
 
 Completion criteria preserved from source:
+
+## Task 324-349
+Original task source: `docs/New_tasks.txt`
+
+Normalization note:
+- Original task wording used `per-user` budget grants.
+- Core now defines the canonical budget contract in `docs/Core-Documents/nodes/node-budget-management-contract.md` using budget policy plus grant scopes of `node`, `customer`, and `provider`.
+- This task range is aligned to that Core-owned contract so node work follows the issued policy/grant model instead of inventing a separate per-user-only contract.
+
+Summary of preserved scope:
+- Implement node-local execution-time budget enforcement against cached Core-issued budget policy and grants.
+- Persist grants, usage, reservations, reset windows, and outage-tolerant refresh state locally.
+- Require the execution request to carry the caller/customer identity and related fields needed to select the applicable grant.
+- Enforce grant ceilings before dispatch, finalize actual spend after execution, and release reservations on rejected, failed, timed-out, or cancelled work.
+- Expose diagnostics, admin/debug views, telemetry, and end-to-end tests for local budget enforcement without putting Core on the hot path.
+- Update Phase 3 documentation and node-control API docs to reflect the Core-owned budget-policy contract boundary.
+
+Task mapping:
+- Task 324: Define the local budget-enforcement contract for Core-issued budget policy and cached grants
+- Task 325: Verify the canonical Core budget-policy and grant schema
+- Task 326: Persist budget-policy snapshots and cached grants locally
+- Task 327: Persist grant usage, reservation totals, and reset-window metadata locally
+- Task 328: Define the local budget period model for daily, weekly, and monthly reset windows
+- Task 329: Add budget-policy refresh and cache-loading flow
+- Task 330: Define canonical request fields for caller/customer identity, service identity, provider targeting, and cost constraints
+- Task 331: Extend task execution request validation for customer-scoped budget enforcement
+- Task 332: Define the local money-budget reservation model
+- Task 333: Add pre-execution reservation checks against applicable node/customer/provider grants
+- Task 334: Add post-execution budget finalization flow
+- Task 335: Add reservation release behavior for rejected, failed-before-dispatch, timed-out, and cancelled executions
+- Task 336: Add degraded-mode budget behavior when estimated cost exists but final cost is unavailable
+- Task 337: Reject execution when no applicable active cached grant exists or the active period budget is exhausted
+- Task 338: Add denial and failure taxonomy for budget enforcement outcomes
+- Task 339: Add concurrency-safe reservation handling
+- Task 340: Extend provider selection and execution planning to honor request-side max-cost constraints together with cached customer/provider ceilings
+- Task 341: Expose budget-policy state and grant balances through diagnostics and observability
+- Task 342: Add telemetry for budget-policy refresh, reservation, denial, finalization, and reset events
+- Task 343: Add local admin/debug APIs for cached grants, usage, reservations, and denials
+- Task 344: Add automated budget reset / rollover handling
+- Task 345: Add tests for reservation math and settlement behavior
+- Task 346: Add tests for concurrency and double-spend prevention
+- Task 347: Add tests for missing, stale, exhausted, or inconsistent grants
+- Task 348: Add end-to-end local budget-enforcement tests without Core on the hot path
+- Task 349: Update Phase 3 and node-control API documentation for the Core-issued budget-policy model
 - nodes can execute tasks end-to-end
 - scheduler-driven execution works
 - provider routing is functional

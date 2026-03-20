@@ -17,8 +17,10 @@ from ai_node.config.provider_credentials_config import ProviderCredentialsStore
 from ai_node.config.provider_selection_config import ProviderSelectionConfigStore
 from ai_node.config.task_capability_selection_config import TaskCapabilitySelectionConfigStore
 from ai_node.core_api.trust_status_client import TrustStatusClient
+from ai_node.core_api.budget_policy_client import BudgetPolicyClient
 from ai_node.runtime.bootstrap_mqtt_runner import BootstrapMqttRunner
 from ai_node.runtime.bootstrap_timeout import BootstrapConnectTimeoutMonitor
+from ai_node.runtime.budget_manager import BudgetManager
 from ai_node.runtime.capability_declaration_runner import CapabilityDeclarationRunner
 from ai_node.runtime.node_control_api import NodeControlState, create_node_control_app
 from ai_node.runtime.onboarding_runtime import OnboardingRuntime
@@ -27,6 +29,7 @@ from ai_node.persistence.capability_state_store import CapabilityStateStore
 from ai_node.persistence.governance_state_store import GovernanceStateStore
 from ai_node.persistence.phase2_state_store import Phase2StateStore
 from ai_node.persistence.prompt_service_state_store import PromptServiceStateStore
+from ai_node.persistence.budget_state_store import BudgetStateStore
 from ai_node.persistence.provider_capability_report_store import ProviderCapabilityReportStore
 from ai_node.providers.runtime_manager import ProviderRuntimeManager
 from ai_node.trust.trust_store import TrustStateStore
@@ -156,6 +159,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to persisted prompt/service registration and probation state",
     )
     parser.add_argument(
+        "--budget-state-path",
+        default=os.environ.get("SYNTHIA_BUDGET_STATE_PATH", ".run/budget_state.json"),
+        help="Path to persisted budget policy, grant usage, and reservation state",
+    )
+    parser.add_argument(
         "--provider-capability-refresh-interval-seconds",
         type=int,
         default=int(os.environ.get("SYNTHIA_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS", "14400")),
@@ -226,6 +234,7 @@ def run(
     phase2_state_path: str = ".run/phase2_state.json",
     provider_capability_report_path: str = ".run/provider_capability_report.json",
     prompt_service_state_path: str = ".run/prompt_service_state.json",
+    budget_state_path: str = ".run/budget_state.json",
     provider_capability_refresh_interval_seconds: int = 14400,
     openai_pricing_catalog_path: str = "providers/openai/provider_model_pricing.json",
     openai_pricing_refresh_interval_seconds: int = 86400,
@@ -275,6 +284,7 @@ def run(
         path=provider_capability_report_path,
         logger=LOGGER,
     )
+    budget_state_store = BudgetStateStore(path=budget_state_path, logger=LOGGER)
     provider_runtime_manager = ProviderRuntimeManager(
         logger=LOGGER,
         provider_selection_store=provider_selection_store,
@@ -287,6 +297,13 @@ def run(
     )
     prompt_service_state_store = PromptServiceStateStore(path=prompt_service_state_path, logger=LOGGER)
     trust_status_client = TrustStatusClient(logger=LOGGER)
+    budget_policy_client = BudgetPolicyClient(logger=LOGGER)
+    budget_manager = BudgetManager(
+        store=budget_state_store,
+        logger=LOGGER,
+        provider_runtime_manager=provider_runtime_manager,
+        budget_policy_client=budget_policy_client,
+    )
     LOGGER.info("[node-identity] %s", {"node_id": node_identity["node_id"], "path": node_identity_path})
     if isinstance(trust_state, dict):
         trust_node_id = str(trust_state.get("node_id") or "").strip()
@@ -406,8 +423,10 @@ def run(
         trust_state_store=trust_state_store,
         governance_state_store=governance_state_store,
         prompt_service_state_store=prompt_service_state_store,
+        budget_state_store=budget_state_store,
         trust_status_client=trust_status_client,
         provider_runtime_manager=provider_runtime_manager,
+        budget_manager=budget_manager,
         service_manager=service_manager,
         provider_refresh_interval_seconds=provider_capability_refresh_interval_seconds,
         startup_mode=startup_mode,
@@ -457,6 +476,7 @@ def main() -> int:
         phase2_state_path=args.phase2_state_path,
         provider_capability_report_path=args.provider_capability_report_path,
         prompt_service_state_path=args.prompt_service_state_path,
+        budget_state_path=args.budget_state_path,
         provider_capability_refresh_interval_seconds=args.provider_capability_refresh_interval_seconds,
         openai_pricing_catalog_path=args.openai_pricing_catalog_path,
         openai_pricing_refresh_interval_seconds=args.openai_pricing_refresh_interval_seconds,
