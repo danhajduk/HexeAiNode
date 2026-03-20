@@ -24,4 +24,6 @@ frontend/dist/
 docs/reports/
 docs/report-format.md
 
+# Local runtime/provider state should stay on disk but never be versioned.
 data/
+providers/
