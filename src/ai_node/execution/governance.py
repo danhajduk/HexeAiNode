@@ -31,7 +31,11 @@ def _task_family_allowed(*, task_family: str, allowed_families: list[str]) -> bo
             if normalized_task_family == normalized:
                 return True
             continue
-        if normalized_task_family == normalized or normalized_task_family.startswith(f"task.{normalized}."):
+        if (
+            normalized_task_family == normalized
+            or normalized_task_family == f"task.{normalized}"
+            or normalized_task_family.startswith(f"task.{normalized}.")
+        ):
             return True
     return False
 

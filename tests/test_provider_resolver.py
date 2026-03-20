@@ -51,7 +51,7 @@ class ProviderResolverTests(unittest.TestCase):
 
             result = resolver.resolve(
                 request=ProviderResolutionRequest(
-                    task_family="task.classification.text",
+                    task_family="task.classification",
                     requested_provider="openai",
                     requested_model="gpt-5-nano",
                     timeout_s=45,
@@ -80,7 +80,7 @@ class ProviderResolverTests(unittest.TestCase):
 
             result = resolver.resolve(
                 request=ProviderResolutionRequest(
-                    task_family="task.classification.text",
+                    task_family="task.classification",
                     timeout_s=60,
                 )
             )
@@ -110,7 +110,7 @@ class ProviderResolverTests(unittest.TestCase):
             resolver = ProviderResolver(runtime_manager=runtime, logger=logging.getLogger("provider-resolver-test"))
 
             result = resolver.resolve(
-                request=ProviderResolutionRequest(task_family="task.classification.text", timeout_s=90),
+                request=ProviderResolutionRequest(task_family="task.classification", timeout_s=90),
                 governance_constraints={
                     "approved_providers": ["local"],
                     "routing_policy_constraints": {"max_timeout_s": 20},
@@ -134,7 +134,7 @@ class ProviderResolverTests(unittest.TestCase):
 
             result = resolver.resolve(
                 request=ProviderResolutionRequest(
-                    task_family="task.classification.text",
+                    task_family="task.classification",
                     requested_provider="openai",
                     timeout_s=30,
                 )
@@ -165,7 +165,7 @@ class ProviderResolverTests(unittest.TestCase):
 
             result = resolver.resolve(
                 request=ProviderResolutionRequest(
-                    task_family="task.classification.text",
+                    task_family="task.classification",
                     requested_provider="openai",
                     requested_model="missing-model",
                     timeout_s=30,

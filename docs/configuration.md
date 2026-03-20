@@ -49,7 +49,7 @@ Provider-specific:
 
 - `scripts/stack.env`: local service commands for `bootstrap.sh`
 - `.run/*.json`: persisted node runtime state
-- `.run/provider_selection_config.json`: provider enablement and optional per-provider budget ceiling state
+- `.run/provider_selection_config.json`: provider enablement and optional per-provider budget ceiling state, including `max_cost_cents` plus `period`
 - `.run/provider_credentials.json`: restricted-permission provider credential store
 - `.run/budget_state.json`: cached budget policy, grant usage, reservations, and recent denial state
 - `data/provider_registry.json`: provider capability snapshot
@@ -77,6 +77,10 @@ Provider-specific:
 ## Defaults And Required Values
 
 - Provider selection defaults to OpenAI as a supported cloud provider and starts disabled until configured.
-- Provider selection may also persist optional per-provider budget ceilings in `providers.budget_limits.<provider_id>.max_cost_cents`.
+- Provider selection may also persist optional per-provider budget ceilings in `providers.budget_limits.<provider_id>`.
+- Each provider budget entry may include:
+  - `max_cost_cents`
+  - `period` with `monthly` or `weekly`; weekly windows run Monday through Sunday in the node's local timezone.
 - Task capability selection defaults to the canonical task family list when created locally.
+- Legacy `task.classification.text` values are canonicalized to `task.classification` when provider/task execution config is loaded or saved.
 - Valid trust state requires node identity, Core pairing metadata, trust token, and operational MQTT credentials.

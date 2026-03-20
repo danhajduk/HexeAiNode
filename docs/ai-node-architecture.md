@@ -433,7 +433,7 @@ This is intentionally a placeholder and not a full runtime-controller design in 
 ## Notes For Future Phases
 
 - Keep bootstrap and trust activation concerns isolated from execution concerns.
-- Preserve Core-governs / Node-executes boundary as capabilities expand.
+- Preserve the boundary where Core declares capability and spend authority while the node owns prompt execution behavior.
 - Extend capability and policy layers without collapsing authority boundaries.
 - Capability declaration details are specified in `docs/node-capability-declaration.md`.
 

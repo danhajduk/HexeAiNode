@@ -829,7 +829,7 @@ class NodeControlState:
         else:
             enabled.discard("openai")
         providers["enabled"] = sorted(enabled)
-        normalized_budget_limits: dict[str, dict[str, int]] = {}
+        normalized_budget_limits: dict[str, dict[str, int | str]] = {}
         if isinstance(provider_budget_limits, dict):
             supported = providers.get("supported") if isinstance(providers.get("supported"), dict) else {}
             supported_ids = {
@@ -845,7 +845,13 @@ class NodeControlState:
                 max_cost_cents = limit_payload.get("max_cost_cents")
                 if max_cost_cents in (None, ""):
                     continue
-                normalized_budget_limits[normalized_provider_id] = {"max_cost_cents": max(int(max_cost_cents), 0)}
+                period = str(limit_payload.get("period") or "monthly").strip().lower()
+                if period not in {"weekly", "monthly"}:
+                    raise ValueError("provider budget period must be weekly or monthly")
+                normalized_budget_limits[normalized_provider_id] = {
+                    "max_cost_cents": max(int(max_cost_cents), 0),
+                    "period": period,
+                }
         providers["budget_limits"] = normalized_budget_limits
         self._provider_selection_store.save(payload)
         self._provider_selection_config = payload
@@ -1582,7 +1588,7 @@ class ProviderSelectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     openai_enabled: bool
-    provider_budget_limits: dict[str, dict[str, int | None]] | None = None
+    provider_budget_limits: dict[str, dict[str, int | str | None]] | None = None
 
 
 class OpenAICredentialsRequest(BaseModel):

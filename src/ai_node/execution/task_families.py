@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES, validate_task_family_capabilities
+from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES, canonicalize_task_family, validate_task_family_capabilities
 
 PHASE3_TASK_FAMILY_V1 = tuple(CANONICAL_TASK_FAMILIES)
 
@@ -14,7 +14,7 @@ class TaskFamilyValidationResult:
 
 
 def canonicalize_phase3_task_family(task_family: str) -> str | None:
-    normalized = str(task_family or "").strip().lower()
+    normalized = canonicalize_task_family(task_family)
     if not normalized:
         return None
     is_valid, _error = validate_task_family_capabilities([normalized])

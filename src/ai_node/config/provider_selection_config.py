@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 
 DEFAULT_PROVIDER_SELECTION_SCHEMA_VERSION = "1.0"
 DEFAULT_OPENAI_PROVIDER = "openai"
+VALID_PROVIDER_BUDGET_PERIODS = {"weekly", "monthly"}
 
 
 def _is_non_empty_string(value: object) -> bool:
@@ -30,10 +31,10 @@ def _collect_supported_providers(payload: dict) -> set[str]:
     return {item for item in all_supported if item}
 
 
-def _normalize_provider_budget_limits(value: object) -> dict[str, dict[str, int]]:
+def _normalize_provider_budget_limits(value: object) -> dict[str, dict[str, int | str]]:
     if not isinstance(value, dict):
         return {}
-    normalized: dict[str, dict[str, int]] = {}
+    normalized: dict[str, dict[str, int | str]] = {}
     for provider_id, raw_limit in value.items():
         normalized_provider_id = str(provider_id or "").strip().lower()
         if not normalized_provider_id or not isinstance(raw_limit, dict):
@@ -44,7 +45,13 @@ def _normalize_provider_budget_limits(value: object) -> dict[str, dict[str, int]
         normalized_cost = int(max_cost_cents)
         if normalized_cost < 0:
             raise ValueError("provider_budget_limit_must_be_non_negative")
-        normalized[normalized_provider_id] = {"max_cost_cents": normalized_cost}
+        period = str(raw_limit.get("period") or "monthly").strip().lower()
+        if period not in VALID_PROVIDER_BUDGET_PERIODS:
+            raise ValueError("provider_budget_period_invalid")
+        normalized[normalized_provider_id] = {
+            "max_cost_cents": normalized_cost,
+            "period": period,
+        }
     return normalized
 
 

@@ -1,5 +1,5 @@
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ai_node.time_utils import local_now, local_now_iso
 
@@ -143,12 +143,37 @@ class BudgetManager:
         state = self._load_state()
         policy = state.get("budget_policy") if isinstance(state.get("budget_policy"), dict) else None
         grant_usage = state.get("grant_usage") if isinstance(state.get("grant_usage"), dict) else {}
+        provider_budget_usage = state.get("provider_budget_usage") if isinstance(state.get("provider_budget_usage"), dict) else {}
         grants = list(policy.get("grants") or []) if isinstance(policy, dict) else []
         active_reservations = 0
         for usage in grant_usage.values():
             reservations = usage.get("reservations") if isinstance(usage, dict) else {}
             if isinstance(reservations, dict):
                 active_reservations += len(reservations)
+        provider_budgets = []
+        for usage in provider_budget_usage.values():
+            if not isinstance(usage, dict):
+                continue
+            reservations = usage.get("reservations") if isinstance(usage, dict) else {}
+            if isinstance(reservations, dict):
+                active_reservations += len(reservations)
+            provider_budgets.append(
+                {
+                    "provider_id": usage.get("provider_id"),
+                    "period": usage.get("period"),
+                    "period_start": usage.get("period_start"),
+                    "period_end": usage.get("period_end"),
+                    "budget_limit_cents": usage.get("budget_limit_cents"),
+                    "used_cost_cents": _normalize_int(usage.get("used_cost_cents"), default=0),
+                    "reserved_cost_cents": _normalize_int(usage.get("reserved_cost_cents"), default=0),
+                    "remaining_cost_cents": max(
+                        _normalize_int(usage.get("budget_limit_cents"), default=0)
+                        - _normalize_int(usage.get("used_cost_cents"), default=0)
+                        - _normalize_int(usage.get("reserved_cost_cents"), default=0),
+                        0,
+                    ),
+                }
+            )
         return {
             "configured": isinstance(policy, dict),
             "policy_status": str((policy or {}).get("status") or "unconfigured"),
@@ -158,6 +183,7 @@ class BudgetManager:
             "active_reservations": active_reservations,
             "recent_denials": list(state.get("recent_denials") or [])[-20:],
             "grants": [self._grant_snapshot(grant=grant, usage=grant_usage.get(str(grant.get("grant_id") or "").strip())) for grant in grants],
+            "provider_budgets": provider_budgets,
         }
 
     def _grant_snapshot(self, *, grant: dict, usage: dict | None) -> dict:
@@ -191,21 +217,61 @@ class BudgetManager:
         model_id: str,
         governance_bundle: dict | None,
     ) -> BudgetReservationResult:
-        policy = self.cache_policy_from_governance(governance_bundle=governance_bundle) or self._load_state().get("budget_policy")
+        state = self._load_state()
+        policy = self.cache_policy_from_governance(governance_bundle=governance_bundle) or state.get("budget_policy")
+        if isinstance(policy, dict):
+            state["budget_policy"] = policy
+        reservation_id = f"budget-reservation:{_normalize_string(task_id)}"
+        reservation_cents = self._reservation_cost_cents(request=request, provider_id=provider_id, model_id=model_id)
         if not isinstance(policy, dict):
-            return BudgetReservationResult(allowed=True, reason=None, policy_status="unconfigured")
+            provider_budget_result = self._reserve_provider_budget(
+                state=state,
+                reservation_id=reservation_id,
+                task_id=task_id,
+                provider_id=provider_id,
+                model_id=model_id,
+                reserved_cost_cents=reservation_cents,
+            )
+            if provider_budget_result is not None and provider_budget_result.get("allowed") is False:
+                self._record_denial(task_id=task_id, request=request, reason="provider_budget_exhausted", provider_id=provider_id)
+                return BudgetReservationResult(allowed=False, reason="provider_budget_exhausted", policy_status="unconfigured")
+            if provider_budget_result is not None:
+                self._save_state(state)
+            return BudgetReservationResult(
+                allowed=True,
+                reason=None,
+                reservation_id=reservation_id if provider_budget_result is not None else None,
+                reserved_cost_cents=reservation_cents if provider_budget_result is not None else 0,
+                policy_status="unconfigured",
+            )
         policy_status = _normalize_string(policy.get("status")).lower() or "unconfigured"
         if policy_status != "active":
-            return BudgetReservationResult(allowed=True, reason=None, policy_status=policy_status)
+            provider_budget_result = self._reserve_provider_budget(
+                state=state,
+                reservation_id=reservation_id,
+                task_id=task_id,
+                provider_id=provider_id,
+                model_id=model_id,
+                reserved_cost_cents=reservation_cents,
+            )
+            if provider_budget_result is not None and provider_budget_result.get("allowed") is False:
+                self._record_denial(task_id=task_id, request=request, reason="provider_budget_exhausted", provider_id=provider_id)
+                return BudgetReservationResult(allowed=False, reason="provider_budget_exhausted", policy_status=policy_status)
+            if provider_budget_result is not None:
+                self._save_state(state)
+            return BudgetReservationResult(
+                allowed=True,
+                reason=None,
+                reservation_id=reservation_id if provider_budget_result is not None else None,
+                reserved_cost_cents=reservation_cents if provider_budget_result is not None else 0,
+                policy_status=policy_status,
+            )
 
         applicable_grants = self._applicable_grants(policy=policy, request=request, provider_id=provider_id)
         if not applicable_grants:
             self._record_denial(task_id=task_id, request=request, reason="missing_budget_grant", provider_id=provider_id)
             return BudgetReservationResult(allowed=False, reason="missing_budget_grant", policy_status=policy_status)
 
-        reservation_id = f"budget-reservation:{_normalize_string(task_id)}"
-        state = self._load_state()
-        reservation_cents = self._reservation_cost_cents(request=request, provider_id=provider_id, model_id=model_id)
         applied_grant_ids: list[str] = []
         reserved_usage_entries: list[dict] = []
         for grant in applicable_grants:
@@ -243,6 +309,23 @@ class BudgetManager:
             usage["updated_at"] = _now_iso()
             applied_grant_ids.append(grant_id)
             reserved_usage_entries.append(usage)
+
+        provider_budget_result = self._reserve_provider_budget(
+            state=state,
+            reservation_id=reservation_id,
+            task_id=task_id,
+            provider_id=provider_id,
+            model_id=model_id,
+            reserved_cost_cents=reservation_cents,
+        )
+        if provider_budget_result is not None and provider_budget_result.get("allowed") is False:
+            self._rollback_reservations(
+                usage_entries=reserved_usage_entries,
+                reservation_id=reservation_id,
+                reserved_cost_cents=reservation_cents,
+            )
+            self._record_denial(task_id=task_id, request=request, reason="provider_budget_exhausted", provider_id=provider_id)
+            return BudgetReservationResult(allowed=False, reason="provider_budget_exhausted", policy_status=policy_status)
 
         self._save_state(state)
         return BudgetReservationResult(
@@ -284,9 +367,12 @@ class BudgetManager:
                 self._queue_usage_summary(state=state, grant_id=_normalize_string(usage.get("grant_id")), usage=usage)
             usage["updated_at"] = _now_iso()
             finalized.append({"grant_id": usage.get("grant_id"), "final_cost_cents": applied_cost})
+        provider_finalized = self._finalize_provider_budget(state=state, reservation_id=reservation_id, final_cost_cents=final_cost_cents, status=status)
         if finalized:
             self._save_state(state)
-        return {"finalized": finalized}
+        elif provider_finalized:
+            self._save_state(state)
+        return {"finalized": finalized, "provider_finalized": provider_finalized}
 
     def release_execution(self, *, task_id: str, reason: str) -> dict:
         state = self._load_state()
@@ -305,9 +391,10 @@ class BudgetManager:
             usage["reserved_cost_cents"] = max(_normalize_int(usage.get("reserved_cost_cents")) - reserved_cost_cents, 0)
             usage["updated_at"] = _now_iso()
             released.append({"grant_id": usage.get("grant_id"), "released_cost_cents": reserved_cost_cents, "reason": reason})
-        if released:
+        provider_released = self._release_provider_budget(state=state, reservation_id=reservation_id, reason=reason)
+        if released or provider_released:
             self._save_state(state)
-        return {"released": released}
+        return {"released": released, "provider_released": provider_released}
 
     def _final_cost_cents(self, *, metrics) -> int | None:
         estimated_cost = getattr(metrics, "estimated_cost", None) if metrics is not None else None
@@ -347,9 +434,12 @@ class BudgetManager:
     def _has_any_money_limits(self, *, provider_id: str, request) -> bool:
         policy = self._load_state().get("budget_policy")
         if not isinstance(policy, dict):
-            return False
+            return self._provider_budget_settings(provider_id=provider_id) is not None
         applicable = self._applicable_grants(policy=policy, request=request, provider_id=provider_id)
-        return any(_normalize_int((grant.get("limits") or {}).get("max_cost_cents"), default=0) > 0 for grant in applicable)
+        return (
+            any(_normalize_int((grant.get("limits") or {}).get("max_cost_cents"), default=0) > 0 for grant in applicable)
+            or self._provider_budget_settings(provider_id=provider_id) is not None
+        )
 
     def _rollback_reservations(self, *, usage_entries: list[dict], reservation_id: str, reserved_cost_cents: int) -> None:
         for usage in usage_entries:
@@ -365,6 +455,7 @@ class BudgetManager:
         service_id = _normalize_string(getattr(request, "service_id", None) or getattr(request, "requested_by", None))
         customer_id = _normalize_string(getattr(request, "customer_id", None))
         provider_key = _normalize_string(provider_id)
+        model_key = _normalize_string(getattr(request, "requested_model", None))
         applicable: list[dict] = []
         for grant in list(policy.get("grants") or []):
             if not isinstance(grant, dict):
@@ -379,6 +470,12 @@ class BudgetManager:
                 continue
             if service_id and _normalize_string(grant.get("service")) and _normalize_string(grant.get("service")) != service_id:
                 continue
+            grant_provider = _normalize_string((grant.get("metadata") or {}).get("provider_id"))
+            if grant_provider and provider_key and grant_provider != provider_key:
+                continue
+            grant_model = _normalize_string((grant.get("metadata") or {}).get("model_id"))
+            if grant_model and model_key and grant_model != model_key:
+                continue
             scope_kind = _normalize_string(grant.get("scope_kind")).lower()
             subject_id = _normalize_string(grant.get("subject_id"))
             if scope_kind == "node":
@@ -388,6 +485,110 @@ class BudgetManager:
             elif scope_kind == "provider" and provider_key and subject_id == provider_key:
                 applicable.append(grant)
         return applicable
+
+    def _provider_budget_settings(self, *, provider_id: str) -> dict | None:
+        runtime = self._provider_runtime_manager
+        if runtime is None or not hasattr(runtime, "provider_selection_context_payload"):
+            return None
+        payload = runtime.provider_selection_context_payload()
+        budgets = payload.get("provider_budget_limits") if isinstance(payload, dict) else {}
+        settings = budgets.get(_normalize_string(provider_id)) if isinstance(budgets, dict) else None
+        return settings if isinstance(settings, dict) and settings.get("max_cost_cents") is not None else None
+
+    def _provider_budget_period_window(self, *, period: str) -> tuple[str, str]:
+        now = _now()
+        normalized_period = _normalize_string(period).lower() or "monthly"
+        if normalized_period == "weekly":
+            start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+            end = (start + timedelta(days=6)).replace(hour=23, minute=59, second=59, microsecond=999999)
+            return start.isoformat(), end.isoformat()
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if start.month == 12:
+            next_month = start.replace(year=start.year + 1, month=1)
+        else:
+            next_month = start.replace(month=start.month + 1)
+        end = next_month - timedelta(microseconds=1)
+        return start.isoformat(), end.isoformat()
+
+    def _ensure_provider_budget_usage_entry(self, *, state: dict, provider_id: str, settings: dict) -> dict:
+        period = _normalize_string(settings.get("period")).lower() or "monthly"
+        period_start, period_end = self._provider_budget_period_window(period=period)
+        usage_key = f"{provider_id}:{period}:{period_start}"
+        usage_map = state.setdefault("provider_budget_usage", {})
+        usage = usage_map.get(usage_key)
+        if not isinstance(usage, dict):
+            usage = {
+                "provider_id": provider_id,
+                "period": period,
+                "period_start": period_start,
+                "period_end": period_end,
+                "budget_limit_cents": _normalize_int(settings.get("max_cost_cents"), default=0),
+                "used_cost_cents": 0,
+                "reserved_cost_cents": 0,
+                "reservations": {},
+                "updated_at": _now_iso(),
+            }
+            usage_map[usage_key] = usage
+        return usage
+
+    def _reserve_provider_budget(self, *, state: dict, reservation_id: str, task_id: str, provider_id: str, model_id: str, reserved_cost_cents: int) -> dict | None:
+        settings = self._provider_budget_settings(provider_id=provider_id)
+        if settings is None:
+            return None
+        usage = self._ensure_provider_budget_usage_entry(state=state, provider_id=provider_id, settings=settings)
+        if reservation_id in usage["reservations"]:
+            return {"allowed": False, "reason": "reservation_conflict"}
+        remaining = _normalize_int(usage.get("budget_limit_cents")) - _normalize_int(usage.get("used_cost_cents")) - _normalize_int(usage.get("reserved_cost_cents"))
+        if remaining < reserved_cost_cents:
+            return {"allowed": False, "reason": "provider_budget_exhausted"}
+        usage["reservations"][reservation_id] = {
+            "reservation_id": reservation_id,
+            "task_id": task_id,
+            "reserved_cost_cents": reserved_cost_cents,
+            "provider_id": provider_id,
+            "model_id": model_id,
+            "created_at": _now_iso(),
+        }
+        usage["reserved_cost_cents"] = _normalize_int(usage.get("reserved_cost_cents")) + reserved_cost_cents
+        usage["updated_at"] = _now_iso()
+        return {"allowed": True}
+
+    def _finalize_provider_budget(self, *, state: dict, reservation_id: str, final_cost_cents: int | None, status: str) -> list[dict]:
+        finalized = []
+        for usage in (state.get("provider_budget_usage") or {}).values():
+            if not isinstance(usage, dict):
+                continue
+            reservations = usage.get("reservations")
+            if not isinstance(reservations, dict):
+                continue
+            reservation = reservations.pop(reservation_id, None)
+            if not isinstance(reservation, dict):
+                continue
+            reserved_cost_cents = _normalize_int(reservation.get("reserved_cost_cents"))
+            usage["reserved_cost_cents"] = max(_normalize_int(usage.get("reserved_cost_cents")) - reserved_cost_cents, 0)
+            applied_cost = final_cost_cents if final_cost_cents is not None else reserved_cost_cents
+            if status == "completed":
+                usage["used_cost_cents"] = _normalize_int(usage.get("used_cost_cents")) + max(applied_cost, 0)
+            usage["updated_at"] = _now_iso()
+            finalized.append({"provider_id": usage.get("provider_id"), "final_cost_cents": applied_cost})
+        return finalized
+
+    def _release_provider_budget(self, *, state: dict, reservation_id: str, reason: str) -> list[dict]:
+        released = []
+        for usage in (state.get("provider_budget_usage") or {}).values():
+            if not isinstance(usage, dict):
+                continue
+            reservations = usage.get("reservations")
+            if not isinstance(reservations, dict):
+                continue
+            reservation = reservations.pop(reservation_id, None)
+            if not isinstance(reservation, dict):
+                continue
+            reserved_cost_cents = _normalize_int(reservation.get("reserved_cost_cents"))
+            usage["reserved_cost_cents"] = max(_normalize_int(usage.get("reserved_cost_cents")) - reserved_cost_cents, 0)
+            usage["updated_at"] = _now_iso()
+            released.append({"provider_id": usage.get("provider_id"), "released_cost_cents": reserved_cost_cents, "reason": reason})
+        return released
 
     def _ensure_usage_entry(self, *, state: dict, grant: dict) -> dict:
         grant_id = _normalize_string(grant.get("grant_id"))

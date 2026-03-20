@@ -149,7 +149,7 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             response = await router.execute(
                 UnifiedExecutionRequest(
-                    task_family="task.classification.text",
+                    task_family="task.classification",
                     prompt="hello",
                     requested_model="mock-model-v1",
                 )
@@ -211,7 +211,7 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 retry_count=0,
             )
             response = await router.execute(
-                UnifiedExecutionRequest(task_family="task.classification.text", prompt="hello world")
+                UnifiedExecutionRequest(task_family="task.classification", prompt="hello world")
             )
             self.assertEqual(response.provider_id, "mock")
             self.assertEqual(response.model_id, "mock-model-v1")
@@ -333,7 +333,7 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 logger=logging.getLogger("provider-runtime-test"),
                 provider_selection_store=_SelectionStore(
                     enabled=["openai"],
-                    budget_limits={"openai": {"max_cost_cents": 2500}},
+                    budget_limits={"openai": {"max_cost_cents": 2500, "period": "weekly"}},
                 ),
                 provider_credentials_store=_CredentialsStore(),
                 registry_path=str(Path(tmp) / "provider_registry.json"),
@@ -349,6 +349,7 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             payload = runtime.provider_selection_context_payload()
 
             self.assertEqual(payload["provider_budget_limits"]["openai"]["max_cost_cents"], 2500)
+            self.assertEqual(payload["provider_budget_limits"]["openai"]["period"], "weekly")
 
     async def test_save_enabled_models_persists_node_capabilities(self):
         with tempfile.TemporaryDirectory() as tmp:

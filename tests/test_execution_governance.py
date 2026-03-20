@@ -15,9 +15,20 @@ class ExecutionGovernanceTests(unittest.TestCase):
         self.assertTrue(decision.allowed)
         self.assertEqual(decision.reason, "governance_allowed")
 
+    def test_allows_classification_root_when_governance_uses_generic_family_name(self):
+        decision = evaluate_execution_governance(
+            task_family="task.classification",
+            timeout_s=30,
+            inputs={"text": "hello"},
+            governance_bundle={"generic_node_class_rules": {"allow_task_families": ["classification"]}},
+        )
+
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.reason, "governance_allowed")
+
     def test_rejects_task_family_not_allowed_by_governance(self):
         decision = evaluate_execution_governance(
-            task_family="task.classification.text",
+            task_family="task.classification",
             timeout_s=30,
             inputs={"text": "hello"},
             governance_bundle={"generic_node_class_rules": {"allow_task_families": ["summarization"]}},
@@ -28,7 +39,7 @@ class ExecutionGovernanceTests(unittest.TestCase):
 
     def test_rejects_timeout_and_input_size_violations(self):
         timeout_decision = evaluate_execution_governance(
-            task_family="task.classification.text",
+            task_family="task.classification",
             timeout_s=90,
             inputs={"text": "hello"},
             request_governance_constraints={"routing_policy_constraints": {"max_timeout_s": 30}},
@@ -37,7 +48,7 @@ class ExecutionGovernanceTests(unittest.TestCase):
         self.assertEqual(timeout_decision.reason, "governance_violation_timeout")
 
         input_decision = evaluate_execution_governance(
-            task_family="task.classification.text",
+            task_family="task.classification",
             timeout_s=30,
             inputs={"text": "hello world"},
             request_governance_constraints={"routing_policy_constraints": {"max_input_bytes": 5}},
@@ -47,7 +58,7 @@ class ExecutionGovernanceTests(unittest.TestCase):
 
     def test_rejects_provider_and_model_not_approved(self):
         provider_decision = evaluate_execution_governance(
-            task_family="task.classification.text",
+            task_family="task.classification",
             timeout_s=30,
             inputs={"text": "hello"},
             request_governance_constraints={"approved_providers": ["local"]},
@@ -57,7 +68,7 @@ class ExecutionGovernanceTests(unittest.TestCase):
         self.assertEqual(provider_decision.reason, "governance_violation_provider")
 
         model_decision = evaluate_execution_governance(
-            task_family="task.classification.text",
+            task_family="task.classification",
             timeout_s=30,
             inputs={"text": "hello"},
             request_governance_constraints={"approved_models": {"openai": ["gpt-5-mini"]}},

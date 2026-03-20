@@ -10,7 +10,7 @@ class TaskExecutionRequestTests(unittest.TestCase):
         payload = TaskExecutionRequest.model_validate(
             {
                 "task_id": "task-001",
-                "task_family": "task.classification.text",
+                "task_family": "task.classification",
                 "requested_by": "service.alpha",
                 "inputs": {"text": "hello world"},
                 "constraints": {"max_cost_usd": 0.02},
@@ -21,7 +21,7 @@ class TaskExecutionRequestTests(unittest.TestCase):
         )
 
         self.assertEqual(payload.task_id, "task-001")
-        self.assertEqual(payload.task_family, "task.classification.text")
+        self.assertEqual(payload.task_family, "task.classification")
         self.assertEqual(payload.priority, "normal")
         self.assertEqual(payload.timeout_s, 45)
         self.assertIsNone(payload.lease_id)
@@ -42,6 +42,19 @@ class TaskExecutionRequestTests(unittest.TestCase):
         )
 
         self.assertEqual(payload.lease_id, "lease-123")
+
+    def test_canonicalizes_legacy_classification_family(self):
+        payload = TaskExecutionRequest.model_validate(
+            {
+                "task_id": "task-legacy-family",
+                "task_family": "task.classification.text",
+                "requested_by": "service.alpha",
+                "inputs": {"text": "legacy"},
+                "trace_id": "trace-legacy-family",
+            }
+        )
+
+        self.assertEqual(payload.task_family, "task.classification")
 
     def test_accepts_customer_id(self):
         payload = TaskExecutionRequest.model_validate(
@@ -78,7 +91,7 @@ class TaskExecutionRequestTests(unittest.TestCase):
             TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-001",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": ["bad-input"],
                     "trace_id": "trace-001",
@@ -92,7 +105,7 @@ class TaskExecutionRequestTests(unittest.TestCase):
             TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-low-timeout",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello world"},
                     "trace_id": "trace-low-timeout",
@@ -105,7 +118,7 @@ class TaskExecutionRequestTests(unittest.TestCase):
             TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-high-timeout",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello world"},
                     "trace_id": "trace-high-timeout",
@@ -119,7 +132,7 @@ class TaskExecutionRequestTests(unittest.TestCase):
             TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-001",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello world"},
                     "trace_id": "trace-001",

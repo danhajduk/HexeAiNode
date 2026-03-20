@@ -395,7 +395,7 @@ class ProviderRuntimeManager:
         enabled_providers = list(config.enabled_providers or [])
         default_model_by_provider: dict[str, str | None] = {}
         provider_retry_count: dict[str, int] = {}
-        provider_budget_limits: dict[str, dict[str, int]] = {}
+        provider_budget_limits: dict[str, dict[str, int | str]] = {}
         provider_health: dict[str, dict] = {}
         available_models_by_provider: dict[str, list[str]] = {}
         usable_models_by_provider: dict[str, list[str]] = {}
@@ -405,7 +405,10 @@ class ProviderRuntimeManager:
             default_model_by_provider[provider_id] = settings.default_model_id if settings is not None else None
             provider_retry_count[provider_id] = max(int(settings.retry_count), 0) if settings is not None else 0
             if settings is not None and settings.max_cost_cents is not None:
-                provider_budget_limits[provider_id] = {"max_cost_cents": max(int(settings.max_cost_cents), 0)}
+                provider_budget_limits[provider_id] = {
+                    "max_cost_cents": max(int(settings.max_cost_cents), 0),
+                    "period": str(settings.budget_period or "monthly").strip().lower(),
+                }
             provider_health[provider_id] = self._registry.get_provider_health(provider_id) or {}
             available_models = [
                 str(model.model_id or "").strip()
@@ -663,7 +666,7 @@ class ProviderRuntimeManager:
         async def execute_batch(model_id: str, system_prompt: str, user_prompt: str) -> str:
             response = await adapter.execute_prompt(
                 UnifiedExecutionRequest(
-                    task_family="task.classification.text",
+                    task_family="task.classification",
                     system_prompt=system_prompt,
                     prompt=user_prompt,
                     requested_model=model_id,

@@ -7,6 +7,7 @@ import httpx
 from ai_node.providers.base import ProviderAdapter
 from ai_node.providers.models import ModelCapability, UnifiedExecutionRequest, UnifiedExecutionResponse, UnifiedExecutionUsage
 from ai_node.providers.openai_catalog import OpenAIPricingCatalogService, get_openai_model_pricing
+from ai_node.capabilities.task_families import TASK_CLASSIFICATION, TASK_CLASSIFICATION_TEXT
 
 
 def _iso_now() -> str:
@@ -143,7 +144,7 @@ class OpenAIProviderAdapter(ProviderAdapter):
         started = time.perf_counter()
         model = str(request.requested_model or "").strip() or self._default_model_id
         # Classification calls are batch-oriented and often exceed the regular request timeout.
-        request_timeout = max(self._timeout_seconds, 90.0) if request.task_family == "task.classification.text" else self._timeout_seconds
+        request_timeout = max(self._timeout_seconds, 90.0) if request.task_family in {TASK_CLASSIFICATION, TASK_CLASSIFICATION_TEXT} else self._timeout_seconds
         messages = list(request.messages or [])
         if not messages:
             if request.system_prompt:

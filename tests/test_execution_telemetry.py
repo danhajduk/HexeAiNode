@@ -28,7 +28,7 @@ class ExecutionTelemetryTests(unittest.IsolatedAsyncioTestCase):
 
         result = await publisher.publish_event(
             event_type="task_received",
-            payload={"task_id": "task-1", "task_family": "task.classification.text"},
+            payload={"task_id": "task-1", "task_family": "task.classification"},
         )
 
         self.assertTrue(result["published"])

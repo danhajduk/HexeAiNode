@@ -23,6 +23,7 @@ def create_budget_state() -> dict:
         "schema_version": BUDGET_STATE_SCHEMA_VERSION,
         "budget_policy": None,
         "grant_usage": {},
+        "provider_budget_usage": {},
         "recent_denials": [],
         "pending_usage_summaries": [],
         "updated_at": _now_iso(),
@@ -118,6 +119,32 @@ def validate_budget_state(data: object) -> Tuple[bool, Optional[str]]:
             reserved_cost_cents = reservation.get("reserved_cost_cents", 0)
             if not isinstance(reserved_cost_cents, int) or reserved_cost_cents < 0:
                 return False, "invalid_grant_usage_reservation_reserved_cost_cents"
+
+    provider_budget_usage = data.get("provider_budget_usage")
+    if not isinstance(provider_budget_usage, dict):
+        return False, "invalid_provider_budget_usage"
+    for usage_key, entry in provider_budget_usage.items():
+        if not _is_non_empty_string(usage_key) or not isinstance(entry, dict):
+            return False, "invalid_provider_budget_usage_entry"
+        for field_name in ("provider_id", "period", "period_start", "period_end", "updated_at"):
+            if not _is_non_empty_string(entry.get(field_name)):
+                return False, f"invalid_provider_budget_usage_{field_name}"
+        for field_name in ("used_cost_cents", "reserved_cost_cents"):
+            value = entry.get(field_name, 0)
+            if not isinstance(value, int) or value < 0:
+                return False, f"invalid_provider_budget_usage_{field_name}"
+        reservations = entry.get("reservations")
+        if not isinstance(reservations, dict):
+            return False, "invalid_provider_budget_usage_reservations"
+        for reservation_id, reservation in reservations.items():
+            if not _is_non_empty_string(reservation_id) or not isinstance(reservation, dict):
+                return False, "invalid_provider_budget_usage_reservation_entry"
+            for field_name in ("reservation_id", "task_id", "created_at"):
+                if not _is_non_empty_string(reservation.get(field_name)):
+                    return False, f"invalid_provider_budget_usage_reservation_{field_name}"
+            reserved_cost_cents = reservation.get("reserved_cost_cents", 0)
+            if not isinstance(reserved_cost_cents, int) or reserved_cost_cents < 0:
+                return False, "invalid_provider_budget_usage_reservation_reserved_cost_cents"
 
     recent_denials = data.get("recent_denials")
     if not isinstance(recent_denials, list):

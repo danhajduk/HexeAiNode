@@ -8,7 +8,7 @@ class ExecutionGatewayTests(unittest.TestCase):
         gateway = ExecutionGateway()
         result = gateway.authorize(
             prompt_id="prompt.missing",
-            task_family="task.classification.text",
+            task_family="task.classification",
             prompt_services_state={"prompt_services": []},
         )
         self.assertFalse(result.allowed)
@@ -18,12 +18,12 @@ class ExecutionGatewayTests(unittest.TestCase):
         gateway = ExecutionGateway()
         result = gateway.authorize(
             prompt_id="prompt.alpha",
-            task_family="task.classification.text",
+            task_family="task.classification",
             prompt_services_state={
                 "prompt_services": [
                     {
                         "prompt_id": "prompt.alpha",
-                        "task_family": "task.classification.text",
+                        "task_family": "task.classification",
                         "status": "probation",
                     }
                 ]
@@ -36,12 +36,12 @@ class ExecutionGatewayTests(unittest.TestCase):
         gateway = ExecutionGateway()
         result = gateway.authorize(
             prompt_id="prompt.alpha",
-            task_family="task.classification.text",
+            task_family="task.classification",
             prompt_services_state={
                 "prompt_services": [
                     {
                         "prompt_id": "prompt.alpha",
-                        "task_family": "task.classification.text",
+                        "task_family": "task.classification",
                         "status": "registered",
                     }
                 ]
@@ -56,12 +56,12 @@ class ExecutionGatewayTests(unittest.TestCase):
         result = gateway.authorize(
             prompt_id="prompt.alpha",
             prompt_version="v2",
-            task_family="task.classification.text",
+            task_family="task.classification",
             prompt_services_state={
                 "prompt_services": [
                     {
                         "prompt_id": "prompt.alpha",
-                        "task_family": "task.classification.text",
+                        "task_family": "task.classification",
                         "status": "active",
                         "current_version": "v1",
                         "versions": [{"version": "v1", "definition": {}}],
@@ -76,12 +76,12 @@ class ExecutionGatewayTests(unittest.TestCase):
         gateway = ExecutionGateway()
         result = gateway.authorize(
             prompt_id="prompt.alpha",
-            task_family="task.classification.text",
+            task_family="task.classification",
             prompt_services_state={
                 "prompt_services": [
                     {
                         "prompt_id": "prompt.alpha",
-                        "task_family": "task.classification.text",
+                        "task_family": "task.classification",
                         "status": "active",
                         "current_version": "v1",
                         "versions": [{"version": "v1", "definition": {}}],

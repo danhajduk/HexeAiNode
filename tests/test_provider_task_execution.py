@@ -42,7 +42,7 @@ class ProviderTaskExecutionTests(unittest.IsolatedAsyncioTestCase):
     async def test_runtime_manager_task_executor_delegates_to_runtime_manager(self):
         runtime_manager = _FakeRuntimeManager()
         executor = RuntimeManagerProviderTaskExecutor(provider_runtime_manager=runtime_manager)
-        request = UnifiedExecutionRequest(task_family="task.classification.text", prompt="hello")
+        request = UnifiedExecutionRequest(task_family="task.classification", prompt="hello")
 
         response = await executor.execute_classification(request)
 
@@ -61,7 +61,7 @@ class ProviderTaskExecutionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_ollama_task_executor_is_explicit_placeholder(self):
         executor = OllamaProviderTaskExecutor()
-        request = UnifiedExecutionRequest(task_family="task.classification.text", prompt="hello")
+        request = UnifiedExecutionRequest(task_family="task.classification", prompt="hello")
 
         with self.assertRaises(RuntimeError) as context:
             await executor.execute_classification(request)

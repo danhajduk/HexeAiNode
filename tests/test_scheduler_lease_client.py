@@ -27,7 +27,7 @@ class SchedulerLeaseClientTests(unittest.IsolatedAsyncioTestCase):
         result = await client.request_lease(
             core_api_endpoint="http://10.0.0.100:9001",
             worker_id="node-001",
-            capabilities=["task.classification.text", "task.summarization.text"],
+            capabilities=["task.classification", "task.summarization.text"],
             max_units=2,
             trust_token="trust-token",
             node_id="node-001",
@@ -36,7 +36,7 @@ class SchedulerLeaseClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "ok")
         self.assertEqual(adapter.last_url, "http://10.0.0.100:9001/api/system/scheduler/leases/request")
         self.assertEqual(adapter.last_body["worker_id"], "node-001")
-        self.assertEqual(adapter.last_body["capabilities"], ["task.classification.text", "task.summarization.text"])
+        self.assertEqual(adapter.last_body["capabilities"], ["task.classification", "task.summarization.text"])
         self.assertEqual(adapter.last_body["max_units"], 2)
 
     async def test_heartbeat_report_and_complete_use_lease_routes(self):

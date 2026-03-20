@@ -2,6 +2,7 @@ import re
 from typing import Optional, Tuple
 
 
+TASK_CLASSIFICATION = "task.classification"
 TASK_CLASSIFICATION_TEXT = "task.classification.text"
 TASK_CLASSIFICATION_EMAIL = "task.classification.email"
 TASK_CLASSIFICATION_IMAGE = "task.classification.image"
@@ -13,8 +14,12 @@ TASK_SUMMARIZATION_EVENT = "task.summarization.event"
 TASK_GENERATION_TEXT = "task.generation.text"
 TASK_GENERATION_IMAGE = "task.generation.image"
 
+LEGACY_TASK_FAMILY_ALIASES = {
+    TASK_CLASSIFICATION_TEXT: TASK_CLASSIFICATION,
+}
+
 CANONICAL_TASK_FAMILIES = (
-    TASK_CLASSIFICATION_TEXT,
+    TASK_CLASSIFICATION,
     TASK_CLASSIFICATION_EMAIL,
     TASK_CLASSIFICATION_IMAGE,
     TASK_SUMMARIZATION_TEXT,
@@ -22,7 +27,6 @@ CANONICAL_TASK_FAMILIES = (
     TASK_SUMMARIZATION_EVENT,
     TASK_GENERATION_TEXT,
     TASK_GENERATION_IMAGE,
-    "task.classification",
     "task.chat",
     "task.summarization",
     "task.reasoning",
@@ -61,13 +65,26 @@ CANONICAL_TASK_FAMILIES = (
 _TASK_FAMILY_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._/-]{1,127}$")
 
 
+def canonicalize_task_family(value: str | None) -> str | None:
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        return None
+    return LEGACY_TASK_FAMILY_ALIASES.get(normalized, normalized)
+
+
+def is_legacy_task_family_alias(value: str | None) -> bool:
+    normalized = str(value or "").strip().lower()
+    return normalized in LEGACY_TASK_FAMILY_ALIASES
+
+
 def _normalize_string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     normalized: list[str] = []
     for item in value:
-        if isinstance(item, str) and item.strip():
-            normalized.append(item.strip())
+        canonical = canonicalize_task_family(str(item or ""))
+        if canonical:
+            normalized.append(canonical)
     return sorted(set(normalized))
 
 
@@ -88,4 +105,7 @@ def validate_task_family_capabilities(task_families: object) -> Tuple[bool, Opti
     invalid = [family for family in normalized if not _TASK_FAMILY_ID_RE.match(family)]
     if invalid:
         return False, f"invalid_task_family:{invalid[0]}"
+    unknown = [family for family in normalized if family not in set(CANONICAL_TASK_FAMILIES)]
+    if unknown:
+        return False, f"unsupported_task_family:{unknown[0]}"
     return True, None

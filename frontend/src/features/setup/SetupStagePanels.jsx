@@ -71,6 +71,7 @@ export function SetupTrustActivationPanel({ trustStatus, pairedCoreId, startupMo
 export function SetupProviderPanel({
   openaiEnabled,
   openaiBudgetCents,
+  openaiBudgetPeriod,
   selectedTaskFamilies,
   setupReadinessFlags,
   children,
@@ -84,7 +85,11 @@ export function SetupProviderPanel({
         <span>OpenAI Enabled</span>
         <StatusBadge value={openaiEnabled ? "enabled" : "disabled"} />
         <span>OpenAI Budget</span>
-        <code>{Number.isFinite(openaiBudgetCents) && openaiBudgetCents > 0 ? `${openaiBudgetCents} cents` : "not_set"}</code>
+        <code>
+          {Number.isFinite(openaiBudgetCents) && openaiBudgetCents > 0
+            ? `${openaiBudgetCents} cents / ${openaiBudgetPeriod || "monthly"}`
+            : "not_set"}
+        </code>
         <span>Task Families</span>
         <code>{selectedTaskFamilies.join(", ") || "none_selected"}</code>
         <span>Provider Ready</span>

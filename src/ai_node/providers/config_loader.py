@@ -16,6 +16,7 @@ class ProviderSettings:
     timeout_seconds: float = 20.0
     retry_count: int = 1
     max_cost_cents: int | None = None
+    budget_period: str | None = None
 
 
 @dataclass
@@ -61,6 +62,7 @@ class ProviderConfigLoader:
         provider_budget_limits = self._provider_budget_limits()
         provider_budget = provider_budget_limits.get(normalized_provider_id) if isinstance(provider_budget_limits, dict) else None
         max_cost_cents = provider_budget.get("max_cost_cents") if isinstance(provider_budget, dict) else None
+        budget_period = provider_budget.get("period") if isinstance(provider_budget, dict) else None
         if normalized_provider_id == "openai":
             api_key_env = "OPENAI_API_KEY"
             stored_openai = self._openai_credentials()
@@ -94,6 +96,7 @@ class ProviderConfigLoader:
                 timeout_seconds=max(timeout, 1.0),
                 retry_count=max(retries, 0),
                 max_cost_cents=int(max_cost_cents) if max_cost_cents is not None else None,
+                budget_period=str(budget_period).strip().lower() if budget_period is not None else None,
             )
         return ProviderSettings(
             provider_id=normalized_provider_id,
@@ -102,6 +105,7 @@ class ProviderConfigLoader:
             timeout_seconds=max(timeout, 1.0),
             retry_count=max(retries, 0),
             max_cost_cents=int(max_cost_cents) if max_cost_cents is not None else None,
+            budget_period=str(budget_period).strip().lower() if budget_period is not None else None,
         )
 
     def _enabled_from_selection_store(self) -> list[str]:

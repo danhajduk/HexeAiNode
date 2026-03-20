@@ -47,7 +47,7 @@ class _FakeTaskCapabilitySelectionStore:
         return {
             "schema_version": "1.0",
             "selected_task_families": [
-                "task.classification.text",
+                "task.classification",
                 "task.summarization.text",
             ],
         }
@@ -230,7 +230,7 @@ class _FakePromptServiceStateStore:
                 {
                     "prompt_id": "prompt.alpha",
                     "service_id": "svc-alpha",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "status": "registered",
                     "metadata": {},
                     "registered_at": "2026-03-12T00:00:00Z",
@@ -707,7 +707,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         await runner.submit_once()
         self.assertEqual(
             client.last_manifest["declared_task_families"],
-            ["task.classification.text", "task.summarization.text"],
+            ["task.classification", "task.summarization.text"],
         )
 
     async def test_submit_manifest_uses_resolved_provider_task_capabilities_when_available(self):

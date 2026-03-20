@@ -59,7 +59,7 @@ Out of scope in Phase 2:
   - OpenAI remains supported by default, while enablement stays operator-controlled
 - Task 065:
   - node feature declarations moved to explicit name+enabled representation
-  - future prompt-governance readiness is carried as a clearly disabled declaration
+  - future prompt-execution readiness is carried as a clearly disabled declaration
 - Task 066:
   - environment/resource hints module added (hostname, OS/platform, memory class, GPU present)
   - manifest now validates lightweight environment hints as a required declaration group

@@ -77,7 +77,7 @@ This is the canonical source-of-truth contract for:
 - `POST /api/providers/config`
 - Request:
   - `openai_enabled: boolean`
-  - optional `provider_budget_limits: { [provider_id]: { max_cost_cents: integer | null } }`
+  - optional `provider_budget_limits: { [provider_id]: { max_cost_cents: integer | null, period?: "monthly" | "weekly" | null } }`
 - Success: updated provider config payload.
 - Error:
   - `400` when provider store is unavailable.
@@ -85,7 +85,13 @@ This is the canonical source-of-truth contract for:
 Current local provider-budget option:
 
 - provider config can persist optional per-provider local budget ceilings under `config.providers.budget_limits`
-- current UI exposes this for `openai`
+- each provider budget entry stores:
+  - `max_cost_cents`
+  - `period`
+- current UI exposes this for `openai` at `#/setup/provider/openai`
+- supported periods are:
+  - `monthly`
+  - `weekly` using local-time Monday through Sunday windows
 - this remains node-local setup state and does not replace the Core-issued budget-policy and grant contract
 
 ## Budget State
@@ -102,6 +108,7 @@ Current local provider-budget option:
   - `active_reservations`
   - `recent_denials[]`
   - `grants[]`
+  - `provider_budgets[]`
 
 ### Refresh cached budget policy
 

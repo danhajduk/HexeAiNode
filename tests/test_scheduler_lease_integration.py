@@ -33,14 +33,14 @@ class SchedulerLeaseIntegrationTests(unittest.IsolatedAsyncioTestCase):
             scheduler_client=_FakeSchedulerClient(),
             logger=logging.getLogger("scheduler-lease-integration-test"),
             node_id_provider=lambda: "node-001",
-            capability_provider=lambda: ["task.classification.text", "task.summarization.text"],
+            capability_provider=lambda: ["task.classification", "task.summarization.text"],
         )
 
         binding = integration.node_binding()
 
         self.assertEqual(binding.node_id, "node-001")
         self.assertEqual(binding.worker_id, "node-001")
-        self.assertEqual(binding.capabilities, ["task.classification.text", "task.summarization.text"])
+        self.assertEqual(binding.capabilities, ["task.classification", "task.summarization.text"])
 
     async def test_request_lease_uses_binding_values(self):
         client = _FakeSchedulerClient()
@@ -48,7 +48,7 @@ class SchedulerLeaseIntegrationTests(unittest.IsolatedAsyncioTestCase):
             scheduler_client=client,
             logger=logging.getLogger("scheduler-lease-integration-test"),
             node_id_provider=lambda: "node-001",
-            capability_provider=lambda: ["task.classification.text"],
+            capability_provider=lambda: ["task.classification"],
         )
 
         result = await integration.request_lease(core_api_endpoint="http://10.0.0.100:9001", trust_token="trust-token")
@@ -56,13 +56,13 @@ class SchedulerLeaseIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "ok")
         self.assertEqual(client.last_call[0], "request_lease")
         self.assertEqual(client.last_call[1]["worker_id"], "node-001")
-        self.assertEqual(client.last_call[1]["capabilities"], ["task.classification.text"])
+        self.assertEqual(client.last_call[1]["capabilities"], ["task.classification"])
 
     async def test_bind_lease_to_task_request_preserves_existing_request_shape(self):
         request = TaskExecutionRequest.model_validate(
             {
                 "task_id": "task-001",
-                "task_family": "task.classification.text",
+                "task_family": "task.classification",
                 "requested_by": "scheduler.core",
                 "inputs": {"text": "hello"},
                 "trace_id": "trace-001",

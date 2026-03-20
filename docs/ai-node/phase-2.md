@@ -16,7 +16,7 @@ Allow nodes to declare their AI capabilities and receive governance policies.
 ## Example Capability Data
 
 Task Families:
-- task.classification.text
+- task.classification
 - task.classification.email
 - task.classification.image
 - task.summarization.text
@@ -66,7 +66,7 @@ Node-local scaffolding now exists for next-phase prompt controls:
 - probation transitions
 - execution authorization endpoint with deny-by-default behavior for unregistered prompts
 
-This scaffold is implemented locally and documented in the node-control API contract, but it aligns with the Core roadmap's prompt-governance phase rather than the Core Phase 2 baseline. It should not be used as the criterion for calling Phase 2 complete.
+This scaffold is implemented locally and documented in the node-control API contract, but it aligns with the node's later prompt-execution phase rather than the Core Phase 2 baseline. It should not be used as the criterion for calling Phase 2 complete.
 
 ## See Also
 

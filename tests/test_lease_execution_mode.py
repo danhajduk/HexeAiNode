@@ -26,7 +26,7 @@ class _FakeLeaseIntegration:
                         "payload": {
                             "task_request": {
                                 "task_id": "task-001",
-                                "task_family": "task.classification.text",
+                                "task_family": "task.classification",
                                 "requested_by": "scheduler.core",
                                 "inputs": {"text": "hello"},
                                 "trace_id": "trace-001",

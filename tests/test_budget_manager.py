@@ -1,6 +1,7 @@
 import logging
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from ai_node.execution.task_models import TaskExecutionRequest
@@ -8,11 +9,13 @@ from ai_node.persistence.budget_state_store import BudgetStateStore
 from ai_node.providers.models import ModelCapability
 from ai_node.providers.provider_registry import ProviderRegistry
 from ai_node.runtime.budget_manager import BudgetManager
+from ai_node.time_utils import local_now
 
 
 class _FakeRuntimeManager:
-    def __init__(self):
+    def __init__(self, provider_budget_limits=None):
         self._registry = ProviderRegistry()
+        self._provider_budget_limits = provider_budget_limits or {}
         self._registry.set_models_for_provider(
             provider_id="openai",
             models=[
@@ -25,6 +28,9 @@ class _FakeRuntimeManager:
                 )
             ],
         )
+
+    def provider_selection_context_payload(self):
+        return {"provider_budget_limits": self._provider_budget_limits}
 
 
 def _active_budget_policy() -> dict:
@@ -100,7 +106,7 @@ class BudgetManagerTests(unittest.TestCase):
             request = TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-001",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "service_id": "service.alpha",
                     "customer_id": "customer-001",
@@ -139,7 +145,7 @@ class BudgetManagerTests(unittest.TestCase):
             request = TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-002",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.beta",
                     "service_id": "service.beta",
                     "customer_id": "missing-customer",
@@ -160,6 +166,81 @@ class BudgetManagerTests(unittest.TestCase):
 
             self.assertFalse(result.allowed)
             self.assertEqual(result.reason, "missing_budget_grant")
+
+    def test_provider_budget_weekly_window_uses_local_monday_to_sunday(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-manager-test"))
+            manager = BudgetManager(
+                store=store,
+                logger=logging.getLogger("budget-manager-test"),
+                provider_runtime_manager=_FakeRuntimeManager(
+                    provider_budget_limits={"openai": {"max_cost_cents": 25, "period": "weekly"}}
+                ),
+            )
+            request = TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-weekly",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "service_id": "service.alpha",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5-mini",
+                    "inputs": {"text": "hello"},
+                    "constraints": {"max_cost_cents": 10},
+                    "trace_id": "trace-weekly",
+                }
+            )
+            frozen_now = local_now().replace(year=2026, month=3, day=18, hour=9, minute=30, second=0, microsecond=0)
+            with patch("ai_node.runtime.budget_manager._now", return_value=frozen_now):
+                reserved = manager.reserve_execution(
+                    task_id=request.task_id,
+                    request=request,
+                    provider_id="openai",
+                    model_id="gpt-5-mini",
+                    governance_bundle=None,
+                )
+
+            self.assertTrue(reserved.allowed)
+            payload = manager.status_payload()
+            self.assertEqual(payload["provider_budgets"][0]["provider_id"], "openai")
+            self.assertEqual(payload["provider_budgets"][0]["period"], "weekly")
+            self.assertEqual(payload["provider_budgets"][0]["period_start"], "2026-03-16T00:00:00-07:00")
+            self.assertEqual(payload["provider_budgets"][0]["period_end"], "2026-03-22T23:59:59.999999-07:00")
+
+    def test_provider_budget_can_deny_before_core_policy_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-manager-test"))
+            manager = BudgetManager(
+                store=store,
+                logger=logging.getLogger("budget-manager-test"),
+                provider_runtime_manager=_FakeRuntimeManager(
+                    provider_budget_limits={"openai": {"max_cost_cents": 5, "period": "monthly"}}
+                ),
+            )
+            request = TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-provider-limit",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "service_id": "service.alpha",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5-mini",
+                    "inputs": {"text": "hello"},
+                    "constraints": {"max_cost_cents": 10},
+                    "trace_id": "trace-provider-limit",
+                }
+            )
+
+            result = manager.reserve_execution(
+                task_id=request.task_id,
+                request=request,
+                provider_id="openai",
+                model_id="gpt-5-mini",
+                governance_bundle=None,
+            )
+
+            self.assertFalse(result.allowed)
+            self.assertEqual(result.reason, "provider_budget_exhausted")
 
 
 if __name__ == "__main__":

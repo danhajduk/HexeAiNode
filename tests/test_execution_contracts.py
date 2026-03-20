@@ -114,7 +114,7 @@ class _FakeLeaseIntegration:
                         "payload": {
                             "task_request": {
                                 "task_id": "task-lease-001",
-                                "task_family": "task.classification.text",
+                                "task_family": "task.classification",
                                 "requested_by": "scheduler.core",
                                 "inputs": {"text": "lease hello"},
                                 "trace_id": "trace-lease-001",
@@ -198,11 +198,11 @@ class ExecutionContractsTests(unittest.IsolatedAsyncioTestCase):
             logger=logging.getLogger("execution-contracts-test"),
             prompt_services_state_provider=lambda: {
                 "prompt_services": [
-                    {"prompt_id": "prompt.alpha", "task_family": "task.classification.text", "status": "registered"}
+                    {"prompt_id": "prompt.alpha", "task_family": "task.classification", "status": "registered"}
                 ]
             },
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
             execution_telemetry_publisher=telemetry,
         )
 
@@ -211,7 +211,7 @@ class ExecutionContractsTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "task_id": "task-001",
                     "prompt_id": "prompt.alpha",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "requested_provider": "openai",
                     "requested_model": "gpt-5-mini",
@@ -246,8 +246,8 @@ class ExecutionContractsTests(unittest.IsolatedAsyncioTestCase):
                 )
             ),
             logger=logging.getLogger("execution-contracts-test"),
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
         )
 
         result = await service.execute(
@@ -283,8 +283,8 @@ class ExecutionContractsTests(unittest.IsolatedAsyncioTestCase):
                 )
             ),
             logger=logging.getLogger("execution-contracts-test"),
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
             execution_telemetry_publisher=telemetry,
         )
 
@@ -292,7 +292,7 @@ class ExecutionContractsTests(unittest.IsolatedAsyncioTestCase):
             TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-fallback",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello"},
                     "trace_id": "trace-fallback",
@@ -321,8 +321,8 @@ class ExecutionContractsTests(unittest.IsolatedAsyncioTestCase):
                 )
             ),
             logger=logging.getLogger("execution-contracts-test"),
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
             governance_bundle_provider=lambda: {"generic_node_class_rules": {"allow_task_families": ["summarization"]}},
         )
 
@@ -330,7 +330,7 @@ class ExecutionContractsTests(unittest.IsolatedAsyncioTestCase):
             TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-governance",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello"},
                     "trace_id": "trace-governance",
@@ -379,7 +379,7 @@ class ExecutionContractsTests(unittest.IsolatedAsyncioTestCase):
 
         result = await publisher.publish_event(
             event_type="task_received",
-            payload={"task_id": "task-telemetry", "task_family": "task.classification.text"},
+            payload={"task_id": "task-telemetry", "task_family": "task.classification"},
         )
 
         self.assertTrue(result["published"])

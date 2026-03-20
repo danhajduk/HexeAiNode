@@ -99,7 +99,7 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.payload = {
                 "schema_version": "1.0",
                 "selected_task_families": [
-                    "task.classification.text",
+                    "task.classification",
                     "task.summarization.text",
                 ],
             }
@@ -132,7 +132,7 @@ class NodeControlFastApiTests(unittest.TestCase):
         def status_payload(self):
             return {
                 "status": "idle",
-                "accepted_profile": {"declared_task_families": ["task.classification.text", "task.summarization.text"]},
+                "accepted_profile": {"declared_task_families": ["task.classification", "task.summarization.text"]},
                 "last_manifest_payload": {"manifest_version": "1.0"},
                 "last_declaration_result": {"status": "accepted"},
                 "governance_bundle": {
@@ -480,13 +480,17 @@ class NodeControlFastApiTests(unittest.TestCase):
 
             provider_set_response = client.post(
                 "/api/providers/config",
-                json={"openai_enabled": True, "provider_budget_limits": {"openai": {"max_cost_cents": 2500}}},
+                json={"openai_enabled": True, "provider_budget_limits": {"openai": {"max_cost_cents": 2500, "period": "weekly"}}},
             )
             self.assertEqual(provider_set_response.status_code, 200)
             self.assertIn("openai", provider_set_response.json()["config"]["providers"]["enabled"])
             self.assertEqual(
                 provider_set_response.json()["config"]["providers"]["budget_limits"]["openai"]["max_cost_cents"],
                 2500,
+            )
+            self.assertEqual(
+                provider_set_response.json()["config"]["providers"]["budget_limits"]["openai"]["period"],
+                "weekly",
             )
 
             credentials_get_response = client.get("/api/providers/openai/credentials")
@@ -584,12 +588,12 @@ class NodeControlFastApiTests(unittest.TestCase):
 
             capability_config_set_response = client.post(
                 "/api/capabilities/config",
-                json={"selected_task_families": ["task.classification.text"]},
+                json={"selected_task_families": ["task.classification"]},
             )
             self.assertEqual(capability_config_set_response.status_code, 200)
             self.assertEqual(
                 capability_config_set_response.json()["config"]["selected_task_families"],
-                ["task.classification.text"],
+                ["task.classification"],
             )
 
             capability_declare_response = client.post("/api/capabilities/declare")
@@ -640,7 +644,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 json={
                     "prompt_id": "prompt.alpha",
                     "service_id": "svc-alpha",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "prompt_name": "Prompt Alpha",
                     "definition": {"system_prompt": "Classify the text."},
                     "constraints": {"max_timeout_s": 30},
@@ -665,7 +669,7 @@ class NodeControlFastApiTests(unittest.TestCase):
 
             exec_authorize_response = client.post(
                 "/api/execution/authorize",
-                json={"prompt_id": "prompt.alpha", "task_family": "task.classification.text"},
+                json={"prompt_id": "prompt.alpha", "task_family": "task.classification"},
             )
             self.assertEqual(exec_authorize_response.status_code, 200)
             self.assertTrue(exec_authorize_response.json()["allowed"])
@@ -678,7 +682,7 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(prompt_lifecycle_response.status_code, 200)
             restricted_authorize_response = client.post(
                 "/api/execution/authorize",
-                json={"prompt_id": "prompt.alpha", "task_family": "task.classification.text"},
+                json={"prompt_id": "prompt.alpha", "task_family": "task.classification"},
             )
             self.assertEqual(restricted_authorize_response.status_code, 200)
             self.assertFalse(restricted_authorize_response.json()["allowed"])
@@ -697,7 +701,7 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(prompt_probation_response.status_code, 200)
             exec_denied_response = client.post(
                 "/api/execution/authorize",
-                json={"prompt_id": "prompt.alpha", "task_family": "task.classification.text"},
+                json={"prompt_id": "prompt.alpha", "task_family": "task.classification"},
             )
             self.assertEqual(exec_denied_response.status_code, 200)
             self.assertFalse(exec_denied_response.json()["allowed"])
@@ -708,7 +712,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 json={
                     "task_id": "task-001",
                     "prompt_id": "prompt.alpha",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "requested_provider": "openai",
                     "requested_model": "gpt-5-mini",
@@ -873,7 +877,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "/api/execution/direct",
                 json={
                     "task_id": "task-200",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "requested_provider": "openai",
                     "requested_model": "gpt-5-mini",

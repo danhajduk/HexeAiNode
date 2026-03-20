@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from ai_node.capabilities.task_families import validate_task_family_capabilities
+from ai_node.capabilities.task_families import canonicalize_task_family, validate_task_family_capabilities
 
 
 TaskExecutionPriority = Literal["background", "low", "normal", "high"]
@@ -57,7 +57,7 @@ class TaskExecutionRequest(BaseModel):
         is_valid, error = validate_task_family_capabilities([normalized])
         if not is_valid:
             raise ValueError(str(error or "invalid_task_family"))
-        return normalized
+        return canonicalize_task_family(normalized) or normalized
 
     @field_validator("requested_by")
     @classmethod

@@ -28,10 +28,26 @@ class ProviderSelectionConfigTests(unittest.TestCase):
         config = create_provider_selection_config(
             {
                 "openai_enabled": True,
-                "provider_budget_limits": {"openai": {"max_cost_cents": 2500}},
+                "provider_budget_limits": {"openai": {"max_cost_cents": 2500, "period": "weekly"}},
             }
         )
         self.assertEqual(config["providers"]["budget_limits"]["openai"]["max_cost_cents"], 2500)
+        self.assertEqual(config["providers"]["budget_limits"]["openai"]["period"], "weekly")
+
+    def test_validate_rejects_invalid_provider_budget_period(self):
+        is_valid, error = validate_provider_selection_config(
+            {
+                "schema_version": "1.0",
+                "providers": {
+                    "supported": {"cloud": ["openai"], "local": [], "future": []},
+                    "enabled": ["openai"],
+                    "budget_limits": {"openai": {"max_cost_cents": 1000, "period": "daily"}},
+                },
+                "services": {"enabled": [], "future": []},
+            }
+        )
+        self.assertFalse(is_valid)
+        self.assertEqual(error, "invalid_provider_budget_limits")
 
     def test_validate_rejects_enabled_provider_not_in_supported(self):
         is_valid, error = validate_provider_selection_config(

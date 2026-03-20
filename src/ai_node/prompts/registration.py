@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES
+from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES, canonicalize_task_family
 from ai_node.time_utils import local_now_iso
 
 
@@ -143,7 +143,7 @@ def create_prompt_service_registration(
 ) -> dict:
     prompt = _non_empty(prompt_id, name="prompt_id")
     service = _non_empty(service_id, name="service_id")
-    task = _non_empty(task_family, name="task_family")
+    task = canonicalize_task_family(_non_empty(task_family, name="task_family")) or _non_empty(task_family, name="task_family")
     if task not in set(CANONICAL_TASK_FAMILIES):
         raise ValueError("unsupported task_family")
     version_value = _optional_string(version) or "v1"
@@ -206,7 +206,7 @@ def update_prompt_service_definition(
     if not isinstance(entry, dict):
         raise ValueError("entry is required")
     if task_family is not None:
-        normalized_task_family = _non_empty(task_family, name="task_family")
+        normalized_task_family = canonicalize_task_family(_non_empty(task_family, name="task_family")) or _non_empty(task_family, name="task_family")
         if normalized_task_family not in set(CANONICAL_TASK_FAMILIES):
             raise ValueError("unsupported task_family")
         entry["task_family"] = normalized_task_family

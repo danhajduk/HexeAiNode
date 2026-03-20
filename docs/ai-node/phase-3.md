@@ -3,9 +3,9 @@
 Status: Implemented baseline
 
 ## Goal
-Introduce governed prompt execution.
+Introduce node-governed prompt execution plus Core-scoped spend enforcement.
 
-Each prompt becomes a governed contract between the caller, Core, and AI Node.
+Each prompt is a node-owned execution contract enforced locally by the AI Node.
 
 ## Prompt Metadata
 
@@ -65,13 +65,13 @@ Current node-local controls:
 
 Current boundary with Core:
 
-- no canonical Core prompt-governance contract is present in the Core docs available to this repository
-- the local node implementation therefore remains the source of truth for prompt enforcement in this repository
-- the Core follow-up requirement is recorded in `docs/ai-node/core-prompt-management-follow-up-ticket.md`
+- prompt ownership, lifecycle, versioning, and execution constraints are node-local
+- Core does not distribute or govern prompt definitions for the AI Node
+- Core only supplies spend authority through budget policy and grant declarations
 
 ## Current Baseline
 
-The current repository now implements the local prompt-governance baseline:
+The current repository now implements the node-local prompt-governance baseline:
 
 - prompt definition persistence
 - version creation and version pinning
@@ -132,6 +132,8 @@ Current behavior:
 - can refresh cached policy from Core through `/api/system/nodes/budgets/policy/current`
 - persists policy, grant usage, reservations, recent denials, and queued usage summaries locally
 - supports `node`, `customer`, and `provider` grant scopes
+- further narrows grant applicability using service plus optional `metadata.provider_id` and `metadata.model_id`
+- can also enforce node-local per-provider budget windows independent of Core-policy freshness
 - reserves spend before dispatch using request-side cost ceilings or local pricing estimates
 - finalizes actual spend after successful execution using execution metrics
 - releases reservations for rejected and failed executions before completion
@@ -145,6 +147,13 @@ Current admin/debug visibility:
 - `GET /api/budgets/state`
 - `POST /api/budgets/refresh`
 - `GET /debug/budgets`
+
+Current node-local provider budget behavior:
+
+- provider budget configuration is stored under `providers.budget_limits.<provider_id>`
+- each provider budget declares `max_cost_cents` plus `period`
+- supported periods are `monthly` and `weekly`
+- weekly windows use local-time Monday through Sunday boundaries
 
 ## Prompt Execution Governance
 
@@ -199,6 +208,10 @@ Status: Implemented
 The Phase 3 execution vocabulary now reuses the existing extended canonical task-family set from `src/ai_node/capabilities/task_families.py`.
 
 The node does not introduce a second reduced execution-only family list. Execution validation uses the same current canonical family values already used for capability selection and declaration.
+
+Compatibility rule:
+
+- legacy `task.classification.text` inputs are canonicalized to `task.classification` before validation and persistence
 
 ## Execution Task Family Validation
 
@@ -467,7 +480,7 @@ Current handler coverage uses the broader existing family declarations already p
 
 - classification:
   - `task.classification`
-  - `task.classification.text`
+  - `task.classification`
   - `task.classification.email`
   - `task.classification.image`
 - summarization:

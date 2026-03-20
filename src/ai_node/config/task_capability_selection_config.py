@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Optional, Tuple
 
-from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES
+from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES, canonicalize_task_family
 
 
 DEFAULT_TASK_CAPABILITY_SELECTION_SCHEMA_VERSION = "1.0"
@@ -18,7 +18,9 @@ def _normalize_string_list(value: object) -> list[str]:
     normalized: list[str] = []
     for item in value:
         if _is_non_empty_string(item):
-            normalized.append(str(item).strip())
+            canonical = canonicalize_task_family(str(item).strip())
+            if canonical:
+                normalized.append(canonical)
     return sorted(set(normalized))
 
 

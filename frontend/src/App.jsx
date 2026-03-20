@@ -40,7 +40,7 @@ const DIAGNOSTIC_ENDPOINTS = [
   "/api/services/status",
 ];
 const TASK_CAPABILITY_OPTIONS = [
-  "task.classification.text",
+  "task.classification",
   "task.classification.email",
   "task.classification.image",
   "task.summarization.text",
@@ -59,6 +59,10 @@ const OPENAI_MODEL_GROUPS = [
   ["text_to_speech", "TTS"],
   ["embeddings", "Embeddings"],
   ["moderation", "Moderation"],
+];
+const PROVIDER_BUDGET_PERIOD_OPTIONS = [
+  ["monthly", "Monthly"],
+  ["weekly", "Weekly (Mon-Sun)"],
 ];
 const PRICING_STAGE_LABELS = [
   ["source_fetched", "Source Fetched"],
@@ -141,6 +145,17 @@ function formatStageStatus(value) {
     return "pending";
   }
   return normalized.replaceAll("_", " ");
+}
+
+function formatBudgetPeriod(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "weekly") {
+    return "Weekly (Mon-Sun)";
+  }
+  if (normalized === "monthly") {
+    return "Monthly";
+  }
+  return "not_set";
 }
 
 function formatModelFamily(value) {
@@ -244,6 +259,7 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [openaiEnabled, setOpenaiEnabled] = useState(false);
   const [openaiBudgetCents, setOpenaiBudgetCents] = useState("");
+  const [openaiBudgetPeriod, setOpenaiBudgetPeriod] = useState("monthly");
   const [selectedTaskFamilies, setSelectedTaskFamilies] = useState(TASK_CAPABILITY_OPTIONS);
   const [savingProvider, setSavingProvider] = useState(false);
   const [declaringCapabilities, setDeclaringCapabilities] = useState(false);
@@ -430,8 +446,12 @@ export default function App() {
     if ((payload.status || "unknown") === "capability_setup_pending" && providerPayload) {
       const enabledProviders = providerPayload?.config?.providers?.enabled || [];
       const openaiBudgetLimit = providerPayload?.config?.providers?.budget_limits?.openai?.max_cost_cents;
+      const openaiBudgetWindow = providerPayload?.config?.providers?.budget_limits?.openai?.period;
       setOpenaiEnabled(enabledProviders.includes("openai"));
       setOpenaiBudgetCents(Number.isFinite(openaiBudgetLimit) ? String(openaiBudgetLimit) : "");
+      setOpenaiBudgetPeriod(
+        openaiBudgetWindow === "weekly" || openaiBudgetWindow === "monthly" ? openaiBudgetWindow : "monthly"
+      );
     }
     if ((payload.status || "unknown") === "capability_setup_pending" && capabilityConfigPayload) {
       const selected = capabilityConfigPayload?.config?.selected_task_families || [];
@@ -811,20 +831,41 @@ function formatTokenHint(value) {
     setSavingProvider(true);
     setError("");
     try {
-      const trimmedBudget = String(openaiBudgetCents || "").trim();
-      const parsedBudget = trimmedBudget === "" ? null : Number.parseInt(trimmedBudget, 10);
-      if (parsedBudget !== null && (!Number.isFinite(parsedBudget) || parsedBudget < 0)) {
-        throw new Error("openai budget must be a non-negative whole number of cents");
-      }
-      await apiPost("/api/providers/config", {
-        openai_enabled: openaiEnabled,
-        provider_budget_limits: {
-          openai: {
-            max_cost_cents: parsedBudget,
-          },
-        },
-      });
+      await persistProviderSelectionConfig();
       await apiPost("/api/capabilities/config", { selected_task_families: selectedTaskFamilies });
+      await loadStatus();
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+    } finally {
+      setSavingProvider(false);
+    }
+  }
+
+  async function persistProviderSelectionConfig() {
+    const trimmedBudget = String(openaiBudgetCents || "").trim();
+    const parsedBudget = trimmedBudget === "" ? null : Number.parseInt(trimmedBudget, 10);
+    if (parsedBudget !== null && (!Number.isFinite(parsedBudget) || parsedBudget < 0)) {
+      throw new Error("openai budget must be a non-negative whole number of cents");
+    }
+    const normalizedBudgetPeriod = openaiBudgetPeriod === "weekly" ? "weekly" : "monthly";
+    await apiPost("/api/providers/config", {
+      openai_enabled: openaiEnabled,
+      provider_budget_limits: {
+        openai: {
+          max_cost_cents: parsedBudget,
+          period: normalizedBudgetPeriod,
+        },
+      },
+    });
+  }
+
+  async function onSaveOpenAiProviderConfig(event) {
+    event?.preventDefault?.();
+    setSavingProvider(true);
+    setError("");
+    try {
+      await persistProviderSelectionConfig();
       await loadStatus();
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
@@ -1112,6 +1153,48 @@ function formatTokenHint(value) {
     return (
       <div className="provider-page-shell">
         <article className="provider-page-card">
+          <form className="setup-form" onSubmit={onSaveOpenAiProviderConfig}>
+            <label>
+              <input
+                type="checkbox"
+                checked={openaiEnabled}
+                onChange={(event) => setOpenaiEnabled(event.target.checked)}
+              />{" "}
+              Enable OpenAI on this node
+            </label>
+            <label>
+              Provider Budget Limit (cents)
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={openaiBudgetCents}
+                onChange={(event) => setOpenaiBudgetCents(event.target.value)}
+                placeholder="Optional provider ceiling"
+              />
+            </label>
+            <label>
+              Budget Period
+              <select value={openaiBudgetPeriod} onChange={(event) => setOpenaiBudgetPeriod(event.target.value)}>
+                {PROVIDER_BUDGET_PERIOD_OPTIONS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="state-grid">
+              <span>Budget Window</span>
+              <code>{formatBudgetPeriod(openaiBudgetPeriod)}</code>
+              <span>Scope</span>
+              <code>provider.openai</code>
+            </div>
+            <div className="row">
+              <button className="btn btn-primary" type="submit" disabled={savingProvider}>
+                {savingProvider ? "Saving..." : "Save Provider Budget"}
+              </button>
+            </div>
+          </form>
           <form className="setup-form" onSubmit={onSaveOpenAiCredentials}>
             <label>
               OpenAI API Token
@@ -1332,6 +1415,7 @@ function formatTokenHint(value) {
           <SetupProviderPanel
             openaiEnabled={openaiEnabled}
             openaiBudgetCents={Number.parseInt(openaiBudgetCents || "", 10)}
+            openaiBudgetPeriod={openaiBudgetPeriod}
             selectedTaskFamilies={selectedTaskFamilies}
             setupReadinessFlags={setupReadinessFlags}
           >
@@ -1347,18 +1431,17 @@ function formatTokenHint(value) {
                   />{" "}
                   Enable OpenAI on this node
                 </label>
-                <label>
-                  OpenAI Budget Limit (cents)
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={openaiBudgetCents}
-                    onChange={(event) => setOpenaiBudgetCents(event.target.value)}
-                    placeholder="Optional provider ceiling"
-                  />
-                </label>
+                <p className="muted tiny">
+                  Provider budgets are configured per provider route. Open <code>#/setup/provider/openai</code> to set the OpenAI
+                  monthly or weekly cap.
+                </p>
                 <div className="state-grid">
+                  <span>OpenAI Budget</span>
+                  <code>
+                    {Number.isFinite(Number.parseInt(openaiBudgetCents || "", 10))
+                      ? `${Number.parseInt(openaiBudgetCents || "", 10)} cents / ${formatBudgetPeriod(openaiBudgetPeriod)}`
+                      : "not_set"}
+                  </code>
                   <span>Task Capabilities</span>
                   <code>{selectedTaskFamilies.join(", ") || "none_selected"}</code>
                 </div>

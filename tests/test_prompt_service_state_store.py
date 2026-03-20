@@ -32,7 +32,7 @@ class PromptServiceStateStoreTests(unittest.TestCase):
                     "prompt_name": "Prompt Alpha",
                     "service_id": "svc-alpha",
                     "owner_service": "svc-alpha",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "status": "active",
                     "privacy_class": "internal",
                     "execution_policy": {"allow_direct_execution": True, "allow_version_pinning": True},
@@ -70,7 +70,7 @@ class PromptServiceStateStoreTests(unittest.TestCase):
                     {
                         "prompt_id": "prompt.alpha",
                         "service_id": "svc-alpha",
-                        "task_family": "task.classification.text",
+                        "task_family": "task.classification",
                         "status": "registered",
                         "metadata": {"owner": "ops"},
                         "registered_at": "2026-03-12T00:00:00Z",

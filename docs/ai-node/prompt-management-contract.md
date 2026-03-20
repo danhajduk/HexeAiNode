@@ -17,14 +17,10 @@ Node-owned responsibilities:
 - track local prompt usage, failures, and denials
 - expose local CRUD, lifecycle, and debug APIs
 
-Not yet Core-owned in this repository:
+Core responsibilities that remain adjacent but separate:
 
-- canonical prompt ownership payload from Core
-- canonical prompt approval workflow for AI Nodes
-- canonical Core-issued prompt lifecycle payloads
-- canonical Core-issued prompt governance distribution contract
-
-Because the Core-owned contract is not present in the Core docs available to this repository, the current implementation keeps prompt governance node-local and documents the follow-up requirement in `docs/ai-node/core-prompt-management-follow-up-ticket.md`.
+- declare spend authority for node services/providers/models through budget policy and grants
+- stay out of node-local prompt ownership, versioning, lifecycle, and enforcement
 
 ## Persisted Prompt Model
 

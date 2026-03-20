@@ -4,7 +4,7 @@ from ai_node.providers.models import UnifiedExecutionRequest
 
 CLASSIFICATION_TASK_FAMILIES = (
     "task.classification",
-    "task.classification.text",
+    "task.classification",
     "task.classification.email",
     "task.classification.image",
 )

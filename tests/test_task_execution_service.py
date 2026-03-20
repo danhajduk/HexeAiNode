@@ -129,11 +129,11 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
             logger=logging.getLogger("task-execution-service-test"),
             prompt_services_state_provider=lambda: {
                 "prompt_services": [
-                    {"prompt_id": "prompt.alpha", "task_family": "task.classification.text", "status": "registered"}
+                    {"prompt_id": "prompt.alpha", "task_family": "task.classification", "status": "registered"}
                 ]
             },
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
             execution_telemetry_publisher=telemetry,
         )
 
@@ -142,7 +142,7 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "task_id": "task-001",
                     "prompt_id": "prompt.alpha",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "requested_provider": "openai",
                     "requested_model": "gpt-5-mini",
@@ -188,8 +188,8 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 )
             ),
             logger=logging.getLogger("task-execution-service-test"),
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
             execution_telemetry_publisher=telemetry,
         )
 
@@ -197,7 +197,7 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
             TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-fallback",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello"},
                     "trace_id": "trace-fallback",
@@ -233,8 +233,8 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 logger=logging.getLogger("task-execution-service-test"),
                 budget_manager=budget_manager,
-                declared_task_families_provider=lambda: ["task.classification.text"],
-                accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+                declared_task_families_provider=lambda: ["task.classification"],
+                accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
                 governance_bundle_provider=lambda: {"budget_policy": _active_budget_policy()},
                 execution_telemetry_publisher=telemetry,
             )
@@ -243,7 +243,7 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 TaskExecutionRequest.model_validate(
                     {
                         "task_id": "task-budget-001",
-                        "task_family": "task.classification.text",
+                        "task_family": "task.classification",
                         "requested_by": "service.alpha",
                         "service_id": "service.alpha",
                         "inputs": {"text": "hello world"},
@@ -274,8 +274,8 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 )
             ),
             logger=logging.getLogger("task-execution-service-test"),
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
         )
 
         result = await service.execute(
@@ -312,11 +312,11 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
             logger=logging.getLogger("task-execution-service-test"),
             prompt_services_state_provider=lambda: {
                 "prompt_services": [
-                    {"prompt_id": "prompt.alpha", "task_family": "task.classification.text", "status": "probation"}
+                    {"prompt_id": "prompt.alpha", "task_family": "task.classification", "status": "probation"}
                 ]
             },
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
         )
 
         result = await service.execute(
@@ -324,7 +324,7 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "task_id": "task-probation",
                     "prompt_id": "prompt.alpha",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello"},
                     "trace_id": "trace-probation",
@@ -358,7 +358,7 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 "prompt_services": [
                     {
                         "prompt_id": "prompt.alpha",
-                        "task_family": "task.classification.text",
+                        "task_family": "task.classification",
                         "status": "active",
                         "current_version": "v2",
                         "versions": [
@@ -370,8 +370,8 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                     }
                 ]
             },
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
         )
 
         result = await service.execute(
@@ -379,7 +379,7 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "task_id": "task-prompt-managed",
                     "prompt_id": "prompt.alpha",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello"},
                     "timeout_s": 45,
@@ -409,15 +409,15 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 )
             ),
             logger=logging.getLogger("task-execution-service-test"),
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
         )
 
         result = await service.execute(
             TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-no-provider",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello"},
                     "trace_id": "trace-no-provider",
@@ -445,15 +445,15 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 )
             ),
             logger=logging.getLogger("task-execution-service-test"),
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
         )
 
         result = await service.execute(
             TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-provider-degraded",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello"},
                     "trace_id": "trace-provider-degraded",
@@ -484,8 +484,8 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 )
             ),
             logger=logging.getLogger("task-execution-service-test"),
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
             governance_status_provider=lambda: {"state": "stale"},
         )
 
@@ -493,7 +493,7 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
             TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-governance-stale",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello"},
                     "trace_id": "trace-governance-stale",
@@ -521,8 +521,8 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 )
             ),
             logger=logging.getLogger("task-execution-service-test"),
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
             governance_bundle_provider=lambda: {"generic_node_class_rules": {"allow_task_families": ["summarization"]}},
         )
 
@@ -530,7 +530,7 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
             TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-governance-family",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello"},
                     "trace_id": "trace-governance-family",
@@ -558,15 +558,15 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
                 )
             ),
             logger=logging.getLogger("task-execution-service-test"),
-            declared_task_families_provider=lambda: ["task.classification.text"],
-            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
         )
 
         result = await service.execute(
             TaskExecutionRequest.model_validate(
                 {
                     "task_id": "task-governance-provider",
-                    "task_family": "task.classification.text",
+                    "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello"},
                     "constraints": {"governance": {"approved_providers": ["local"]}},

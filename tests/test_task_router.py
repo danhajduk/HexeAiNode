@@ -9,10 +9,10 @@ class TaskRouterTests(unittest.IsolatedAsyncioTestCase):
             return {"handler": "specific", "task_id": kwargs["request"].task_id}
 
         router = TaskRouter()
-        router.register_handler(task_families=["task.classification.text"], handler=handler)
+        router.register_handler(task_families=["task.classification"], handler=handler)
 
         result = await router.dispatch(
-            task_family="task.classification.text",
+            task_family="task.classification",
             request=type("Request", (), {"task_id": "task-001"})(),
             resolution=None,
         )
@@ -26,18 +26,18 @@ class TaskRouterTests(unittest.IsolatedAsyncioTestCase):
 
         router = TaskRouter(
             default_handler=default_handler,
-            routable_task_families_provider=lambda: ["task.classification.text"],
+            routable_task_families_provider=lambda: ["task.classification"],
         )
 
-        request = type("Request", (), {"task_id": "task-001", "task_family": "task.classification.text"})()
-        result = await router.dispatch(task_family="task.classification.text", request=request, resolution=None)
+        request = type("Request", (), {"task_id": "task-001", "task_family": "task.classification"})()
+        result = await router.dispatch(task_family="task.classification", request=request, resolution=None)
 
         self.assertEqual(result["handler"], "default")
 
     async def test_dispatch_rejects_non_routable_family_without_handler(self):
         router = TaskRouter(
             default_handler=lambda **_kwargs: None,
-            routable_task_families_provider=lambda: ["task.classification.text"],
+            routable_task_families_provider=lambda: ["task.classification"],
         )
 
         with self.assertRaises(ValueError) as context:

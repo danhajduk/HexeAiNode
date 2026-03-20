@@ -348,3 +348,15 @@ Task 363: Add validation rules and failure taxonomy for prompt-management errors
 Task 364: Add tests for prompt CRUD flows, prompt version transitions, lifecycle transitions, and authorization enforcement - Completed on 03/20/2026 08:49
 Task 365: Add end-to-end execution tests proving prompt-managed executions honor prompt lifecycle, prompt constraints, and probation behavior together with the shared execution service - Completed on 03/20/2026 08:49
 Task 366: Update Phase 3 documentation and node-control API docs to describe the full local prompt-management surface and its boundary with future Core-managed prompt governance - Completed on 03/20/2026 08:49
+Task 367: Move provider budget setup into provider-specific setup routes under `/setup/provider/<provider-name>` so each provider owns its own budget configuration UI and API flow - Completed on 03/20/2026 09:23
+Task 368: Add a provider budget scheduling model that lets the operator choose `monthly` or `weekly` budget periods during provider setup - Completed on 03/20/2026 09:23
+Task 369: Define and enforce the weekly provider budget period as calendar `Monday` through `Sunday` in local node timezone - Completed on 03/20/2026 09:23
+Task 370: Update provider setup persistence and node-control API contracts so provider budget settings store both amount and schedule type - Completed on 03/20/2026 09:23
+Task 371: Update the setup UI and documentation to describe provider budget configuration per provider, including weekly `Mon-Sun` and monthly schedule behavior - Completed on 03/20/2026 09:23
+Task 372: Align local task-family vocabulary with Core so `task.classification.text` is replaced by canonical `task.classification` - Completed on 03/20/2026 09:23
+Task 373: Update execution, provider-routing, prompt-management, and setup flows to accept and emit the Core-aligned canonical classification family without relying on the old `.text` suffix - Completed on 03/20/2026 09:23
+Task 374: Add compatibility handling or migration for persisted/local config state that still contains `task.classification.text`, then remove drift from docs and tests - Completed on 03/20/2026 09:23
+Task 375: Remove any remaining Core-governs-prompts assumptions and define prompts as node-owned local policy and execution assets - Completed on 03/20/2026 09:23
+Task 376: Update the local/Core budget contract so Core only declares spend authority in the form “this node may spend up to X for these services/providers/models” - Completed on 03/20/2026 09:23
+Task 377: Implement provider/service/model scoped spend-allowance handling from Core declarations without introducing Core-managed prompt governance - Completed on 03/20/2026 09:23
+Task 378: Update diagnostics, API contracts, and docs so prompt ownership stays on-node while Core budget declarations are limited to spend authority for services/providers/models - Completed on 03/20/2026 09:23

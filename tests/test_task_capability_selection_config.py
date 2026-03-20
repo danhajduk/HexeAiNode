@@ -22,10 +22,19 @@ class TaskCapabilitySelectionConfigTests(unittest.TestCase):
 
     def test_validate_rejects_unknown_task_family(self):
         is_valid, error = validate_task_capability_selection_config(
-            {"schema_version": "1.0", "selected_task_families": ["task.classification.text", "task.unknown"]}
+            {"schema_version": "1.0", "selected_task_families": ["task.classification", "task.unknown"]}
         )
         self.assertFalse(is_valid)
         self.assertEqual(error, "unsupported_task_family:task.unknown")
+
+    def test_create_canonicalizes_legacy_classification_alias(self):
+        config = create_task_capability_selection_config(
+            {"selected_task_families": ["task.classification.text", "task.summarization.text"]}
+        )
+        self.assertEqual(
+            config["selected_task_families"],
+            ["task.classification", "task.summarization.text"],
+        )
 
     def test_store_save_load_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -34,7 +43,7 @@ class TaskCapabilitySelectionConfigTests(unittest.TestCase):
             config = create_task_capability_selection_config(
                 {
                     "selected_task_families": [
-                        "task.classification.text",
+                        "task.classification",
                         "task.summarization.text",
                     ]
                 }

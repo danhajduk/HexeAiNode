@@ -79,8 +79,8 @@ class NodeControlApiTests(unittest.TestCase):
                 "capability_graph_version": "1.0",
                 "enabled_models": ["gpt-5-mini"],
                 "feature_union": {"classification": True},
-                "resolved_tasks": ["task.classification.text"],
-                "enabled_task_capabilities": ["task.classification.text"],
+                "resolved_tasks": ["task.classification"],
+                "enabled_task_capabilities": ["task.classification"],
                 "generated_at": "2026-03-13T00:00:00Z",
                 "source": "node_capabilities",
             }
@@ -182,7 +182,7 @@ class NodeControlApiTests(unittest.TestCase):
             self.payload = {
                 "schema_version": "1.0",
                 "selected_task_families": [
-                    "task.classification.text",
+                    "task.classification",
                     "task.summarization.text",
                 ],
             }
@@ -239,7 +239,7 @@ class NodeControlApiTests(unittest.TestCase):
 
         def status_payload(self):
             return {
-                "accepted_profile": {"declared_task_families": ["task.classification.text"]},
+                "accepted_profile": {"declared_task_families": ["task.classification"]},
                 "governance_bundle": {"generic_node_class_rules": {"allow_task_families": ["classification"]}},
                 "provider_capability_report": {
                     "providers": [
@@ -403,7 +403,7 @@ class NodeControlApiTests(unittest.TestCase):
                     request=TaskExecutionRequest.model_validate(
                         {
                             "task_id": "task-001",
-                            "task_family": "task.classification.text",
+                            "task_family": "task.classification",
                             "requested_by": "service.alpha",
                             "requested_provider": "openai",
                             "requested_model": "gpt-5-mini",
@@ -442,7 +442,7 @@ class NodeControlApiTests(unittest.TestCase):
                         request=TaskExecutionRequest.model_validate(
                             {
                                 "task_id": "task-002",
-                                "task_family": "task.classification.text",
+                                "task_family": "task.classification",
                                 "requested_by": "service.alpha",
                                 "inputs": {"text": "hello"},
                                 "trace_id": "trace-002",
@@ -565,9 +565,10 @@ class NodeControlApiTests(unittest.TestCase):
             )
             payload = state.update_provider_selection(
                 openai_enabled=True,
-                provider_budget_limits={"openai": {"max_cost_cents": 2500}},
+                provider_budget_limits={"openai": {"max_cost_cents": 2500, "period": "weekly"}},
             )
             self.assertEqual(payload["config"]["providers"]["budget_limits"]["openai"]["max_cost_cents"], 2500)
+            self.assertEqual(payload["config"]["providers"]["budget_limits"]["openai"]["period"], "weekly")
 
     def test_update_task_capability_selection_persists_selected_families(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -579,11 +580,11 @@ class NodeControlApiTests(unittest.TestCase):
                 task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
             )
             payload = state.update_task_capability_selection(
-                selected_task_families=["task.classification.text", "task.generation.image"]
+                selected_task_families=["task.classification", "task.generation.image"]
             )
             self.assertEqual(
                 payload["config"]["selected_task_families"],
-                ["task.classification.text", "task.generation.image"],
+                ["task.classification", "task.generation.image"],
             )
 
     def test_update_openai_credentials_returns_redacted_summary(self):
@@ -755,7 +756,7 @@ class NodeControlApiTests(unittest.TestCase):
             registered = state.register_prompt_service(
                 prompt_id="prompt.alpha",
                 service_id="svc-alpha",
-                task_family="task.classification.text",
+                task_family="task.classification",
                 prompt_name="Prompt Alpha",
                 definition={"system_prompt": "Classify this text."},
                 provider_preferences={"preferred_providers": ["openai"], "default_provider": "openai"},
@@ -773,7 +774,7 @@ class NodeControlApiTests(unittest.TestCase):
 
             allowed = state.authorize_execution(
                 prompt_id="prompt.alpha",
-                task_family="task.classification.text",
+                task_family="task.classification",
             )
             self.assertTrue(allowed["allowed"])
             self.assertEqual(allowed["prompt_version"], "v2")
@@ -786,7 +787,7 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(restricted["state"]["prompt_services"][0]["status"], "restricted")
             denied_restricted = state.authorize_execution(
                 prompt_id="prompt.alpha",
-                task_family="task.classification.text",
+                task_family="task.classification",
             )
             self.assertFalse(denied_restricted["allowed"])
             self.assertEqual(denied_restricted["reason"], "prompt_state_invalid")
@@ -805,7 +806,7 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertIn("prompt.alpha", probation["state"]["probation"]["active_prompt_ids"])
             denied = state.authorize_execution(
                 prompt_id="prompt.alpha",
-                task_family="task.classification.text",
+                task_family="task.classification",
             )
             self.assertFalse(denied["allowed"])
             self.assertEqual(denied["reason"], "prompt_in_probation")
