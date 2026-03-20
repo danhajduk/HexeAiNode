@@ -42,6 +42,8 @@ This is the canonical source-of-truth contract for:
   - capability setup contract (`capability_setup`)
   - capability runtime state (`capability_declaration`)
   - service status (`services`)
+- Behavior:
+  - when Core trust-status explicitly reports `support_state=removed`, the node clears its trusted linkage and falls back to `unconfigured` for re-onboarding
 
 ## Onboarding
 

@@ -13,6 +13,7 @@ from ai_node.config.bootstrap_config import create_bootstrap_config
 from ai_node.execution.gateway import ExecutionGateway
 from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.config.provider_credentials_config import summarize_provider_credentials
+from ai_node.core_api.trust_status_client import TrustStatusClient
 from ai_node.providers.openai_model_catalog import select_representative_openai_model_ids
 from ai_node.prompts.registration import apply_probation_transition, create_prompt_service_registration
 from ai_node.config.task_capability_selection_config import create_task_capability_selection_config
@@ -48,6 +49,7 @@ class NodeControlState:
         trust_state_store=None,
         governance_state_store=None,
         prompt_service_state_store=None,
+        trust_status_client=None,
         execution_gateway=None,
         provider_runtime_manager=None,
         service_manager=None,
@@ -69,6 +71,7 @@ class NodeControlState:
         self._trust_state_store = trust_state_store
         self._governance_state_store = governance_state_store
         self._prompt_service_state_store = prompt_service_state_store
+        self._trust_status_client = trust_status_client or TrustStatusClient(logger=logger)
         self._execution_gateway = execution_gateway or ExecutionGateway()
         self._provider_runtime_manager = provider_runtime_manager
         self._service_manager = service_manager or NullServiceManager()
@@ -340,6 +343,7 @@ class NodeControlState:
         return datetime.now(timezone.utc).isoformat()
 
     def status_payload(self) -> dict:
+        self._sync_core_support_status()
         state = self._lifecycle.get_state()
         runtime_context = {}
         if self._onboarding_runtime is not None and hasattr(self._onboarding_runtime, "get_status_context"):
@@ -377,6 +381,79 @@ class NodeControlState:
             "prompt_service_state": self.prompt_service_state_payload(),
             "services": self.service_status_payload().get("services"),
         }
+
+    def _sync_core_support_status(self) -> None:
+        trust_state = (
+            self._trust_state_store.load()
+            if self._trust_state_store is not None and hasattr(self._trust_state_store, "load")
+            else None
+        )
+        if not isinstance(trust_state, dict):
+            return
+        node_id = str(trust_state.get("node_id") or self._node_id or "").strip()
+        trust_token = str(trust_state.get("node_trust_token") or "").strip()
+        core_api_endpoint = str(trust_state.get("core_api_endpoint") or "").strip()
+        if not node_id or not trust_token or not core_api_endpoint:
+            return
+        state = self._lifecycle.get_state()
+        if state in {
+            NodeLifecycleState.UNCONFIGURED,
+            NodeLifecycleState.BOOTSTRAP_CONNECTING,
+            NodeLifecycleState.BOOTSTRAP_CONNECTED,
+            NodeLifecycleState.CORE_DISCOVERED,
+            NodeLifecycleState.REGISTRATION_PENDING,
+            NodeLifecycleState.PENDING_APPROVAL,
+        }:
+            return
+        if self._trust_status_client is None or not hasattr(self._trust_status_client, "fetch"):
+            return
+        try:
+            support_result = self._trust_status_client.fetch(
+                core_api_endpoint=core_api_endpoint,
+                trust_token=trust_token,
+                node_id=node_id,
+            )
+        except Exception as exc:
+            if hasattr(self._logger, "warning"):
+                self._logger.warning("[trust-status-check-failed] %s", {"node_id": node_id, "error": str(exc)})
+            return
+        if support_result.status == "removed":
+            self._reset_for_core_removal(payload=support_result.payload)
+
+    @staticmethod
+    def _delete_store_file(store) -> None:
+        path = getattr(store, "_path", None)
+        if isinstance(path, Path) and path.exists():
+            path.unlink()
+
+    def _reset_for_core_removal(self, *, payload: dict) -> None:
+        if hasattr(self._logger, "warning"):
+            self._logger.warning(
+                "[core-node-removed] %s",
+                {
+                    "node_id": payload.get("node_id") or self._node_id,
+                    "support_state": payload.get("support_state"),
+                    "message": payload.get("message"),
+                },
+            )
+        if self._bootstrap_runner is not None and hasattr(self._bootstrap_runner, "stop"):
+            self._bootstrap_runner.stop()
+        if self._onboarding_runtime is not None and hasattr(self._onboarding_runtime, "cancel"):
+            self._onboarding_runtime.cancel()
+        self._bootstrap_config = None
+        if self._config_path.exists():
+            self._config_path.unlink()
+        self._delete_store_file(self._trust_state_store)
+        self._delete_store_file(self._node_identity_store)
+        self._delete_store_file(self._governance_state_store)
+        self._delete_store_file(self._prompt_service_state_store)
+        if self._capability_runner is not None and hasattr(self._capability_runner, "clear_local_state_for_reonboarding"):
+            self._capability_runner.clear_local_state_for_reonboarding()
+        self._trusted_runtime_context = {}
+        self._node_id = None
+        self._identity_state = "unknown"
+        self._startup_mode = "bootstrap_onboarding"
+        self._lifecycle.reset_to_unconfigured({"source": "core_node_removed"})
 
     def provider_selection_payload(self) -> dict:
         if self._provider_selection_config is None:

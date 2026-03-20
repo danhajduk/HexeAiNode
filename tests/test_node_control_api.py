@@ -229,6 +229,9 @@ class NodeControlApiTests(unittest.TestCase):
         async def submit_once(self):
             return {"status": "accepted"}
 
+        def clear_local_state_for_reonboarding(self):
+            self.cleared = True
+
         def status_payload(self):
             return {
                 "accepted_profile": {"declared_task_families": ["task.classification.text"]},
@@ -259,6 +262,73 @@ class NodeControlApiTests(unittest.TestCase):
             )
             payload = state.status_payload()
             self.assertEqual(payload["status"], "unconfigured")
+
+    def test_status_payload_resets_to_unconfigured_when_core_reports_removed(self):
+        class _FakeTrustStatusClient:
+            def fetch(self, **_kwargs):
+                return type(
+                    "Result",
+                    (),
+                    {
+                        "status": "removed",
+                        "payload": {
+                            "node_id": "node-001",
+                            "support_state": "removed",
+                            "message": "This node was removed by Core and is no longer trusted.",
+                        },
+                    },
+                )()
+
+        class _StoreWithPath:
+            def __init__(self, path: Path, payload: dict | None = None):
+                self._path = path
+                self.payload = payload
+                path.write_text("{}", encoding="utf-8")
+
+            def load(self):
+                return self.payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+            trust_store = _StoreWithPath(
+                Path(tmp) / "trust_state.json",
+                payload={
+                    "node_id": "node-001",
+                    "core_api_endpoint": "http://10.0.0.100:9001/api",
+                    "node_trust_token": "token",
+                },
+            )
+            identity_store = _StoreWithPath(Path(tmp) / "node_identity.json", payload={"node_id": "node-001"})
+            governance_store = _StoreWithPath(Path(tmp) / "governance_state.json", payload={"policy_version": "1"})
+            prompt_store = _StoreWithPath(Path(tmp) / "prompt_service_state.json", payload={"prompt_services": []})
+            bootstrap_path = Path(tmp) / "bootstrap_config.json"
+            bootstrap_path.write_text("{}", encoding="utf-8")
+            capability_runner = self._FakeCapabilityRunner()
+            capability_runner.cleared = False
+
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(bootstrap_path),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=capability_runner,
+                node_identity_store=identity_store,
+                trust_state_store=trust_store,
+                governance_state_store=governance_store,
+                prompt_service_state_store=prompt_store,
+                trust_status_client=_FakeTrustStatusClient(),
+            )
+
+            payload = state.status_payload()
+
+            self.assertEqual(payload["status"], "unconfigured")
+            self.assertIsNone(payload["node_id"])
+            self.assertFalse(bootstrap_path.exists())
+            self.assertFalse(trust_store._path.exists())
+            self.assertFalse(identity_store._path.exists())
+            self.assertFalse(governance_store._path.exists())
+            self.assertFalse(prompt_store._path.exists())
+            self.assertTrue(capability_runner.cleared)
             self.assertFalse(payload["bootstrap_configured"])
             self.assertEqual(payload["identity_state"], "unknown")
             self.assertIsNone(payload["node_id"])

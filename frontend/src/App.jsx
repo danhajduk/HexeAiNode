@@ -103,6 +103,25 @@ function parseIsoTimestamp(value) {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function formatLocalTimestamp(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  const parsed = Date.parse(normalized);
+  if (Number.isNaN(parsed)) {
+    return normalized;
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(parsed));
+}
+
 function formatTierLabel(value) {
   const normalized = String(value || "unknown").replaceAll("_", " ");
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
@@ -1402,7 +1421,7 @@ export default function App() {
   const recentActivityItems = [
     {
       label: "Last declaration",
-      value: uiState.capabilitySummary.capabilityDeclarationTimestamp || "pending",
+      value: formatLocalTimestamp(uiState.capabilitySummary.capabilityDeclarationTimestamp) || "pending",
       hint: "Most recent accepted capability declaration timestamp.",
     },
     {
@@ -1412,7 +1431,7 @@ export default function App() {
     },
     {
       label: "Provider intelligence refresh",
-      value: capabilityDiagnostics?.provider_intelligence_last_submitted_at || "none",
+      value: formatLocalTimestamp(capabilityDiagnostics?.provider_intelligence_last_submitted_at) || "none",
       hint: "Last provider intelligence submission timestamp.",
     },
     {
@@ -1470,15 +1489,15 @@ export default function App() {
   const operationalDashboardProps = {
     currentSection: currentOperationalSection,
     sections: operationalSections,
-    healthStripProps: {
-      lifecycleState: uiState.lifecycle.current,
-      trustStatus: uiState.lifecycle.trustStatus,
-      coreApiStatus: uiState.runtimeHealth.coreApiConnectivity,
-      mqttStatus: uiState.runtimeHealth.operationalMqttConnectivity,
-      governanceStatus: uiState.runtimeHealth.governanceFreshness,
-      providerStatus: enabledProviderSummary ? "configured" : "none",
-      lastTelemetryTimestamp: uiState.runtimeHealth.lastTelemetryTimestamp,
-    },
+      healthStripProps: {
+        lifecycleState: uiState.lifecycle.current,
+        trustStatus: uiState.lifecycle.trustStatus,
+        coreApiStatus: uiState.runtimeHealth.coreApiConnectivity,
+        mqttStatus: uiState.runtimeHealth.operationalMqttConnectivity,
+        governanceStatus: uiState.runtimeHealth.governanceFreshness,
+        providerStatus: enabledProviderSummary ? "configured" : "none",
+        lastTelemetryTimestamp: formatLocalTimestamp(uiState.runtimeHealth.lastTelemetryTimestamp),
+      },
     degradedBanner:
       uiState.lifecycle.current === "degraded"
         ? {
@@ -1625,9 +1644,6 @@ export default function App() {
           <div className="app-header-bottom">
             <ThemeToggle />
             <div className="app-header-actions">
-              <button className="btn" onClick={onRestartSetup} disabled={restarting}>
-                {restarting ? "Restarting..." : "Restart Setup"}
-              </button>
               {isPendingApproval && pendingApprovalUrl ? (
                 <a className="btn btn-primary" href={pendingApprovalUrl} target="_blank" rel="noreferrer">
                   Approve In Core
@@ -1640,7 +1656,7 @@ export default function App() {
           </div>
           <div className="app-header-meta">
             <span className="muted tiny">API: <code>{getApiBase()}</code></span>
-            <span className="muted tiny">Updated: <code>{uiState.meta.lastUpdatedAt || "never"}</code></span>
+            <span className="muted tiny">Updated: <code>{formatLocalTimestamp(uiState.meta.lastUpdatedAt) || "never"}</code></span>
             <span className="muted tiny">Node: <code>{nodeId || "unavailable"}</code></span>
           </div>
           {uiState.meta.partialFailures?.length ? (

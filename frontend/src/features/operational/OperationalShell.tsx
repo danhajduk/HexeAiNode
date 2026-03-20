@@ -1,8 +1,7 @@
 export function OperationalShell({ currentSection, sections = [], healthStrip, children }) {
   return (
     <section className="operational-shell">
-      {healthStrip}
-      <article className="card operational-shell-nav-card">
+      <aside className="card operational-shell-nav-card">
         <nav className="operational-shell-nav" aria-label="Operational sections">
           {sections.map((section) => (
             <button
@@ -15,9 +14,12 @@ export function OperationalShell({ currentSection, sections = [], healthStrip, c
             </button>
           ))}
         </nav>
-      </article>
-      <div className="operational-shell-content">
-        {children}
+      </aside>
+      <div className="operational-shell-main">
+        {healthStrip}
+        <div className="operational-shell-content">
+          {children}
+        </div>
       </div>
     </section>
   );

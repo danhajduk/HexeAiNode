@@ -16,6 +16,7 @@ from ai_node.identity.node_identity_store import NodeIdentityStore
 from ai_node.config.provider_credentials_config import ProviderCredentialsStore
 from ai_node.config.provider_selection_config import ProviderSelectionConfigStore
 from ai_node.config.task_capability_selection_config import TaskCapabilitySelectionConfigStore
+from ai_node.core_api.trust_status_client import TrustStatusClient
 from ai_node.runtime.bootstrap_mqtt_runner import BootstrapMqttRunner
 from ai_node.runtime.bootstrap_timeout import BootstrapConnectTimeoutMonitor
 from ai_node.runtime.capability_declaration_runner import CapabilityDeclarationRunner
@@ -285,6 +286,7 @@ def run(
         pricing_stale_tolerance_seconds=openai_pricing_stale_tolerance_seconds,
     )
     prompt_service_state_store = PromptServiceStateStore(path=prompt_service_state_path, logger=LOGGER)
+    trust_status_client = TrustStatusClient(logger=LOGGER)
     LOGGER.info("[node-identity] %s", {"node_id": node_identity["node_id"], "path": node_identity_path})
     if isinstance(trust_state, dict):
         trust_node_id = str(trust_state.get("node_id") or "").strip()
@@ -404,6 +406,7 @@ def run(
         trust_state_store=trust_state_store,
         governance_state_store=governance_state_store,
         prompt_service_state_store=prompt_service_state_store,
+        trust_status_client=trust_status_client,
         provider_runtime_manager=provider_runtime_manager,
         service_manager=service_manager,
         provider_refresh_interval_seconds=provider_capability_refresh_interval_seconds,

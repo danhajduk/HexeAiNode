@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from pathlib import Path
 
 from ai_node.capabilities.environment_hints import collect_environment_hints
 from ai_node.capabilities.manifest_schema import create_capability_manifest
@@ -113,6 +114,30 @@ class CapabilityDeclarationRunner:
             ),
             "prompt_service_registry": self._prompt_service_summary(),
         }
+
+    @staticmethod
+    def _delete_store_file(store) -> None:
+        path = getattr(store, "_path", None)
+        if isinstance(path, Path) and path.exists():
+            path.unlink()
+
+    def clear_local_state_for_reonboarding(self) -> None:
+        self._delete_store_file(self._capability_state_store)
+        self._delete_store_file(self._phase2_state_store)
+        self._delete_store_file(self._provider_capability_report_store)
+        self._status = "idle"
+        self._last_error = None
+        self._last_submitted_at = None
+        self._accepted_profile = None
+        self._governance_bundle = None
+        self._last_manifest_summary = None
+        self._last_manifest_payload = None
+        self._last_declaration_result = None
+        self._provider_capability_report = None
+        self._provider_intelligence_last_submitted_at = None
+        self._governance_status = evaluate_governance_freshness(None)
+        self._governance_status["refresh_state"] = "idle"
+        self._governance_status["last_refresh_error"] = None
 
     def _provider_report_payload(self) -> dict | None:
         if not isinstance(self._provider_capability_report, dict):

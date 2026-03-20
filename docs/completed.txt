@@ -303,3 +303,5 @@ Task 318: Update AI-Node UI Documentation - Completed on 03/19/2026 19:52
 Task 319: Run Validation and Regression Pass - Completed on 03/19/2026 19:52
 Task 320: Redesign the header layout - Completed on 03/19/2026 20:11
 Task 321: Redesign the setup page layout - Completed on 03/19/2026 20:11
+Task 322: Remove restart setup button from the header - Completed on 03/19/2026 20:29
+Task 323: Implement Core-driven node removal reset flow - Completed on 03/19/2026 20:29
