@@ -756,14 +756,46 @@ class NodeControlApiTests(unittest.TestCase):
                 prompt_id="prompt.alpha",
                 service_id="svc-alpha",
                 task_family="task.classification.text",
+                prompt_name="Prompt Alpha",
+                definition={"system_prompt": "Classify this text."},
+                provider_preferences={"preferred_providers": ["openai"], "default_provider": "openai"},
+                constraints={"max_timeout_s": 30},
                 metadata={"owner": "ops"},
             )
             self.assertEqual(len(registered["state"]["prompt_services"]), 1)
+            self.assertEqual(registered["state"]["prompt_services"][0]["current_version"], "v1")
+
+            updated = state.update_prompt_service(
+                prompt_id="prompt.alpha",
+                definition={"system_prompt": "Classify this text carefully."},
+            )
+            self.assertEqual(updated["state"]["prompt_services"][0]["current_version"], "v2")
+
             allowed = state.authorize_execution(
                 prompt_id="prompt.alpha",
                 task_family="task.classification.text",
             )
             self.assertTrue(allowed["allowed"])
+            self.assertEqual(allowed["prompt_version"], "v2")
+
+            restricted = state.transition_prompt_service(
+                prompt_id="prompt.alpha",
+                state="restricted",
+                reason="manual_review",
+            )
+            self.assertEqual(restricted["state"]["prompt_services"][0]["status"], "restricted")
+            denied_restricted = state.authorize_execution(
+                prompt_id="prompt.alpha",
+                task_family="task.classification.text",
+            )
+            self.assertFalse(denied_restricted["allowed"])
+            self.assertEqual(denied_restricted["reason"], "prompt_state_invalid")
+
+            state.transition_prompt_service(
+                prompt_id="prompt.alpha",
+                state="active",
+                reason="review_complete",
+            )
 
             probation = state.update_prompt_probation(
                 prompt_id="prompt.alpha",

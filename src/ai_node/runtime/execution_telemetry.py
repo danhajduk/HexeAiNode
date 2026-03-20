@@ -18,6 +18,11 @@ EXECUTION_TELEMETRY_EVENTS = {
     "budget_denial",
     "budget_finalized",
     "budget_reset",
+    "prompt_registered",
+    "prompt_updated",
+    "prompt_lifecycle_transition",
+    "prompt_probation",
+    "prompt_execution_denial",
 }
 
 

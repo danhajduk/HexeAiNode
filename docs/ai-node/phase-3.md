@@ -1,6 +1,6 @@
 # Phase 3 — Prompt Contracts and Execution Governance
 
-Status: Partially implemented
+Status: Implemented baseline
 
 ## Goal
 Introduce governed prompt execution.
@@ -9,41 +9,77 @@ Each prompt becomes a governed contract between the caller, Core, and AI Node.
 
 ## Prompt Metadata
 
-- prompt_id
-- prompt_name
-- owner service
-- task_family
-- expected frequency
-- privacy class
-- cost sensitivity
-- version
+Status: Implemented baseline
+
+The local prompt definition model is now documented in `docs/ai-node/prompt-management-contract.md`.
+
+Persisted prompt fields now include:
+
+- `prompt_id`
+- `prompt_name`
+- `service_id`
+- `owner_service`
+- `task_family`
+- `privacy_class`
+- `execution_policy`
+- `provider_preferences`
+- `constraints`
+- `current_version`
+- `versions[]`
+- `lifecycle_history[]`
+- `usage`
 
 ## Prompt Lifecycle
 
-probation → active → restricted → suspended → expired
+Status: Implemented baseline
+
+The node now enforces the local lifecycle states:
+
+- `probation`
+- `active`
+- `restricted`
+- `suspended`
+- `retired`
+- `expired`
+
+Current executable state:
+
+- only `active`
+
+Current denial behavior:
+
+- `probation` returns `prompt_in_probation`
+- all other non-active states return `prompt_state_invalid`
 
 ## Governance Controls
 
-Core controls:
+Status: Implemented node-local baseline
 
-- prompt approval
-- budget limits
-- allowed models
-- prompt suspension
+Current node-local controls:
 
-Node enforces:
+- prompt CRUD and version tracking
+- prompt lifecycle transitions
+- provider/model preferences
+- prompt timeout and structured-output constraints
+- prompt denial and usage tracking
 
-- prompt budgets
-- probation limits
-- usage telemetry
+Current boundary with Core:
+
+- no canonical Core prompt-governance contract is present in the Core docs available to this repository
+- the local node implementation therefore remains the source of truth for prompt enforcement in this repository
+- the Core follow-up requirement is recorded in `docs/ai-node/core-prompt-management-follow-up-ticket.md`
 
 ## Current Baseline
 
-The current repository already implements a limited Phase 3 baseline:
+The current repository now implements the local prompt-governance baseline:
 
-- prompt/service registration persistence
-- probation transitions
-- deny-by-default execution authorization for registered prompts
+- prompt definition persistence
+- version creation and version pinning
+- lifecycle transitions beyond probation
+- deny-by-default authorization for missing prompt IDs
+- prompt-aware provider/model preference enforcement
+- prompt-aware execution constraints
+- prompt usage and denial tracking
 - provider runtime execution with fallback and metrics
 
 The end-to-end task execution layer is not yet developed.
@@ -109,6 +145,22 @@ Current admin/debug visibility:
 - `GET /api/budgets/state`
 - `POST /api/budgets/refresh`
 - `GET /debug/budgets`
+
+## Prompt Execution Governance
+
+Status: Implemented baseline
+
+`ExecutionGateway` and `TaskExecutionService` now enforce:
+
+- prompt registration
+- prompt version validity
+- prompt task-family compatibility
+- prompt lifecycle executability
+- prompt-local provider/model constraints
+- prompt-local timeout ceilings
+- prompt-local structured-output requirements
+
+Prompt-managed execution also applies prompt version `system_prompt` content when the request does not already provide one.
 
 ## Canonical Task Result Envelope
 

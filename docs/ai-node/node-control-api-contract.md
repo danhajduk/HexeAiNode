@@ -1,7 +1,7 @@
 # AI Node Control API Contract
 
 Status: Implemented
-Last updated: 2026-03-12
+Last updated: 2026-03-20
 
 ## Purpose
 
@@ -16,8 +16,8 @@ This is the canonical source-of-truth contract for:
 - periodic provider intelligence refresh job lifecycle
 - degraded recovery trigger
 - service status/restart controls
-- prompt/service registration and probation controls
-- execution authorization gate scaffolding
+- prompt definition CRUD, versioning, lifecycle, and probation controls
+- execution authorization and prompt diagnostics
 - provider runtime visibility debug endpoints
 
 ## API Root
@@ -510,6 +510,9 @@ For OpenAI, this response only includes regular base-model families used for nor
 - Response:
   - `configured: boolean`
   - `state: object | null`
+  - `summary`
+    - `prompt_count`
+    - `active_count`
 
 ### Register prompt/service metadata
 
@@ -518,11 +521,53 @@ For OpenAI, this response only includes regular base-model families used for nor
   - `prompt_id: string`
   - `service_id: string`
   - `task_family: string` (must be canonical task family)
+  - `prompt_name?: string`
+  - `owner_service?: string`
+  - `privacy_class?: public | internal | restricted | sensitive`
+  - `execution_policy?: object`
+  - `provider_preferences?: object`
+  - `constraints?: object`
+  - `definition?: object`
+  - `version?: string`
+  - `status?: probation | active | restricted | suspended | retired | expired`
   - `metadata: object` (optional)
 - Success:
   - updated prompt/service state payload
 - Error:
   - `400` when validation/store fails
+
+### Read prompt definition
+
+- `GET /api/prompts/services/{prompt_id}`
+- Response:
+  - `configured: boolean`
+  - `prompt: object`
+
+### Update prompt definition
+
+- `PUT /api/prompts/services/{prompt_id}`
+- Request:
+  - any mutable prompt metadata fields
+  - `definition?: object`
+  - `version?: string`
+- Behavior:
+  - when a new `definition` is supplied, the node creates a new immutable prompt version
+  - omitted metadata fields remain unchanged
+- Success:
+  - updated prompt/service state payload
+- Error:
+  - `400` when prompt is missing or the update is invalid
+
+### Prompt lifecycle transition
+
+- `POST /api/prompts/services/{prompt_id}/lifecycle`
+- Request:
+  - `state: probation | active | restricted | suspended | retired | expired`
+  - `reason?: string`
+- Success:
+  - updated prompt/service state payload
+- Error:
+  - `400` when prompt is missing or lifecycle state is invalid
 
 ### Prompt probation transition
 
@@ -535,7 +580,13 @@ For OpenAI, this response only includes regular base-model families used for nor
 - Error:
   - `400` when prompt is missing/unregistered or action is invalid
 
-## Execution Gateway Contract Scaffolding
+### Prompt debug visibility
+
+- `GET /debug/prompts`
+- Response:
+  - same prompt-service state payload returned by `GET /api/prompts/services`
+
+## Execution Gateway Contract
 
 ### Authorize execution request
 
@@ -543,18 +594,28 @@ For OpenAI, this response only includes regular base-model families used for nor
 - Request:
   - `prompt_id: string`
   - `task_family: string`
+  - `prompt_version?: string`
+  - `requested_provider?: string`
+  - `requested_model?: string`
+  - `inputs?: object`
 - Response:
   - `allowed: boolean`
-  - `reason: authorized | prompt_not_registered | prompt_in_probation | task_family_mismatch | ...`
+  - `reason: authorized | prompt_not_registered | prompt_in_probation | prompt_state_invalid | prompt_task_family_mismatch | invalid_prompt_version | ...`
   - `prompt_id`
   - `task_family`
+  - `prompt_version`
+  - `prompt_state`
 
 Current enforcement model:
 
 - deny-by-default for unregistered prompt IDs
 - deny while prompt is in probation
 - deny when requested task family mismatches registered task family
-- allow only for registered prompt IDs with matching task family and non-probation status
+- deny when the requested prompt version is unknown
+- deny when prompt lifecycle state is `restricted`, `suspended`, `retired`, or `expired`
+- deny when prompt-local provider/model constraints are violated
+- deny when structured output is required but the request omits a schema
+- allow only for `active` prompt versions that match the request contract
 
 ### Direct execution request
 

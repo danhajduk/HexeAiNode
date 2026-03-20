@@ -6,6 +6,7 @@ from pathlib import Path
 from ai_node.persistence.prompt_service_state_store import (
     PromptServiceStateStore,
     create_prompt_service_state,
+    normalize_prompt_service_state,
     validate_prompt_service_state,
 )
 
@@ -28,17 +29,61 @@ class PromptServiceStateStoreTests(unittest.TestCase):
             payload["prompt_services"] = [
                 {
                     "prompt_id": "prompt.alpha",
+                    "prompt_name": "Prompt Alpha",
                     "service_id": "svc-alpha",
+                    "owner_service": "svc-alpha",
                     "task_family": "task.classification.text",
-                    "status": "registered",
+                    "status": "active",
+                    "privacy_class": "internal",
+                    "execution_policy": {"allow_direct_execution": True, "allow_version_pinning": True},
+                    "provider_preferences": {"preferred_providers": ["openai"], "preferred_models": ["gpt-5-mini"]},
+                    "constraints": {"max_timeout_s": 30, "structured_output_required": False, "allowed_model_overrides": []},
                     "metadata": {},
+                    "current_version": "v1",
+                    "versions": [
+                        {
+                            "version": "v1",
+                            "definition": {"system_prompt": "You are a classifier.", "prompt_template": None, "template_variables": [], "default_inputs": {}},
+                            "metadata": {},
+                            "created_at": payload["updated_at"],
+                        }
+                    ],
+                    "lifecycle_history": [{"state": "active", "reason": "created", "changed_at": payload["updated_at"]}],
+                    "usage": {"execution_count": 0, "success_count": 0, "failure_count": 0, "denial_count": 0},
                     "registered_at": payload["updated_at"],
                     "updated_at": payload["updated_at"],
                 }
             ]
             store.save(payload)
             loaded = store.load()
-            self.assertEqual(loaded, payload)
+            self.assertEqual(loaded["schema_version"], "2.0")
+            self.assertEqual(loaded["prompt_services"][0]["prompt_id"], "prompt.alpha")
+            self.assertEqual(loaded["prompt_services"][0]["current_version"], "v1")
+            self.assertEqual(loaded["prompt_services"][0]["status"], "active")
+            self.assertEqual(loaded["prompt_services"][0]["versions"][0]["definition"]["system_prompt"], "You are a classifier.")
+
+    def test_normalize_legacy_state_migrates_registered_prompt(self):
+        payload = normalize_prompt_service_state(
+            {
+                "schema_version": "1.0",
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.alpha",
+                        "service_id": "svc-alpha",
+                        "task_family": "task.classification.text",
+                        "status": "registered",
+                        "metadata": {"owner": "ops"},
+                        "registered_at": "2026-03-12T00:00:00Z",
+                        "updated_at": "2026-03-12T00:00:00Z",
+                    }
+                ],
+                "probation": {"active_prompt_ids": [], "reasons": {}, "updated_at": "2026-03-12T00:00:00Z"},
+                "updated_at": "2026-03-12T00:00:00Z",
+            }
+        )
+        self.assertEqual(payload["schema_version"], "2.0")
+        self.assertEqual(payload["prompt_services"][0]["status"], "active")
+        self.assertEqual(payload["prompt_services"][0]["current_version"], "v1")
 
     def test_load_or_create_creates_file(self):
         with tempfile.TemporaryDirectory() as tmp:

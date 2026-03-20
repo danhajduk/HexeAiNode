@@ -24,6 +24,7 @@ class TaskExecutionRequest(BaseModel):
 
     task_id: str
     prompt_id: str | None = None
+    prompt_version: str | None = None
     task_family: str
     requested_by: str
     service_id: str | None = None
@@ -42,12 +43,12 @@ class TaskExecutionRequest(BaseModel):
     def _validate_task_id(cls, value: str) -> str:
         return _normalized_non_empty_string(value, field_name="task_id")
 
-    @field_validator("prompt_id")
+    @field_validator("prompt_id", "prompt_version")
     @classmethod
-    def _validate_prompt_id(cls, value: str | None) -> str | None:
+    def _validate_prompt_selection_field(cls, value: str | None, info) -> str | None:
         if value is None:
             return None
-        return _normalized_non_empty_string(value, field_name="prompt_id")
+        return _normalized_non_empty_string(value, field_name=str(info.field_name))
 
     @field_validator("task_family")
     @classmethod

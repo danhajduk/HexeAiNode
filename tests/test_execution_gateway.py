@@ -49,6 +49,50 @@ class ExecutionGatewayTests(unittest.TestCase):
         )
         self.assertTrue(result.allowed)
         self.assertEqual(result.reason, "authorized")
+        self.assertEqual(result.prompt_version, "v1")
+
+    def test_deny_when_prompt_version_is_missing(self):
+        gateway = ExecutionGateway()
+        result = gateway.authorize(
+            prompt_id="prompt.alpha",
+            prompt_version="v2",
+            task_family="task.classification.text",
+            prompt_services_state={
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.alpha",
+                        "task_family": "task.classification.text",
+                        "status": "active",
+                        "current_version": "v1",
+                        "versions": [{"version": "v1", "definition": {}}],
+                    }
+                ]
+            },
+        )
+        self.assertFalse(result.allowed)
+        self.assertEqual(result.reason, "invalid_prompt_version")
+
+    def test_deny_when_structured_output_required_and_missing(self):
+        gateway = ExecutionGateway()
+        result = gateway.authorize(
+            prompt_id="prompt.alpha",
+            task_family="task.classification.text",
+            prompt_services_state={
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.alpha",
+                        "task_family": "task.classification.text",
+                        "status": "active",
+                        "current_version": "v1",
+                        "versions": [{"version": "v1", "definition": {}}],
+                        "constraints": {"structured_output_required": True},
+                    }
+                ]
+            },
+            inputs={"text": "hello"},
+        )
+        self.assertFalse(result.allowed)
+        self.assertEqual(result.reason, "prompt_structured_output_required")
 
 
 if __name__ == "__main__":

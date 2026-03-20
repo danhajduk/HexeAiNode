@@ -335,6 +335,63 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "rejected")
         self.assertEqual(result.error_code, "prompt_in_probation")
 
+    async def test_execute_honors_prompt_constraints_and_definition(self):
+        runtime_manager = _FakeProviderRuntimeManager()
+        resolver = _FakeProviderResolver(
+            ProviderResolutionResult(
+                allowed=True,
+                provider_id="openai",
+                model_id="gpt-5-mini",
+                provider_order=["openai"],
+                fallback_provider_ids=[],
+                model_allowlist_by_provider={"openai": ["gpt-5-mini"]},
+                timeout_s=45,
+                retry_count=0,
+                rejection_reason=None,
+            )
+        )
+        service = TaskExecutionService(
+            provider_runtime_manager=runtime_manager,
+            provider_resolver=resolver,
+            logger=logging.getLogger("task-execution-service-test"),
+            prompt_services_state_provider=lambda: {
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.alpha",
+                        "task_family": "task.classification.text",
+                        "status": "active",
+                        "current_version": "v2",
+                        "versions": [
+                            {"version": "v1", "definition": {"system_prompt": "old prompt"}},
+                            {"version": "v2", "definition": {"system_prompt": "new prompt"}},
+                        ],
+                        "provider_preferences": {"default_provider": "openai", "preferred_providers": ["openai"]},
+                        "constraints": {"max_timeout_s": 30},
+                    }
+                ]
+            },
+            declared_task_families_provider=lambda: ["task.classification.text"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification.text"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-prompt-managed",
+                    "prompt_id": "prompt.alpha",
+                    "task_family": "task.classification.text",
+                    "requested_by": "service.alpha",
+                    "inputs": {"text": "hello"},
+                    "timeout_s": 45,
+                    "trace_id": "trace-prompt-managed",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(resolver.last_request.timeout_s, 30)
+        self.assertEqual(runtime_manager.last_request.system_prompt, "new prompt")
+
     async def test_execute_degrades_when_provider_resolution_fails_due_to_provider_unavailability(self):
         service = TaskExecutionService(
             provider_runtime_manager=_FakeProviderRuntimeManager(),

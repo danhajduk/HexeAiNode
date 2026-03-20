@@ -18,13 +18,17 @@ SUMMARIZATION_TASK_FAMILIES = (
 
 
 def _build_unified_execution_request(*, request, resolution, normalized_inputs) -> UnifiedExecutionRequest:
+    resolution_plan = resolution.get("plan") if isinstance(resolution, dict) else resolution
+    authorization = resolution.get("authorization") if isinstance(resolution, dict) else None
+    prompt_definition = authorization.prompt_definition if authorization is not None and isinstance(authorization.prompt_definition, dict) else {}
+    system_prompt = normalized_inputs.system_prompt or prompt_definition.get("system_prompt")
     return UnifiedExecutionRequest(
         task_family=request.task_family,
         prompt=normalized_inputs.prompt,
-        system_prompt=normalized_inputs.system_prompt,
+        system_prompt=system_prompt,
         messages=normalized_inputs.messages,
-        requested_provider=resolution.provider_id,
-        requested_model=resolution.model_id,
+        requested_provider=resolution_plan.provider_id,
+        requested_model=resolution_plan.model_id,
         temperature=normalized_inputs.temperature,
         max_tokens=normalized_inputs.max_tokens,
         metadata={
@@ -32,6 +36,7 @@ def _build_unified_execution_request(*, request, resolution, normalized_inputs) 
             "requested_by": request.requested_by,
             "trace_id": request.trace_id,
             "prompt_id": request.prompt_id,
+            "prompt_version": request.prompt_version,
             "lease_id": request.lease_id,
             **(normalized_inputs.metadata if isinstance(normalized_inputs.metadata, dict) else {}),
         },

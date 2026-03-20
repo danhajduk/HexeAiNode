@@ -31,6 +31,7 @@ class TaskExecutionService:
         provider_resolver,
         logger,
         budget_manager=None,
+        prompt_registry=None,
         lifecycle_tracker: ExecutionLifecycleTracker | None = None,
         execution_gateway: ExecutionGateway | None = None,
         task_router: TaskRouter | None = None,
@@ -45,6 +46,7 @@ class TaskExecutionService:
         self._provider_resolver = provider_resolver
         self._logger = logger
         self._budget_manager = budget_manager
+        self._prompt_registry = prompt_registry
         self._task_executor = RuntimeManagerProviderTaskExecutor(provider_runtime_manager=self._provider_runtime_manager)
         self._lifecycle_tracker = lifecycle_tracker or ExecutionLifecycleTracker()
         self._execution_gateway = execution_gateway or ExecutionGateway()
@@ -98,6 +100,7 @@ class TaskExecutionService:
 
         authorization = self._authorize_prompt_if_present(request=request)
         if authorization is not None and not authorization.allowed:
+            self._record_prompt_authorization(request=request, allowed=False, reason=authorization.reason)
             return self._terminal_result(
                 request=request,
                 started=started,
@@ -105,6 +108,8 @@ class TaskExecutionService:
                 error_code=authorization.reason,
                 error_message=authorization.reason,
             )
+        if authorization is not None:
+            self._record_prompt_authorization(request=request, allowed=True, reason=authorization.reason)
 
         governance_status = self._safe_governance_status()
         if str(governance_status.get("state") or "").strip().lower() == "stale":
@@ -117,9 +122,15 @@ class TaskExecutionService:
             )
 
         governance_constraints = self._safe_governance_constraints(request=request)
+        if authorization is not None:
+            governance_constraints = self._merge_prompt_governance_constraints(
+                governance_constraints=governance_constraints,
+                authorization=authorization,
+            )
+        effective_timeout_s = self._effective_timeout_s(request=request, authorization=authorization)
         pre_resolution_governance = evaluate_execution_governance(
             task_family=request.task_family,
-            timeout_s=request.timeout_s,
+            timeout_s=effective_timeout_s,
             inputs=request.inputs,
             governance_bundle=self._safe_governance_bundle(),
             request_governance_constraints=governance_constraints,
@@ -136,9 +147,9 @@ class TaskExecutionService:
         resolution = self._provider_resolver.resolve(
             request=ProviderResolutionRequest(
                 task_family=request.task_family,
-                requested_provider=request.requested_provider,
-                requested_model=request.requested_model,
-                timeout_s=request.timeout_s,
+                requested_provider=self._effective_requested_provider(request=request, authorization=authorization),
+                requested_model=self._effective_requested_model(request=request, authorization=authorization),
+                timeout_s=effective_timeout_s,
                 max_cost_cents=self._request_max_cost_cents(request=request),
             ),
             governance_constraints=governance_constraints,
@@ -176,7 +187,7 @@ class TaskExecutionService:
 
         post_resolution_governance = evaluate_execution_governance(
             task_family=request.task_family,
-            timeout_s=request.timeout_s,
+            timeout_s=effective_timeout_s,
             inputs=request.inputs,
             governance_bundle=self._safe_governance_bundle(),
             request_governance_constraints=governance_constraints,
@@ -257,7 +268,7 @@ class TaskExecutionService:
             response = await self._task_router.dispatch(
                 task_family=request.task_family,
                 request=request,
-                resolution=resolution,
+                resolution={"plan": resolution, "authorization": authorization},
             )
         except ValueError as exc:
             failure_reason = str(exc)
@@ -343,6 +354,7 @@ class TaskExecutionService:
                 model_id=response.model_id,
                 details=budget_result,
             )
+        self._record_prompt_execution(request=request, status="completed", error_code=None)
         return result
 
     def _authorize_prompt_if_present(self, *, request: TaskExecutionRequest):
@@ -352,6 +364,10 @@ class TaskExecutionService:
             prompt_id=request.prompt_id,
             task_family=request.task_family,
             prompt_services_state=self._safe_prompt_services_state(),
+            prompt_version=request.prompt_version,
+            requested_provider=request.requested_provider,
+            requested_model=request.requested_model,
+            inputs=request.inputs,
         )
 
     def _safe_prompt_services_state(self) -> dict:
@@ -381,6 +397,60 @@ class TaskExecutionService:
         return governance
 
     @staticmethod
+    def _effective_requested_provider(*, request: TaskExecutionRequest, authorization) -> str | None:
+        if request.requested_provider:
+            return request.requested_provider
+        if authorization is None or not isinstance(authorization.provider_preferences, dict):
+            return None
+        return authorization.provider_preferences.get("default_provider")
+
+    @staticmethod
+    def _effective_requested_model(*, request: TaskExecutionRequest, authorization) -> str | None:
+        if request.requested_model:
+            return request.requested_model
+        if authorization is None or not isinstance(authorization.provider_preferences, dict):
+            return None
+        return authorization.provider_preferences.get("default_model")
+
+    @staticmethod
+    def _effective_timeout_s(*, request: TaskExecutionRequest, authorization) -> int:
+        timeout_s = int(request.timeout_s)
+        if authorization is None or not isinstance(authorization.prompt_constraints, dict):
+            return timeout_s
+        max_timeout_s = authorization.prompt_constraints.get("max_timeout_s")
+        if max_timeout_s is None:
+            return timeout_s
+        return min(timeout_s, max(int(max_timeout_s), 1))
+
+    @staticmethod
+    def _merge_prompt_governance_constraints(*, governance_constraints: dict, authorization) -> dict:
+        merged = dict(governance_constraints or {})
+        provider_preferences = authorization.provider_preferences if isinstance(authorization.provider_preferences, dict) else {}
+        prompt_constraints = authorization.prompt_constraints if isinstance(authorization.prompt_constraints, dict) else {}
+        preferred_providers = list(provider_preferences.get("preferred_providers") or [])
+        preferred_models = list(provider_preferences.get("preferred_models") or [])
+        if preferred_providers:
+            approved_providers = list(merged.get("approved_providers") or [])
+            if approved_providers:
+                merged["approved_providers"] = [item for item in approved_providers if item in set(preferred_providers)]
+            else:
+                merged["approved_providers"] = preferred_providers
+        if preferred_models:
+            requested_provider = provider_preferences.get("default_provider")
+            approved_models = merged.get("approved_models") if isinstance(merged.get("approved_models"), dict) else {}
+            provider_key = str(requested_provider or "").strip().lower() or "*"
+            provider_models = list(approved_models.get(provider_key) or [])
+            approved_models[provider_key] = [item for item in provider_models if item in set(preferred_models)] if provider_models else preferred_models
+            merged["approved_models"] = approved_models
+        if prompt_constraints.get("max_timeout_s") is not None:
+            routing = merged.get("routing_policy_constraints") if isinstance(merged.get("routing_policy_constraints"), dict) else {}
+            current_timeout = routing.get("max_timeout_s")
+            prompt_timeout = int(prompt_constraints.get("max_timeout_s"))
+            routing["max_timeout_s"] = min(int(current_timeout), prompt_timeout) if current_timeout is not None else prompt_timeout
+            merged["routing_policy_constraints"] = routing
+        return merged
+
+    @staticmethod
     def _request_max_cost_cents(*, request: TaskExecutionRequest) -> int | None:
         constraints = request.constraints if isinstance(request.constraints, dict) else {}
         budget = constraints.get("budget") if isinstance(constraints.get("budget"), dict) else {}
@@ -393,13 +463,17 @@ class TaskExecutionService:
         return None
 
     @staticmethod
-    def _build_unified_request(*, request: TaskExecutionRequest, resolution) -> UnifiedExecutionRequest:
+    def _build_unified_request(*, request: TaskExecutionRequest, resolution, authorization=None) -> UnifiedExecutionRequest:
+        resolution_plan = resolution.get("plan") if isinstance(resolution, dict) else resolution
         inputs = request.inputs if isinstance(request.inputs, dict) else {}
         messages = inputs.get("messages") if isinstance(inputs.get("messages"), list) else []
         prompt = inputs.get("prompt")
         if prompt is None:
             prompt = inputs.get("text")
         system_prompt = inputs.get("system_prompt")
+        prompt_definition = authorization.prompt_definition if authorization is not None and isinstance(authorization.prompt_definition, dict) else {}
+        if system_prompt is None:
+            system_prompt = prompt_definition.get("system_prompt")
         max_tokens = inputs.get("max_tokens")
         temperature = inputs.get("temperature")
         return UnifiedExecutionRequest(
@@ -407,8 +481,8 @@ class TaskExecutionService:
             prompt=str(prompt or "") if prompt is not None else None,
             system_prompt=str(system_prompt or "") if system_prompt is not None else None,
             messages=messages,
-            requested_provider=resolution.provider_id,
-            requested_model=resolution.model_id,
+            requested_provider=resolution_plan.provider_id,
+            requested_model=resolution_plan.model_id,
             temperature=float(temperature) if isinstance(temperature, (int, float)) else None,
             max_tokens=int(max_tokens) if isinstance(max_tokens, int) else None,
             metadata={
@@ -416,6 +490,7 @@ class TaskExecutionService:
                 "requested_by": request.requested_by,
                 "trace_id": request.trace_id,
                 "prompt_id": request.prompt_id,
+                "prompt_version": request.prompt_version,
                 "lease_id": request.lease_id,
             },
         )
@@ -477,7 +552,7 @@ class TaskExecutionService:
         except Exception:
             pass
         metric_context = self._provider_metric_context(provider_id=provider_id, model_id=model_id)
-        return TaskExecutionResult.model_validate(
+        result = TaskExecutionResult.model_validate(
             {
                 "task_id": request.task_id,
                 "status": state,
@@ -495,9 +570,40 @@ class TaskExecutionService:
                 "completed_at": _iso_now(),
             }
         )
+        self._record_prompt_execution(request=request, status=state, error_code=error_code)
+        return result
+
+    def _record_prompt_authorization(self, *, request: TaskExecutionRequest, allowed: bool, reason: str) -> None:
+        if self._prompt_registry is None or not request.prompt_id:
+            return
+        try:
+            self._prompt_registry.record_authorization(
+                prompt_id=request.prompt_id,
+                allowed=allowed,
+                reason=reason,
+                used_at=_iso_now(),
+            )
+        except Exception:
+            pass
+
+    def _record_prompt_execution(self, *, request: TaskExecutionRequest, status: str, error_code: str | None) -> None:
+        if self._prompt_registry is None or not request.prompt_id:
+            return
+        try:
+            self._prompt_registry.record_execution(
+                prompt_id=request.prompt_id,
+                status=status,
+                recorded_at=_iso_now(),
+                error_code=error_code,
+            )
+        except Exception:
+            pass
 
     async def _execute_provider_handler(self, *, request: TaskExecutionRequest, resolution):
-        return await self._provider_runtime_manager.execute(self._build_unified_request(request=request, resolution=resolution))
+        authorization = resolution.get("authorization") if isinstance(resolution, dict) else None
+        return await self._provider_runtime_manager.execute(
+            self._build_unified_request(request=request, resolution=resolution, authorization=authorization)
+        )
 
     def _provider_metric_context(self, *, provider_id: str | None, model_id: str | None) -> dict:
         if not provider_id or not model_id:

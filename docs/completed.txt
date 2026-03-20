@@ -331,3 +331,20 @@ Task 346: Add tests for concurrency and double-spend prevention across overlappi
 Task 347: Add tests for budget denial behavior when grants are missing, stale, exhausted, or inconsistent - Completed on 03/20/2026 08:27
 Task 348: Add end-to-end execution tests proving Core-issued cached grants are enforced locally without putting Core in the hot path - Completed on 03/20/2026 08:27
 Task 349: Update Phase 3 documentation and node-control API docs to describe Core-issued budget-policy enforcement, grant scopes, and the removal of prompt-registration dependency from the budget flow - Completed on 03/20/2026 08:27
+Task 350: Define the target prompt-management scope for the AI Node, separating local prompt registration scaffolding from future Core-managed prompt governance - Completed on 03/20/2026 08:49
+Task 351: Check Core-Documents for a canonical prompt-management contract and create a Core-doc follow-up ticket if prompt ownership, approval, or lifecycle payloads are still undefined for AI Nodes - Completed on 03/20/2026 08:49
+Task 352: Define the canonical prompt metadata model the node will persist locally, including prompt_id, prompt_name, owner service, task_family, version, privacy class, and execution policy fields - Completed on 03/20/2026 08:49
+Task 353: Extend local prompt-service state persistence to support richer prompt metadata, lifecycle history, and prompt version tracking - Completed on 03/20/2026 08:49
+Task 354: Add local CRUD APIs for prompt definitions so prompts can be created, listed, updated, viewed, and retired through the node-control API - Completed on 03/20/2026 08:49
+Task 355: Add prompt versioning rules so prompt updates create traceable versions without breaking currently authorized executions - Completed on 03/20/2026 08:49
+Task 356: Add prompt lifecycle transitions beyond probation, including active, restricted, suspended, retired, and expired states - Completed on 03/20/2026 08:49
+Task 357: Extend execution authorization to enforce prompt lifecycle state, task-family compatibility, and prompt-version validity before execution begins - Completed on 03/20/2026 08:49
+Task 358: Add prompt-to-provider and prompt-to-model preference fields so prompts can optionally constrain provider resolution without introducing a second family vocabulary - Completed on 03/20/2026 08:49
+Task 359: Add prompt-level execution constraints such as timeout ceilings, structured-output requirements, and allowed model overrides that merge cleanly with governance constraints - Completed on 03/20/2026 08:49
+Task 360: Add prompt usage metrics and observability state, including execution counts, failures, last-used timestamps, and most recent denial reason - Completed on 03/20/2026 08:49
+Task 361: Add trusted telemetry for prompt registration, prompt updates, lifecycle transitions, probation changes, and prompt-based execution denials - Completed on 03/20/2026 08:49
+Task 362: Add local admin/debug APIs and diagnostics views for prompt definitions, lifecycle state, version history, and prompt usage summaries - Completed on 03/20/2026 08:49
+Task 363: Add validation rules and failure taxonomy for prompt-management errors such as duplicate_prompt_id, invalid_prompt_version, prompt_state_invalid, and prompt_task_family_mismatch - Completed on 03/20/2026 08:49
+Task 364: Add tests for prompt CRUD flows, prompt version transitions, lifecycle transitions, and authorization enforcement - Completed on 03/20/2026 08:49
+Task 365: Add end-to-end execution tests proving prompt-managed executions honor prompt lifecycle, prompt constraints, and probation behavior together with the shared execution service - Completed on 03/20/2026 08:49
+Task 366: Update Phase 3 documentation and node-control API docs to describe the full local prompt-management surface and its boundary with future Core-managed prompt governance - Completed on 03/20/2026 08:49

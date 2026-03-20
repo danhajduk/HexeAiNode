@@ -641,6 +641,9 @@ class NodeControlFastApiTests(unittest.TestCase):
                     "prompt_id": "prompt.alpha",
                     "service_id": "svc-alpha",
                     "task_family": "task.classification.text",
+                    "prompt_name": "Prompt Alpha",
+                    "definition": {"system_prompt": "Classify the text."},
+                    "constraints": {"max_timeout_s": 30},
                     "metadata": {"owner": "ops"},
                 },
             )
@@ -649,12 +652,43 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(prompt_get_response.status_code, 200)
             self.assertEqual(len(prompt_get_response.json()["state"]["prompt_services"]), 1)
 
+            prompt_update_response = client.put(
+                "/api/prompts/services/prompt.alpha",
+                json={"definition": {"system_prompt": "Classify the text carefully."}},
+            )
+            self.assertEqual(prompt_update_response.status_code, 200)
+            self.assertEqual(prompt_update_response.json()["state"]["prompt_services"][0]["current_version"], "v2")
+
+            prompt_detail_response = client.get("/api/prompts/services/prompt.alpha")
+            self.assertEqual(prompt_detail_response.status_code, 200)
+            self.assertEqual(prompt_detail_response.json()["prompt"]["prompt_name"], "Prompt Alpha")
+
             exec_authorize_response = client.post(
                 "/api/execution/authorize",
                 json={"prompt_id": "prompt.alpha", "task_family": "task.classification.text"},
             )
             self.assertEqual(exec_authorize_response.status_code, 200)
             self.assertTrue(exec_authorize_response.json()["allowed"])
+            self.assertEqual(exec_authorize_response.json()["prompt_version"], "v2")
+
+            prompt_lifecycle_response = client.post(
+                "/api/prompts/services/prompt.alpha/lifecycle",
+                json={"state": "restricted", "reason": "manual_review"},
+            )
+            self.assertEqual(prompt_lifecycle_response.status_code, 200)
+            restricted_authorize_response = client.post(
+                "/api/execution/authorize",
+                json={"prompt_id": "prompt.alpha", "task_family": "task.classification.text"},
+            )
+            self.assertEqual(restricted_authorize_response.status_code, 200)
+            self.assertFalse(restricted_authorize_response.json()["allowed"])
+            self.assertEqual(restricted_authorize_response.json()["reason"], "prompt_state_invalid")
+
+            prompt_lifecycle_clear_response = client.post(
+                "/api/prompts/services/prompt.alpha/lifecycle",
+                json={"state": "active", "reason": "review_complete"},
+            )
+            self.assertEqual(prompt_lifecycle_clear_response.status_code, 200)
 
             prompt_probation_response = client.post(
                 "/api/prompts/services/prompt.alpha/probation",
@@ -707,6 +741,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             debug_metrics_response = client.get("/debug/providers/metrics")
             self.assertEqual(debug_metrics_response.status_code, 200)
             self.assertEqual(debug_metrics_response.json()["providers"]["openai"]["totals"]["total_requests"], 1)
+
+            debug_prompts_response = client.get("/debug/prompts")
+            self.assertEqual(debug_prompts_response.status_code, 200)
+            self.assertTrue(debug_prompts_response.json()["configured"])
 
             debug_execution_response = client.get("/debug/execution")
             self.assertEqual(debug_execution_response.status_code, 200)
