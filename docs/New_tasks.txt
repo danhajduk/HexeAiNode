@@ -1,2 +1,132 @@
+Workflow skill: $synthia-workflow 
+(/home/dan/.codex/skills/synthia-workflow/SKILL.md)
+
+## Codex Execution Directive
+
+You are acting as the Synthia development agent.
+
+Your job is to implement tasks listed in this file sequentially.
+
+Rules:
+
+1. Work through tasks in numerical order.
+2. Continue executing tasks until ALL tasks are completed.
+3. Do not stop after partial implementation.
+4. Do not return summaries unless every task is finished.
+5. If a task cannot be completed:
+   - document the blocker
+   - implement everything else that is possible
+   - continue to the next task.
+
+Execution behavior:
+
+- Read the repository before modifying code.
+- Follow existing architecture and coding conventions.
+- Update or create files as required.
+- Run tests or validation where possible.
+- Commit after each completed task.
+
+Completion criteria:
+
+A task is considered complete only when:
+- implementation exists in the codebase
+- it compiles or runs without breaking existing features
+- any required documentation is updated
+
+Persistence rule:
+
+Continue working autonomously until all tasks in this document are completed.
+Do not stop early.
+
+if there is missing data for the task check in the @Core-Documents folder.for core documentation
+if it is not present and should be core-owned create a ticket for the req. data in the core dodc
+if it is not present and should be node-owned create a file with the new data in the core docs
+
 Do not edit above this line:
 #######################################################################
+
+# AI-Node UI Redesign Tasks
+
+## Scope
+
+Redesign the AI-Node UI after the initial identity screen.
+
+Keep the current initial setup screen that asks for:
+- node name
+- Core IP / Core endpoint
+
+Redesign everything after that point.
+
+Primary goals:
+- separate setup UI from operational UI
+- reduce dashboard clutter
+- move advanced diagnostics out of the main operational view
+- improve readability of capability and runtime information
+- create a clearer state-driven UX
+
+---
+
+## Design Principles
+
+- Setup is a guided flow, not a dashboard.
+- Operational mode is a dashboard, not a setup wizard.
+- Diagnostics are advanced tools and must not dominate the default view.
+- Each piece of information should have one primary home.
+- Raw payloads and verbose metadata should be collapsed or hidden behind diagnostics.
+- The UI must remain functional for dark theme and desktop-first layouts.
+- Existing initial node-name/Core-IP screen remains unchanged unless required for routing integration.
+
+---
+
+## Required Outcome
+
+The AI-Node frontend must support three distinct UI layers:
+
+1. Initial identity screen
+   - existing screen
+   - remains as-is
+
+2. Setup UI
+   - shown when the node is not fully operational
+   - step-based flow
+   - focused on onboarding, provider setup, declaration, governance, readiness
+
+3. Operational UI
+   - shown when the node is operational or degraded
+   - dashboard-first layout
+   - separate diagnostics section/page/tab
+
+---
+
+## State Rules
+
+Use explicit UI mode resolution driven by lifecycle/runtime state.
+
+Recommended mapping:
+
+### Setup Mode
+Show setup UI when state indicates unfinished onboarding or unfinished readiness, including cases such as:
+- pending bootstrap
+- pending registration
+- pending approval
+- pending trust activation
+- capability_setup_pending
+- governance pending
+- setup incomplete
+- provider not configured
+
+### Operational Mode
+Show operational UI when state indicates:
+- operational
+- degraded
+
+### Manual Access
+Operational UI must expose actions to:
+- reopen setup/reconfigure flow
+- open diagnostics
+
+Setup UI may expose:
+- restart setup
+- exit to dashboard only if safe and state allows it
+
+---

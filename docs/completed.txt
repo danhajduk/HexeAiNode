@@ -272,3 +272,32 @@ Task 287: Extend Telemetry for Task Execution - Completed on 03/19/2026 18:25
 Task 288: Implement Execution Metrics - Completed on 03/19/2026 18:29
 Task 289: Implement Observability Hooks - Completed on 03/19/2026 18:32
 Task 290: Implement Contract Tests - Completed on 03/19/2026 18:34
+Task 291: Audit Current AI-Node UI Structure - Completed on 03/19/2026 19:13
+Task 292: Define New AI-Node UI Information Architecture - Completed on 03/19/2026 19:15
+Task 293: Define Canonical UI Mode Resolver - Completed on 03/19/2026 19:17
+Task 294: Preserve Initial Identity Screen and Wire It Into New Flow - Completed on 03/19/2026 19:19
+Task 295: Create Setup UI Shell - Completed on 03/19/2026 19:32
+Task 296: Implement Setup Stepper / Timeline - Completed on 03/19/2026 19:32
+Task 297: Create Setup Stage Content Panels - Completed on 03/19/2026 19:32
+Task 298: Group Setup Actions by Stage - Completed on 03/19/2026 19:32
+Task 299: Create Operational UI Shell - Completed on 03/19/2026 19:32
+Task 300: Create Top Health / Status Summary Strip - Completed on 03/19/2026 19:32
+Task 301: Create Operational Overview Card - Completed on 03/19/2026 19:35
+Task 302: Create Capability Summary Card - Completed on 03/19/2026 19:35
+Task 303: Group Resolved Tasks by Category - Completed on 03/19/2026 19:35
+Task 304: Create Runtime / Service Status Card - Completed on 03/19/2026 19:35
+Task 305: Create Recent Activity Card - Completed on 03/19/2026 19:40
+Task 306: Move Diagnostics Out of Main Dashboard - Completed on 03/19/2026 19:40
+Task 307: Create Diagnostics Section Structure - Completed on 03/19/2026 19:40
+Task 308: Standardize Status Badge and Severity System - Completed on 03/19/2026 19:40
+Task 309: Remove Duplicated Information Across Cards - Completed on 03/19/2026 19:52
+Task 310: Define and Implement Action Grouping Rules - Completed on 03/19/2026 19:52
+Task 311: Add Setup-to-Operational Transition UX - Completed on 03/19/2026 19:52
+Task 312: Add Operational Degraded-State UX - Completed on 03/19/2026 19:52
+Task 313: Improve Capability Readability for Long Lists - Completed on 03/19/2026 19:52
+Task 314: Improve Layout Spacing and Visual Hierarchy - Completed on 03/19/2026 19:52
+Task 315: Introduce Route Structure for New UI Modes - Completed on 03/19/2026 19:52
+Task 316: Refactor Current Monolithic Page Into Feature Modules - Completed on 03/19/2026 19:52
+Task 317: Add Frontend Tests for UI Mode and State Rendering - Completed on 03/19/2026 19:52
+Task 318: Update AI-Node UI Documentation - Completed on 03/19/2026 19:52
+Task 319: Run Validation and Regression Pass - Completed on 03/19/2026 19:52

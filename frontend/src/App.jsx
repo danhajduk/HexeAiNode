@@ -2,7 +2,23 @@ import { useEffect, useState } from "react";
 import { getTheme, setTheme } from "./theme/theme";
 import { apiAdminGet, apiAdminPost, apiGet, apiPost, getApiBase } from "./api";
 import { buildDashboardUiState } from "./uiStateModel";
-import { CardHeader, HealthIndicator, StatusBadge } from "./components/uiPrimitives";
+import { CardHeader, StatusBadge } from "./components/uiPrimitives";
+import { IdentityScreen } from "./features/node-ui/IdentityScreen";
+import { resolveUiMode } from "./features/node-ui/uiModeResolver";
+import { buildOperationalRoute, buildSetupRoute, resolveOperationalSection } from "./features/node-ui/uiRoutes";
+import { SetupModeView } from "./features/setup/SetupModeView";
+import { buildSetupFlowModel } from "./features/setup/setupFlowModel";
+import { OperationalDashboard } from "./features/operational/OperationalDashboard";
+import {
+  SetupApprovalPanel,
+  SetupCapabilityDeclarationPanel,
+  SetupCoreConnectionPanel,
+  SetupGovernancePanel,
+  SetupProviderPanel,
+  SetupReadyPanel,
+  SetupRegistrationPanel,
+  SetupTrustActivationPanel,
+} from "./features/setup/SetupStagePanels";
 import "./app.css";
 
 const REFRESH_INTERVAL_MS = 7000;
@@ -485,6 +501,7 @@ export default function App() {
       });
       setBackendStatus(payload.status || "bootstrap_connecting");
       setNodeId(payload.node_id || nodeId);
+      window.location.hash = "#/setup";
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
       setError(message);
@@ -501,6 +518,7 @@ export default function App() {
       setBackendStatus(payload.status || "unconfigured");
       setPendingApprovalUrl(payload.pending_approval_url || "");
       setNodeId(payload.node_id || nodeId);
+      window.location.hash = "#/";
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
       setError(message);
@@ -509,14 +527,17 @@ export default function App() {
     }
   }
 
-  const isUnconfigured = backendStatus === "unconfigured";
+  const modeResolution = resolveUiMode({ lifecycleState: backendStatus, routeHash });
+  const isIdentityMode = modeResolution.mode === "identity";
+  const isSetupMode = modeResolution.mode === "setup";
+  const isOperationalMode = modeResolution.mode === "operational";
   const isPendingApproval = backendStatus === "pending_approval";
   const isCapabilitySetupPending = backendStatus === "capability_setup_pending";
-  const isProviderSetupRoute = routeHash === "#/providers/openai";
+  const isProviderSetupRoute = modeResolution.providerSetupOpen;
   const openaiCredentialSummary = providerCredentials?.credentials || {};
   const hasCapabilityRegistration = Boolean(uiState.capabilitySummary.capabilityDeclarationTimestamp);
   const canManageOpenAiCredentials =
-    hasCapabilityRegistration && uiState.capabilitySummary.enabledProviders.includes("openai");
+    uiState.capabilitySummary.enabledProviders.includes("openai") && (hasCapabilityRegistration || isSetupMode);
   const selectedOpenaiModel = latestOpenaiModels.find((model) => model.model_id === (selectedOpenaiModelIds[0] || "")) || null;
   const openaiModelPriceById = Object.fromEntries(latestOpenaiModels.map((model) => [model.model_id, model.pricing || {}]));
   const openaiModelCreatedById = Object.fromEntries(latestOpenaiModels.map((model) => [model.model_id, model.created || 0]));
@@ -589,6 +610,14 @@ export default function App() {
     { key: "approval", label: "Approval" },
     { key: "trust_activation", label: "Trust Activation" },
   ];
+  const setupFlow = buildSetupFlowModel({
+    lifecycleState: backendStatus,
+    routeIntent: modeResolution.routeIntent,
+    pendingApprovalUrl,
+    governanceFreshness: uiState.runtimeHealth.governanceFreshness,
+    setupReadinessFlags,
+    setupBlockingReasons,
+  });
 
   function stepStateLabel(value) {
     if (value === "completed") return "Completed";
@@ -598,12 +627,36 @@ export default function App() {
   }
 
   function navigateToDashboard() {
-    window.location.hash = "#/";
+    window.location.hash = buildOperationalRoute();
   }
 
   function navigateToOpenAiProviderSetup() {
-    window.location.hash = "#/providers/openai";
+    window.location.hash = buildSetupRoute("openai");
   }
+
+  function navigateToSetup() {
+    window.location.hash = buildSetupRoute();
+  }
+
+  function navigateToDiagnostics() {
+    window.location.hash = buildOperationalRoute("diagnostics");
+  }
+
+  useEffect(() => {
+    if (routeHash !== "#/" && routeHash !== "") {
+      return;
+    }
+    if (isIdentityMode) {
+      return;
+    }
+    if (isOperationalMode) {
+      window.location.hash = buildOperationalRoute();
+      return;
+    }
+    if (isSetupMode) {
+      window.location.hash = buildSetupRoute();
+    }
+  }, [isIdentityMode, isOperationalMode, isSetupMode, routeHash]);
 
   function isValidToken(value) {
     return typeof value === "string" && value.trim().length >= 12 && OPENAI_TOKEN_FORMAT.test(value.trim());
@@ -723,7 +776,7 @@ export default function App() {
   }
 
   async function onSaveProviderSelection(event) {
-    event.preventDefault();
+    event?.preventDefault?.();
     setSavingProvider(true);
     setError("");
     try {
@@ -735,6 +788,17 @@ export default function App() {
       setError(message);
     } finally {
       setSavingProvider(false);
+    }
+  }
+
+  async function onRefreshGovernance() {
+    setError("");
+    try {
+      await apiPost("/api/governance/refresh", {});
+      await loadStatus();
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
     }
   }
 
@@ -994,6 +1058,497 @@ export default function App() {
     }
   }
 
+  const setupSummaryItems = [
+    { label: "Lifecycle", value: <StatusBadge value={uiState.lifecycle.current} /> },
+    { label: "Trust", value: <StatusBadge value={uiState.lifecycle.trustStatus} /> },
+    { label: "Core", value: <code>{uiState.coreConnection.pairedCoreId || "not_paired"}</code> },
+    { label: "Governance", value: <StatusBadge value={uiState.runtimeHealth.governanceFreshness} /> },
+  ];
+
+  function renderProviderSetupContent() {
+    return (
+      <div className="provider-page-shell">
+        <article className="provider-page-card">
+          <form className="setup-form" onSubmit={onSaveOpenAiCredentials}>
+            <label>
+              OpenAI API Token
+              <input
+                type="password"
+                value={openaiApiToken}
+                onChange={(event) => {
+                  setOpenaiApiToken(event.target.value);
+                  setProviderSetupDirty(true);
+                }}
+                placeholder="sk-proj-..."
+                required
+              />
+            </label>
+            <label>
+              OpenAI Service Token
+              <input
+                type="password"
+                value={openaiServiceToken}
+                onChange={(event) => {
+                  setOpenaiServiceToken(event.target.value);
+                  setProviderSetupDirty(true);
+                }}
+                placeholder="sk-service-..."
+                required
+              />
+            </label>
+            <label>
+              OpenAI Project Name
+              <input
+                value={openaiProjectName}
+                onChange={(event) => {
+                  setOpenaiProjectName(event.target.value);
+                  setProviderSetupDirty(true);
+                }}
+                placeholder="project-name"
+                required
+              />
+            </label>
+            <div className="state-grid">
+              <span>Provider</span>
+              <code>openai</code>
+              <span>Provider State</span>
+              <StatusBadge value={openaiCredentialSummary.configured ? "configured" : "pending"} />
+              <span>Saved API Token</span>
+              <code>{openaiCredentialSummary.api_token_hint || "not_saved"}</code>
+              <span>Saved Service Token</span>
+              <code>{openaiCredentialSummary.service_token_hint || "not_saved"}</code>
+              <span>Project Name</span>
+              <code>{openaiCredentialSummary.project_name || "not_saved"}</code>
+              <span>Saved Model</span>
+              <code>{openaiCredentialSummary.default_model_id || "not_selected"}</code>
+            </div>
+            <div className="row">
+              <button className="btn btn-primary" type="submit" disabled={savingCredentials || refreshingLatestModels}>
+                {savingCredentials ? "Saving..." : "Save Provider Setup"}
+              </button>
+              <button
+                className="btn"
+                type="button"
+                onClick={refreshOpenAiModels}
+                disabled={refreshingLatestModels || !openaiCredentialSummary.has_api_token}
+              >
+                {refreshingLatestModels ? "Reloading Models..." : "Reload Models"}
+              </button>
+            </div>
+          </form>
+          <div className="row capability-actions">
+            <button className="btn" type="button" onClick={onSaveOpenAiPreference} disabled={savingModelPreference || !selectedOpenaiModelIds.length}>
+              {savingModelPreference ? "Saving Selection..." : "Save Model Selection"}
+            </button>
+            <button className="btn" type="button" onClick={refreshOpenAiModels} disabled={refreshingLatestModels}>
+              Refresh Provider Catalog
+            </button>
+            <button className="btn" type="button" onClick={() => startPricingReview(selectedOpenaiModelIds)} disabled={!selectedOpenaiModelIds.length}>
+              Review Pricing
+            </button>
+          </div>
+          <div className="modal-capability-data">
+            <div className="model-section-header">
+              <h3>Filtered OpenAI Models</h3>
+              <span className="muted tiny">
+                {savingModelPreference ? "Saving selections..." : `${openaiCatalogModels.length} filtered models`}
+              </span>
+            </div>
+            {groupedOpenAiCatalogModels.length ? (
+              <div className="grouped-model-sections">
+                {groupedOpenAiCatalogModels.map((group) => (
+                  <section key={group.family} className="model-group-section">
+                    <div className="model-section-header">
+                      <h3>{group.label}</h3>
+                      <span className="muted tiny">{group.models.length} models</span>
+                    </div>
+                    <div className="model-list mini-card-grid">
+                      {group.models.map((model) => {
+                        const capabilityEntry = openaiCapabilityById[model.model_id] || null;
+                        const pricingEntry = openaiModelPriceById[model.model_id] || null;
+                        const blockedEntry = blockedResolvedModelMap[model.model_id] || null;
+                        const capabilityBadges = getCapabilityBadges(capabilityEntry);
+                        const pricingRows = getModelPricingRows(pricingEntry);
+                        const statusBadges = [
+                          selectedOpenaiModelIds.includes(model.model_id) ? "Selected" : null,
+                          enabledOpenaiModelIds.includes(model.model_id) ? "Enabled selection" : null,
+                          usableResolvedModelIds.includes(model.model_id) ? "Usable" : null,
+                          blockedEntry && Array.isArray(blockedEntry.blockers) && blockedEntry.blockers.length
+                            ? `Blocked: ${blockedEntry.blockers.join(",")}`
+                            : null,
+                          pricingEntry?.pricing_status ? formatTierLabel(pricingEntry.pricing_status) : null,
+                        ].filter(Boolean);
+                        return (
+                          <article
+                            key={model.model_id}
+                            className={`model-card mini-model-card ${
+                              selectedOpenaiModelIds.includes(model.model_id) || enabledOpenaiModelIds.includes(model.model_id)
+                                ? "is-selected"
+                                : ""
+                            }`}
+                          >
+                            <div className="model-card-header">
+                              <strong>{model.model_id}</strong>
+                              <StatusBadge
+                                value={
+                                  usableResolvedModelIds.includes(model.model_id)
+                                    ? "ready"
+                                    : blockedEntry
+                                      ? "blocked"
+                                      : enabledOpenaiModelIds.includes(model.model_id)
+                                        ? "enabled"
+                                        : "available"
+                                }
+                              />
+                            </div>
+                            <div className="capability-badge-list">
+                              <span className="capability-badge">{formatModelFamily(capabilityEntry?.family || model.family)}</span>
+                              {statusBadges.map((badge) => (
+                                <span key={`${model.model_id}-status-${badge}`} className="capability-badge capability-badge-muted">
+                                  {badge}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="state-grid compact-grid">
+                              <span>Model ID</span>
+                              <code>{model.model_id}</code>
+                              <span>Discovered</span>
+                              <code>{model.discovered_at ? model.discovered_at.slice(0, 10) : "unknown"}</code>
+                              {pricingRows.flatMap(([label, value]) => ([
+                                <span key={`${model.model_id}-${label}-label`}>{label}</span>,
+                                <code key={`${model.model_id}-${label}-value`}>{value}</code>,
+                              ]))}
+                            </div>
+                            <div className="capability-badge-list">
+                              {capabilityBadges.length ? (
+                                capabilityBadges.map((badge) => (
+                                  <span key={`${model.model_id}-${badge}`} className="capability-badge">
+                                    {badge}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="muted tiny">Deterministic capability defaults applied</span>
+                              )}
+                            </div>
+                            <div className="row model-card-actions">
+                              <button
+                                className={`btn ${enabledOpenaiModelIds.includes(model.model_id) ? "btn-primary" : ""}`}
+                                type="button"
+                                onClick={() => onToggleEnabledOpenAiModel(model.model_id)}
+                              >
+                                {enabledOpenaiModelIds.includes(model.model_id) ? "Disable" : "Enable"}
+                              </button>
+                              <button
+                                className={`btn ${selectedOpenaiModelIds.includes(model.model_id) ? "btn-primary" : ""}`}
+                                type="button"
+                                onClick={() => onToggleOpenAiModel(model.model_id)}
+                              >
+                                {selectedOpenaiModelIds.includes(model.model_id) ? "Selected" : "Select"}
+                              </button>
+                              <button className="btn" type="button" onClick={() => openSingleModelPricing(model.model_id)}>
+                                Set Price
+                              </button>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <p className="muted tiny">
+                No OpenAI models discovered yet. Save provider setup and reload discovery to populate this list.
+              </p>
+            )}
+          </div>
+        </article>
+      </div>
+    );
+  }
+
+  function renderSetupActivePanel() {
+    switch (setupFlow.activeStage) {
+      case "core_connection":
+      case "bootstrap_discovery":
+        return <SetupCoreConnectionPanel mqttHost={mqttHost} lifecycleState={backendStatus} nodeId={nodeId} />;
+      case "registration":
+        return <SetupRegistrationPanel nodeId={nodeId} />;
+      case "approval":
+        return <SetupApprovalPanel nodeId={nodeId} pendingApprovalUrl={pendingApprovalUrl} />;
+      case "trust_activation":
+        return (
+          <SetupTrustActivationPanel
+            trustStatus={uiState.lifecycle.trustStatus}
+            pairedCoreId={uiState.coreConnection.pairedCoreId}
+            startupMode={uiState.lifecycle.startupMode}
+          />
+        );
+      case "provider_setup":
+        return (
+          <SetupProviderPanel
+            openaiEnabled={openaiEnabled}
+            selectedTaskFamilies={selectedTaskFamilies}
+            setupReadinessFlags={setupReadinessFlags}
+          >
+            {isProviderSetupRoute ? (
+              renderProviderSetupContent()
+            ) : (
+              <form className="setup-form" onSubmit={onSaveProviderSelection}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={openaiEnabled}
+                    onChange={(event) => setOpenaiEnabled(event.target.checked)}
+                  />{" "}
+                  Enable OpenAI on this node
+                </label>
+                <div className="state-grid">
+                  <span>Task Capabilities</span>
+                  <code>{selectedTaskFamilies.join(", ") || "none_selected"}</code>
+                </div>
+                {renderTaskCapabilityToggles("setup-shell")}
+              </form>
+            )}
+          </SetupProviderPanel>
+        );
+      case "governance_sync":
+        return (
+          <SetupGovernancePanel
+            governanceFreshness={uiState.runtimeHealth.governanceFreshness}
+            policyVersion={uiState.capabilitySummary.governancePolicyVersion}
+            declaredAt={uiState.capabilitySummary.capabilityDeclarationTimestamp}
+          />
+        );
+      case "ready":
+        return (
+          <SetupReadyPanel
+            pairedCoreId={uiState.coreConnection.pairedCoreId}
+            lifecycleState={uiState.lifecycle.current}
+            governanceFreshness={uiState.runtimeHealth.governanceFreshness}
+          />
+        );
+      case "capability_declaration":
+      default:
+        return (
+          <SetupCapabilityDeclarationPanel
+            declarationAllowed={capabilityDeclareAllowed}
+            setupReadinessFlags={setupReadinessFlags}
+            setupBlockingReasons={setupBlockingReasons}
+          />
+        );
+    }
+  }
+
+  function buildSetupActions() {
+    const primaryActions = [];
+    const secondaryActions = [];
+    const dangerActions = [{ label: restarting ? "Restarting..." : "Restart Setup", onClick: onRestartSetup, disabled: restarting }];
+
+    if (setupFlow.activeStage === "approval" && pendingApprovalUrl) {
+      primaryActions.push({
+        label: "Open Approval In Core",
+        onClick: () => window.open(pendingApprovalUrl, "_blank", "noopener,noreferrer"),
+      });
+    }
+    if (setupFlow.activeStage === "provider_setup" && !isProviderSetupRoute) {
+      primaryActions.push({
+        label: savingProvider ? "Saving..." : "Save Setup Selection",
+        onClick: () => onSaveProviderSelection(),
+        disabled: savingProvider,
+        primary: true,
+      });
+      secondaryActions.push({ label: "Configure OpenAI Provider", onClick: navigateToOpenAiProviderSetup });
+    }
+    if (setupFlow.activeStage === "provider_setup" && isProviderSetupRoute) {
+      secondaryActions.push({ label: "Back To Setup Flow", onClick: navigateToSetup });
+    }
+    if (setupFlow.activeStage === "capability_declaration") {
+      primaryActions.push({
+        label: declaringCapabilities ? "Declaring..." : "Declare Capabilities",
+        onClick: onDeclareCapabilities,
+        disabled: declaringCapabilities || !capabilityDeclareAllowed,
+        primary: true,
+      });
+      secondaryActions.push({ label: "Configure Provider", onClick: navigateToOpenAiProviderSetup });
+    }
+    if (setupFlow.activeStage === "governance_sync") {
+      primaryActions.push({ label: "Refresh Governance", onClick: onRefreshGovernance, primary: true });
+    }
+    if (setupFlow.activeStage === "ready") {
+      primaryActions.push({ label: "Open Dashboard", onClick: navigateToDashboard, primary: true });
+      secondaryActions.push({ label: "Reopen Provider Setup", onClick: navigateToOpenAiProviderSetup });
+    }
+
+    return { primaryActions, secondaryActions, dangerActions };
+  }
+
+  const setupActions = buildSetupActions();
+  const enabledProviderSummary = uiState.capabilitySummary.enabledProviders.join(", ");
+  const currentOperationalSection = resolveOperationalSection(routeHash);
+  const operationalSections = [
+    ["overview", "Overview"],
+    ["capabilities", "Capabilities"],
+    ["runtime", "Runtime"],
+    ["activity", "Activity"],
+    ["diagnostics", "Diagnostics"],
+  ].map(([id, label]) => ({
+    id,
+    label,
+    onClick: () => {
+      window.location.hash = buildOperationalRoute(id);
+    },
+  }));
+  const recentActivityItems = [
+    {
+      label: "Last declaration",
+      value: uiState.capabilitySummary.capabilityDeclarationTimestamp || "pending",
+      hint: "Most recent accepted capability declaration timestamp.",
+    },
+    {
+      label: "Governance status",
+      value: `${uiState.runtimeHealth.governanceFreshness}${capabilityDiagnostics?.governance_status?.last_refresh_error ? ` (${capabilityDiagnostics.governance_status.last_refresh_error})` : ""}`,
+      hint: "Current governance freshness and refresh error state when present.",
+    },
+    {
+      label: "Provider intelligence refresh",
+      value: capabilityDiagnostics?.provider_intelligence_last_submitted_at || "none",
+      hint: "Last provider intelligence submission timestamp.",
+    },
+    {
+      label: "Last declaration result",
+      value: capabilityDiagnostics?.last_declaration_result?.status || "none",
+      hint: "Most recent declaration result code.",
+    },
+    {
+      label: "Current warning/error",
+      value: error || capabilityDiagnostics?.last_error || "none",
+      hint: "Most recent UI or runtime visible warning.",
+    },
+  ];
+  const completionState =
+    isSetupMode && (uiState.lifecycle.current === "operational" || uiState.lifecycle.current === "degraded")
+      ? {
+          title: uiState.lifecycle.current === "degraded" ? "Setup Complete With Warnings" : "Setup Complete",
+          subtitle:
+            uiState.lifecycle.current === "degraded"
+              ? "Core onboarding is complete. Open the dashboard to review the degraded warning details and continue operating."
+              : "Onboarding and governance are ready. Open the dashboard when you are ready to move into operational mode.",
+          actions: [
+            { label: "Open Dashboard", onClick: navigateToDashboard, primary: true },
+            { label: "Review Provider Setup", onClick: navigateToOpenAiProviderSetup },
+          ],
+        }
+      : null;
+  const setupSubtitle = completionState
+    ? "Setup remains available until you deliberately switch into the operational dashboard."
+    : "Setup mode focuses on onboarding, provider readiness, declaration, and governance without dashboard clutter.";
+  const degradedReason =
+    error ||
+    capabilityDiagnostics?.last_error ||
+    uiState.meta.partialFailures?.[0] ||
+    (uiState.runtimeHealth.governanceFreshness !== "fresh" ? `governance_${uiState.runtimeHealth.governanceFreshness}` : "") ||
+    (uiState.runtimeHealth.operationalMqttConnectivity !== "connected"
+      ? `mqtt_${uiState.runtimeHealth.operationalMqttConnectivity}`
+      : "");
+  const operationalActions = {
+    setupActions: [
+      { label: "Open Setup", onClick: navigateToSetup },
+      { label: "Configure OpenAI Provider", onClick: navigateToOpenAiProviderSetup, disabled: !canManageOpenAiCredentials },
+      { label: "Refresh Governance", onClick: onRefreshGovernance },
+      { label: refreshingLatestModels ? "Refreshing Models..." : "Refresh Provider Models", onClick: refreshOpenAiModels, disabled: refreshingLatestModels },
+      { label: declaringCapabilities ? "Redeclaring..." : "Redeclare Capabilities", onClick: onDeclareCapabilities, disabled: declaringCapabilities || !capabilityDeclareAllowed },
+    ],
+    runtimeActions: [
+      { label: restartingServiceTarget === "backend" ? "Restarting Backend..." : "Restart Backend", onClick: () => onRestartService("backend"), disabled: Boolean(restartingServiceTarget) },
+      { label: restartingServiceTarget === "frontend" ? "Restarting Frontend..." : "Restart Frontend", onClick: () => onRestartService("frontend"), disabled: Boolean(restartingServiceTarget) },
+      { label: restartingServiceTarget === "node" ? "Restarting Node..." : "Restart Node", onClick: () => onRestartService("node"), disabled: Boolean(restartingServiceTarget), primary: true },
+    ],
+    adminHint: "Advanced rebuild and inspection actions stay on the diagnostics page.",
+    onOpenDiagnostics: navigateToDiagnostics,
+  };
+  const operationalDashboardProps = {
+    currentSection: currentOperationalSection,
+    sections: operationalSections,
+    healthStripProps: {
+      lifecycleState: uiState.lifecycle.current,
+      trustStatus: uiState.lifecycle.trustStatus,
+      coreApiStatus: uiState.runtimeHealth.coreApiConnectivity,
+      mqttStatus: uiState.runtimeHealth.operationalMqttConnectivity,
+      governanceStatus: uiState.runtimeHealth.governanceFreshness,
+      providerStatus: enabledProviderSummary ? "configured" : "none",
+      lastTelemetryTimestamp: uiState.runtimeHealth.lastTelemetryTimestamp,
+    },
+    degradedBanner:
+      uiState.lifecycle.current === "degraded"
+        ? {
+            reason: degradedReason,
+            actions: [
+              { label: "Open Setup", onClick: navigateToSetup },
+              { label: "Open Diagnostics", onClick: navigateToDiagnostics, primary: true },
+            ],
+          }
+        : null,
+    overviewCardProps: {
+      nodeId,
+      nodeName,
+      pairedCoreId: uiState.coreConnection.pairedCoreId,
+      softwareVersion: UI_VERSION,
+      lifecycleState: uiState.lifecycle.current,
+      trustState: uiState.lifecycle.trustStatus,
+      pairingTimestamp: uiState.coreConnection.pairingTimestamp,
+    },
+    coreConnection: {
+      show: showCorePanel,
+      pairedCoreId: uiState.coreConnection.pairedCoreId,
+      coreApiEndpoint: uiState.coreConnection.coreApiEndpoint,
+      operationalMqttAddress:
+        uiState.coreConnection.operationalMqttHost
+          ? `${uiState.coreConnection.operationalMqttHost}${uiState.coreConnection.operationalMqttPort ? `:${uiState.coreConnection.operationalMqttPort}` : ""}`
+          : "",
+      connected: uiState.coreConnection.connected,
+      onboardingReference: uiState.onboarding.pendingSessionId || uiState.lifecycle.current,
+    },
+    runtimeHealth: uiState.runtimeHealth,
+    capabilitySummaryProps: {
+      enabledProviders: uiState.capabilitySummary.enabledProviders,
+      usableModels: usableResolvedModelIds,
+      blockedModels: blockedResolvedModels,
+      featureUnion: Object.entries(openaiFeatureUnion)
+        .filter(([, enabled]) => Boolean(enabled))
+        .map(([feature]) => feature),
+      resolvedTaskCount: resolvedNodeTasks.length,
+      classifierSource: classifierModelUsed,
+      capabilityGraphVersion: resolvedNodeCapabilities?.capability_graph_version,
+      onOpenProviderSetup: navigateToOpenAiProviderSetup,
+      providerSetupEnabled: canManageOpenAiCredentials,
+      providerHint:
+        !canManageOpenAiCredentials
+          ? "Available after capability registration completes with OpenAI enabled."
+          : `Saved token: ${openaiCredentialSummary.api_token_hint || "not_saved"} | Default model: ${
+              openaiCredentialSummary.default_model_id || "not_selected"
+            }`,
+    },
+    resolvedTasks: resolvedNodeTasks,
+    runtimeServicesProps: {
+      serviceStatus: uiState.serviceStatus,
+    },
+    operationalActions,
+    activityItems: recentActivityItems,
+    onboardingSteps,
+    onboardingProgress: uiState.onboarding.progress,
+    pendingApprovalNodeId: isPendingApproval && nodeId ? nodeId : "",
+    diagnosticsProps: {
+      capabilityDiagnostics,
+      adminActionState,
+      runningAdminAction,
+      runAdminAction,
+      onCopyDiagnostics,
+      copiedDiagnostics,
+      uiState,
+    },
+  };
+
   return (
     <main className="page">
       {showModelPricingPopup && pricingReviewModel ? (
@@ -1097,761 +1652,32 @@ export default function App() {
         </section>
       ) : null}
 
-      {isProviderSetupRoute ? (
-        <section className="provider-page-shell">
-          <article className="card provider-page-card">
-            <CardHeader
-              title="Setup AI Provider"
-              subtitle="Save OpenAI provider credentials, review discovered models, and manage manual pricing from a dedicated page."
-            />
-            <form className="setup-form" onSubmit={onSaveOpenAiCredentials}>
-              <label>
-                OpenAI API Token
-                <input
-                  type="password"
-                  value={openaiApiToken}
-                  onChange={(event) => {
-                    setOpenaiApiToken(event.target.value);
-                    setProviderSetupDirty(true);
-                  }}
-                  placeholder="sk-proj-..."
-                  required
-                />
-              </label>
-              <label>
-                OpenAI Service Token
-                <input
-                  type="password"
-                  value={openaiServiceToken}
-                  onChange={(event) => {
-                    setOpenaiServiceToken(event.target.value);
-                    setProviderSetupDirty(true);
-                  }}
-                  placeholder="sk-service-..."
-                  required
-                />
-              </label>
-              <label>
-                OpenAI Project Name
-                <input
-                  value={openaiProjectName}
-                  onChange={(event) => {
-                    setOpenaiProjectName(event.target.value);
-                    setProviderSetupDirty(true);
-                  }}
-                  placeholder="project-name"
-                  required
-                />
-              </label>
-              <div className="state-grid">
-                <span>Provider</span>
-                <code>openai</code>
-                <span>Provider State</span>
-                <StatusBadge value={openaiCredentialSummary.configured ? "configured" : "pending"} />
-                <span>Saved API Token</span>
-                <code>{openaiCredentialSummary.api_token_hint || "not_saved"}</code>
-                <span>Saved Service Token</span>
-                <code>{openaiCredentialSummary.service_token_hint || "not_saved"}</code>
-                <span>Project Name</span>
-                <code>{openaiCredentialSummary.project_name || "not_saved"}</code>
-                <span>Saved Model</span>
-                <code>{openaiCredentialSummary.default_model_id || "not_selected"}</code>
-                <span>Updated</span>
-                <code>{openaiCredentialSummary.updated_at || "never"}</code>
-              </div>
-              <div className="row">
-                <button className="btn btn-primary" type="submit" disabled={savingCredentials || refreshingLatestModels}>
-                  {savingCredentials ? "Saving..." : "Save Provider Setup"}
-                </button>
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={refreshOpenAiModels}
-                  disabled={refreshingLatestModels || !openaiCredentialSummary.has_api_token}
-                >
-                  {refreshingLatestModels ? "Reloading Models..." : "Reload Models"}
-                </button>
-                <button className="btn" type="button" onClick={navigateToDashboard}>
-                  Back To Dashboard
-                </button>
-              </div>
-              <p className="muted tiny">
-                Tokens are masked after save and are never rendered back into the form. Reload Models refreshes local discovery only.
-              </p>
-              {pricingRefreshState ? (
-                <p className="muted tiny">
-                  Last pricing sync result: <code>{pricingRefreshState}</code>
-                </p>
-              ) : null}
-              {Object.keys(pricingStageStatuses).length ? (
-                <div className="state-grid compact-grid">
-                  {PRICING_STAGE_LABELS.map(([stageKey, stageLabel]) => (
-                    <span key={`provider-stage-${stageKey}`}>
-                      {stageLabel}: <code>{formatStageStatus(pricingStageStatuses[stageKey])}</code>
-                    </span>
-                  ))}
-                  <span>
-                    Family statuses:{" "}
-                    <code>
-                      {Object.entries(pricingFamilyStatuses)
-                        .map(([family, status]) => `${family}=${status}`)
-                        .join(", ") || "none"}
-                    </code>
-                  </span>
-                </div>
-              ) : null}
-            </form>
-            <div className="modal-capability-data">
-              <div className="model-section-header">
-                <h3>Filtered OpenAI Models</h3>
-                <span className="muted tiny">
-                  {savingModelPreference ? "Saving selections..." : `${openaiCatalogModels.length} filtered models`}
-                </span>
-              </div>
-              {groupedOpenAiCatalogModels.length ? (
-                <div className="grouped-model-sections">
-                  {groupedOpenAiCatalogModels.map((group) => (
-                    <section key={group.family} className="model-group-section">
-                      <div className="model-section-header">
-                        <h3>{group.label}</h3>
-                        <span className="muted tiny">{group.models.length} models</span>
-                      </div>
-                      <div className="model-list mini-card-grid">
-                        {group.models.map((model) => (
-                          (() => {
-                            const capabilityEntry = openaiCapabilityById[model.model_id] || null;
-                            const pricingEntry = openaiModelPriceById[model.model_id] || null;
-                            const blockedEntry = blockedResolvedModelMap[model.model_id] || null;
-                            const capabilityBadges = getCapabilityBadges(capabilityEntry);
-                            const pricingRows = getModelPricingRows(pricingEntry);
-                            const statusBadges = [
-                              selectedOpenaiModelIds.includes(model.model_id) ? "Selected" : null,
-                              enabledOpenaiModelIds.includes(model.model_id) ? "Enabled selection" : null,
-                              usableResolvedModelIds.includes(model.model_id) ? "Usable" : null,
-                              blockedEntry && Array.isArray(blockedEntry.blockers) && blockedEntry.blockers.length
-                                ? `Blocked: ${blockedEntry.blockers.join(",")}`
-                                : null,
-                              pricingEntry?.pricing_status ? formatTierLabel(pricingEntry.pricing_status) : null,
-                            ].filter(Boolean);
-                            return (
-                          <article
-                            key={model.model_id}
-                            className={`model-card mini-model-card ${
-                              selectedOpenaiModelIds.includes(model.model_id) || enabledOpenaiModelIds.includes(model.model_id)
-                                ? "is-selected"
-                                : ""
-                            }`}
-                          >
-                            <div className="model-card-header">
-                              <strong>{model.model_id}</strong>
-                              <StatusBadge
-                                value={
-                                  usableResolvedModelIds.includes(model.model_id)
-                                    ? "ready"
-                                    : blockedEntry
-                                      ? "blocked"
-                                      : enabledOpenaiModelIds.includes(model.model_id)
-                                        ? "enabled"
-                                        : "available"
-                                }
-                              />
-                            </div>
-                            <div className="capability-badge-list">
-                              <span className="capability-badge">{formatModelFamily(capabilityEntry?.family || model.family)}</span>
-                              <span className="capability-badge">
-                                {formatTierLabel(capabilityEntry?.speed_tier || "unknown")} speed
-                              </span>
-                              <span className="capability-badge">
-                                {formatTierLabel(capabilityEntry?.cost_tier || "unknown")} cost
-                              </span>
-                              {statusBadges.map((badge) => (
-                                <span key={`${model.model_id}-status-${badge}`} className="capability-badge capability-badge-muted">
-                                  {badge}
-                                </span>
-                              ))}
-                            </div>
-                            <div className="state-grid compact-grid">
-                              <span>Model ID</span>
-                              <code>{model.model_id}</code>
-                              <span>Discovered</span>
-                              <code>{model.discovered_at ? model.discovered_at.slice(0, 10) : "unknown"}</code>
-                              <span>Family</span>
-                              <code>{formatModelFamily(capabilityEntry?.family || model.family)}</code>
-                              <span>Coding</span>
-                              <code>{formatTierLabel(capabilityEntry?.coding_strength || "unknown")}</code>
-                              <span>Structured</span>
-                              <code>{capabilityEntry?.structured_output ? "Yes" : "No"}</code>
-                              {pricingRows.flatMap(([label, value]) => ([
-                                <span key={`${model.model_id}-${label}-label`}>{label}</span>,
-                                <code key={`${model.model_id}-${label}-value`}>{value}</code>,
-                              ]))}
-                            </div>
-                            <div className="capability-badge-list">
-                              {capabilityBadges.length ? (
-                                capabilityBadges.map((badge) => (
-                                  <span key={`${model.model_id}-${badge}`} className="capability-badge">
-                                    {badge}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="muted tiny">Deterministic capability defaults applied</span>
-                              )}
-                            </div>
-                            <div className="recommended-task-list">
-                              <span className="muted tiny">
-                                Capability summary is derived locally from deterministic rules and rendered from the saved classification catalog.
-                              </span>
-                            </div>
-                            <div className="row model-card-actions">
-                              <button
-                                className={`btn ${enabledOpenaiModelIds.includes(model.model_id) ? "btn-primary" : ""}`}
-                                type="button"
-                                onClick={() => onToggleEnabledOpenAiModel(model.model_id)}
-                              >
-                                {enabledOpenaiModelIds.includes(model.model_id) ? "Disable" : "Enable"}
-                              </button>
-                              <button
-                                className={`btn ${selectedOpenaiModelIds.includes(model.model_id) ? "btn-primary" : ""}`}
-                                type="button"
-                                onClick={() => onToggleOpenAiModel(model.model_id)}
-                              >
-                                {selectedOpenaiModelIds.includes(model.model_id) ? "Selected" : "Select"}
-                              </button>
-                              <button className="btn" type="button" onClick={() => openSingleModelPricing(model.model_id)}>
-                                Set Price
-                              </button>
-                            </div>
-                          </article>
-                            );
-                          })()
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                </div>
-              ) : (
-                <p className="muted tiny">
-                  No OpenAI models discovered yet. Save provider setup and reload discovery to populate this list.
-                </p>
-              )}
-            </div>
-            <article className="card capability-summary-card">
-              <CardHeader
-                title="Resolved Node Capabilities"
-                subtitle="Only enabled models contribute to this capability summary."
-              />
-              <div className="capability-summary-grid">
-                <div className="state-grid">
-                  <span>Enabled Models</span>
-                  <code>{enabledOpenaiModelIds.join(", ") || "none_enabled"}</code>
-                  <span>Classification Source</span>
-                  <code>{resolvedOpenaiCapabilities?.classification_model || "unavailable"}</code>
-                  <span>Reasoning</span>
-                  <StatusBadge value={resolvedCapabilityFlags.reasoning ? "enabled" : "disabled"} />
-                  <span>Vision</span>
-                  <StatusBadge value={resolvedCapabilityFlags.vision ? "enabled" : "disabled"} />
-                  <span>Image Generation</span>
-                  <StatusBadge value={resolvedCapabilityFlags.image_generation ? "enabled" : "disabled"} />
-                  <span>Audio Input</span>
-                  <StatusBadge value={resolvedCapabilityFlags.audio_input ? "enabled" : "disabled"} />
-                  <span>Audio Output</span>
-                  <StatusBadge value={resolvedCapabilityFlags.audio_output ? "enabled" : "disabled"} />
-                  <span>Realtime</span>
-                  <StatusBadge value={resolvedCapabilityFlags.realtime ? "enabled" : "disabled"} />
-                  <span>Structured Output</span>
-                  <StatusBadge value={resolvedCapabilityFlags.structured_output ? "enabled" : "disabled"} />
-                  <span>Long Context</span>
-                  <StatusBadge value={resolvedCapabilityFlags.long_context ? "enabled" : "disabled"} />
-                  <span>Tool Calling</span>
-                  <StatusBadge value={resolvedCapabilityFlags.tool_calling ? "enabled" : "disabled"} />
-                  <span>Coding Strength</span>
-                  <code>{formatTierLabel(resolvedCapabilityFlags.coding_strength || "unknown")}</code>
-                  <span>Speed Tier</span>
-                  <code>{formatTierLabel(resolvedCapabilityFlags.speed_tier || "unknown")}</code>
-                  <span>Cost Tier</span>
-                  <code>{formatTierLabel(resolvedCapabilityFlags.cost_tier || "unknown")}</code>
-                </div>
-                <div>
-                  <strong>Recommended Tasks</strong>
-                  <div className="recommended-task-list">
-                    {(resolvedCapabilityFlags.recommended_for || []).length ? (
-                      resolvedCapabilityFlags.recommended_for.map((task) => (
-                        <span key={task} className="capability-badge">
-                          {formatRecommendedTask(task)}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="muted tiny">Enable one or more classified models to build node capabilities.</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div>
-                <strong>Model Features</strong>
-                <div className="recommended-task-list">
-                  {Object.entries(openaiFeatureUnion)
-                    .filter(([, enabled]) => enabled)
-                    .sort(([left], [right]) => left.localeCompare(right))
-                    .map(([feature]) => (
-                      <span key={feature} className="capability-badge">
-                        {formatRecommendedTask(feature)}
-                      </span>
-                    ))}
-                  {!Object.values(openaiFeatureUnion).some((enabled) => enabled) ? (
-                    <span className="muted tiny">No model features resolved yet.</span>
-                  ) : null}
-                </div>
-              </div>
-              <div>
-                <strong>Resolved Node Tasks</strong>
-                <div className="recommended-task-list">
-                  {resolvedNodeTasks.length ? (
-                    resolvedNodeTasks.map((task) => (
-                      <span key={task} className="capability-badge">
-                        {task}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="muted tiny">No node tasks resolved yet.</span>
-                  )}
-                </div>
-              </div>
-            </article>
-          </article>
-        </section>
-      ) : isUnconfigured ? (
-        <section className="card setup-card">
-          <h2>Setup Node</h2>
-          <p className="muted">
-            Node is <code>UNCONFIGURED</code>. Enter the bootstrap MQTT host and a friendly name to begin onboarding.
-          </p>
-          {nodeId ? (
-            <p className="muted tiny">
-              This node identity is fixed for onboarding: <code>{nodeId}</code>
-            </p>
-          ) : null}
-          <p className="muted tiny">
-            Friendly name is sent to Core as <code>node_name</code>. Spaces are allowed.
-          </p>
-          <form onSubmit={onSubmit} className="setup-form">
-            <label>
-              MQTT Host
-              <input
-                value={mqttHost}
-                onChange={(event) => setMqttHost(event.target.value)}
-                placeholder="10.0.0.100"
-                required
-              />
-            </label>
-            <label>
-              Friendly Node Name
-              <input
-                value={nodeName}
-                onChange={(event) => setNodeName(event.target.value)}
-                placeholder="Main AI Node"
-                required
-              />
-            </label>
-            <button className="btn btn-primary" type="submit" disabled={saving}>
-              {saving ? "Starting..." : "Start Onboarding"}
-            </button>
-          </form>
-        </section>
-      ) : (
-        <section className="grid">
-          <article className={`card lifecycle-card ${lifecycleToneClass}`}>
-            <CardHeader title="Lifecycle" subtitle="Primary node diagnostic state" />
-            <div className="state-grid">
-              <span>Current State</span>
-              <StatusBadge value={uiState.lifecycle.current} />
-              <span>Trust Status</span>
-              <StatusBadge value={uiState.lifecycle.trustStatus} />
-              <span>Paired Core ID</span>
-              <code>{uiState.coreConnection.pairedCoreId || "not_paired"}</code>
-              <span>Pairing Timestamp</span>
-              <code>{uiState.coreConnection.pairingTimestamp || "unavailable"}</code>
-              <span>Governance</span>
-              <code>{uiState.runtimeHealth.governanceFreshness}</code>
-            </div>
-          </article>
-          <article className="card">
-            <CardHeader title="Onboarding" subtitle="Live onboarding progress by lifecycle stage." />
-            <div className="progress-list">
-              {onboardingSteps.map((step) => {
-                const state = uiState.onboarding.progress?.[step.key] || "pending";
-                return (
-                  <div className="progress-row" key={step.key}>
-                    <span>{step.label}</span>
-                    <span className={`step-badge step-${state}`}>{stepStateLabel(state)}</span>
-                  </div>
-                );
-              })}
-            </div>
-            {isPendingApproval && nodeId ? (
-              <p className="muted tiny">
-                Pending approval for node: <code>{nodeId}</code>
-              </p>
-            ) : null}
-            {isCapabilitySetupPending ? (
-              <form className="setup-form" onSubmit={onSaveProviderSelection}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={openaiEnabled}
-                    onChange={(event) => setOpenaiEnabled(event.target.checked)}
-                  />{" "}
-                  Enable OpenAI on this node
-                </label>
-                <div className="state-grid">
-                  <span>Task Capabilities</span>
-                  <code>{selectedTaskFamilies.join(", ") || "none_selected"}</code>
-                </div>
-                {renderTaskCapabilityToggles("page")}
-                <button className="btn btn-primary" type="submit" disabled={savingProvider}>
-                  {savingProvider ? "Saving..." : "Save Setup Selection"}
-                </button>
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={onDeclareCapabilities}
-                  disabled={declaringCapabilities || !capabilityDeclareAllowed}
-                >
-                  {declaringCapabilities ? "Declaring..." : "Declare Capabilities"}
-                </button>
-                <div className="state-grid">
-                  <span>Trust Ready</span>
-                  <StatusBadge value={setupReadinessFlags.trust_state_valid ? "ready" : "blocked"} />
-                  <span>Identity Ready</span>
-                  <StatusBadge value={setupReadinessFlags.node_identity_valid ? "ready" : "blocked"} />
-                  <span>Provider Ready</span>
-                  <StatusBadge value={setupReadinessFlags.provider_selection_valid ? "ready" : "blocked"} />
-                  <span>Task Capability Ready</span>
-                  <StatusBadge value={setupReadinessFlags.task_capability_selection_valid ? "ready" : "blocked"} />
-                  <span>Runtime Context</span>
-                  <StatusBadge value={setupReadinessFlags.core_runtime_context_valid ? "ready" : "blocked"} />
-                </div>
-                {setupBlockingReasons.length ? (
-                  <p className="warning tiny">
-                    Blocking: <code>{setupBlockingReasons.join(", ")}</code>
-                  </p>
-                ) : null}
-              </form>
-            ) : null}
-          </article>
-          <article className="card">
-            <CardHeader title="Runtime" subtitle="Operational signals and health indicators" />
-            <div className="state-grid">
-              <span>Core API</span>
-              <HealthIndicator value={uiState.runtimeHealth.coreApiConnectivity} />
-              <span>Operational MQTT</span>
-              <HealthIndicator value={uiState.runtimeHealth.operationalMqttConnectivity} />
-              <span>Governance</span>
-              <HealthIndicator value={uiState.runtimeHealth.governanceFreshness} />
-              <span>Last Telemetry</span>
-              <code>{uiState.runtimeHealth.lastTelemetryTimestamp || "none"}</code>
-              <span>Node Health</span>
-              <HealthIndicator value={uiState.runtimeHealth.nodeHealthState} />
-            </div>
-          </article>
-          {showCorePanel ? (
-            <article className="card">
-              <CardHeader title="Core Connection" subtitle="Trusted Core endpoint metadata" />
-              <div className="state-grid">
-                <span>Core ID</span>
-                <code>{uiState.coreConnection.pairedCoreId}</code>
-                <span>Core API</span>
-                <code>{uiState.coreConnection.coreApiEndpoint || "unavailable"}</code>
-                <span>Operational MQTT</span>
-                <code>
-                  {uiState.coreConnection.operationalMqttHost || "unavailable"}
-                  {uiState.coreConnection.operationalMqttPort ? `:${uiState.coreConnection.operationalMqttPort}` : ""}
-                </code>
-                <span>Connection</span>
-                <HealthIndicator value={uiState.coreConnection.connected ? "connected" : "disconnected"} />
-                <span>Onboarding Ref</span>
-                <code>{uiState.onboarding.pendingSessionId || uiState.lifecycle.current}</code>
-              </div>
-            </article>
-          ) : null}
-          <article className="card">
-            <CardHeader title="Capability Summary" subtitle="Phase 2 declaration readiness snapshot" />
-            <div className="row capability-actions">
-              <button
-                className="btn btn-primary"
-                type="button"
-                disabled={!canManageOpenAiCredentials}
-                onClick={navigateToOpenAiProviderSetup}
-              >
-                Setup AI Provider
-              </button>
-              {!canManageOpenAiCredentials ? (
-                <span className="muted tiny">Available after capability registration completes with OpenAI enabled.</span>
-              ) : (
-                <span className="muted tiny">
-                  Saved token: <code>{openaiCredentialSummary.api_token_hint || "not_saved"}</code> | Model:{" "}
-                  <code>{openaiCredentialSummary.default_model_id || "not_selected"}</code>
-                </span>
-              )}
-            </div>
-            <div className="state-grid">
-              <span>Task Families</span>
-              <code>{uiState.capabilitySummary.declaredTaskFamilies.join(", ") || "not_declared"}</code>
-              <span>Enabled Providers</span>
-              <code>{uiState.capabilitySummary.enabledProviders.join(", ") || "none"}</code>
-              <span>Declared At</span>
-              <code>{uiState.capabilitySummary.capabilityDeclarationTimestamp || "pending"}</code>
-              <span>Governance Policy</span>
-              <code>{uiState.capabilitySummary.governancePolicyVersion || "unknown"}</code>
-              <span>Provider Expansion</span>
-              <code>openai (active), local/future (placeholder)</code>
-            </div>
-            {canManageOpenAiCredentials ? (
-              <div className="model-preview">
-                <h3>Latest 9 Canonical OpenAI Models</h3>
-                {latestOpenaiModels.length ? (
-                  <div className="model-preview-list">
-                    {latestOpenaiModels.map((model) => (
-                      <div key={model.model_id} className="model-preview-row">
-                        <span>
-                          {selectedOpenaiModelIds.includes(model.model_id) ? <span className="selected-model-check">✓ </span> : null}
-                          {model.display_name || model.model_id}
-                        </span>
-                        <code>
-                          {formatPrice(model.pricing?.input_per_1m_tokens)} in / {formatPrice(model.pricing?.output_per_1m_tokens)} out
-                        </code>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="muted tiny">No model pricing cached yet. Open Setup AI Provider and reload discovery.</p>
-                )}
-              </div>
-            ) : null}
-          </article>
-          <article className="card capability-summary-card">
-            <CardHeader title="Resolved Node Capabilities" subtitle="Capability graph output from enabled model features." />
-            <div className="state-grid">
-              <span>Usable Models</span>
-              <code>{usableResolvedModelIds.join(", ") || "none_usable"}</code>
-              <span>Blocked Models</span>
-              <code>
-                {blockedResolvedModels
-                  .map((entry) =>
-                    `${entry?.model_id || "unknown"}${Array.isArray(entry?.blockers) && entry.blockers.length ? ` (${entry.blockers.join(",")})` : ""}`
-                  )
-                  .join(", ") || "none_blocked"}
-              </code>
-              <span>Classifier Model Used</span>
-              <code>{classifierModelUsed}</code>
-            </div>
-            <div>
-              <strong>Feature Union</strong>
-              <div className="recommended-task-list">
-                {Object.entries(openaiFeatureUnion)
-                  .filter(([, enabled]) => enabled)
-                  .sort(([left], [right]) => left.localeCompare(right))
-                  .map(([feature]) => (
-                    <span key={`dashboard-${feature}`} className="capability-badge">
-                      {formatRecommendedTask(feature)}
-                    </span>
-                  ))}
-                {!Object.values(openaiFeatureUnion).some((enabled) => enabled) ? (
-                  <span className="muted tiny">No feature union available.</span>
-                ) : null}
-              </div>
-            </div>
-            <div>
-              <strong>Resolved Tasks</strong>
-              <div className="recommended-task-list">
-                {resolvedNodeTasks.length ? (
-                  resolvedNodeTasks.map((task) => (
-                    <span key={`dashboard-${task}`} className="capability-badge">
-                      {task}
-                    </span>
-                  ))
-                ) : (
-                  <span className="muted tiny">No resolved node tasks available.</span>
-                )}
-              </div>
-            </div>
-          </article>
-          <article className="card">
-            <CardHeader title="Service" subtitle="User systemd service state and controls" />
-            <div className="state-grid">
-              <span>Backend</span>
-              <StatusBadge value={uiState.serviceStatus.backend} />
-              <span>Frontend</span>
-              <StatusBadge value={uiState.serviceStatus.frontend} />
-              <span>Node</span>
-              <StatusBadge value={uiState.serviceStatus.node} />
-            </div>
-            <div className="row">
-              <button
-                className="btn"
-                onClick={() => onRestartService("backend")}
-                disabled={Boolean(restartingServiceTarget)}
-              >
-                {restartingServiceTarget === "backend" ? "Restarting..." : "Restart Backend"}
-              </button>
-              <button
-                className="btn"
-                onClick={() => onRestartService("frontend")}
-                disabled={Boolean(restartingServiceTarget)}
-              >
-                {restartingServiceTarget === "frontend" ? "Restarting..." : "Restart Frontend"}
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => onRestartService("node")}
-                disabled={Boolean(restartingServiceTarget)}
-              >
-                {restartingServiceTarget === "node" ? "Restarting..." : "Restart Node"}
-              </button>
-            </div>
-          </article>
-          {capabilityDiagnostics ? (
-            <article className="card diagnostics-card">
-              <CardHeader
-                title="Admin Capability Diagnostics"
-                subtitle="Model capability visibility and manual refresh controls"
-              />
-              <div className="state-grid">
-                <span>Discovered Models</span>
-                <code>
-                  {(capabilityDiagnostics?.discovered_models?.models || []).map((model) => model.model_id).join(", ") || "none"}
-                </code>
-                <span>Enabled Models</span>
-                <code>
-                  {(capabilityDiagnostics?.enabled_models?.models || [])
-                    .filter((model) => model?.enabled)
-                    .map((model) => model.model_id)
-                    .join(", ") || "none"}
-                </code>
-                <span>Capability Catalog</span>
-                <code>
-                  {(capabilityDiagnostics?.capability_catalog?.entries || []).map((entry) => entry.model_id).join(", ") || "none"}
-                </code>
-                <span>Feature Catalog</span>
-                <code>
-                  {(capabilityDiagnostics?.feature_catalog?.entries || []).map((entry) => entry.model_id).join(", ") || "none"}
-                </code>
-                <span>Resolved Tasks</span>
-                <code>{(capabilityDiagnostics?.resolved_tasks || []).join(", ") || "none"}</code>
-                <span>Capability Graph Version</span>
-                <code>{capabilityDiagnostics?.capability_graph?.capability_graph_version || "unavailable"}</code>
-                <span>Classification Source</span>
-                <code>{capabilityDiagnostics?.classification_model || "unavailable"}</code>
-                <span>Pricing Extraction</span>
-                <code>{capabilityDiagnostics?.pricing_diagnostics?.refresh_state || "unavailable"}</code>
-                <span>Pricing Stages</span>
-                <code>
-                  {Object.entries(capabilityDiagnostics?.pricing_diagnostics?.stage_statuses || {})
-                    .map(([stage, status]) => `${stage}:${status}`)
-                    .join(", ") || "none"}
-                </code>
-                <span>Pricing Family Statuses</span>
-                <code>
-                  {Object.entries(capabilityDiagnostics?.pricing_diagnostics?.family_statuses || {})
-                    .map(([family, status]) => `${family}:${status}`)
-                    .join(", ") || "none"}
-                </code>
-                <span>Last Declaration Result</span>
-                <code>{capabilityDiagnostics?.last_declaration_result?.status || "none"}</code>
-              </div>
-              <div className="row capability-actions">
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={() =>
-                    runAdminAction("refresh_provider_models", "/api/capabilities/providers/refresh", { force_refresh: true })
-                  }
-                  disabled={Boolean(runningAdminAction)}
-                >
-                  {runningAdminAction === "refresh_provider_models" ? "Refreshing..." : "Refresh Provider Models"}
-                </button>
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={() =>
-                    runAdminAction(
-                      "rerun_classification",
-                      "/api/providers/openai/models/classification/refresh",
-                      {}
-                    )
-                  }
-                  disabled={Boolean(runningAdminAction)}
-                >
-                  {runningAdminAction === "rerun_classification" ? "Running..." : "Recompute Deterministic Catalog"}
-                </button>
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={() => runAdminAction("recompute_capability_graph", "/api/capabilities/rebuild", {})}
-                  disabled={Boolean(runningAdminAction)}
-                >
-                  {runningAdminAction === "recompute_capability_graph" ? "Computing..." : "Recompute Capability Graph"}
-                </button>
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  onClick={() => runAdminAction("redeclare_capabilities", "/api/capabilities/redeclare", { force_refresh: true })}
-                  disabled={Boolean(runningAdminAction)}
-                >
-                  {runningAdminAction === "redeclare_capabilities" ? "Redeclaring..." : "Redeclare Capabilities To Core"}
-                </button>
-              </div>
-              <p className="muted tiny">
-                Admin action result: <code>{adminActionState || "idle"}</code>
-              </p>
-              <details>
-                <summary>Last Declaration Payload</summary>
-                <pre className="json-block">{JSON.stringify(capabilityDiagnostics?.last_declaration_payload || {}, null, 2)}</pre>
-              </details>
-              <details>
-                <summary>Last Declaration Result</summary>
-                <pre className="json-block">{JSON.stringify(capabilityDiagnostics?.last_declaration_result || {}, null, 2)}</pre>
-              </details>
-              <details>
-                <summary>Feature Catalog</summary>
-                <pre className="json-block">{JSON.stringify(capabilityDiagnostics?.feature_catalog || {}, null, 2)}</pre>
-              </details>
-              <details>
-                <summary>Pricing Catalog</summary>
-                <pre className="json-block">{JSON.stringify(capabilityDiagnostics?.pricing_catalog || {}, null, 2)}</pre>
-              </details>
-              <details>
-                <summary>Pricing Diagnostics</summary>
-                <pre className="json-block">{JSON.stringify(capabilityDiagnostics?.pricing_diagnostics || {}, null, 2)}</pre>
-              </details>
-              <details>
-                <summary>Capability Graph</summary>
-                <pre className="json-block">{JSON.stringify(capabilityDiagnostics?.capability_graph || {}, null, 2)}</pre>
-              </details>
-            </article>
-          ) : null}
-          <article className="card diagnostics-card">
-            <details>
-              <summary>Diagnostics</summary>
-              <p className="muted tiny">Safe debug data for support and troubleshooting</p>
-              <div className="state-grid">
-                <span>Lifecycle</span>
-                <code>{uiState.lifecycle.current}</code>
-                <span>API Base</span>
-                <code>{getApiBase()}</code>
-                <span>Endpoints</span>
-                <code>{DIAGNOSTIC_ENDPOINTS.join(", ")}</code>
-                <span>Last Update</span>
-                <code>{uiState.meta.lastUpdatedAt || "never"}</code>
-                <span>UI Version</span>
-                <code>{UI_VERSION}</code>
-              </div>
-              <button className="btn" onClick={onCopyDiagnostics}>
-                {copiedDiagnostics ? "Diagnostics Copied" : "Copy Diagnostics"}
-              </button>
-            </details>
-          </article>
-        </section>
-      )}
+      {isIdentityMode ? (
+        <IdentityScreen
+          nodeId={nodeId}
+          mqttHost={mqttHost}
+          nodeName={nodeName}
+          saving={saving}
+          onMqttHostChange={setMqttHost}
+          onNodeNameChange={setNodeName}
+          onSubmit={onSubmit}
+        />
+      ) : isSetupMode ? (
+        <SetupModeView
+          title={isProviderSetupRoute ? "AI Provider Setup" : "Node Setup"}
+          subtitle={setupSubtitle}
+          summaryItems={setupSummaryItems}
+          stages={setupFlow.stages}
+          activeStageLabel={setupFlow.stages.find((stage) => stage.id === setupFlow.activeStage)?.label}
+          activePanel={renderSetupActivePanel()}
+          primaryActions={setupActions.primaryActions}
+          secondaryActions={setupActions.secondaryActions}
+          dangerActions={setupActions.dangerActions}
+          completionState={completionState}
+        />
+      ) : isOperationalMode ? (
+        <OperationalDashboard {...operationalDashboardProps} />
+      ) : null}
     </main>
   );
 }
