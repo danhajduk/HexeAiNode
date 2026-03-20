@@ -33,6 +33,9 @@ function getActiveStage({
     return "provider_setup";
   }
   switch (lifecycleState) {
+    case "operational":
+    case "degraded":
+      return "ready";
     case "bootstrap_connecting":
     case "bootstrap_connected":
       return "core_connection";
@@ -88,11 +91,17 @@ function getStageStatusText(stageId, { lifecycleState, pendingApprovalUrl, gover
     case "provider_setup":
       return setupBlockingReasons.length ? `${setupBlockingReasons.length} blockers` : "provider and task selection";
     case "capability_declaration":
-      return lifecycleState === "capability_declaration_failed_retry_pending" ? "retry required" : "ready to declare";
+      if (lifecycleState === "capability_declaration_failed_retry_pending") {
+        return "retry required";
+      }
+      if (lifecycleState === "capability_declaration_accepted") {
+        return "declaration accepted";
+      }
+      return "ready to declare";
     case "governance_sync":
       return governanceFreshness === "fresh" ? "governance ready" : "syncing governance";
     case "ready":
-      return "handoff to dashboard";
+      return lifecycleState === "degraded" ? "dashboard available with warnings" : "handoff to dashboard";
     default:
       return "";
   }

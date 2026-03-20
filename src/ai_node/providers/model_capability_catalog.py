@@ -232,10 +232,20 @@ def _build_entry(*, model_id: str, family: str, discovered_at: str | None = None
     return entry
 
 
-def _filter_models_for_classification(*, models: list[OpenAIProviderModelCatalogEntry]) -> list[OpenAIProviderModelCatalogEntry]:
+def _filter_models_for_classification(
+    *,
+    models: list[OpenAIProviderModelCatalogEntry],
+    preserve_model_ids: list[str] | None = None,
+) -> list[OpenAIProviderModelCatalogEntry]:
     selected_ids = select_representative_openai_model_ids(
         [str(item.model_id or "").strip().lower() for item in models]
     )
+    preserved_ids = {
+        str(model_id or "").strip().lower()
+        for model_id in (preserve_model_ids or [])
+        if str(model_id or "").strip()
+    }
+    selected_ids.update(preserved_ids)
     seen: set[str] = set()
     filtered: list[OpenAIProviderModelCatalogEntry] = []
     for item in models:
@@ -249,8 +259,12 @@ def _filter_models_for_classification(*, models: list[OpenAIProviderModelCatalog
     return filtered
 
 
-def build_deterministic_entries(*, models: list[OpenAIProviderModelCatalogEntry]) -> list[ProviderModelCapabilityEntry]:
-    filtered_models = _filter_models_for_classification(models=models)
+def build_deterministic_entries(
+    *,
+    models: list[OpenAIProviderModelCatalogEntry],
+    preserve_model_ids: list[str] | None = None,
+) -> list[ProviderModelCapabilityEntry]:
+    filtered_models = _filter_models_for_classification(models=models, preserve_model_ids=preserve_model_ids)
     entries = [
         _build_entry(model_id=item.model_id, family=item.family, discovered_at=item.discovered_at)
         for item in filtered_models
@@ -387,8 +401,13 @@ class OpenAIModelCapabilityClassifier:
         self._logger = logger
         self._store = store
 
-    async def classify_and_save(self, *, models: list[OpenAIProviderModelCatalogEntry]) -> ProviderModelCapabilitiesSnapshot:
-        entries = build_deterministic_entries(models=models)
+    async def classify_and_save(
+        self,
+        *,
+        models: list[OpenAIProviderModelCatalogEntry],
+        preserve_model_ids: list[str] | None = None,
+    ) -> ProviderModelCapabilitiesSnapshot:
+        entries = build_deterministic_entries(models=models, preserve_model_ids=preserve_model_ids)
         snapshot = self._store.save(classification_model=_DETERMINISTIC_CLASSIFICATION_MODEL, entries=entries)
         if hasattr(self._logger, "info"):
             self._logger.info(

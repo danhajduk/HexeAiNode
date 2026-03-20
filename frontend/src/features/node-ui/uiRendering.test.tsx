@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { SetupModeView } from "../setup/SetupModeView";
+import { buildSetupFlowModel } from "../setup/setupFlowModel";
 import { OperationalDashboard } from "../operational/OperationalDashboard";
 
 function buildOperationalProps(overrides = {}) {
@@ -57,7 +58,7 @@ function buildOperationalProps(overrides = {}) {
       providerSetupEnabled: true,
       providerHint: "Saved token: sk-**** | Default model: gpt-5.4",
     },
-    resolvedTasks: ["task.classification.text"],
+    resolvedTasks: ["task.classification"],
     runtimeServicesProps: {
       serviceStatus: {
         backend: "running",
@@ -76,7 +77,7 @@ function buildOperationalProps(overrides = {}) {
     onboardingProgress: { registration: "completed" },
     pendingApprovalNodeId: "",
     diagnosticsProps: {
-      capabilityDiagnostics: { resolved_tasks: ["task.classification.text"] },
+      capabilityDiagnostics: { resolved_tasks: ["task.classification"] },
       adminActionState: "idle",
       runningAdminAction: "",
       runAdminAction: () => {},
@@ -113,6 +114,21 @@ describe("SetupModeView", () => {
     expect(markup).toContain("Setup Complete");
     expect(markup).toContain("Open Dashboard");
     expect(markup).toContain("Ready panel");
+  });
+
+  it("maps operational lifecycle to the ready setup stage", () => {
+    const flow = buildSetupFlowModel({
+      lifecycleState: "operational",
+      routeIntent: "setup",
+      pendingApprovalUrl: null,
+      governanceFreshness: "fresh",
+      setupReadinessFlags: {},
+      setupBlockingReasons: [],
+    });
+
+    expect(flow.activeStage).toBe("ready");
+    expect(flow.stages.find((stage) => stage.id === "ready")?.state).toBe("current");
+    expect(flow.stages.find((stage) => stage.id === "capability_declaration")?.state).toBe("completed");
   });
 });
 

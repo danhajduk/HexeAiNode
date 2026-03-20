@@ -62,6 +62,22 @@ class ModelCapabilityCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(image.feature_flags["image_generation"])
         self.assertFalse(image.feature_flags["image_editing"])
 
+    def test_build_deterministic_entries_preserves_selected_models_outside_representative_subset(self):
+        entries = build_deterministic_entries(
+            models=[
+                OpenAIProviderModelCatalogEntry(model_id="gpt-5.4-mini", family="llm", discovered_at="2026-03-13T00:00:00Z"),
+                OpenAIProviderModelCatalogEntry(model_id="gpt-5-mini", family="llm", discovered_at="2026-03-13T00:00:00Z"),
+                OpenAIProviderModelCatalogEntry(model_id="gpt-5.4-nano", family="llm", discovered_at="2026-03-13T00:00:00Z"),
+                OpenAIProviderModelCatalogEntry(model_id="gpt-5-nano", family="llm", discovered_at="2026-03-13T00:00:00Z"),
+            ],
+            preserve_model_ids=["gpt-5-mini", "gpt-5-nano"],
+        )
+
+        self.assertEqual(
+            [entry.model_id for entry in entries],
+            ["gpt-5-mini", "gpt-5-nano", "gpt-5.4-mini", "gpt-5.4-nano"],
+        )
+
     async def test_classifier_saves_deterministic_snapshot(self):
         models = [
             OpenAIProviderModelCatalogEntry(model_id="gpt-5-mini", family="llm", discovered_at="2026-03-13T00:00:00Z"),
