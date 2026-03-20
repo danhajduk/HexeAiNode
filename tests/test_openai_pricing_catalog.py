@@ -7,6 +7,7 @@ from pathlib import Path
 from ai_node.providers.models import ModelCapability
 from ai_node.providers.openai_catalog import (
     OpenAIPricingCatalogService,
+    OpenAIPricingEntry,
     OpenAIPricingPageParser,
     OpenAIPricingSnapshot,
     _build_family_pricing_extraction_prompt,
@@ -853,6 +854,54 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(merged_models[0].base_model_id, "gpt-5.4-pro")
             self.assertEqual(merged_models[0].pricing_input, 3.0)
             self.assertEqual(merged_models[0].pricing_output, 15.0)
+
+    async def test_merge_keeps_free_moderation_model_available_when_fallback_pricing_is_used(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = OpenAIPricingCatalogService(
+                logger=logging.getLogger("openai-pricing-test"),
+                catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
+            )
+            service._store.save(  # noqa: SLF001
+                OpenAIPricingSnapshot(
+                    refresh_state="ok",
+                    stale=False,
+                    source_urls=["https://developers.openai.com/api/docs/pricing.md"],
+                    source_url_used="https://developers.openai.com/api/docs/pricing.md",
+                    scraped_at="2026-03-20T12:00:00+00:00",
+                    extraction_source="ai_extraction_family_prompts_partial",
+                    entries=[
+                        OpenAIPricingEntry(
+                            model_id="omni-moderation-2024-09-26",
+                            family="moderation",
+                            pricing_basis="per_1m_tokens",
+                            input_price=0.0,
+                            output_price=0.0,
+                            cached_input_price=0.0,
+                            normalized_price=0.0,
+                            normalized_unit="per_1m_tokens",
+                            source_url="https://developers.openai.com/api/docs/pricing.md",
+                            extracted_at="2026-03-20T00:00:00+00:00",
+                            extraction_status="fallback_used",
+                            notes=["status:free"],
+                        )
+                    ],
+                )
+            )
+
+            merged_models, unknown_models = service.merge_model_capabilities(
+                [
+                    ModelCapability(
+                        model_id="omni-moderation-2024-09-26",
+                        display_name="omni-moderation-2024-09-26",
+                        status="available",
+                    )
+                ]
+            )
+
+            self.assertEqual(unknown_models, [])
+            self.assertEqual(merged_models[0].status, "available")
+            self.assertEqual(merged_models[0].pricing_input, 0.0)
+            self.assertEqual(merged_models[0].pricing_output, 0.0)
 
     async def test_manual_pricing_persists_across_refresh(self):
         with tempfile.TemporaryDirectory() as tmp:

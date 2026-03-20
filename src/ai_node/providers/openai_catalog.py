@@ -2004,8 +2004,11 @@ class OpenAIPricingCatalogService:
             cached_input = pricing_entry.cached_input_price if pricing_entry.pricing_basis == "per_1m_tokens" else None
             pricing_status = "stale" if stale else pricing_entry.extraction_status
             model_status = getattr(model, "status", "available")
+            normalized_model_id = str(getattr(model, "model_id", "") or "").strip().lower()
             if pricing_status == "stale":
                 model_status = "degraded"
+            elif normalized_model_id.startswith("omni-moderation-") and pricing_status == "fallback_used":
+                model_status = "available"
             elif pricing_status not in {"ok", "manual"}:
                 model_status = "unavailable"
 
