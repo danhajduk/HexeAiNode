@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ai_node.config.task_capability_selection_config import TaskCapabilitySelectionConfigStore
 from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
@@ -701,6 +702,55 @@ class NodeControlApiTests(unittest.TestCase):
             )
             payload = state.status_payload()
             self.assertTrue(payload["capability_setup"]["declaration_allowed"])
+
+    def test_capability_declaration_gate_accepts_legacy_task_family_aliases_from_disk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED, {"source": "test"})
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING, {"source": "test"})
+            task_config_path = Path(tmp) / "task_capability_selection.json"
+            task_config_path.write_text(
+                """
+{
+  "schema_version": "1.0",
+  "selected_task_families": [
+    "task.classification.text",
+    "task.summarization.text"
+  ]
+}
+                """.strip(),
+                encoding="utf-8",
+            )
+            task_capability_store = TaskCapabilitySelectionConfigStore(
+                path=str(task_config_path),
+                logger=logging.getLogger("node-control-test"),
+            )
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(),
+                node_identity_store=self._FakeNodeIdentityStore({"node_id": "node-001"}),
+                provider_selection_store=self._FakeProviderSelectionStore(),
+                task_capability_selection_store=task_capability_store,
+                trust_state_store=self._FakeTrustStateStore(),
+                startup_mode="trusted_resume",
+                trusted_runtime_context={
+                    "paired_core_id": "core-main",
+                    "core_api_endpoint": "http://10.0.0.100:9001",
+                    "operational_mqtt_host": "10.0.0.100",
+                    "operational_mqtt_port": 1883,
+                },
+            )
+
+            payload = state.status_payload()
+
+            self.assertTrue(payload["capability_setup"]["readiness_flags"]["task_capability_selection_valid"])
+            self.assertTrue(payload["capability_setup"]["declaration_allowed"])
+            self.assertEqual(
+                payload["capability_setup"]["task_capability_selection"]["selected"],
+                ["task.classification", "task.summarization.text"],
+            )
 
     def test_capability_declaration_gate_blocks_when_no_openai_models_are_usable(self):
         class _OpenAiIncompleteRuntimeManager:

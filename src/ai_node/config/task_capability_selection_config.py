@@ -87,6 +87,10 @@ class TaskCapabilitySelectionConfigStore:
                     {"path": str(self._path), "reason": error},
                 )
             return None
+        normalized = create_task_capability_selection_config(payload)
+        if normalized != payload:
+            self.save(normalized)
+            payload = normalized
         if hasattr(self._logger, "info"):
             self._logger.info("[task-capability-selection-config-loaded] %s", {"path": str(self._path)})
         return payload

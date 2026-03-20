@@ -60,6 +60,37 @@ class TaskCapabilitySelectionConfigTests(unittest.TestCase):
             self.assertTrue(path.exists())
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), config)
 
+    def test_store_load_canonicalizes_legacy_aliases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "task_capability_selection.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "selected_task_families": [
+                            "task.classification.text",
+                            "task.summarization.text",
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            store = TaskCapabilitySelectionConfigStore(path=str(path), logger=self.logger)
+
+            loaded = store.load()
+
+            self.assertEqual(
+                loaded,
+                {
+                    "schema_version": "1.0",
+                    "selected_task_families": [
+                        "task.classification",
+                        "task.summarization.text",
+                    ],
+                },
+            )
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), loaded)
+
 
 if __name__ == "__main__":
     unittest.main()
