@@ -8,8 +8,8 @@ Document the post-identity AI-Node UI structure after the Phase 3 frontend redes
 
 This redesign follows the local Core references in:
 
-- [node-phase2-lifecycle-contract.md](/home/dan/Projects/SynthiaAiNode/docs/Core-Documents/nodes/node-phase2-lifecycle-contract.md)
-- [node-capability-activation-architecture.md](/home/dan/Projects/SynthiaAiNode/docs/Core-Documents/nodes/node-capability-activation-architecture.md)
+- [node-phase2-lifecycle-contract.md](/home/dan/Projects/HexeAiNode/docs/Core-Documents/nodes/node-phase2-lifecycle-contract.md)
+- [node-capability-activation-architecture.md](/home/dan/Projects/HexeAiNode/docs/Core-Documents/nodes/node-capability-activation-architecture.md)
 
 ## UI Modes
 
@@ -17,26 +17,26 @@ The frontend now has three explicit UI modes:
 
 1. Identity
    - preserved initial node-name / Core-endpoint screen
-   - rendered by [IdentityScreen.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/node-ui/IdentityScreen.jsx)
+   - rendered by [IdentityScreen.jsx](/home/dan/Projects/HexeAiNode/frontend/src/features/node-ui/IdentityScreen.jsx)
 
 2. Setup
    - guided onboarding and readiness flow
-   - rendered through [SetupModeView.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/setup/SetupModeView.jsx)
-   - shell lives in [SetupShell.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/setup/SetupShell.tsx)
+   - rendered through [SetupModeView.jsx](/home/dan/Projects/HexeAiNode/frontend/src/features/setup/SetupModeView.jsx)
+   - shell lives in [SetupShell.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/setup/SetupShell.tsx)
 
 3. Operational
    - dashboard-first runtime view for `operational` and `degraded`
-   - rendered through [OperationalDashboard.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/operational/OperationalDashboard.jsx)
+   - rendered through [OperationalDashboard.jsx](/home/dan/Projects/HexeAiNode/frontend/src/features/operational/OperationalDashboard.jsx)
 
 Mode resolution remains centralized in:
 
-- [uiModeResolver.ts](/home/dan/Projects/SynthiaAiNode/frontend/src/features/node-ui/uiModeResolver.ts)
+- [uiModeResolver.ts](/home/dan/Projects/HexeAiNode/frontend/src/features/node-ui/uiModeResolver.ts)
 
 ## Route Layout
 
 Canonical route helpers live in:
 
-- [uiRoutes.ts](/home/dan/Projects/SynthiaAiNode/frontend/src/features/node-ui/uiRoutes.ts)
+- [uiRoutes.ts](/home/dan/Projects/HexeAiNode/frontend/src/features/node-ui/uiRoutes.ts)
 
 Supported routes:
 
@@ -92,13 +92,13 @@ Diagnostics now live only on the dedicated diagnostics route. The default overvi
 
 The diagnostics page lives in:
 
-- [DiagnosticsPage.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/diagnostics/DiagnosticsPage.tsx)
+- [DiagnosticsPage.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/diagnostics/DiagnosticsPage.tsx)
 
 ## Shared Component Rules
 
 Shared status and severity primitives live in:
 
-- [uiPrimitives.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/components/uiPrimitives.jsx)
+- [uiPrimitives.jsx](/home/dan/Projects/HexeAiNode/frontend/src/components/uiPrimitives.jsx)
 
 Rules:
 

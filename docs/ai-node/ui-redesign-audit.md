@@ -8,11 +8,11 @@ This audit covers the current AI-Node frontend after the initial identity screen
 
 Relevant implementation files:
 
-- [App.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/App.jsx)
-- [uiStateModel.js](/home/dan/Projects/SynthiaAiNode/frontend/src/uiStateModel.js)
-- [api.js](/home/dan/Projects/SynthiaAiNode/frontend/src/api.js)
-- [uiPrimitives.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/components/uiPrimitives.jsx)
-- [main.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/main.jsx)
+- [App.jsx](/home/dan/Projects/HexeAiNode/frontend/src/App.jsx)
+- [uiStateModel.js](/home/dan/Projects/HexeAiNode/frontend/src/uiStateModel.js)
+- [api.js](/home/dan/Projects/HexeAiNode/frontend/src/api.js)
+- [uiPrimitives.jsx](/home/dan/Projects/HexeAiNode/frontend/src/components/uiPrimitives.jsx)
+- [main.jsx](/home/dan/Projects/HexeAiNode/frontend/src/main.jsx)
 
 ## Current Route Structure
 
@@ -27,7 +27,7 @@ Implemented route handling today:
 
 Route state is stored in local component state:
 
-- `routeHash` in [App.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/App.jsx)
+- `routeHash` in [App.jsx](/home/dan/Projects/HexeAiNode/frontend/src/App.jsx)
 - hash changes are observed through a `hashchange` listener
 
 There is no explicit route separation for:
@@ -59,7 +59,7 @@ Shared presentational components:
 - `StatusBadge`
 - `HealthIndicator`
 
-Everything else is inline inside [App.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/App.jsx).
+Everything else is inline inside [App.jsx](/home/dan/Projects/HexeAiNode/frontend/src/App.jsx).
 
 Major UI sections currently embedded in `App`:
 
@@ -100,7 +100,7 @@ Primary raw state in `App`:
 
 Derived dashboard state:
 
-- `uiState = buildDashboardUiState(...)` from [uiStateModel.js](/home/dan/Projects/SynthiaAiNode/frontend/src/uiStateModel.js)
+- `uiState = buildDashboardUiState(...)` from [uiStateModel.js](/home/dan/Projects/HexeAiNode/frontend/src/uiStateModel.js)
 
 Additional inline derived render logic in `App`:
 
@@ -126,7 +126,7 @@ Important current behavior:
 
 ### Polling
 
-The page performs one large polling fan-out every 7 seconds from `loadStatus()` in [App.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/App.jsx).
+The page performs one large polling fan-out every 7 seconds from `loadStatus()` in [App.jsx](/home/dan/Projects/HexeAiNode/frontend/src/App.jsx).
 
 Requests made together:
 
@@ -171,7 +171,7 @@ Mutation handlers usually call `loadStatus()` after success and sometimes after 
 
 ### API Base Resolution
 
-The API base is resolved centrally in [api.js](/home/dan/Projects/SynthiaAiNode/frontend/src/api.js):
+The API base is resolved centrally in [api.js](/home/dan/Projects/HexeAiNode/frontend/src/api.js):
 
 - `VITE_API_BASE` if set
 - otherwise `${window.location.protocol}//${window.location.hostname}:9002`
@@ -300,20 +300,20 @@ Write/admin endpoints currently used:
 
 ### Reusable
 
-- [api.js](/home/dan/Projects/SynthiaAiNode/frontend/src/api.js)
+- [api.js](/home/dan/Projects/HexeAiNode/frontend/src/api.js)
   - central fetch helpers and API base resolution are reusable
-- [uiStateModel.js](/home/dan/Projects/SynthiaAiNode/frontend/src/uiStateModel.js)
+- [uiStateModel.js](/home/dan/Projects/HexeAiNode/frontend/src/uiStateModel.js)
   - useful starting point for normalized runtime summaries, though it should be narrowed to the new mode boundaries
-- [uiPrimitives.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/components/uiPrimitives.jsx)
+- [uiPrimitives.jsx](/home/dan/Projects/HexeAiNode/frontend/src/components/uiPrimitives.jsx)
   - `CardHeader`, `StatusBadge`, `HealthIndicator`
-- initial identity form content in [App.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/App.jsx)
+- initial identity form content in [App.jsx](/home/dan/Projects/HexeAiNode/frontend/src/App.jsx)
   - preserve structure and behavior, but extract into its own screen/shell
 - provider setup data/actions
   - reusable logic, but should move under a setup feature module instead of living in the top-level page
 
 ### Replace or Extract
 
-- [App.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/App.jsx)
+- [App.jsx](/home/dan/Projects/HexeAiNode/frontend/src/App.jsx)
   - should be split into mode shells and feature sections
 - inline lifecycle/mode booleans
   - replace with a canonical UI mode resolver

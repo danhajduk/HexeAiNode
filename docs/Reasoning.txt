@@ -494,7 +494,7 @@ tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_returns_succes
 tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_reuses_existing_node_identity
 tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_reuses_existing_node_identity
 tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_with_valid_trust_state_uses_trusted_resume_startup_path
-  /home/dan/Projects/SynthiaAiNode/src/ai_node/runtime/node_control_api.py:679: DeprecationWarning: 
+  /home/dan/Projects/HexeAiNode/src/ai_node/runtime/node_control_api.py:679: DeprecationWarning: 
           on_event is deprecated, use lifespan event handlers instead.
   
           Read more about it in the
@@ -504,7 +504,7 @@ tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_with_valid_tru
 
 tests/test_node_control_fastapi.py: 4 warnings
 tests/test_main_entrypoint.py: 14 warnings
-  /home/dan/Projects/SynthiaAiNode/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+  /home/dan/Projects/HexeAiNode/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
           on_event is deprecated, use lifespan event handlers instead.
   
           Read more about it in the
@@ -521,7 +521,7 @@ tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_returns_succes
 tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_reuses_existing_node_identity
 tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_reuses_existing_node_identity
 tests/test_main_entrypoint.py::MainEntrypointTests::test_run_once_with_valid_trust_state_uses_trusted_resume_startup_path
-  /home/dan/Projects/SynthiaAiNode/src/ai_node/runtime/node_control_api.py:684: DeprecationWarning: 
+  /home/dan/Projects/HexeAiNode/src/ai_node/runtime/node_control_api.py:684: DeprecationWarning: 
           on_event is deprecated, use lifespan event handlers instead.
   
           Read more about it in the

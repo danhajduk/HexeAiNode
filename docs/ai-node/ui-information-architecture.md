@@ -8,10 +8,10 @@ Define the canonical UI information architecture for the AI-Node redesign after 
 
 This structure is aligned with:
 
-- [node-phase2-lifecycle-contract.md](/home/dan/Projects/SynthiaAiNode/docs/Core-Documents/nodes/node-phase2-lifecycle-contract.md)
-- [node-capability-activation-architecture.md](/home/dan/Projects/SynthiaAiNode/docs/Core-Documents/nodes/node-capability-activation-architecture.md)
-- [phase-2.md](/home/dan/Projects/SynthiaAiNode/docs/ai-node/phase-2.md)
-- [ui-redesign-audit.md](/home/dan/Projects/SynthiaAiNode/docs/ai-node/ui-redesign-audit.md)
+- [node-phase2-lifecycle-contract.md](/home/dan/Projects/HexeAiNode/docs/Core-Documents/nodes/node-phase2-lifecycle-contract.md)
+- [node-capability-activation-architecture.md](/home/dan/Projects/HexeAiNode/docs/Core-Documents/nodes/node-capability-activation-architecture.md)
+- [phase-2.md](/home/dan/Projects/HexeAiNode/docs/ai-node/phase-2.md)
+- [ui-redesign-audit.md](/home/dan/Projects/HexeAiNode/docs/ai-node/ui-redesign-audit.md)
 
 ## Canonical UI Layers
 
@@ -73,10 +73,10 @@ Mode resolution must use a single resolver, not scattered inline checks.
 
 Implementation note:
 
-- the current canonical resolver lives in [uiModeResolver.ts](/home/dan/Projects/SynthiaAiNode/frontend/src/features/node-ui/uiModeResolver.ts)
-- canonical route helpers live in [uiRoutes.ts](/home/dan/Projects/SynthiaAiNode/frontend/src/features/node-ui/uiRoutes.ts)
-- current resolver coverage lives in [uiModeResolver.test.ts](/home/dan/Projects/SynthiaAiNode/frontend/src/features/node-ui/uiModeResolver.test.ts)
-- rendering coverage lives in [uiRendering.test.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/node-ui/uiRendering.test.tsx)
+- the current canonical resolver lives in [uiModeResolver.ts](/home/dan/Projects/HexeAiNode/frontend/src/features/node-ui/uiModeResolver.ts)
+- canonical route helpers live in [uiRoutes.ts](/home/dan/Projects/HexeAiNode/frontend/src/features/node-ui/uiRoutes.ts)
+- current resolver coverage lives in [uiModeResolver.test.ts](/home/dan/Projects/HexeAiNode/frontend/src/features/node-ui/uiModeResolver.test.ts)
+- rendering coverage lives in [uiRendering.test.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/node-ui/uiRendering.test.tsx)
 
 Resolver outputs:
 
@@ -169,7 +169,7 @@ If onboarding history is shown in operational mode, it must be compact and secon
   - preserve existing node-name / Core-endpoint form
   - submit onboarding start
   - no operational dashboard content
-  - current implementation lives in [IdentityScreen.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/node-ui/IdentityScreen.jsx)
+  - current implementation lives in [IdentityScreen.jsx](/home/dan/Projects/HexeAiNode/frontend/src/features/node-ui/IdentityScreen.jsx)
 
 ### Setup Layer
 
@@ -181,7 +181,7 @@ If onboarding history is shown in operational mode, it must be compact and secon
   - stage-aware action footer
 - `SetupModeView`
   - wraps setup shell and completion handoff state
-  - current implementation lives in [SetupModeView.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/setup/SetupModeView.jsx)
+  - current implementation lives in [SetupModeView.jsx](/home/dan/Projects/HexeAiNode/frontend/src/features/setup/SetupModeView.jsx)
 
 Setup stage panels:
 
@@ -202,7 +202,7 @@ Setup stage panels:
   - content outlet
 - `OperationalDashboard`
   - route-aware operational page composition
-  - current implementation lives in [OperationalDashboard.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/operational/OperationalDashboard.jsx)
+  - current implementation lives in [OperationalDashboard.jsx](/home/dan/Projects/HexeAiNode/frontend/src/features/operational/OperationalDashboard.jsx)
 
 Operational sections:
 
@@ -214,9 +214,9 @@ Operational sections:
 
 Operational support components:
 
-- [DegradedStateBanner.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/operational/DegradedStateBanner.tsx)
-- [OperationalActionsCard.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/operational/cards/OperationalActionsCard.tsx)
-- [CompactChipList.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/operational/cards/CompactChipList.tsx)
+- [DegradedStateBanner.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/operational/DegradedStateBanner.tsx)
+- [OperationalActionsCard.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/operational/cards/OperationalActionsCard.tsx)
+- [CompactChipList.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/operational/cards/CompactChipList.tsx)
 
 ## Setup Stage Model
 
@@ -335,9 +335,9 @@ Setup feature owns:
 
 Current implementation references:
 
-- [SetupShell.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/setup/SetupShell.tsx)
-- [SetupStepper.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/setup/SetupStepper.tsx)
-- [SetupStagePanels.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/setup/SetupStagePanels.jsx)
+- [SetupShell.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/setup/SetupShell.tsx)
+- [SetupStepper.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/setup/SetupStepper.tsx)
+- [SetupStagePanels.jsx](/home/dan/Projects/HexeAiNode/frontend/src/features/setup/SetupStagePanels.jsx)
 
 Operational feature owns:
 
@@ -348,15 +348,15 @@ Operational feature owns:
 
 Current implementation references:
 
-- [OperationalShell.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/operational/OperationalShell.tsx)
-- [NodeHealthStrip.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/operational/NodeHealthStrip.tsx)
-- [NodeOverviewCard.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/operational/cards/NodeOverviewCard.tsx)
-- [CapabilitySummaryCard.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/operational/cards/CapabilitySummaryCard.tsx)
-- [ResolvedTasksCard.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/operational/cards/ResolvedTasksCard.tsx)
-- [RuntimeServicesCard.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/operational/cards/RuntimeServicesCard.tsx)
-- [RecentActivityCard.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/operational/cards/RecentActivityCard.tsx)
-- [DiagnosticsPage.tsx](/home/dan/Projects/SynthiaAiNode/frontend/src/features/diagnostics/DiagnosticsPage.tsx)
-- [uiPrimitives.jsx](/home/dan/Projects/SynthiaAiNode/frontend/src/components/uiPrimitives.jsx)
+- [OperationalShell.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/operational/OperationalShell.tsx)
+- [NodeHealthStrip.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/operational/NodeHealthStrip.tsx)
+- [NodeOverviewCard.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/operational/cards/NodeOverviewCard.tsx)
+- [CapabilitySummaryCard.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/operational/cards/CapabilitySummaryCard.tsx)
+- [ResolvedTasksCard.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/operational/cards/ResolvedTasksCard.tsx)
+- [RuntimeServicesCard.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/operational/cards/RuntimeServicesCard.tsx)
+- [RecentActivityCard.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/operational/cards/RecentActivityCard.tsx)
+- [DiagnosticsPage.tsx](/home/dan/Projects/HexeAiNode/frontend/src/features/diagnostics/DiagnosticsPage.tsx)
+- [uiPrimitives.jsx](/home/dan/Projects/HexeAiNode/frontend/src/components/uiPrimitives.jsx)
 
 Diagnostics feature owns:
 

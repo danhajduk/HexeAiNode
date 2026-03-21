@@ -51,7 +51,6 @@ ALLOWED_LINE_PATTERNS = (
     re.compile(r"Synthia Core"),
     re.compile(r"Compatibility-sensitive identifiers such as"),
     re.compile(r"synthia_theme"),
-    re.compile(r"/home/dan/Projects/SynthiaAiNode"),
     re.compile(r"/path/to/SynthiaCore"),
     re.compile(r"\.\./Synthia"),
     re.compile(r"`Synthia` naming"),

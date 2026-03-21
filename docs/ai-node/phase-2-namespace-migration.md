@@ -35,9 +35,9 @@ The current repository still uses the following legacy MQTT roots in active code
 
 Verified code locations:
 
-- [bootstrap_config.py](/home/dan/Projects/SynthiaAiNode/src/ai_node/config/bootstrap_config.py)
-- [bootstrap_parser.py](/home/dan/Projects/SynthiaAiNode/src/ai_node/bootstrap/bootstrap_parser.py)
-- [trusted_status_telemetry.py](/home/dan/Projects/SynthiaAiNode/src/ai_node/runtime/trusted_status_telemetry.py)
+- [bootstrap_config.py](/home/dan/Projects/HexeAiNode/src/ai_node/config/bootstrap_config.py)
+- [bootstrap_parser.py](/home/dan/Projects/HexeAiNode/src/ai_node/bootstrap/bootstrap_parser.py)
+- [trusted_status_telemetry.py](/home/dan/Projects/HexeAiNode/src/ai_node/runtime/trusted_status_telemetry.py)
 
 ## Target Namespace
 

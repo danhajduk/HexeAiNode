@@ -14,7 +14,7 @@ Completed on: 2026-03-20
 
 - targeted code scan confirms active runtime code no longer uses `synthia/...` MQTT topics
 - local bootstrap, onboarding, telemetry, security-boundary, node-control, and execution contract tests passed with the Hexe namespace
-- the namespace verification checklist is recorded in [phase-2-namespace-verification-checklist.md](/home/dan/Projects/SynthiaAiNode/docs/ai-node/phase-2-namespace-verification-checklist.md)
+- the namespace verification checklist is recorded in [phase-2-namespace-verification-checklist.md](/home/dan/Projects/HexeAiNode/docs/ai-node/phase-2-namespace-verification-checklist.md)
 
 ## Live Integration Follow-Up
 
