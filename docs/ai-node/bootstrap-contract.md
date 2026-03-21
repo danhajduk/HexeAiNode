@@ -40,7 +40,7 @@ Node name is bootstrap identity only. It is not a trusted credential.
 The node must subscribe to this exact topic:
 
 ```text
-synthia/bootstrap/core
+hexe/bootstrap/core
 ```
 
 Rules:
@@ -85,7 +85,7 @@ Example payload:
 
 ```json
 {
-  "topic": "synthia/bootstrap/core",
+  "topic": "hexe/bootstrap/core",
   "bootstrap_version": 1,
   "core_id": "core-main",
   "core_name": "Synthia Core",
@@ -130,7 +130,7 @@ When a node receives bootstrap payload it must validate:
 
 - payload is valid JSON
 - all required fields are present
-- `topic == "synthia/bootstrap/core"`
+- `topic == "hexe/bootstrap/core"`
 - `bootstrap_version` is supported
 - `onboarding_mode == "api"`
 - `api_base` is non-empty
@@ -149,7 +149,7 @@ Node must not treat bootstrap as durable trust state. Durable trust begins only 
 An untrusted node sequence:
 
 1. Connect anonymously to operator-provided MQTT host on port `1884`.
-2. Subscribe to `synthia/bootstrap/core`.
+2. Subscribe to `hexe/bootstrap/core`.
 3. Wait for valid Core bootstrap payload.
 4. Validate payload fields and constraints.
 5. Build registration URL from `api_base` + `onboarding_endpoints.register_session`.

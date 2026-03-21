@@ -218,6 +218,20 @@ Task 235: Add section extractor for audio/realtime pricing - Completed on 03/14/
 Task 236: Add section extractor for image generation pricing - Completed on 03/14/2026 18:23
 Task 237: Add section extractor for video pricing - Completed on 03/14/2026 18:24
 Task 238: Add section extractor for STT/TTS/other model pricing - Completed on 03/14/2026 18:24
+Task 419: Create internal cleanup document - Completed on 03/20/2026 19:45
+Task 420: Audit remaining `Synthia` references - Completed on 03/20/2026 19:45
+Task 421: Rename internal helpers and constants - Completed on 03/20/2026 19:45
+Task 422: Update logs and runtime labels - Completed on 03/20/2026 19:45
+Task 423: Update prompt templates - Completed on 03/20/2026 19:45
+Task 424: Update API/status display labels - Completed on 03/20/2026 19:45
+Task 425: Update docs to Hexe naming - Completed on 03/20/2026 19:45
+Task 426: Update scripts/config/examples - Completed on 03/20/2026 19:45
+Task 427: Review file/module renames (optional) - Completed on 03/20/2026 19:45
+Task 428: Update tests and fixtures - Completed on 03/20/2026 19:45
+Task 429: Add safeguard against legacy reintroduction - Completed on 03/20/2026 19:45
+Task 430: Archive unavoidable legacy references - Completed on 03/20/2026 19:45
+Task 431: Verify runtime behavior - Completed on 03/20/2026 19:45
+Task 432: Phase 3 completion report - Completed on 03/20/2026 19:45
 Task 239: Add section extractor for embeddings pricing - Completed on 03/14/2026 18:25
 Task 240: Add section extractor for moderation pricing - Completed on 03/14/2026 18:26
 Task 241: Create family-specific pricing extraction prompts - Completed on 03/14/2026 18:28
@@ -381,3 +395,21 @@ Task 396: Verify no protocol breakage - Completed on 03/20/2026 19:31
 Task 397: Add tests for branding correctness - Completed on 03/20/2026 19:31
 Task 398: Run full verification pass - Completed on 03/20/2026 19:31
 Task 399: Create completion report - Completed on 03/20/2026 19:31
+Task 400: Create namespace migration document - Completed on 03/20/2026 19:38
+Task 401: Set MQTT topic root to Hexe - Completed on 03/20/2026 19:38
+Task 402: Refactor MQTT topic helpers - Completed on 03/20/2026 19:38
+Task 403: Replace hardcoded MQTT topics - Completed on 03/20/2026 19:38
+Task 404: Migrate bootstrap topic - Completed on 03/20/2026 19:38
+Task 405: Migrate notification topics - Completed on 03/20/2026 19:38
+Task 406: Migrate node communication topics - Completed on 03/20/2026 19:38
+Task 407: Update task dispatch topics - Completed on 03/20/2026 19:38
+Task 408: Update subscription patterns - Completed on 03/20/2026 19:38
+Task 409: Update topic classification logic - Completed on 03/20/2026 19:38
+Task 410: Update docs and examples - Completed on 03/20/2026 19:38
+Task 411: Update test fixtures - Completed on 03/20/2026 19:38
+Task 412: Audit for remaining synthia topics - Completed on 03/20/2026 19:38
+Task 413: Verify onboarding flow - Completed on 03/20/2026 19:38
+Task 414: Verify task pipeline - Completed on 03/20/2026 19:38
+Task 415: Verify notification flow - Completed on 03/20/2026 19:38
+Task 417: Namespace verification checklist - Completed on 03/20/2026 19:38
+Task 418: Phase 2 completion report - Completed on 03/20/2026 19:38

@@ -20,7 +20,7 @@
 - [Core References](./core-references.md): canonical platform documents and `docs/Core-Documents` symlink hints.
 - [Documentation Policy](./README.md): what stays in this repo versus what belongs in Core.
 
-Internal identifiers such as MQTT topics, task families, service IDs, and header names may still use legacy `Synthia` naming during migration.
+Compatibility-sensitive identifiers such as `X-Synthia-*` headers and `synthia-*` service IDs still use legacy naming during migration.
 
 ## Operations
 

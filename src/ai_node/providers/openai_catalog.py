@@ -607,7 +607,7 @@ class OpenAIPricingHTMLFetcher:
             raise ValueError("openai_pricing_source_urls_empty")
         errors = []
         headers = {
-            "User-Agent": "SynthiaAiNode/0.1 (+https://openai.com/)",
+            "User-Agent": "HexeAiNode/0.1 (+https://openai.com/)",
             "Accept": "text/markdown,text/plain,text/html,application/xhtml+xml",
         }
         for url in urls:

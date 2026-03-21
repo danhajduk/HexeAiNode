@@ -48,7 +48,7 @@ class Phase1ABootstrapTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(config.node_name, "node-a")
         self.assertEqual(config.port, 1884)
         self.assertTrue(config.anonymous)
-        self.assertEqual(config.topic, "synthia/bootstrap/core")
+        self.assertEqual(config.topic, "hexe/bootstrap/core")
 
         with self.assertRaisesRegex(ValueError, "required"):
             create_bootstrap_config({"bootstrap_host": "", "node_name": "node-a"})
@@ -66,7 +66,7 @@ class Phase1ABootstrapTests(unittest.IsolatedAsyncioTestCase):
 
     def test_bootstrap_payload_validation(self):
         sample = {
-            "topic": "synthia/bootstrap/core",
+            "topic": "hexe/bootstrap/core",
             "bootstrap_version": 1,
             "core_id": "core-main",
             "core_name": "Synthia Core",
@@ -145,7 +145,7 @@ class Phase1ABootstrapTests(unittest.IsolatedAsyncioTestCase):
         await client.connect(config, on_core_discovered=lambda payload: discovered.append(payload))
 
         payload = {
-            "topic": "synthia/bootstrap/core",
+            "topic": "hexe/bootstrap/core",
             "bootstrap_version": 1,
             "core_id": "core-main",
             "core_name": "Synthia Core",
@@ -157,7 +157,7 @@ class Phase1ABootstrapTests(unittest.IsolatedAsyncioTestCase):
             "onboarding_mode": "api",
             "emitted_at": "2026-03-11T18:21:00Z",
         }
-        await fake_client.publish_message("synthia/bootstrap/core", str(payload).replace("'", '"'))
+        await fake_client.publish_message("hexe/bootstrap/core", str(payload).replace("'", '"'))
         self.assertEqual(len(discovered), 1)
         self.assertEqual(lifecycle.get_state(), NodeLifecycleState.CORE_DISCOVERED)
 

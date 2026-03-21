@@ -1,6 +1,6 @@
 # Hexe Rebranding Completion Report
 
-Status: Active
+Status: Historical migration record
 Completed on: 2026-03-20
 
 ## Completed Scope

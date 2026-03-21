@@ -40,7 +40,7 @@ Not allowed:
 Exact topic:
 
 ```text
-synthia/bootstrap/core
+hexe/bootstrap/core
 ```
 
 Allowed payload fields:
@@ -66,7 +66,7 @@ Compatibility metadata that may also appear:
 
 Validation constraints:
 
-- `topic == "synthia/bootstrap/core"`
+- `topic == "hexe/bootstrap/core"`
 - `bootstrap_version` is supported
 - `onboarding_mode == "api"`
 

@@ -1916,9 +1916,11 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/providers/openai/models/classification/refresh")
-    async def post_openai_model_capabilities_refresh(x_synthia_admin_token: str | None = Header(default=None)):
+    async def post_openai_model_capabilities_refresh(
+        x_admin_token: str | None = Header(default=None, alias="X-Synthia-Admin-Token")
+    ):
         try:
-            require_admin(x_synthia_admin_token)
+            require_admin(x_admin_token)
             response = await state.rerun_openai_model_capabilities()
             payload = {**response, "declaration": {"status": "pending_manual", "reason": "capability_catalog_refresh"}}
             await state.notify_workflow_request(
@@ -1972,9 +1974,11 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/capabilities/rebuild")
-    async def post_capability_rebuild(x_synthia_admin_token: str | None = Header(default=None)):
+    async def post_capability_rebuild(
+        x_admin_token: str | None = Header(default=None, alias="X-Synthia-Admin-Token")
+    ):
         try:
-            require_admin(x_synthia_admin_token)
+            require_admin(x_admin_token)
             response = await state.rebuild_node_capabilities()
             await state.notify_workflow_request(
                 workflow_request="node_capability_rebuild",
@@ -1993,10 +1997,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.post("/api/capabilities/redeclare")
     async def post_capability_redeclare(
         payload: RefreshTriggerRequest,
-        x_synthia_admin_token: str | None = Header(default=None),
+        x_admin_token: str | None = Header(default=None, alias="X-Synthia-Admin-Token"),
     ):
         try:
-            require_admin(x_synthia_admin_token)
+            require_admin(x_admin_token)
             return await state.redeclare_capabilities(reason="manual_redeclare", force=payload.force_refresh)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2026,10 +2030,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.post("/api/capabilities/providers/refresh")
     async def post_provider_capability_refresh(
         payload: ProviderCapabilityRefreshRequest,
-        x_synthia_admin_token: str | None = Header(default=None),
+        x_admin_token: str | None = Header(default=None, alias="X-Synthia-Admin-Token"),
     ):
         try:
-            require_admin(x_synthia_admin_token)
+            require_admin(x_admin_token)
             response = await state.refresh_provider_capabilities(force_refresh=payload.force_refresh)
             result = {**response, "declaration": {"status": "pending_manual", "reason": "provider_capability_refresh"}}
             await state.notify_workflow_request(
@@ -2176,8 +2180,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         return state.execution_observability_payload()
 
     @app.get("/api/capabilities/diagnostics")
-    def get_capability_diagnostics(x_synthia_admin_token: str | None = Header(default=None)):
-        require_admin(x_synthia_admin_token)
+    def get_capability_diagnostics(x_admin_token: str | None = Header(default=None, alias="X-Synthia-Admin-Token")):
+        require_admin(x_admin_token)
         return state.capability_diagnostics_payload()
 
     if hasattr(logger, "info"):

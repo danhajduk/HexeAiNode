@@ -175,19 +175,19 @@ class _FakeTelemetryPublisher:
         self.last = None
 
     def status_payload(self):
-        return {"published": self.last is not None, "last_topic": "synthia/nodes/node-001/status"}
+        return {"published": self.last is not None, "last_topic": "hexe/nodes/node-001/status"}
 
     async def publish_status(self, **kwargs):
         self.last = kwargs
-        return {"published": True, "last_error": None, "last_topic": "synthia/nodes/node-001/status"}
+        return {"published": True, "last_error": None, "last_topic": "hexe/nodes/node-001/status"}
 
 
 class _FakeTelemetryPublisherFailure:
     def status_payload(self):
-        return {"published": False, "last_topic": "synthia/nodes/node-001/status"}
+        return {"published": False, "last_topic": "hexe/nodes/node-001/status"}
 
     async def publish_status(self, **_kwargs):
-        return {"published": False, "last_error": "mqtt_unavailable", "last_topic": "synthia/nodes/node-001/status"}
+        return {"published": False, "last_error": "mqtt_unavailable", "last_topic": "hexe/nodes/node-001/status"}
 
 
 class _FakeCapabilityStateStore:

@@ -11,7 +11,7 @@ class SecurityBoundariesTests(unittest.TestCase):
     def test_enforce_bootstrap_boundary_rejects_trust_fields(self):
         ok, error = enforce_bootstrap_security_boundary(
             {
-                "topic": "synthia/bootstrap/core",
+                "topic": "hexe/bootstrap/core",
                 "node_trust_token": "bad",
             }
         )
@@ -19,7 +19,7 @@ class SecurityBoundariesTests(unittest.TestCase):
         self.assertIn("forbidden_bootstrap_fields", error)
 
     def test_enforce_bootstrap_boundary_accepts_discovery_only_payload(self):
-        ok, error = enforce_bootstrap_security_boundary({"topic": "synthia/bootstrap/core"})
+        ok, error = enforce_bootstrap_security_boundary({"topic": "hexe/bootstrap/core"})
         self.assertTrue(ok)
         self.assertIsNone(error)
 

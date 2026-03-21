@@ -82,7 +82,7 @@ def validate_bootstrap_payload(
     payload: object,
     *,
     supported_versions: Iterable[int] = (1,),
-    expected_topic: str = "synthia/bootstrap/core",
+    expected_topic: str = "hexe/bootstrap/core",
 ) -> Tuple[bool, object]:
     if not isinstance(payload, dict):
         return False, "invalid_payload"

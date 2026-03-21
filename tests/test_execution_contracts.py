@@ -87,11 +87,11 @@ class _FakeStatusPublisher:
         self.calls = []
 
     def status_payload(self):
-        return {"published": bool(self.calls), "last_topic": "synthia/nodes/node-001/status"}
+        return {"published": bool(self.calls), "last_topic": "hexe/nodes/node-001/status"}
 
     async def publish_status(self, **kwargs):
         self.calls.append(kwargs)
-        return {"published": True, "last_error": None, "last_topic": "synthia/nodes/node-001/status"}
+        return {"published": True, "last_error": None, "last_topic": "hexe/nodes/node-001/status"}
 
 
 class _FakeLeaseIntegration:

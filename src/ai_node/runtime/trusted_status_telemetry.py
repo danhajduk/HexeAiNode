@@ -82,7 +82,7 @@ class TrustedStatusTelemetryPublisher:
         if not host or not identity or not token or port <= 0:
             return self._record(False, "invalid_operational_mqtt_credentials", None)
 
-        topic = f"synthia/nodes/{node_id}/status"
+        topic = f"hexe/nodes/{node_id}/status"
         result = dict(payload)
         result["node_id"] = node_id
         result["timestamp"] = local_now_iso()

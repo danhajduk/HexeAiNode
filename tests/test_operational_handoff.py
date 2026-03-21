@@ -15,7 +15,7 @@ class OperationalHandoffTests(unittest.TestCase):
             bootstrap_config={
                 "bootstrap_host": "192.168.1.10",
                 "port": 1884,
-                "topic": "synthia/bootstrap/core",
+                "topic": "hexe/bootstrap/core",
             },
         )
 
@@ -36,7 +36,7 @@ class OperationalHandoffTests(unittest.TestCase):
                 bootstrap_config={
                     "bootstrap_host": "192.168.1.10",
                     "port": 1884,
-                    "topic": "synthia/bootstrap/core",
+                    "topic": "hexe/bootstrap/core",
                 },
             )
 

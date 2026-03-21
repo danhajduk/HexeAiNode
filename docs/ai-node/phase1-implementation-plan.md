@@ -39,7 +39,7 @@ Out of scope for this phase:
 1. Load node bootstrap config and local trust state.
 2. If trust state is valid, skip bootstrap and restore trusted state path.
 3. If trust state is missing/invalid, connect to bootstrap MQTT.
-4. Subscribe to `synthia/bootstrap/core` and validate payload.
+4. Subscribe to `hexe/bootstrap/core` and validate payload.
 5. Build registration URL and submit registration to Core API.
 6. Wait on pending approval without re-register loops.
 7. On approval, validate trust activation payload.

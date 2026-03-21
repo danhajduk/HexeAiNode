@@ -1,6 +1,6 @@
 # Hexe Rebranding Audit
 
-Status: Active
+Status: Historical migration record
 Last updated: 2026-03-20
 
 ## Scope

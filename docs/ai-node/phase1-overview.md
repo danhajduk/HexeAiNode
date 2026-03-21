@@ -32,7 +32,7 @@ Phase 1 excludes AI execution and provider runtime features.
 
 ## Bootstrap Contract Snapshot
 
-- Topic: `synthia/bootstrap/core`
+- Topic: `hexe/bootstrap/core`
 - Port: `1884`
 - Access: anonymous, subscribe-only
 - Required payload fields:

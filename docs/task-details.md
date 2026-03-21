@@ -258,6 +258,18 @@ Task mapping:
 - Task 343: Add local admin/debug APIs for cached grants, usage, reservations, and denials
 - Task 344: Add automated budget reset / rollover handling
 - Task 345: Add tests for reservation math and settlement behavior
+
+## Task 416
+Original task source: `docs/New_tasks.txt`
+
+Blocker:
+- Full live integration verification with Hexe Core is not verifiable from current repository state.
+- This workspace does not provide a running Core target or integration harness for an end-to-end broker/API validation run.
+
+What was completed locally:
+- runtime MQTT namespace migrated from `synthia/...` to `hexe/...` for the implemented bootstrap and trusted-status paths
+- tests and documentation were updated to match the migrated namespace
+- local verification completed through targeted unit/integration test coverage
 - Task 346: Add tests for concurrency and double-spend prevention
 - Task 347: Add tests for missing, stale, exhausted, or inconsistent grants
 - Task 348: Add end-to-end local budget-enforcement tests without Core on the hot path

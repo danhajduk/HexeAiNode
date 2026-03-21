@@ -33,7 +33,7 @@ class TrustedStatusTelemetryTests(unittest.IsolatedAsyncioTestCase):
             payload={"overall_status": "operational"},
         )
         self.assertTrue(result["published"])
-        self.assertEqual(adapter.calls[0]["topic"], "synthia/nodes/node-1/status")
+        self.assertEqual(adapter.calls[0]["topic"], "hexe/nodes/node-1/status")
 
     async def test_publish_status_rejects_missing_credentials(self):
         adapter = _FakeAdapter()

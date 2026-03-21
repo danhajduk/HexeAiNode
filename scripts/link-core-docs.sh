@@ -10,7 +10,7 @@ TARGET_LINK="${REPO_ROOT}/docs/core"
 
 if [[ ! -d "${CORE_DOCS}" ]]; then
   printf 'Core docs directory not found: %s\n' "${CORE_DOCS}" >&2
-  printf 'Pass the Synthia Core repo path explicitly, for example:\n' >&2
+  printf 'Pass the Hexe Core repo path explicitly, for example:\n' >&2
   printf '  %s /path/to/SynthiaCore\n' "${0}" >&2
   exit 1
 fi

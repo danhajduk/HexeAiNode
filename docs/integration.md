@@ -12,7 +12,7 @@ This document summarizes how this node uses platform contracts without redefinin
 ## MQTT Usage
 
 - bootstrap discovery uses anonymous MQTT through the bootstrap runner
-- trusted operational status uses `synthia/nodes/{node_id}/status`
+- trusted operational status uses `hexe/nodes/{node_id}/status`
 - trusted telemetry uses operational MQTT credentials from local trust state
 
 ## Capabilities Declared

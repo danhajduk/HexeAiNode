@@ -493,7 +493,7 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertTrue(path.exists())
             self.assertEqual(lifecycle.get_state(), NodeLifecycleState.BOOTSTRAP_CONNECTING)
             self.assertEqual(len(runner.calls), 1)
-            self.assertEqual(runner.calls[0]["topic"], "synthia/bootstrap/core")
+            self.assertEqual(runner.calls[0]["topic"], "hexe/bootstrap/core")
 
     def test_initiate_onboarding_preserves_friendly_node_name(self):
         with tempfile.TemporaryDirectory() as tmp:

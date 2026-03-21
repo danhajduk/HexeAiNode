@@ -1,6 +1,6 @@
 # Hexe AI Node (Python)
 
-Internal identifiers, environment variable prefixes, and protocol-level names may still use legacy `Synthia` naming during this compatibility phase.
+Compatibility-sensitive identifiers such as `X-Synthia-*` headers and `synthia-*` service IDs still use legacy naming during this migration phase.
 
 ## Environment setup
 

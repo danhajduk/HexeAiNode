@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 BOOTSTRAP_PORT = 1884
 BOOTSTRAP_ANONYMOUS = True
-BOOTSTRAP_TOPIC = "synthia/bootstrap/core"
+BOOTSTRAP_TOPIC = "hexe/bootstrap/core"
 
 
 @dataclass(frozen=True)

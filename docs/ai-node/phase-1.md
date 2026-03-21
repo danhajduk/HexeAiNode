@@ -17,7 +17,7 @@ Allow an AI Node to securely join the Hexe system.
 ## Flow
 
 1. Node connects to MQTT bootstrap port `1884`
-2. Node subscribes to `synthia/bootstrap/core`
+2. Node subscribes to `hexe/bootstrap/core`
 3. Core broadcasts bootstrap message
 4. Node receives API base + onboarding endpoint
 5. Node submits registration request to Core
