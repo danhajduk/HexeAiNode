@@ -232,6 +232,7 @@ Task 429: Add safeguard against legacy reintroduction - Completed on 03/20/2026 
 Task 430: Archive unavoidable legacy references - Completed on 03/20/2026 19:45
 Task 431: Verify runtime behavior - Completed on 03/20/2026 19:45
 Task 432: Phase 3 completion report - Completed on 03/20/2026 19:45
+Task 416: Full integration test with Core - Completed on 03/20/2026 19:54
 Task 239: Add section extractor for embeddings pricing - Completed on 03/14/2026 18:25
 Task 240: Add section extractor for moderation pricing - Completed on 03/14/2026 18:26
 Task 241: Create family-specific pricing extraction prompts - Completed on 03/14/2026 18:28

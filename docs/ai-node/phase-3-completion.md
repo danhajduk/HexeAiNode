@@ -1,6 +1,6 @@
 # Hexe AI Node — Phase 3 Completion
 
-Status: Complete except blocked Core integration follow-up
+Status: Complete
 Last updated: 2026-03-20
 
 ## Completed Local Cleanup
@@ -29,6 +29,6 @@ These remain intentionally:
 - `cd frontend && npm test`
 - `cd frontend && npm run build`
 
-## Blockers
+## Integration Follow-Up
 
-- Task 416 remains blocked by a live Core registration contract mismatch: bootstrap discovery now works against the real Core target, but Core rejects the node registration with `node_id_invalid`.
+- Task 416 is now verified live after the Core-side UUID `node_id` validator was aligned with the node onboarding contract.

@@ -262,16 +262,16 @@ Task mapping:
 ## Task 416
 Original task source: `docs/New_tasks.txt`
 
-Blocker:
-- A live Core target is now reachable, but the end-to-end registration handshake fails at the Core API contract.
-- Core rejects the node registration request with `400 node_id_invalid` after successful bootstrap discovery.
+Status:
+- Completed on 2026-03-20 through live Core verification plus coordinated Core validator fix.
 
-What was completed locally:
+What was verified live:
 - runtime MQTT namespace migrated from `synthia/...` to `hexe/...` for the implemented bootstrap and trusted-status paths
 - tests and documentation were updated to match the migrated namespace
 - local verification completed through targeted unit/integration test coverage
 - live verification confirmed that the node subscribes to `hexe/bootstrap/core`, discovers Core, and attempts registration against `/api/system/nodes/onboarding/sessions`
 - live verification also confirmed that on startup the node now honors Core trust-status removal and resets itself from the stale trusted state back to `unconfigured`
+- after updating the live Core validator, direct Core onboarding accepted UUIDv4 `node_id` values, created an approved registration, and returned a trust activation payload with the same UUID `node_id`
 - Task 346: Add tests for concurrency and double-spend prevention
 - Task 347: Add tests for missing, stale, exhausted, or inconsistent grants
 - Task 348: Add end-to-end local budget-enforcement tests without Core on the hot path
@@ -288,10 +288,9 @@ Observed live integration result on 2026-03-20:
 - Node control API responded at `http://127.0.0.1:9002/api/node/status`
 - node startup queried Core trust status for the stale node identity and Core returned `support_state=removed`
 - after restarting setup, the node connected to MQTT host `10.0.0.100:1884`, subscribed to `hexe/bootstrap/core`, discovered Core, and transitioned through `bootstrap_connected -> core_discovered -> registration_pending`
-- Core rejected the real registration request to `http://10.0.0.100:9001/api/system/nodes/onboarding/sessions` with `node_id_invalid`
-
-Current next step:
-- resolve the node ID contract mismatch between this repository's UUID identity strategy and the currently running Core validation rules, then rerun Task 416
+- the original blocker was a Core-side `node_id_invalid` rejection for UUIDv4 node identities
+- after updating the live Core validator, the real Core API accepted UUIDv4 `node_id` values and completed `start -> approve -> finalize`
+- approved registration record and trust activation payload both preserved `node_id = 123e4567-e89b-42d3-a456-426614174000`
 
 ## Task 367-371
 Original task source: user request on 2026-03-20

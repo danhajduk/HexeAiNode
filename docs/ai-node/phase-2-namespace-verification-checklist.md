@@ -35,6 +35,6 @@ These are not active runtime MQTT references and remain outside this checklist's
 
 - [x] live Core target was reached from this workspace
 - [x] node subscribed to `hexe/bootstrap/core` and discovered Core over the live broker path
-- [ ] live registration handshake completes successfully with Core
+- [x] live registration handshake completes successfully with Core
 
-Status: Partially verified live. The remaining blocker is a Core registration rejection with `node_id_invalid`.
+Status: Fully verified live.

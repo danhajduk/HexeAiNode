@@ -18,9 +18,9 @@ Completed on: 2026-03-20
 
 ## Live Integration Follow-Up
 
-- a live Hexe Core target was later verified from this workspace
-- the node successfully subscribed to `hexe/bootstrap/core`, discovered Core, and attempted a real registration request
-- the current end-to-end blocker is no longer environment availability; it is a Core-side `node_id_invalid` rejection during registration
+- a live Hexe Core target was verified from this workspace
+- the node successfully subscribed to `hexe/bootstrap/core`, discovered Core, and reached the live registration path
+- after aligning the live Core validator with the UUIDv4 node identity contract, Core accepted a UUID `node_id`, created the onboarding session, approved the registration, and issued a trust activation payload that preserved the UUID
 
 ## Remaining Legacy Items Outside Phase 2 Scope
 
@@ -32,4 +32,4 @@ Completed on: 2026-03-20
 
 The repository is locally ready for the MQTT namespace migration scope implemented here.
 
-Before declaring full platform completion for Phase 2, the live registration contract mismatch must be resolved and the integration run repeated.
+Phase 2 live namespace integration is now verified.
