@@ -16,11 +16,11 @@ Completed on: 2026-03-20
 - local bootstrap, onboarding, telemetry, security-boundary, node-control, and execution contract tests passed with the Hexe namespace
 - the namespace verification checklist is recorded in [phase-2-namespace-verification-checklist.md](/home/dan/Projects/SynthiaAiNode/docs/ai-node/phase-2-namespace-verification-checklist.md)
 
-## What Was Not Verifiable
+## Live Integration Follow-Up
 
-- full integration with a live Hexe Core instance
-
-Current status: Not verifiable from current repository state because no live Core environment is available in this workspace.
+- a live Hexe Core target was later verified from this workspace
+- the node successfully subscribed to `hexe/bootstrap/core`, discovered Core, and attempted a real registration request
+- the current end-to-end blocker is no longer environment availability; it is a Core-side `node_id_invalid` rejection during registration
 
 ## Remaining Legacy Items Outside Phase 2 Scope
 
@@ -32,4 +32,4 @@ Current status: Not verifiable from current repository state because no live Cor
 
 The repository is locally ready for the MQTT namespace migration scope implemented here.
 
-Before declaring full platform completion for Phase 2, a live Core integration run is still required.
+Before declaring full platform completion for Phase 2, the live registration contract mismatch must be resolved and the integration run repeated.

@@ -31,4 +31,4 @@ These remain intentionally:
 
 ## Blockers
 
-- Task 416 remains blocked because this workspace does not include a live Hexe Core integration target for end-to-end verification.
+- Task 416 remains blocked by a live Core registration contract mismatch: bootstrap discovery now works against the real Core target, but Core rejects the node registration with `node_id_invalid`.

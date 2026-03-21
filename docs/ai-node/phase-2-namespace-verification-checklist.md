@@ -33,6 +33,8 @@ These are not active runtime MQTT references and remain outside this checklist's
 
 ## Blocked Verification
 
-- [ ] live end-to-end integration with a real Core instance
+- [x] live Core target was reached from this workspace
+- [x] node subscribed to `hexe/bootstrap/core` and discovered Core over the live broker path
+- [ ] live registration handshake completes successfully with Core
 
-Status: Not verifiable from current repository state because this workspace does not provide a running Hexe Core integration target.
+Status: Partially verified live. The remaining blocker is a Core registration rejection with `node_id_invalid`.

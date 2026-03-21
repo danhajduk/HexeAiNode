@@ -263,13 +263,15 @@ Task mapping:
 Original task source: `docs/New_tasks.txt`
 
 Blocker:
-- Full live integration verification with Hexe Core is not verifiable from current repository state.
-- This workspace does not provide a running Core target or integration harness for an end-to-end broker/API validation run.
+- A live Core target is now reachable, but the end-to-end registration handshake fails at the Core API contract.
+- Core rejects the node registration request with `400 node_id_invalid` after successful bootstrap discovery.
 
 What was completed locally:
 - runtime MQTT namespace migrated from `synthia/...` to `hexe/...` for the implemented bootstrap and trusted-status paths
 - tests and documentation were updated to match the migrated namespace
 - local verification completed through targeted unit/integration test coverage
+- live verification confirmed that the node subscribes to `hexe/bootstrap/core`, discovers Core, and attempts registration against `/api/system/nodes/onboarding/sessions`
+- live verification also confirmed that on startup the node now honors Core trust-status removal and resets itself from the stale trusted state back to `unconfigured`
 - Task 346: Add tests for concurrency and double-spend prevention
 - Task 347: Add tests for missing, stale, exhausted, or inconsistent grants
 - Task 348: Add end-to-end local budget-enforcement tests without Core on the hot path
@@ -280,6 +282,16 @@ What was completed locally:
 - governance is enforced during execution
 - telemetry reflects execution behavior
 - baseline task families are operational
+
+Observed live integration result on 2026-03-20:
+- Core API health responded at `http://127.0.0.1:9001/api/health`
+- Node control API responded at `http://127.0.0.1:9002/api/node/status`
+- node startup queried Core trust status for the stale node identity and Core returned `support_state=removed`
+- after restarting setup, the node connected to MQTT host `10.0.0.100:1884`, subscribed to `hexe/bootstrap/core`, discovered Core, and transitioned through `bootstrap_connected -> core_discovered -> registration_pending`
+- Core rejected the real registration request to `http://10.0.0.100:9001/api/system/nodes/onboarding/sessions` with `node_id_invalid`
+
+Current next step:
+- resolve the node ID contract mismatch between this repository's UUID identity strategy and the currently running Core validation rules, then rerun Task 416
 
 ## Task 367-371
 Original task source: user request on 2026-03-20
