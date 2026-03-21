@@ -4,7 +4,7 @@ export function SetupCoreConnectionPanel({ mqttHost, lifecycleState, nodeId }) {
   return (
     <div className="setup-stage-panel">
       <p className="muted">
-        The node is using the saved bootstrap host to establish its first Core connection and wait for bootstrap discovery.
+        The node is using the saved bootstrap host to establish its first Hexe Core connection and wait for bootstrap discovery.
       </p>
       <div className="state-grid">
         <span>Bootstrap Host</span>
@@ -22,7 +22,7 @@ export function SetupRegistrationPanel({ nodeId }) {
   return (
     <div className="setup-stage-panel">
       <p className="muted">
-        Core discovery completed. The node is now registering itself with Core and waiting for the approval session to be created.
+        Hexe Core discovery completed. The node is now registering itself and waiting for the approval session to be created.
       </p>
       <div className="state-grid">
         <span>Node ID</span>
@@ -38,13 +38,13 @@ export function SetupApprovalPanel({ nodeId, pendingApprovalUrl }) {
   return (
     <div className="setup-stage-panel">
       <p className="muted">
-        Registration is complete. Core must approve the node before trust activation and capability setup can continue.
+        Registration is complete. Hexe Core must approve the node before trust activation and capability setup can continue.
       </p>
       <div className="state-grid">
         <span>Node ID</span>
         <code>{nodeId || "unavailable"}</code>
         <span>Approval Link</span>
-        <code>{pendingApprovalUrl || "waiting_for_core"}</code>
+        <code>{pendingApprovalUrl || "waiting_for_hexe_core"}</code>
       </div>
     </div>
   );
@@ -61,7 +61,7 @@ export function SetupTrustActivationPanel({ trustStatus, pairedCoreId, startupMo
         <StatusBadge value={trustStatus || "unknown"} />
         <span>Startup Mode</span>
         <code>{startupMode || "unknown"}</code>
-        <span>Paired Core</span>
+        <span>Paired Hexe Core</span>
         <code>{pairedCoreId || "unavailable"}</code>
       </div>
     </div>
@@ -110,7 +110,7 @@ export function SetupCapabilityDeclarationPanel({
   return (
     <div className="setup-stage-panel">
       <p className="muted">
-        Review the declaration blockers, verify provider and task readiness, and submit the capability declaration to Core.
+        Review the declaration blockers, verify provider and task readiness, and submit the capability declaration to Hexe Core.
       </p>
       <div className="state-grid">
         <span>Declare Ready</span>
@@ -160,7 +160,7 @@ export function SetupReadyPanel({ pairedCoreId, lifecycleState, governanceFreshn
       <div className="state-grid">
         <span>Lifecycle</span>
         <StatusBadge value={lifecycleState || "unknown"} />
-        <span>Core</span>
+        <span>Hexe Core</span>
         <code>{pairedCoreId || "unavailable"}</code>
         <span>Governance</span>
         <StatusBadge value={governanceFreshness || "unknown"} />

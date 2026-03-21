@@ -53,7 +53,7 @@ Supported routes:
 
 The shared page header now follows a simple two-row structure:
 
-- row 1: `Synthia Ai-Node` title on the left and lifecycle status pill on the right
+- row 1: `Hexe AI Node` title on the left and lifecycle status pill on the right
 - row 2: theme control on the left and utility actions on the right
 
 Secondary metadata stays compact beneath that header instead of dominating the page.

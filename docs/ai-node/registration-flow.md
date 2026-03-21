@@ -1,4 +1,4 @@
-# Synthia AI Node — Registration Flow
+# Hexe AI Node — Registration Flow
 
 Status: Active
 Implementation status: Implemented in backend runtime

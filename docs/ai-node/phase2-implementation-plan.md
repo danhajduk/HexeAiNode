@@ -1,4 +1,4 @@
-# Synthia AI Node - Phase 2 Implementation Plan and Module Map
+# Hexe AI Node - Phase 2 Implementation Plan and Module Map
 
 Status: Active
 Implementation status: Complete for Phase 2 scope (Tasks 059-078 implemented)

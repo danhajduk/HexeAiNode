@@ -1,4 +1,4 @@
-# Synthia AI Node - Phase 1A Implementation Plan and Module Map
+# Hexe AI Node - Phase 1A Implementation Plan and Module Map
 
 Status: Active
 Implementation status: Phase 1 core + node identity tasks completed (Tasks 041-067)

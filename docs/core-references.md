@@ -1,8 +1,10 @@
 # Core References
 
-Canonical platform docs live in Synthia Core: `https://github.com/danhajduk/SynthiaCore`
+Canonical platform docs live in Hexe Core: `https://github.com/danhajduk/SynthiaCore`
 
 Local developer convenience symlink: `docs/Core-Documents -> /home/dan/Projects/Synthia/docs`
+
+Compatibility note: the canonical Core repository and local path still use legacy `SynthiaCore` / `Synthia` naming during migration.
 
 | Topic | Local symlink path | Canonical Core link | Notes |
 | --- | --- | --- | --- |

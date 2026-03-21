@@ -1,4 +1,6 @@
-# Synthia AI Node (Python)
+# Hexe AI Node (Python)
+
+Internal identifiers, environment variable prefixes, and protocol-level names may still use legacy `Synthia` naming during this compatibility phase.
 
 ## Environment setup
 
@@ -170,7 +172,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 ## Documentation
 
-This repository keeps node-specific documentation. Platform-wide contracts and shared architecture are owned by Synthia Core.
+This repository keeps node-specific documentation. Platform-wide contracts and shared architecture are owned by Hexe Core.
 
 - `docs/index.md` for the primary docs entry point
 - `docs/overview.md` for node scope and ownership boundaries

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CardHeader } from "../../../components/uiPrimitives";
 import { groupResolvedTasks } from "./resolvedTaskGroups";
+import { getTaskDisplay } from "../taskDisplay";
 
 const DEFAULT_VISIBLE_COUNT = 6;
 
@@ -31,11 +32,18 @@ export function ResolvedTasksCard({ tasks = [] }) {
                   <span className="muted tiny">{group.items.length} tasks</span>
                 </div>
                 <div className="recommended-task-list">
-                  {visibleItems.map((task) => (
-                    <span key={`${group.category}-${task}`} className="capability-badge">
-                      {task}
-                    </span>
-                  ))}
+                  {visibleItems.map((task) => {
+                    const display = getTaskDisplay(task);
+                    return (
+                      <span
+                        key={`${group.category}-${task}`}
+                        className="capability-badge"
+                        title={display.description || task}
+                      >
+                        {display.label}
+                      </span>
+                    );
+                  })}
                 </div>
                 {hiddenCount > 0 ? (
                   <button className="btn" type="button" onClick={() => toggleCategory(group.category)}>

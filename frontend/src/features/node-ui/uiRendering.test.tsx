@@ -166,4 +166,14 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Open Diagnostics");
     expect(markup).toContain("Node Overview");
   });
+
+  it("renders Hexe-facing task and pairing labels for operator views", () => {
+    const capabilitiesMarkup = renderToStaticMarkup(
+      <OperationalDashboard {...buildOperationalProps({ currentSection: "capabilities" })} />
+    );
+    const overviewMarkup = renderToStaticMarkup(<OperationalDashboard {...buildOperationalProps()} />);
+
+    expect(capabilitiesMarkup).toContain("Classification");
+    expect(overviewMarkup).toContain("Paired Hexe Core");
+  });
 });

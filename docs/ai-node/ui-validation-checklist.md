@@ -1,4 +1,4 @@
-# Synthia AI Node - UI Validation Checklist
+# Hexe AI Node - UI Validation Checklist
 
 Status: Active
 Last updated: 2026-03-11

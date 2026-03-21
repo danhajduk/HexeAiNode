@@ -1,4 +1,4 @@
-# Synthia AI Node Documentation
+# Hexe AI Node Documentation
 
 ## Start Here
 
@@ -15,10 +15,12 @@
 - [Runtime](./runtime.md): lifecycle, retries, telemetry, and degraded behavior.
 - [Integration](./integration.md): how this node talks to Core and MQTT.
 
-## Integration With Synthia Core
+## Integration With Hexe Core
 
 - [Core References](./core-references.md): canonical platform documents and `docs/Core-Documents` symlink hints.
 - [Documentation Policy](./README.md): what stays in this repo versus what belongs in Core.
+
+Internal identifiers such as MQTT topics, task families, service IDs, and header names may still use legacy `Synthia` naming during migration.
 
 ## Operations
 

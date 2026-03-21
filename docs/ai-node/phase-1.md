@@ -5,7 +5,7 @@ Implementation status: Implemented
 Last updated: 2026-03-12
 
 ## Goal
-Allow an AI Node to securely join the Synthia system.
+Allow an AI Node to securely join the Hexe system.
 
 ## Core Components
 - MQTT bootstrap discovery

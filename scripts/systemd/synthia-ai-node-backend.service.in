@@ -1,5 +1,5 @@
 [Unit]
-Description=Synthia AI Node Backend
+Description=Hexe AI Node Backend
 After=network-online.target
 Wants=network-online.target
 

@@ -1,4 +1,4 @@
-# Synthia AI Node - Phase 2 Validation Checklist
+# Hexe AI Node - Phase 2 Validation Checklist
 
 Status: Active
 Last updated: 2026-03-19

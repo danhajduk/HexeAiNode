@@ -363,3 +363,21 @@ Task 378: Update diagnostics, API contracts, and docs so prompt ownership stays 
 Task 379: Detect resolved task-family changes after OpenAI enabled-model updates so the node can tell when provider model toggles changed the declaration surface - Completed on 03/20/2026 09:35
 Task 380: Automatically trigger capability redeclaration when enabled-model changes alter the resolved task families advertised to Core - Completed on 03/20/2026 09:35
 Task 381: Update API/tests/docs so enabled-model updates report whether a redeclaration was triggered or skipped because the task set was unchanged - Completed on 03/20/2026 09:35
+Task 382: Create AI-Node rebranding document - Completed on 03/20/2026 19:23
+Task 383: Update AI-Node README branding - Completed on 03/20/2026 19:23
+Task 384: Update AI-Node display name and metadata - Completed on 03/20/2026 19:27
+Task 385: Update API / status responses (display fields only) - Completed on 03/20/2026 19:27
+Task 386: Update onboarding display text - Completed on 03/20/2026 19:27
+Task 387: Update capability display descriptions - Completed on 03/20/2026 19:27
+Task 388: Update AI response branding (if present) - Completed on 03/20/2026 19:27
+Task 389: Update logs and startup messages - Completed on 03/20/2026 19:27
+Task 390: Update CLI / console output branding - Completed on 03/20/2026 19:27
+Task 391: Update docs in ai-node folder - Completed on 03/20/2026 19:31
+Task 392: Add compatibility note for legacy naming - Completed on 03/20/2026 19:31
+Task 393: Audit codebase for remaining hardcoded "Synthia" - Completed on 03/20/2026 19:31
+Task 394: Replace user-facing hardcoded strings in backend - Completed on 03/20/2026 19:31
+Task 395: Update prompt templates and system prompts - Completed on 03/20/2026 19:31
+Task 396: Verify no protocol breakage - Completed on 03/20/2026 19:31
+Task 397: Add tests for branding correctness - Completed on 03/20/2026 19:31
+Task 398: Run full verification pass - Completed on 03/20/2026 19:31
+Task 399: Create completion report - Completed on 03/20/2026 19:31

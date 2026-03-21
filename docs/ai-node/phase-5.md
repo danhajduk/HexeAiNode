@@ -1,7 +1,7 @@
 # Phase 5 — Distributed AI Runtime Fabric
 
 ## Goal
-Turn Synthia into a distributed AI compute platform.
+Turn Hexe into a distributed AI compute platform.
 
 ## New Capabilities
 
@@ -27,7 +27,7 @@ Functions:
 
 ## Outcome
 
-Synthia becomes a distributed AI infrastructure combining:
+Hexe becomes a distributed AI infrastructure combining:
 
 - cloud providers
 - local compute

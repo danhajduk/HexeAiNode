@@ -1,1 +1,1 @@
-"""Synthia AI Node runtime package."""
+"""Hexe AI Node runtime package."""

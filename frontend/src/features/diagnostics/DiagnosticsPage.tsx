@@ -1,4 +1,5 @@
 import { CardHeader } from "../../components/uiPrimitives";
+import { getTaskDisplay } from "../operational/taskDisplay";
 
 function Section({ title, subtitle, children, defaultOpen = false }) {
   return (
@@ -19,6 +20,16 @@ export function DiagnosticsPage({
   copiedDiagnostics,
   uiState,
 }) {
+  const resolvedTasks = capabilityDiagnostics?.resolved_tasks || [];
+  const resolvedTaskSummary = resolvedTasks.length
+    ? resolvedTasks.map((taskId) => {
+        const display = getTaskDisplay(taskId);
+        return display.description && display.description !== taskId
+          ? `${display.label} (${taskId})`
+          : display.label;
+      }).join(", ")
+    : "none";
+
   return (
     <article className="card diagnostics-card">
       <CardHeader title="Diagnostics" subtitle="Advanced inspection and admin controls live here instead of the main dashboard." />
@@ -30,7 +41,7 @@ export function DiagnosticsPage({
           <span>Enabled Models</span>
           <code>{(capabilityDiagnostics?.enabled_models?.models || []).filter((model) => model?.enabled).map((model) => model.model_id).join(", ") || "none"}</code>
           <span>Resolved Tasks</span>
-          <code>{(capabilityDiagnostics?.resolved_tasks || []).join(", ") || "none"}</code>
+          <code>{resolvedTaskSummary}</code>
           <span>Capability Graph Version</span>
           <code>{capabilityDiagnostics?.capability_graph?.capability_graph_version || "unavailable"}</code>
         </div>

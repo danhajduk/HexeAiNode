@@ -19,7 +19,7 @@ export function IdentityScreen({
         </p>
       ) : null}
       <p className="muted tiny">
-        Friendly name is sent to Core as <code>node_name</code>. Spaces are allowed.
+        Friendly name is sent to Hexe Core as <code>node_name</code>. Spaces are allowed.
       </p>
       <form onSubmit={onSubmit} className="setup-form">
         <label>

@@ -21,7 +21,7 @@ export function NodeOverviewCard({
         <StatusBadge value={lifecycleState || "unknown"} />
         <span>Trust</span>
         <StatusBadge value={trustState || "unknown"} />
-        <span>Paired Core</span>
+        <span>Paired Hexe Core</span>
         <code>{pairedCoreId || "not_paired"}</code>
         <span>Software</span>
         <code>{softwareVersion || "unknown"}</code>

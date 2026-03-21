@@ -1,6 +1,6 @@
-# Synthia AI Node Overview
+# Hexe AI Node Overview
 
-Synthia AI Node is the node-local runtime that onboards with Synthia Core, persists trust state, declares AI capabilities, syncs governance, exposes a local control API, and manages provider execution/runtime metadata.
+Hexe AI Node is the node-local runtime that onboards with Hexe Core, persists trust state, declares AI capabilities, syncs governance, exposes a local control API, and manages provider execution/runtime metadata.
 
 ## What This Repository Owns
 
@@ -35,6 +35,6 @@ Synthia AI Node is the node-local runtime that onboards with Synthia Core, persi
 - canonical MQTT standards
 - platform architecture and terminology
 
-## Relationship to Synthia Core
+## Relationship to Hexe Core
 
-This node depends on Synthia Core for platform contracts and trusted control-plane behavior. Use [core-references.md](./core-references.md) for the canonical Core docs, and treat the docs in this repo as node-specific implementation guidance only.
+This node depends on Hexe Core for platform contracts and trusted control-plane behavior. Use [core-references.md](./core-references.md) for the canonical Core docs, and treat the docs in this repo as node-specific implementation guidance only.

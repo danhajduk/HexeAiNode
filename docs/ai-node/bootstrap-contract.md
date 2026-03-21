@@ -1,4 +1,4 @@
-# Synthia AI Node — Bootstrap Contract
+# Hexe AI Node — Bootstrap Contract
 
 Status: Planned
 Implementation status: Not developed
@@ -6,7 +6,7 @@ Last updated: 2026-03-11
 
 ## Purpose
 
-The bootstrap contract defines how an untrusted AI Node discovers Synthia Core.
+The bootstrap contract defines how an untrusted AI Node discovers Hexe Core.
 
 Bootstrap exists only for:
 

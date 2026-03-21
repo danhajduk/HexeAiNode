@@ -1,4 +1,4 @@
-# Synthia AI Node — Trust State
+# Hexe AI Node — Trust State
 
 Status: Active
 Implementation status: Implemented in backend runtime

@@ -1,4 +1,4 @@
-# Synthia AI Node — Lifecycle States
+# Hexe AI Node — Lifecycle States
 
 Status: Planned
 Implementation status: Not developed

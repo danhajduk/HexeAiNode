@@ -1,4 +1,4 @@
-# Synthia AI Node - Phase 1 Overview
+# Hexe AI Node - Phase 1 Overview
 
 Status: Planned
 Implementation status: Not developed
@@ -8,7 +8,7 @@ Last updated: 2026-03-11
 
 Status: Planned
 
-Phase 1 establishes AI Node onboarding into the Synthia system.
+Phase 1 establishes AI Node onboarding into the Hexe system.
 
 This phase focuses only on:
 

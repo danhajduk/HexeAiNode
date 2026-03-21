@@ -1,4 +1,4 @@
-# Synthia AI Node — Unique Node Identity
+# Hexe AI Node — Unique Node Identity
 
 Status: Active
 Implementation status: Implemented (Tasks 059-067)

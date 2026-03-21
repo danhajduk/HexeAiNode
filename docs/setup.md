@@ -4,7 +4,7 @@
 
 - Python 3 with `venv`
 - Node.js and npm for the frontend
-- access to a Synthia Core instance for real onboarding
+- access to a Hexe Core instance for real onboarding
 - optional user systemd support for background services
 
 ## Environment Setup

@@ -6,8 +6,8 @@ Last updated: 2026-03-11
 
 ## Purpose
 
-This document defines the initial target architecture for the Synthia AI Node.
-The AI Node is a remote Synthia service paired to Core, not a Supervisor-managed local standalone addon.
+This document defines the initial target architecture for the Hexe AI Node.
+The AI Node is a remote Hexe service paired to Core, not a Supervisor-managed local standalone addon.
 
 Because this repository currently contains architecture planning tasks only, all runtime behavior described here is target design and not yet implemented.
 
@@ -36,8 +36,8 @@ Status: Planned
 
 ## Architectural Positioning
 
-- AI Node runs as a remote service and pairs with a Synthia Core instance.
-- Synthia Core retains governance authority.
+- AI Node runs as a remote service and pairs with a Hexe Core instance.
+- Hexe Core retains governance authority.
 - AI Node executes node-local responsibilities (bootstrap, registration, local policy enforcement, telemetry).
 - Architecture is intentionally future-proofed for additional local providers and a future runtime manager layer.
 

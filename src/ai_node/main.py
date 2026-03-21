@@ -51,7 +51,7 @@ def _handle_signal(signum, _frame):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Synthia AI Node backend entrypoint")
+    parser = argparse.ArgumentParser(description="Hexe AI Node backend entrypoint")
     parser.add_argument(
         "--once",
         action="store_true",
@@ -242,7 +242,7 @@ def run(
     finalize_poll_interval_seconds: float = 2.0,
 ) -> int:
     configure_logging(log_file)
-    LOGGER.info("starting ai-node backend")
+    LOGGER.info("[Hexe AI Node] starting backend")
     phase2_diag = Phase2DiagnosticsLogger(LOGGER)
     trust_state_store = TrustStateStore(path=trust_state_path, logger=LOGGER)
     trust_state = trust_state_store.load()
@@ -433,12 +433,12 @@ def run(
         trusted_runtime_context=trusted_runtime_context,
     )
     app = create_node_control_app(state=control_state, logger=LOGGER)
-    LOGGER.info("phase1 modules loaded; control API active")
+    LOGGER.info("[Hexe AI Node] phase1 modules loaded; control API active")
 
     if once:
         bootstrap_runner.stop()
         timeout_monitor.stop()
-        LOGGER.info("run-once mode complete")
+        LOGGER.info("[Hexe AI Node] run-once mode complete")
         return 0
 
     try:
@@ -446,7 +446,7 @@ def run(
     finally:
         bootstrap_runner.stop()
         timeout_monitor.stop()
-    LOGGER.info("backend stopped cleanly")
+    LOGGER.info("[Hexe AI Node] backend stopped cleanly")
     return 0
 
 

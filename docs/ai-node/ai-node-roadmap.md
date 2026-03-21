@@ -1,9 +1,9 @@
-# Synthia AI Node — Roadmap
+# Hexe AI Node — Roadmap
 
-This document summarizes the full development roadmap for the Synthia AI Node.
+This document summarizes the full development roadmap for the Hexe AI Node.
 
-The AI Node is a trusted AI execution gateway in the Synthia ecosystem responsible for:
-- onboarding into Synthia Core
+The AI Node is a trusted AI execution gateway in the Hexe ecosystem responsible for:
+- onboarding into Hexe Core
 - declaring capabilities
 - executing AI workloads
 - enforcing policy and budgets

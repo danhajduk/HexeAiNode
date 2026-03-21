@@ -1,4 +1,4 @@
-# Synthia AI Node - Phase 2 Review and Handoff
+# Hexe AI Node - Phase 2 Review and Handoff
 
 Status: Active
 Last updated: 2026-03-19

@@ -872,6 +872,23 @@ class NodeControlFastApiTests(unittest.TestCase):
                 else:
                     os.environ["SYNTHIA_ADMIN_TOKEN"] = old_admin_token
 
+    def test_openapi_uses_hexe_control_api_title(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                capability_runner=self._FakeCapabilityRunner(),
+                provider_runtime_manager=self._FakeProviderRuntimeManager(),
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            response = client.get("/openapi.json")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["info"]["title"], "Hexe AI Node Control API")
+
     def test_direct_execution_endpoint_executes_supported_task(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))

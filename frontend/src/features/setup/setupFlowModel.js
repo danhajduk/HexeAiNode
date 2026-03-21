@@ -81,11 +81,11 @@ function getStageStatusText(stageId, { lifecycleState, pendingApprovalUrl, gover
     case "core_connection":
       return lifecycleState === "bootstrap_connected" ? "broker connected" : "connecting to bootstrap";
     case "bootstrap_discovery":
-      return lifecycleState === "core_discovered" ? "Core discovered" : "waiting for discovery";
+      return lifecycleState === "core_discovered" ? "Hexe Core discovered" : "waiting for discovery";
     case "registration":
       return lifecycleState === "registration_pending" ? "registration in progress" : "awaiting registration";
     case "approval":
-      return pendingApprovalUrl ? "approval link available" : "awaiting Core approval";
+      return pendingApprovalUrl ? "Hexe Core approval link available" : "awaiting Hexe Core approval";
     case "trust_activation":
       return lifecycleState === "trusted" ? "trusted locally" : "waiting for trust";
     case "provider_setup":

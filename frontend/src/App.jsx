@@ -1584,7 +1584,7 @@ function formatTokenHint(value) {
 
     if (setupFlow.activeStage === "approval" && pendingApprovalUrl) {
       primaryActions.push({
-        label: "Open Approval In Core",
+        label: "Open Approval In Hexe Core",
         onClick: () => window.open(pendingApprovalUrl, "_blank", "noopener,noreferrer"),
       });
     }
@@ -1684,7 +1684,7 @@ function formatTokenHint(value) {
           title: uiState.lifecycle.current === "degraded" ? "Setup Complete With Warnings" : "Setup Complete",
           subtitle:
             uiState.lifecycle.current === "degraded"
-              ? "Core onboarding is complete. Open the dashboard to review the degraded warning details and continue operating."
+              ? "Hexe Core onboarding is complete. Open the dashboard to review the degraded warning details and continue operating."
               : "Onboarding and governance are ready. Open the dashboard when you are ready to move into operational mode.",
           actions: [
             { label: "Open Dashboard", onClick: navigateToDashboard, primary: true },
@@ -1870,7 +1870,7 @@ function formatTokenHint(value) {
         <section className="card app-header">
           <div className="app-header-top">
             <div>
-              <h1>Synthia Ai-Node</h1>
+              <h1>Hexe AI Node</h1>
             </div>
             <div className="app-header-status-pills">
               <StatusBadge value={backendStatus} />
@@ -1886,7 +1886,7 @@ function formatTokenHint(value) {
             <div className="app-header-actions">
               {isPendingApproval && pendingApprovalUrl ? (
                 <a className="btn btn-primary" href={pendingApprovalUrl} target="_blank" rel="noreferrer">
-                  Approve In Core
+                  Approve In Hexe Core
                 </a>
               ) : null}
               <button className="btn" onClick={onCopyNodeId} disabled={!nodeId}>

@@ -1,4 +1,4 @@
-# Synthia AI Node — Security Boundaries (Phase 1)
+# Hexe AI Node — Security Boundaries (Phase 1)
 
 Status: Planned
 Implementation status: Not developed

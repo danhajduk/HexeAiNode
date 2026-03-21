@@ -1,4 +1,4 @@
-# Synthia AI Node — Phase 1 Overview
+# Hexe AI Node — Phase 1 Overview
 
 Status: Planned
 Implementation status: In progress (bootstrap/onboarding/trust flow implemented)
@@ -6,7 +6,7 @@ Last updated: 2026-03-11
 
 ## Purpose
 
-Phase 1 establishes AI Node onboarding into Synthia.
+Phase 1 establishes AI Node onboarding into Hexe.
 
 Phase 1 covers:
 

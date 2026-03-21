@@ -1,4 +1,4 @@
-# Synthia AI Node Architecture
+# Hexe AI Node Architecture
 
 ## Scope
 

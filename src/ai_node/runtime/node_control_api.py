@@ -1711,7 +1711,7 @@ class ExecutionAuthorizeRequest(BaseModel):
 
 
 def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
-    app = FastAPI(title="Synthia AI Node Control API", version="0.1.0")
+    app = FastAPI(title="Hexe AI Node Control API", version="0.1.0")
     configured_admin_token = str(os.environ.get("SYNTHIA_ADMIN_TOKEN") or "").strip()
 
     def require_admin(admin_token: str | None) -> None:

@@ -1,4 +1,4 @@
-# Synthia AI Node - Phase 1 Test Checklist
+# Hexe AI Node - Phase 1 Test Checklist
 
 Status: Active
 Implementation status: Validation checklist and pass log
