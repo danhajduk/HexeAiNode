@@ -535,6 +535,32 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertTrue(payload["bootstrap_configured"])
             self.assertEqual(len(runner.calls), 1)
 
+    def test_restart_setup_clears_bootstrap_config_for_followup_status_reads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bootstrap_config.json"
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            runner = self._FakeBootstrapRunner()
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(path),
+                logger=logging.getLogger("node-control-test"),
+                bootstrap_runner=runner,
+            )
+
+            state.initiate_onboarding(
+                mqtt_host="10.0.0.100",
+                node_name="main-ai-node",
+            )
+
+            restart_payload = state.restart_setup()
+            followup_payload = state.status_payload()
+
+            self.assertEqual(restart_payload["status"], "unconfigured")
+            self.assertFalse(restart_payload["bootstrap_configured"])
+            self.assertEqual(followup_payload["status"], "unconfigured")
+            self.assertFalse(followup_payload["bootstrap_configured"])
+            self.assertFalse(path.exists())
+
     def test_trusted_startup_skips_persisted_bootstrap_config(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "bootstrap_config.json"

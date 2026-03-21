@@ -451,9 +451,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
             runtime_manager = self._FakeProviderRuntimeManager()
             capability_runner = self._FakeCapabilityRunner()
+            config_path = Path(tmp) / "bootstrap_config.json"
             state = NodeControlState(
                 lifecycle=lifecycle,
-                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                config_path=str(config_path),
                 logger=logging.getLogger("node-control-fastapi-test"),
                 provider_selection_store=self._FakeProviderSelectionStore(),
                 provider_credentials_store=self._FakeProviderCredentialsStore(),
@@ -480,6 +481,18 @@ class NodeControlFastApiTests(unittest.TestCase):
             )
             self.assertEqual(initiate_response.status_code, 200)
             self.assertEqual(initiate_response.json()["status"], "bootstrap_connecting")
+            self.assertTrue(config_path.exists())
+
+            restart_response = client.post("/api/onboarding/restart")
+            self.assertEqual(restart_response.status_code, 200)
+            self.assertEqual(restart_response.json()["status"], "unconfigured")
+            self.assertFalse(restart_response.json()["bootstrap_configured"])
+            self.assertFalse(config_path.exists())
+
+            followup_status_response = client.get("/api/node/status")
+            self.assertEqual(followup_status_response.status_code, 200)
+            self.assertEqual(followup_status_response.json()["status"], "unconfigured")
+            self.assertFalse(followup_status_response.json()["bootstrap_configured"])
 
             provider_get_response = client.get("/api/providers/config")
             self.assertEqual(provider_get_response.status_code, 200)

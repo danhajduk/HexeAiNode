@@ -28,6 +28,7 @@ These remain intentionally:
 - `python3 scripts/check_legacy_references.py`
 - `cd frontend && npm test`
 - `cd frontend && npm run build`
+- added restart/status regression coverage to keep `bootstrap_configured` false after onboarding reset until a new bootstrap config is written
 
 ## Integration Follow-Up
 
