@@ -13,6 +13,11 @@ TASK_SUMMARIZATION_EVENT = "task.summarization.event"
 
 TASK_GENERATION_TEXT = "task.generation.text"
 TASK_GENERATION_IMAGE = "task.generation.image"
+TASK_CODING = "task.coding"
+TASK_CODE_GENERATION = "task.code_generation"
+TASK_CODE_REVIEW = "task.code_review"
+TASK_CODE_DEBUGGING = "task.code_debugging"
+TASK_CODE_EXPLANATION = "task.code_explanation"
 
 LEGACY_TASK_FAMILY_ALIASES = {
     TASK_CLASSIFICATION_TEXT: TASK_CLASSIFICATION,
@@ -39,7 +44,11 @@ CANONICAL_TASK_FAMILIES = (
     "task.tool_usage",
     "task.automation_command",
     "task.environment_control",
-    "task.coding",
+    TASK_CODING,
+    TASK_CODE_GENERATION,
+    TASK_CODE_REVIEW,
+    TASK_CODE_DEBUGGING,
+    TASK_CODE_EXPLANATION,
     "task.vision_analysis",
     "task.object_detection",
     "task.image_description",

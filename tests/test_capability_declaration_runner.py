@@ -87,6 +87,36 @@ class _FakeClientAcceptedCapture(_FakeClientAccepted):
         return await super().submit_provider_intelligence(**kwargs)
 
 
+class _FakeClientRejectInvalidNodeIdThenAccept(_FakeClientAccepted):
+    def __init__(self):
+        self.manifests = []
+
+    async def submit_manifest(self, **kwargs):
+        self.manifests.append(kwargs.get("capability_manifest"))
+        if len(self.manifests) == 1:
+            payload = {
+                "detail": {
+                    "error": "invalid_schema",
+                    "message": (
+                        "capability_manifest_invalid: 1 validation error for CapabilityDeclaration\n"
+                        "node.node_id\n"
+                        "  Value error, invalid_node_id"
+                    ),
+                }
+            }
+            return type(
+                "_R",
+                (),
+                {
+                    "status": "rejected",
+                    "payload": payload,
+                    "retryable": False,
+                    "error": str(payload["detail"]),
+                },
+            )()
+        return await super().submit_manifest(**kwargs)
+
+
 class _FakeClientRetry:
     async def submit_manifest(self, **_kwargs):
         class _R:
@@ -819,6 +849,35 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(lifecycle.get_state(), NodeLifecycleState.OPERATIONAL)
         self.assertEqual(runner.status_payload()["status"], "accepted")
         self.assertEqual(runner.status_payload()["last_error"], "connect_rc_5")
+
+    async def test_submit_once_retries_with_operational_identity_when_manifest_node_id_is_rejected(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
+        lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        client = _FakeClientRejectInvalidNodeIdThenAccept()
+        runner = CapabilityDeclarationRunner(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("capability-runner-test"),
+            trust_store=_FakeTrustStore(),
+            provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
+            node_id="node-001",
+            capability_state_store=_FakeCapabilityStateStore(),
+            governance_state_store=_FakeGovernanceStateStore(),
+            capability_client=client,
+            governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
+            telemetry_publisher=_FakeTelemetryPublisher(),
+            phase2_state_store=_FakePhase2StateStore(),
+        )
+
+        result = await runner.submit_once()
+
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(len(client.manifests), 2)
+        self.assertEqual(client.manifests[0]["node"]["node_id"], "node-001")
+        self.assertEqual(client.manifests[1]["node"]["node_id"], "main-ai-node")
+        self.assertEqual(runner.status_payload()["last_manifest_payload"]["node"]["node_id"], "main-ai-node")
 
     async def test_recover_from_degraded_to_capability_setup_pending(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))

@@ -141,6 +141,8 @@ UI behavior:
 
 Task capability selection endpoints:
 
+Capability declarations also accept runtime-resolved granular coding families such as `task.code_generation`, `task.code_review`, `task.code_debugging`, and `task.code_explanation`.
+
 ```bash
 curl http://127.0.0.1:9002/api/capabilities/config
 curl -X POST http://127.0.0.1:9002/api/capabilities/config \

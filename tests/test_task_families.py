@@ -3,6 +3,7 @@ import unittest
 from ai_node.capabilities.task_families import (
     CANONICAL_TASK_FAMILIES,
     TASK_CLASSIFICATION,
+    TASK_CODE_DEBUGGING,
     create_declared_task_family_capabilities,
     validate_task_family_capabilities,
 )
@@ -25,6 +26,11 @@ class TaskFamilyCapabilityTests(unittest.TestCase):
     def test_legacy_classification_alias_is_canonicalized(self):
         declared = create_declared_task_family_capabilities(["task.classification.text"])
         self.assertEqual(declared, [TASK_CLASSIFICATION])
+
+    def test_validate_accepts_granular_code_task_families(self):
+        is_valid, error = validate_task_family_capabilities([TASK_CODE_DEBUGGING])
+        self.assertTrue(is_valid)
+        self.assertIsNone(error)
 
 
 if __name__ == "__main__":

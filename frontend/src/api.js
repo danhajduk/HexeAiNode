@@ -19,18 +19,34 @@ function adminHeaders() {
   return { "X-Synthia-Admin-Token": token };
 }
 
+function formatBlockingReasons(blockingReasons) {
+  if (!Array.isArray(blockingReasons) || !blockingReasons.length) {
+    return "";
+  }
+  return blockingReasons.filter(Boolean).join(", ");
+}
+
+function buildApiError(response, payload) {
+  const detail = payload?.detail;
+  const baseMessage =
+    typeof detail === "string"
+      ? detail
+      : detail?.message || detail?.error_code || payload?.error || `request failed (${response.status})`;
+  const blockingReasonsMessage = formatBlockingReasons(detail?.blocking_reasons);
+  const message = blockingReasonsMessage ? `${baseMessage}: ${blockingReasonsMessage}` : baseMessage;
+  const error = new Error(message);
+  error.detail = detail;
+  error.status = response.status;
+  return error;
+}
+
 export async function apiGet(path, extraHeaders = {}) {
   const response = await fetch(`${getApiBase()}${path}`, {
     headers: requestHeaders(extraHeaders),
   });
   const payload = await response.json();
   if (!response.ok) {
-    const detail = payload.detail;
-    const message =
-      typeof detail === "string"
-        ? detail
-        : detail?.message || detail?.error_code || payload.error || `request failed (${response.status})`;
-    throw new Error(message);
+    throw buildApiError(response, payload);
   }
   return payload;
 }
@@ -43,12 +59,7 @@ export async function apiPost(path, body, extraHeaders = {}) {
   });
   const payload = await response.json();
   if (!response.ok) {
-    const detail = payload.detail;
-    const message =
-      typeof detail === "string"
-        ? detail
-        : detail?.message || detail?.error_code || payload.error || `request failed (${response.status})`;
-    throw new Error(message);
+    throw buildApiError(response, payload);
   }
   return payload;
 }

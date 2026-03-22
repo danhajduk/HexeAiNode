@@ -10,10 +10,10 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
     @staticmethod
     def _valid_environment_hints() -> dict:
         return {
-            "hostname": "node-a",
-            "os_platform": "linux-test",
-            "memory_class": "standard",
-            "gpu_present": False,
+            "deployment_target": "edge",
+            "acceleration": "cpu",
+            "network_tier": "lan",
+            "region": "local",
         }
 
     def test_create_manifest_with_required_groups(self):
@@ -38,7 +38,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
             node_type="ai-node",
             node_name="main-ai-node",
             node_software_version="0.1.0",
-            task_families=[],
+            task_families=["task.classification"],
             supported_providers=["openai"],
             enabled_providers=[],
             node_features=["telemetry_support"],
@@ -79,7 +79,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
             node_type="ai-node",
             node_name="main-ai-node",
             node_software_version="0.1.0",
-            task_families=[],
+            task_families=["task.classification"],
             supported_providers=["openai"],
             enabled_providers=[],
             node_features=["telemetry_support"],
@@ -88,9 +88,9 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
         manifest["declared_task_families"] = ["BAD FAMILY"]
         is_valid, error = validate_capability_manifest(manifest)
         self.assertFalse(is_valid)
-        self.assertEqual(error, "invalid_task_family:BAD FAMILY")
+        self.assertEqual(error, "invalid_task_family:bad family")
 
-    def test_validate_rejects_metadata_field(self):
+    def test_validate_rejects_unknown_manifest_field(self):
         manifest = create_capability_manifest(
             node_id="node-001",
             node_type="ai-node",
@@ -105,9 +105,9 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
         manifest["metadata"] = {"schema_version": "1.0"}
         is_valid, error = validate_capability_manifest(manifest)
         self.assertFalse(is_valid)
-        self.assertEqual(error, "metadata_not_allowed")
+        self.assertEqual(error, "unknown_manifest_field:metadata")
 
-    def test_create_manifest_accepts_provider_metadata_and_enabled_models(self):
+    def test_create_manifest_accepts_provider_intelligence(self):
         manifest = create_capability_manifest(
             node_id="node-001",
             node_type="ai-node",
@@ -118,19 +118,16 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
             enabled_providers=["openai"],
             node_features=["telemetry_support"],
             environment_hints=self._valid_environment_hints(),
-            provider_metadata=[
+            provider_intelligence=[
                 {
-                    "provider_id": "openai",
-                    "classification_model": "gpt-5-mini",
-                    "enabled_model_ids": ["gpt-5-mini"],
-                    "resolved_capabilities": {"reasoning": True},
-                    "task_families": ["task.classification", "task.reasoning"],
-                }
-            ],
-            enabled_models=[
-                {
-                    "provider_id": "openai",
-                    "model_id": "gpt-5-mini",
+                    "provider": "openai",
+                    "available_models": [
+                        {
+                            "model_id": "gpt-5-mini",
+                            "pricing": {"input_per_million": 0.25},
+                            "latency_metrics": {"p95_ms": 420},
+                        }
+                    ],
                 }
             ],
         )
@@ -139,8 +136,45 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
 
         self.assertTrue(is_valid)
         self.assertIsNone(error)
-        self.assertEqual(manifest["provider_metadata"][0]["provider_id"], "openai")
-        self.assertEqual(manifest["enabled_models"][0]["model_id"], "gpt-5-mini")
+        self.assertEqual(manifest["provider_intelligence"][0]["provider"], "openai")
+        self.assertEqual(manifest["provider_intelligence"][0]["available_models"][0]["model_id"], "gpt-5-mini")
+
+    def test_validate_rejects_provider_intelligence_for_unsupported_provider(self):
+        manifest = create_capability_manifest(
+            node_id="node-001",
+            node_type="ai-node",
+            node_name="main-ai-node",
+            node_software_version="0.1.0",
+            task_families=["task.classification"],
+            supported_providers=["openai"],
+            enabled_providers=["openai"],
+            node_features=["telemetry_support"],
+            environment_hints=self._valid_environment_hints(),
+        )
+        manifest["provider_intelligence"] = [{"provider": "anthropic", "available_models": [{"model_id": "claude"}]}]
+
+        is_valid, error = validate_capability_manifest(manifest)
+
+        self.assertFalse(is_valid)
+        self.assertEqual(error, "provider_intelligence_provider_not_supported")
+
+    def test_create_manifest_accepts_granular_code_task_families(self):
+        manifest = create_capability_manifest(
+            node_id="node-001",
+            node_type="ai-node",
+            node_name="main-ai-node",
+            node_software_version="0.1.0",
+            task_families=["task.code_debugging", "task.code_generation"],
+            supported_providers=["openai"],
+            enabled_providers=["openai"],
+            node_features=["telemetry_support"],
+            environment_hints=self._valid_environment_hints(),
+        )
+
+        is_valid, error = validate_capability_manifest(manifest)
+
+        self.assertTrue(is_valid)
+        self.assertIsNone(error)
 
 
 if __name__ == "__main__":

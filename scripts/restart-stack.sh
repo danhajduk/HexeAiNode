@@ -5,7 +5,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BOOTSTRAP_SCRIPT="$ROOT_DIR/scripts/bootstrap.sh"
 STACK_CONTROL_SCRIPT="$ROOT_DIR/scripts/stack-control.sh"
 VENV_PY="$ROOT_DIR/.venv/bin/python"
-VENV_PIP="$ROOT_DIR/.venv/bin/pip"
 REQ_FILE="$ROOT_DIR/requirements.txt"
 BACKEND_SERVICE="synthia-ai-node-backend.service"
 FRONTEND_SERVICE="synthia-ai-node-frontend.service"
@@ -20,9 +19,9 @@ print_failure_logs() {
   journalctl --user -u "$svc" -n 40 --no-pager || true
 }
 
-if [[ -x "$VENV_PIP" && -f "$REQ_FILE" ]]; then
+if [[ -x "$VENV_PY" && -f "$REQ_FILE" ]]; then
   echo "Ensuring Python dependencies are installed in .venv..."
-  "$VENV_PIP" install -r "$REQ_FILE" >/dev/null
+  "$VENV_PY" -m pip install -r "$REQ_FILE" >/dev/null
 fi
 
 if have_user_units; then

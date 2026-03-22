@@ -219,6 +219,68 @@ class CapabilityDeclarationRunner:
         normalized = error.strip().lower()
         return normalized in {"connect_rc_5", "not authorised", "not authorized"}
 
+    @staticmethod
+    def _is_invalid_manifest_node_id_result(result) -> bool:
+        if not hasattr(result, "status") or str(getattr(result, "status") or "").strip().lower() != "rejected":
+            return False
+        payload = getattr(result, "payload", None)
+        if not isinstance(payload, dict):
+            return False
+        detail = payload.get("detail")
+        message = ""
+        if isinstance(detail, dict):
+            message = str(detail.get("message") or detail.get("error") or "")
+        else:
+            message = str(detail or payload.get("error") or getattr(result, "error") or "")
+        normalized = message.strip().lower()
+        return "capability_manifest_invalid" in normalized and "node.node_id" in normalized and "invalid_node_id" in normalized
+
+    async def _submit_manifest_with_node_id_fallback(
+        self,
+        *,
+        trust_state: dict,
+        manifest: dict,
+    ):
+        core_api_endpoint = str(trust_state.get("core_api_endpoint") or "").strip()
+        trust_token = str(trust_state.get("node_trust_token") or "").strip()
+        result = await self._capability_client.submit_manifest(
+            core_api_endpoint=core_api_endpoint,
+            trust_token=trust_token,
+            node_id=self._node_id,
+            capability_manifest=manifest,
+        )
+        if not self._is_invalid_manifest_node_id_result(result):
+            return result, manifest
+
+        fallback_node_id = str(trust_state.get("operational_mqtt_identity") or "").strip()
+        current_manifest_node = str(((manifest.get("node") or {}).get("node_id")) or "").strip()
+        if not fallback_node_id or fallback_node_id == current_manifest_node:
+            return result, manifest
+
+        fallback_manifest = {
+            **manifest,
+            "node": {
+                **(manifest.get("node") if isinstance(manifest.get("node"), dict) else {}),
+                "node_id": fallback_node_id,
+            },
+        }
+        if hasattr(self._logger, "warning"):
+            self._logger.warning(
+                "[capability-declare-node-id-fallback] %s",
+                {
+                    "node_id": self._node_id,
+                    "manifest_node_id": current_manifest_node,
+                    "fallback_node_id": fallback_node_id,
+                },
+            )
+        fallback_result = await self._capability_client.submit_manifest(
+            core_api_endpoint=core_api_endpoint,
+            trust_token=trust_token,
+            node_id=self._node_id,
+            capability_manifest=fallback_manifest,
+        )
+        return fallback_result, fallback_manifest
+
     def _build_manifest_payload(self, *, trust_state: dict, selected_task_families: list[str] | None) -> dict:
         provider_selection = (
             self._provider_selection_store.load_or_create(openai_enabled=False)
@@ -328,11 +390,9 @@ class CapabilityDeclarationRunner:
         self._last_error = None
         self._last_submitted_at = local_now_iso()
 
-        result = await self._capability_client.submit_manifest(
-            core_api_endpoint=str(trust_state.get("core_api_endpoint") or "").strip(),
-            trust_token=str(trust_state.get("node_trust_token") or "").strip(),
-            node_id=self._node_id,
-            capability_manifest=manifest,
+        result, submitted_manifest = await self._submit_manifest_with_node_id_fallback(
+            trust_state=trust_state,
+            manifest=manifest,
         )
         self._diag.capability_submission(
             {
@@ -342,6 +402,12 @@ class CapabilityDeclarationRunner:
                 "error": result.error,
             }
         )
+        self._last_manifest_summary = {
+            "task_families": list(submitted_manifest.get("declared_task_families") or []),
+            "enabled_providers": list(submitted_manifest.get("enabled_providers") or []),
+            "manifest_version": submitted_manifest.get("manifest_version"),
+        }
+        self._last_manifest_payload = submitted_manifest
         self._last_declaration_result = {
             "status": result.status,
             "retryable": result.retryable,
@@ -371,7 +437,7 @@ class CapabilityDeclarationRunner:
                 "core_restrictions": result.payload.get("core_restrictions") or result.payload.get("restrictions") or {},
                 "core_notes": str(result.payload.get("core_notes") or result.payload.get("notes") or "").strip() or None,
                 "raw_response": result.payload,
-                "submitted_manifest": manifest,
+                "submitted_manifest": submitted_manifest,
             }
             if self._capability_state_store is not None and hasattr(self._capability_state_store, "save"):
                 self._capability_state_store.save(accepted_payload)

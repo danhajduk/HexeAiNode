@@ -1,5 +1,22 @@
 import { StatusBadge } from "../../components/uiPrimitives";
 
+const BLOCKING_REASON_LABELS = {
+  missing_or_invalid_trust_state: "Trust state is missing or invalid.",
+  missing_or_invalid_node_identity: "Node identity is missing or invalid.",
+  missing_or_invalid_provider_selection: "Provider setup has not been saved yet.",
+  missing_or_invalid_task_capability_selection: "Choose at least one task capability before declaring.",
+  missing_or_invalid_trusted_runtime_context: "Trusted runtime context from Hexe Core is incomplete.",
+  openai_enabled_models_required_before_declare: "Enable at least one OpenAI model before declaring capabilities.",
+  openai_usable_models_required_before_declare: "At least one enabled OpenAI model must be usable before declaration can continue.",
+};
+
+function formatBlockingReason(reason) {
+  if (!reason) {
+    return "";
+  }
+  return BLOCKING_REASON_LABELS[reason] || reason.replaceAll("_", " ");
+}
+
 export function SetupCoreConnectionPanel({ mqttHost, lifecycleState, nodeId }) {
   return (
     <div className="setup-stage-panel">
@@ -107,6 +124,10 @@ export function SetupCapabilityDeclarationPanel({
   setupReadinessFlags,
   setupBlockingReasons,
 }) {
+  const readableBlockingReasons = Array.isArray(setupBlockingReasons)
+    ? setupBlockingReasons.map(formatBlockingReason).filter(Boolean)
+    : [];
+
   return (
     <div className="setup-stage-panel">
       <p className="muted">
@@ -124,10 +145,15 @@ export function SetupCapabilityDeclarationPanel({
         <span>Model Readiness</span>
         <StatusBadge value={setupReadinessFlags.openai_usable_models_ready ? "ready" : "blocked"} />
       </div>
-      {setupBlockingReasons.length ? (
-        <p className="warning tiny">
-          Blocking: <code>{setupBlockingReasons.join(", ")}</code>
-        </p>
+      {readableBlockingReasons.length ? (
+        <div className="warning tiny">
+          <p>Blocking</p>
+          <ul>
+            {readableBlockingReasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
     </div>
   );
