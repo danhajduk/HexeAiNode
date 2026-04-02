@@ -44,6 +44,54 @@ def _is_loopback_host(value: object) -> bool:
     return host in {"127.0.0.1", "localhost", "::1"}
 
 
+def _detect_primary_ip() -> str | None:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("8.8.8.8", 80))
+            detected = str(probe.getsockname()[0] or "").strip()
+            if detected and not _is_loopback_host(detected):
+                return detected
+    except OSError:
+        pass
+    try:
+        detected = str(socket.gethostbyname(socket.gethostname()) or "").strip()
+        if detected and not _is_loopback_host(detected):
+            return detected
+    except OSError:
+        pass
+    return None
+
+
+def _default_node_ui_endpoint(*, node_ui_endpoint: str | None, node_ui_port: int) -> str | None:
+    configured = str(node_ui_endpoint or "").strip()
+    if configured:
+        return configured
+    detected_ip = _detect_primary_ip()
+    if not detected_ip:
+        return None
+    return f"http://{detected_ip}:{int(node_ui_port)}/"
+
+
+def _default_node_hostname(node_hostname: str | None) -> str:
+    configured = str(node_hostname or "").strip()
+    if configured:
+        return configured
+    detected_ip = _detect_primary_ip()
+    if detected_ip:
+        return detected_ip
+    return socket.gethostname()
+
+
+def _default_node_api_base_url(*, node_api_base_url: str | None, api_port: int) -> str | None:
+    configured = str(node_api_base_url or "").strip()
+    if configured:
+        return configured
+    detected_ip = _detect_primary_ip()
+    if not detected_ip:
+        return None
+    return f"http://{detected_ip}:{int(api_port)}"
+
+
 def _handle_signal(signum, _frame):
     global SHOULD_STOP
     LOGGER.info("received signal %s, stopping", signum)
@@ -102,8 +150,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--node-hostname",
-        default=os.environ.get("SYNTHIA_NODE_HOSTNAME", socket.gethostname()),
+        default=os.environ.get("SYNTHIA_NODE_HOSTNAME", ""),
         help="Hostname sent during registration",
+    )
+    parser.add_argument(
+        "--node-ui-endpoint",
+        default=os.environ.get("SYNTHIA_NODE_UI_ENDPOINT", ""),
+        help="Optional absolute node UI URL sent during registration",
+    )
+    parser.add_argument(
+        "--node-ui-port",
+        type=int,
+        default=int(os.environ.get("SYNTHIA_NODE_UI_PORT", "8081")),
+        help="Frontend port used when auto-building the node UI endpoint from the detected node IP",
+    )
+    parser.add_argument(
+        "--node-api-base-url",
+        default=os.environ.get("SYNTHIA_NODE_API_BASE_URL", ""),
+        help="Optional absolute node API base URL sent during registration",
     )
     parser.add_argument(
         "--trust-state-path",
@@ -224,6 +288,9 @@ def run(
     node_software_version: str = "0.1.0",
     protocol_version: str = "1.0",
     node_hostname: str | None = None,
+    node_ui_endpoint: str | None = None,
+    node_ui_port: int = 8081,
+    node_api_base_url: str | None = None,
     trust_state_path: str = ".run/trust_state.json",
     node_identity_path: str = ".run/node_identity.json",
     provider_selection_config_path: str = ".run/provider_selection_config.json",
@@ -243,6 +310,15 @@ def run(
 ) -> int:
     configure_logging(log_file)
     LOGGER.info("[Hexe AI Node] starting backend")
+    resolved_node_ui_endpoint = _default_node_ui_endpoint(
+        node_ui_endpoint=node_ui_endpoint,
+        node_ui_port=node_ui_port,
+    )
+    resolved_node_hostname = _default_node_hostname(node_hostname)
+    resolved_node_api_base_url = _default_node_api_base_url(
+        node_api_base_url=node_api_base_url,
+        api_port=api_port,
+    )
     phase2_diag = Phase2DiagnosticsLogger(LOGGER)
     trust_state_store = TrustStateStore(path=trust_state_path, logger=LOGGER)
     trust_state = trust_state_store.load()
@@ -376,7 +452,9 @@ def run(
         node_id=node_identity["node_id"],
         node_software_version=node_software_version,
         protocol_version=protocol_version,
-        hostname=node_hostname,
+        hostname=resolved_node_hostname,
+        ui_endpoint=resolved_node_ui_endpoint,
+        api_base_url=resolved_node_api_base_url,
         trust_state_path=trust_state_path,
         finalize_poll_interval_seconds=finalize_poll_interval_seconds,
     )
@@ -466,6 +544,9 @@ def main() -> int:
         node_software_version=args.node_software_version,
         protocol_version=args.protocol_version,
         node_hostname=args.node_hostname,
+        node_ui_endpoint=args.node_ui_endpoint,
+        node_ui_port=args.node_ui_port,
+        node_api_base_url=args.node_api_base_url,
         trust_state_path=args.trust_state_path,
         node_identity_path=args.node_identity_path,
         provider_selection_config_path=args.provider_selection_config_path,

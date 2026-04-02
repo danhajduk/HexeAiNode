@@ -18,8 +18,15 @@ from ai_node.core_api.governance_client import GovernanceSyncClient
 from ai_node.governance.freshness import evaluate_governance_freshness
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.operational_mqtt_readiness import OperationalMqttReadinessChecker
-from ai_node.runtime.trusted_status_telemetry import TrustedStatusTelemetryPublisher
+from ai_node.runtime.trusted_status_telemetry import (
+    STATUS_MESSAGE_EXPIRY_SECONDS,
+    STATUS_TTL_SECONDS,
+    TrustedStatusTelemetryPublisher,
+)
 from ai_node.time_utils import local_now, local_now_iso
+
+
+STATUS_HEARTBEAT_INTERVAL_SECONDS = 60
 
 
 class CapabilityDeclarationRunner:
@@ -252,7 +259,7 @@ class CapabilityDeclarationRunner:
         if not self._is_invalid_manifest_node_id_result(result):
             return result, manifest
 
-        fallback_node_id = str(trust_state.get("operational_mqtt_identity") or "").strip()
+        fallback_node_id = str(trust_state.get("node_id") or "").strip()
         current_manifest_node = str(((manifest.get("node") or {}).get("node_id")) or "").strip()
         if not fallback_node_id or fallback_node_id == current_manifest_node:
             return result, manifest
@@ -951,22 +958,39 @@ class CapabilityDeclarationRunner:
     ) -> dict | None:
         if self._telemetry_publisher is None or not hasattr(self._telemetry_publisher, "publish_status"):
             return None
-        payload = {
-            "lifecycle_state": lifecycle_state,
-            "overall_status": overall_status,
+        operational_ready = (
+            self._operational_readiness_checker.status_payload().get("ready")
+            if hasattr(self._operational_readiness_checker, "status_payload")
+            else None
+        )
+        checks = {
             "trusted": True,
             "capability_state": self._status,
             "governance_state": self._governance_status.get("state"),
             "governance_version": self._governance_status.get("active_governance_version"),
-            "operational_mqtt_ready": (
-                self._operational_readiness_checker.status_payload().get("ready")
-                if hasattr(self._operational_readiness_checker, "status_payload")
-                else None
-            ),
+            "operational_mqtt_ready": operational_ready,
+            "registered_count": self._prompt_service_summary().get("registered_count", 0),
+            "probation_count": self._prompt_service_summary().get("probation_count", 0),
+        }
+        ready = lifecycle_state == NodeLifecycleState.OPERATIONAL.value
+        health_status = self._derive_health_status(
+            lifecycle_state=lifecycle_state,
+            overall_status=overall_status,
+            ready=ready,
+            operational_ready=operational_ready,
+        )
+        payload = {
+            "health_status": health_status,
+            "reported_at": datetime.now(timezone.utc).isoformat(),
+            "ttl_s": STATUS_TTL_SECONDS,
+            "lifecycle_state": lifecycle_state,
+            "summary": self._build_status_summary(lifecycle_state=lifecycle_state, overall_status=overall_status),
+            "ready": ready,
+            "checks": checks,
+            "details": {"overall_status": overall_status},
         }
         if isinstance(extra_payload, dict):
-            payload.update(extra_payload)
-        payload.update(self._prompt_service_summary())
+            payload["details"].update(extra_payload)
         result = await self._telemetry_publisher.publish_status(
             trust_state=trust_state,
             node_id=self._node_id,
@@ -1006,6 +1030,57 @@ class CapabilityDeclarationRunner:
                 "workflow_details": details if isinstance(details, dict) else {},
             },
         )
+
+    async def emit_periodic_status_telemetry(self) -> dict | None:
+        if self._trust_store is None or not hasattr(self._trust_store, "load"):
+            return None
+        trust_state = self._trust_store.load()
+        if not isinstance(trust_state, dict):
+            return None
+        lifecycle_state = self._lifecycle.get_state().value
+        return await self._emit_status_telemetry(
+            trust_state=trust_state,
+            lifecycle_state=lifecycle_state,
+            overall_status=self._derive_overall_status(lifecycle_state),
+            extra_payload={
+                "event_type": "heartbeat",
+                "heartbeat_interval_seconds": STATUS_HEARTBEAT_INTERVAL_SECONDS,
+                "message_expiry_interval_seconds": STATUS_MESSAGE_EXPIRY_SECONDS,
+            },
+        )
+
+    @staticmethod
+    def _derive_overall_status(lifecycle_state: str) -> str:
+        normalized = str(lifecycle_state or "").strip().lower()
+        if normalized == NodeLifecycleState.OPERATIONAL.value:
+            return "operational"
+        if normalized == NodeLifecycleState.DEGRADED.value:
+            return "degraded"
+        return normalized or "unknown"
+
+    @staticmethod
+    def _derive_health_status(
+        *,
+        lifecycle_state: str,
+        overall_status: str,
+        ready: bool,
+        operational_ready: object,
+    ) -> str:
+        normalized_lifecycle = str(lifecycle_state or "").strip().lower()
+        normalized_overall = str(overall_status or "").strip().lower()
+        if normalized_lifecycle == NodeLifecycleState.DEGRADED.value or normalized_overall in {"degraded", "governance_stale"}:
+            return "degraded"
+        if normalized_lifecycle == NodeLifecycleState.OPERATIONAL.value:
+            return "healthy" if ready or operational_ready is not False else "degraded"
+        if "failed" in normalized_lifecycle or normalized_overall in {"error", "retryable_failure"}:
+            return "error"
+        return "unknown"
+
+    @staticmethod
+    def _build_status_summary(*, lifecycle_state: str, overall_status: str) -> str:
+        lifecycle = str(lifecycle_state or "").strip() or "unknown"
+        overall = str(overall_status or "").strip()
+        return f"{lifecycle} | {overall}"[:512] if overall else lifecycle[:512]
 
 
 def _build_governance_payload(*, governance_payload: dict, trust_state: dict) -> dict:

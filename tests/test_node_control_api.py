@@ -588,6 +588,31 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(len(runner.calls), 0)
             self.assertTrue(payload["capability_setup"]["active"])
 
+    def test_start_background_jobs_starts_bootstrap_listener_from_trust_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED, {"source": "test"})
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING, {"source": "test"})
+            runner = self._FakeBootstrapRunner()
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                bootstrap_runner=runner,
+                trust_state_store=self._FakeTrustStateStore(),
+                startup_mode="trusted_resume",
+                trusted_runtime_context={"paired_core_id": "core-main"},
+            )
+
+            asyncio.run(state.start_background_jobs())
+            asyncio.run(state.stop_background_jobs())
+
+            self.assertEqual(len(runner.calls), 1)
+            self.assertEqual(runner.calls[0]["bootstrap_host"], "10.0.0.100")
+            self.assertEqual(runner.calls[0]["port"], 1884)
+            self.assertEqual(runner.calls[0]["topic"], "hexe/bootstrap/core")
+            self.assertEqual(runner.calls[0]["node_name"], "main-ai-node")
+
     def test_update_provider_selection_toggles_openai(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))

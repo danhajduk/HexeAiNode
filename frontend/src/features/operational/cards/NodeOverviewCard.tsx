@@ -1,5 +1,26 @@
 import { CardHeader, StatusBadge } from "../../../components/uiPrimitives";
 
+function formatLocalTimestamp(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const parsed = Date.parse(normalized);
+  if (Number.isNaN(parsed)) {
+    return normalized;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(parsed));
+}
+
 export function NodeOverviewCard({
   nodeId,
   nodeName,
@@ -26,7 +47,7 @@ export function NodeOverviewCard({
         <span>Software</span>
         <code>{softwareVersion || "unknown"}</code>
         <span>Pairing Timestamp</span>
-        <code>{pairingTimestamp || "unavailable"}</code>
+        <code>{formatLocalTimestamp(pairingTimestamp) || "unavailable"}</code>
       </div>
     </article>
   );

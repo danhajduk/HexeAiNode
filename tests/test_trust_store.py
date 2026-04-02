@@ -9,7 +9,7 @@ from ai_node.trust.trust_store import TrustStateStore, redact_trust_state, valid
 
 def _sample_trust_state() -> dict:
     return {
-        "node_id": "node-ai-001",
+        "node_id": "node-123e4567-e89b-42d3-a456-426614174000",
         "node_name": "main-ai-node",
         "node_type": "ai-node",
         "paired_core_id": "core-main",
@@ -17,7 +17,7 @@ def _sample_trust_state() -> dict:
         "node_trust_token": "node-token",
         "initial_baseline_policy": {"policy_version": "v1"},
         "baseline_policy_version": "v1",
-        "operational_mqtt_identity": "main-ai-node",
+        "operational_mqtt_identity": "hn_node-123e4567-e89b-42d3-a456-426614174000",
         "operational_mqtt_token": "mqtt-token",
         "operational_mqtt_host": "192.168.1.50",
         "operational_mqtt_port": 1883,
@@ -55,6 +55,17 @@ class TrustStoreTests(unittest.TestCase):
             store.save(state)
             loaded = store.load()
             self.assertEqual(loaded, state)
+
+    def test_load_normalizes_plain_uuid_to_node_uuid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "trust_state.json"
+            state = _sample_trust_state()
+            state["node_id"] = "123e4567-e89b-42d3-a456-426614174000"
+            path.write_text(json.dumps(state), encoding="utf-8")
+            store = TrustStateStore(path=str(path), logger=self.logger)
+            loaded = store.load()
+            self.assertEqual(loaded["node_id"], "node-123e4567-e89b-42d3-a456-426614174000")
+            self.assertEqual(loaded["operational_mqtt_identity"], "hn_node-123e4567-e89b-42d3-a456-426614174000")
 
     def test_load_returns_none_for_corrupt_json(self):
         with tempfile.TemporaryDirectory() as tmp:

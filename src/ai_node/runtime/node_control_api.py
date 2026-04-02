@@ -8,7 +8,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 
-from ai_node.config.bootstrap_config import create_bootstrap_config
+from ai_node.config.bootstrap_config import BOOTSTRAP_PORT, BOOTSTRAP_TOPIC, create_bootstrap_config
 from ai_node.execution.gateway import ExecutionGateway
 from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.config.provider_credentials_config import summarize_provider_credentials
@@ -23,6 +23,7 @@ from ai_node.runtime.service_manager import NullServiceManager
 from ai_node.runtime.capability_resolver import load_task_graph
 from ai_node.runtime.execution_telemetry import ExecutionTelemetryPublisher
 from ai_node.runtime.task_execution_service import TaskExecutionService
+from ai_node.runtime.capability_declaration_runner import STATUS_HEARTBEAT_INTERVAL_SECONDS
 from ai_node.time_utils import local_now_iso
 
 
@@ -83,6 +84,7 @@ class NodeControlState:
         self._task_execution_service = task_execution_service
         self._provider_refresh_interval_seconds = max(int(provider_refresh_interval_seconds), 60)
         self._provider_refresh_task: asyncio.Task | None = None
+        self._status_telemetry_task: asyncio.Task | None = None
         self._startup_mode = startup_mode
         self._trusted_runtime_context = trusted_runtime_context or {}
         self._phase2_diag = Phase2DiagnosticsLogger(logger)
@@ -1404,19 +1406,27 @@ class NodeControlState:
         return await self._capability_runner.refresh_provider_capabilities_once(force_refresh=force_refresh)
 
     async def start_background_jobs(self) -> None:
-        if self._provider_refresh_task is not None and not self._provider_refresh_task.done():
-            return
-        self._provider_refresh_task = asyncio.create_task(self._provider_refresh_loop())
+        self._start_bootstrap_listener_if_available()
+        if self._provider_refresh_task is None or self._provider_refresh_task.done():
+            self._provider_refresh_task = asyncio.create_task(self._provider_refresh_loop())
+        if self._status_telemetry_task is None or self._status_telemetry_task.done():
+            self._status_telemetry_task = asyncio.create_task(self._status_telemetry_loop())
 
     async def stop_background_jobs(self) -> None:
-        if self._provider_refresh_task is None:
-            return
-        self._provider_refresh_task.cancel()
-        try:
-            await self._provider_refresh_task
-        except asyncio.CancelledError:
-            pass
-        self._provider_refresh_task = None
+        if self._provider_refresh_task is not None:
+            self._provider_refresh_task.cancel()
+            try:
+                await self._provider_refresh_task
+            except asyncio.CancelledError:
+                pass
+            self._provider_refresh_task = None
+        if self._status_telemetry_task is not None:
+            self._status_telemetry_task.cancel()
+            try:
+                await self._status_telemetry_task
+            except asyncio.CancelledError:
+                pass
+            self._status_telemetry_task = None
 
     async def _provider_refresh_loop(self) -> None:
         while True:
@@ -1437,6 +1447,24 @@ class NodeControlState:
             except Exception as exc:
                 if hasattr(self._logger, "warning"):
                     self._logger.warning("[provider-intelligence-refresh-job-error] %s", {"error": str(exc)})
+
+    async def _status_telemetry_loop(self) -> None:
+        while True:
+            await asyncio.sleep(STATUS_HEARTBEAT_INTERVAL_SECONDS)
+            if self._capability_runner is None or not hasattr(self._capability_runner, "emit_periodic_status_telemetry"):
+                continue
+            try:
+                result = await self._capability_runner.emit_periodic_status_telemetry()
+                if hasattr(self._logger, "info"):
+                    self._logger.info(
+                        "[status-telemetry-heartbeat-job] %s",
+                        {"published": bool((result or {}).get("published")), "result": result},
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                if hasattr(self._logger, "warning"):
+                    self._logger.warning("[status-telemetry-heartbeat-job-error] %s", {"error": str(exc)})
 
     def debug_providers_payload(self) -> dict:
         if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "providers_snapshot"):
@@ -1564,6 +1592,32 @@ class NodeControlState:
             port=self._bootstrap_config.port,
             topic=self._bootstrap_config.topic,
             node_name=self._bootstrap_config.node_name,
+        )
+
+    def _start_bootstrap_listener_if_available(self) -> None:
+        if self._bootstrap_runner is None:
+            return
+        if self._bootstrap_config is not None:
+            self._start_bootstrap_runner_if_available()
+            return
+        trust_state = (
+            self._trust_state_store.load()
+            if self._trust_state_store is not None and hasattr(self._trust_state_store, "load")
+            else None
+        )
+        if not isinstance(trust_state, dict):
+            return
+        bootstrap_host = str(
+            trust_state.get("bootstrap_mqtt_host") or trust_state.get("operational_mqtt_host") or ""
+        ).strip()
+        node_name = str(trust_state.get("node_name") or "").strip()
+        if not bootstrap_host or not node_name:
+            return
+        self._bootstrap_runner.start(
+            bootstrap_host=bootstrap_host,
+            port=BOOTSTRAP_PORT,
+            topic=BOOTSTRAP_TOPIC,
+            node_name=node_name,
         )
 
     def initiate_onboarding(self, *, mqtt_host: str, node_name: str) -> dict:

@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { resolveUiMode, resolveUiRouteIntent } from "./uiModeResolver";
-import { buildOperationalRoute, buildSetupRoute, isProviderSetupRoute, isSetupRoute, resolveOperationalSection } from "./uiRoutes";
+import {
+  buildOperationalRoute,
+  buildSetupRoute,
+  isProviderSetupRoute,
+  isSetupRoute,
+  resolveDefaultRouteHashForMode,
+  resolveOperationalSection,
+  shouldArmSetupCompletionRedirect,
+  shouldAutoRedirectCompletedSetup,
+} from "./uiRoutes";
 
 describe("resolveUiRouteIntent", () => {
   it("detects setup provider route", () => {
@@ -83,5 +92,29 @@ describe("uiRoutes", () => {
     expect(resolveOperationalSection("#/dashboard")).toBe("overview");
     expect(isSetupRoute("#/setup/provider/openai")).toBe(true);
     expect(isProviderSetupRoute("#/setup/provider/openai")).toBe(true);
+  });
+
+  it("defaults operational lifecycle roots to dashboard", () => {
+    expect(resolveDefaultRouteHashForMode("operational", "#/")).toBe("#/dashboard");
+    expect(resolveDefaultRouteHashForMode("operational", "")).toBe("#/dashboard");
+    expect(resolveDefaultRouteHashForMode("operational", "#/dashboard/runtime")).toBeNull();
+  });
+
+  it("auto-redirects to dashboard only when setup completion was armed", () => {
+    expect(shouldArmSetupCompletionRedirect("capability_setup_pending", "setup")).toBe(true);
+    expect(
+      shouldAutoRedirectCompletedSetup({
+        lifecycleState: "operational",
+        routeIntent: "setup",
+        redirectArmed: true,
+      })
+    ).toBe(true);
+    expect(
+      shouldAutoRedirectCompletedSetup({
+        lifecycleState: "operational",
+        routeIntent: "setup",
+        redirectArmed: false,
+      })
+    ).toBe(false);
   });
 });

@@ -17,6 +17,7 @@ export function SetupModeView({
     <section className="setup-mode-view">
       <SetupShell
         stages={stages}
+        activeStageLabel={activeStageLabel}
         activePanel={
           <div className="setup-main-stack">
             {completionState ? (

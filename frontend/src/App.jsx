@@ -1,11 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getTheme, setTheme } from "./theme/theme";
 import { apiAdminGet, apiAdminPost, apiGet, apiPost, getApiBase } from "./api";
 import { buildDashboardUiState } from "./uiStateModel";
 import { CardHeader, SeverityIndicator, StatusBadge } from "./components/uiPrimitives";
 import { IdentityScreen } from "./features/node-ui/IdentityScreen";
 import { resolveUiMode } from "./features/node-ui/uiModeResolver";
-import { buildOperationalRoute, buildSetupRoute, resolveOperationalSection } from "./features/node-ui/uiRoutes";
+import {
+  buildOperationalRoute,
+  buildSetupRoute,
+  resolveDefaultRouteHashForMode,
+  resolveOperationalSection,
+  shouldArmSetupCompletionRedirect,
+  shouldAutoRedirectCompletedSetup,
+} from "./features/node-ui/uiRoutes";
 import { SetupModeView } from "./features/setup/SetupModeView";
 import { buildSetupFlowModel } from "./features/setup/setupFlowModel";
 import { OperationalDashboard } from "./features/operational/OperationalDashboard";
@@ -21,7 +28,7 @@ import {
 } from "./features/setup/SetupStagePanels";
 import "./app.css";
 
-const REFRESH_INTERVAL_MS = 7000;
+const REFRESH_INTERVAL_MS = 5000;
 const UI_VERSION = "0.1.0";
 const OPENAI_LATEST_MODELS_LIMIT = 200;
 const DIAGNOSTIC_ENDPOINTS = [
@@ -78,7 +85,7 @@ function ThemeToggle() {
   }
 
   return (
-    <button className="btn app-header-theme-btn" onClick={toggleTheme}>
+    <button className="btn btn-ghost app-header-theme-btn" onClick={toggleTheme}>
       Theme: {theme}
     </button>
   );
@@ -318,6 +325,7 @@ function getCapabilityBadges(capabilityEntry) {
 }
 
 export default function App() {
+  const setupCompletionRedirectArmedRef = useRef(false);
   const [routeHash, setRouteHash] = useState(() => window.location.hash || "#/");
   const [backendStatus, setBackendStatus] = useState("loading");
   const [pendingApprovalUrl, setPendingApprovalUrl] = useState("");
@@ -555,9 +563,34 @@ export default function App() {
   }
 
   useEffect(() => {
+    let cancelled = false;
+    let timeoutId;
+
+    function scheduleNextRefresh() {
+      const now = Date.now();
+      const remainder = now % REFRESH_INTERVAL_MS;
+      const delay = remainder === 0 ? REFRESH_INTERVAL_MS : REFRESH_INTERVAL_MS - remainder;
+
+      timeoutId = window.setTimeout(async () => {
+        if (cancelled) {
+          return;
+        }
+        await loadStatus();
+        if (!cancelled) {
+          scheduleNextRefresh();
+        }
+      }, delay);
+    }
+
     loadStatus();
-    const id = setInterval(loadStatus, REFRESH_INTERVAL_MS);
-    return () => clearInterval(id);
+    scheduleNextRefresh();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -767,20 +800,28 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (routeHash !== "#/" && routeHash !== "") {
+    const nextRoute = resolveDefaultRouteHashForMode(modeResolution.mode, routeHash);
+    if (nextRoute) {
+      window.location.hash = nextRoute;
+    }
+  }, [modeResolution.mode, routeHash]);
+
+  useEffect(() => {
+    if (shouldArmSetupCompletionRedirect(backendStatus, modeResolution.routeIntent)) {
+      setupCompletionRedirectArmedRef.current = true;
       return;
     }
-    if (isIdentityMode) {
-      return;
-    }
-    if (isOperationalMode) {
+    if (
+      shouldAutoRedirectCompletedSetup({
+        lifecycleState: backendStatus,
+        routeIntent: modeResolution.routeIntent,
+        redirectArmed: setupCompletionRedirectArmedRef.current,
+      })
+    ) {
+      setupCompletionRedirectArmedRef.current = false;
       window.location.hash = buildOperationalRoute();
-      return;
     }
-    if (isSetupMode) {
-      window.location.hash = buildSetupRoute();
-    }
-  }, [isIdentityMode, isOperationalMode, isSetupMode, routeHash]);
+  }, [backendStatus, modeResolution.routeIntent]);
 
   function isValidToken(value) {
     return typeof value === "string" && value.trim().length >= 12 && OPENAI_TOKEN_FORMAT.test(value.trim());
@@ -1251,7 +1292,7 @@ function formatTokenHint(value) {
   function renderProviderSetupContent() {
     return (
       <div className="provider-page-shell">
-        <article className="provider-page-card">
+        <article className="card provider-page-card">
           <form className="setup-form" onSubmit={onSaveOpenAiProviderConfig}>
             <label>
               <input
@@ -1729,7 +1770,7 @@ function formatTokenHint(value) {
         mqttStatus: uiState.runtimeHealth.operationalMqttConnectivity,
         governanceStatus: uiState.runtimeHealth.governanceFreshness,
         providerStatus: enabledProviderSummary ? "configured" : "none",
-        lastTelemetryTimestamp: formatLocalTimestamp(uiState.runtimeHealth.lastTelemetryTimestamp),
+        lastTelemetryTimestamp: uiState.runtimeHealth.lastTelemetryTimestamp,
       },
     degradedBanner:
       uiState.lifecycle.current === "degraded"
@@ -1802,7 +1843,8 @@ function formatTokenHint(value) {
   };
 
   return (
-    <main className="page">
+    <div className="shell">
+      <main className="app-frame">
       {showModelPricingPopup && pricingReviewModel ? (
         <section className="modal-overlay pricing-modal-overlay" role="dialog" aria-modal="true" aria-label="Model pricing">
           <article className="card modal-card">
@@ -1933,6 +1975,7 @@ function formatTokenHint(value) {
       ) : isOperationalMode ? (
         <OperationalDashboard {...operationalDashboardProps} />
       ) : null}
-    </main>
+      </main>
+    </div>
   );
 }

@@ -3,6 +3,7 @@ import uuid
 from pathlib import Path
 from typing import Optional, Tuple
 
+from ai_node.identity.node_ids import is_valid_canonical_node_id, normalize_node_id
 from ai_node.time_utils import local_now_iso
 
 
@@ -16,14 +17,6 @@ def _is_non_empty_string(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def _is_valid_uuid_v4(value: str) -> bool:
-    try:
-        parsed = uuid.UUID(value)
-    except Exception:
-        return False
-    return parsed.version == 4 and str(parsed) == value
-
-
 def validate_node_identity(data: object) -> Tuple[bool, Optional[str]]:
     if not isinstance(data, dict):
         return False, "invalid_node_identity_object"
@@ -32,15 +25,15 @@ def validate_node_identity(data: object) -> Tuple[bool, Optional[str]]:
         if key not in data:
             return False, f"missing_{key}"
 
-    node_id = data.get("node_id")
+    node_id = normalize_node_id(data.get("node_id"))
     created_at = data.get("created_at")
     id_format = str(data.get("id_format") or "uuidv4").strip()
 
     if not _is_non_empty_string(node_id):
         return False, "invalid_node_id"
-    if id_format not in {"uuidv4", "legacy"}:
+    if id_format != "uuidv4":
         return False, "invalid_id_format"
-    if id_format == "uuidv4" and not _is_valid_uuid_v4(node_id.strip()):
+    if not is_valid_canonical_node_id(node_id):
         return False, "invalid_node_id"
 
     if not _is_non_empty_string(created_at):
@@ -51,7 +44,7 @@ def validate_node_identity(data: object) -> Tuple[bool, Optional[str]]:
 
 def create_node_identity() -> dict:
     return {
-        "node_id": str(uuid.uuid4()),
+        "node_id": normalize_node_id(str(uuid.uuid4())),
         "created_at": local_now_iso(),
         "id_format": "uuidv4",
     }
@@ -63,6 +56,11 @@ class NodeIdentityStore:
         self._logger = logger
 
     def save(self, identity: dict) -> None:
+        identity = {
+            **identity,
+            "node_id": normalize_node_id(identity.get("node_id")),
+            "id_format": "uuidv4",
+        }
         is_valid, error = validate_node_identity(identity)
         if not is_valid:
             raise ValueError(f"cannot save invalid node identity: {error}")
@@ -89,7 +87,12 @@ class NodeIdentityStore:
                 )
             return None
 
-        is_valid, error = validate_node_identity(data)
+        normalized = {
+            **data,
+            "node_id": normalize_node_id(data.get("node_id")),
+            "id_format": "uuidv4",
+        }
+        is_valid, error = validate_node_identity(normalized)
         if not is_valid:
             if hasattr(self._logger, "warning"):
                 self._logger.warning(
@@ -100,7 +103,9 @@ class NodeIdentityStore:
 
         if hasattr(self._logger, "info"):
             self._logger.info("[node-identity-loaded] %s", {"path": str(self._path)})
-        return data
+        if normalized != data:
+            self.save(normalized)
+        return normalized
 
     def create(self) -> dict:
         identity = create_node_identity()
@@ -108,12 +113,13 @@ class NodeIdentityStore:
         return identity
 
     def create_from_node_id(self, node_id: str, *, id_format: str = "legacy") -> dict:
-        if not _is_non_empty_string(node_id):
+        normalized_node_id = normalize_node_id(node_id)
+        if not _is_non_empty_string(normalized_node_id):
             raise ValueError("node_id is required")
         identity = {
-            "node_id": node_id.strip(),
+            "node_id": normalized_node_id,
             "created_at": local_now_iso(),
-            "id_format": id_format,
+            "id_format": "uuidv4",
         }
         self.save(identity)
         return identity
@@ -123,5 +129,5 @@ class NodeIdentityStore:
         if existing is not None:
             return existing
         if _is_non_empty_string(migration_node_id):
-            return self.create_from_node_id(str(migration_node_id), id_format="legacy")
+            return self.create_from_node_id(str(migration_node_id), id_format="uuidv4")
         return self.create()

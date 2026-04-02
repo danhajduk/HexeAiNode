@@ -3,6 +3,11 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from ai_node.diagnostics.onboarding_logger import OnboardingDiagnosticsLogger
+from ai_node.identity.node_ids import (
+    derive_operational_mqtt_identity,
+    is_valid_canonical_node_id,
+    normalize_node_id,
+)
 from ai_node.security.redaction import redact_dict
 
 
@@ -34,9 +39,18 @@ def redact_trust_state(data: dict) -> dict:
     return redact_dict(data)
 
 
+def normalize_trust_state(data: dict) -> dict:
+    normalized = dict(data)
+    if "node_id" in normalized:
+        normalized["node_id"] = normalize_node_id(normalized.get("node_id"))
+        normalized["operational_mqtt_identity"] = derive_operational_mqtt_identity(normalized.get("node_id"))
+    return normalized
+
+
 def validate_trust_state(data: object) -> Tuple[bool, Optional[str]]:
     if not isinstance(data, dict):
         return False, "invalid_trust_state_object"
+    data = normalize_trust_state(data)
 
     for key in REQUIRED_TRUST_STATE_FIELDS:
         if key not in data:
@@ -59,6 +73,8 @@ def validate_trust_state(data: object) -> Tuple[bool, Optional[str]]:
     for key in string_fields:
         if not _is_non_empty_string(data.get(key)):
             return False, f"invalid_{key}"
+    if not is_valid_canonical_node_id(data.get("node_id")):
+        return False, "invalid_node_id"
 
     if data.get("node_type") != "ai-node":
         return False, "invalid_node_type"
@@ -82,6 +98,7 @@ class TrustStateStore:
         self._diag = OnboardingDiagnosticsLogger(logger)
 
     def save(self, trust_state: dict) -> None:
+        trust_state = normalize_trust_state(trust_state)
         is_valid, error = validate_trust_state(trust_state)
         if not is_valid:
             raise ValueError(f"cannot save invalid trust state: {error}")
@@ -111,7 +128,8 @@ class TrustStateStore:
             )
             return None
 
-        is_valid, error = validate_trust_state(data)
+        normalized = normalize_trust_state(data)
+        is_valid, error = validate_trust_state(normalized)
         if not is_valid:
             if hasattr(self._logger, "warning"):
                 self._logger.warning(
@@ -127,6 +145,8 @@ class TrustStateStore:
         if hasattr(self._logger, "info"):
             self._logger.info(
                 "[trust-state-loaded] %s",
-                {"path": str(self._path), "state": redact_trust_state(data)},
+                {"path": str(self._path), "state": redact_trust_state(normalized)},
             )
-        return data
+        if normalized != data:
+            self.save(normalized)
+        return normalized

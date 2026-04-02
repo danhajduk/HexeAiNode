@@ -127,7 +127,7 @@ describe("SetupModeView", () => {
     });
 
     expect(flow.activeStage).toBe("ready");
-    expect(flow.stages.find((stage) => stage.id === "ready")?.state).toBe("current");
+    expect(flow.stages.find((stage) => stage.id === "ready")?.state).toBe("completed");
     expect(flow.stages.find((stage) => stage.id === "capability_declaration")?.state).toBe("completed");
   });
 });
@@ -138,6 +138,7 @@ describe("OperationalDashboard", () => {
 
     expect(markup).toContain("Node Overview");
     expect(markup).toContain("Actions");
+    expect(markup).toContain("Last Heartbeat");
     expect(markup).not.toContain("Advanced inspection and admin controls");
   });
 
@@ -175,5 +176,7 @@ describe("OperationalDashboard", () => {
 
     expect(capabilitiesMarkup).toContain("Classification");
     expect(overviewMarkup).toContain("Paired Hexe Core");
+    expect(overviewMarkup).toContain("Telemetry Freshness");
+    expect(overviewMarkup).toContain("Telemetry Age");
   });
 });

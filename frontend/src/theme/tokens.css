@@ -1,26 +1,45 @@
+/*
+ * Hexe UI Theme Contract
+ * Official design tokens for Core and addons. Addons should consume these
+ * `--sx-*` variables instead of hard-coded values to stay visually aligned.
+ */
 :root {
-  /* colors */
-  --color-bg: 222 84% 5%;
-  --color-panel: 222 50% 10%;
-  --color-border: 217 20% 20%;
+  --sx-bg: 222 84% 5%;
+  --sx-panel: 222 50% 10%;
+  --sx-border: 217 20% 20%;
+  --sx-text: 210 40% 98%;
+  --sx-text-muted: 215 20% 65%;
+  --sx-accent: 262 83% 58%;
+  --sx-success: 142 71% 45%;
+  --sx-warning: 38 92% 50%;
+  --sx-danger: 0 84% 60%;
+  --sx-space-1: 4px;
+  --sx-space-2: 8px;
+  --sx-space-3: 12px;
+  --sx-space-4: 16px;
+  --sx-space-5: 24px;
+  --sx-space-6: 32px;
+  --sx-radius-sm: 6px;
+  --sx-radius-md: 10px;
+  --sx-radius-lg: 14px;
+  --sx-radius-pill: 999px;
+  --sx-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --sx-shadow-2: 0 4px 10px rgba(0, 0, 0, 0.35);
+  --sx-font-sans: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 
-  --color-text: 210 40% 98%;
-  --color-text-muted: 215 20% 65%;
-
-  --color-primary: 262 83% 58%;
-  --color-success: 142 71% 45%;
-  --color-warning: 38 92% 50%;
-  --color-danger: 0 84% 60%;
-
-  /* radius */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-
-  /* shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.35);
-
-  /* typography */
-  --font-sans: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --color-bg: var(--sx-bg);
+  --color-panel: var(--sx-panel);
+  --color-border: var(--sx-border);
+  --color-text: var(--sx-text);
+  --color-text-muted: var(--sx-text-muted);
+  --color-primary: var(--sx-accent);
+  --color-success: var(--sx-success);
+  --color-warning: var(--sx-warning);
+  --color-danger: var(--sx-danger);
+  --radius-sm: var(--sx-radius-sm);
+  --radius-md: var(--sx-radius-md);
+  --radius-lg: var(--sx-radius-lg);
+  --shadow-sm: var(--sx-shadow-1);
+  --shadow-md: var(--sx-shadow-2);
+  --font-sans: var(--sx-font-sans);
 }

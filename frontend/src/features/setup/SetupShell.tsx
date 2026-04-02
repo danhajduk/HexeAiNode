@@ -1,21 +1,24 @@
-import { CardHeader } from "../../components/uiPrimitives";
 import { SetupStepper } from "./SetupStepper";
 
 export function SetupShell({
   stages = [],
+  activeStageLabel,
   activePanel,
   primaryActions = [],
   secondaryActions = [],
   dangerActions = [],
 }) {
   return (
-    <section className="setup-shell">
-      <div className="setup-shell-layout">
-        <aside className="card setup-shell-sidebar">
-          <CardHeader title="Setup Progress" subtitle="Follow the current onboarding and readiness stages." />
-          <SetupStepper stages={stages} />
-        </aside>
-        <section className="setup-shell-main">
+    <section className="app-shell">
+      <aside className="card stack flow-sidebar">
+        <div className="section-heading">
+          <h2>Setup Flow</h2>
+          <span className="pill">{activeStageLabel || "Idle"}</span>
+        </div>
+        <SetupStepper stages={stages} />
+      </aside>
+      <div className="main-column">
+        <section className="content-stack">
           {activePanel}
           {(primaryActions.length || secondaryActions.length || dangerActions.length) ? (
             <footer className="card setup-shell-footer">

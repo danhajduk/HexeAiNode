@@ -1,6 +1,20 @@
+function getProxiedNodeApiBase() {
+  const pathname = String(window.location.pathname || "").trim();
+  const match = pathname.match(/^\/nodes\/([^/]+)\/ui(?:\/.*)?$/i);
+  if (!match) {
+    return "";
+  }
+  const nodeId = decodeURIComponent(match[1]);
+  return `${window.location.origin}/api/nodes/${nodeId}`;
+}
+
 export function getApiBase() {
   if (import.meta.env.VITE_API_BASE) {
     return import.meta.env.VITE_API_BASE;
+  }
+  const proxiedNodeApiBase = getProxiedNodeApiBase();
+  if (proxiedNodeApiBase) {
+    return proxiedNodeApiBase;
   }
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;

@@ -15,11 +15,9 @@ export function OperationalShell({ currentSection, sections = [], healthStrip, c
           ))}
         </nav>
       </aside>
-      <div className="operational-shell-main">
+      <div className="operational-shell-content">
         {healthStrip}
-        <div className="operational-shell-content">
-          {children}
-        </div>
+        {children}
       </div>
     </section>
   );

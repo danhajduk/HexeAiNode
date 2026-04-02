@@ -1,3 +1,9 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --sx-bg: 222 84% 5%;
+  --sx-panel: 222 50% 10%;
+  --sx-border: 217 20% 20%;
+  --sx-text: 210 40% 98%;
+  --sx-text-muted: 215 20% 65%;
+  --sx-accent: 262 83% 58%;
 }

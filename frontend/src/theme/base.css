@@ -1,32 +1,33 @@
 :root {
   color-scheme: dark;
-  font-family: var(--font-sans);
+  font-family: var(--sx-font-sans);
   background: radial-gradient(
     circle at 20% 0%,
-    hsl(var(--color-panel)) 0%,
-    hsl(var(--color-bg)) 55%,
-    hsl(var(--color-bg)) 100%
+    hsl(var(--sx-panel)) 0%,
+    hsl(var(--sx-bg)) 55%,
+    hsl(var(--sx-bg)) 100%
   );
-  color: hsl(var(--color-text));
+  color: hsl(var(--sx-text));
+}
+
+html,
+body {
+  min-height: 100%;
 }
 
 body {
   margin: 0;
-  font-family: var(--font-sans);
-  background: hsl(var(--color-bg));
-  color: hsl(var(--color-text));
-}
-
-h1 {
-  font-size: 28px;
+  font-family: var(--sx-font-sans);
+  background: hsl(var(--sx-bg));
+  color: hsl(var(--sx-text));
 }
 
 a {
-  color: hsl(var(--color-primary));
+  color: hsl(var(--sx-accent));
   text-decoration: none;
 }
 
 hr {
   border: none;
-  border-top: 1px solid hsl(var(--color-border));
+  border-top: 1px solid hsl(var(--sx-border));
 }

@@ -63,7 +63,9 @@ Example:
   "node_software_version": "0.1.0",
   "protocol_version": "1.0",
   "node_nonce": "58a5f88e-64c2-4552-8721-9ea47dcf2d1e",
-  "hostname": "ai-server.local"
+  "hostname": "ai-server.local",
+  "ui_endpoint": "http://ai-server.local:8081/",
+  "api_base_url": "http://ai-server.local:9002"
 }
 ```
 
@@ -78,6 +80,8 @@ Fields:
 | `protocol_version` | Registration protocol compatibility |
 | `node_nonce` | Unique per-registration attempt correlation nonce |
 | `hostname` | Optional host identifier |
+| `ui_endpoint` | Optional absolute `http(s)` URL for the node-hosted operator UI |
+| `api_base_url` | Optional absolute `http(s)` URL for the node-hosted API base |
 
 ## Core Registration Handling
 

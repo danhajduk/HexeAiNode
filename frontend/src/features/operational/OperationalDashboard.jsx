@@ -10,6 +10,64 @@ import { RecentActivityCard } from "./cards/RecentActivityCard";
 import { OperationalActionsCard } from "./cards/OperationalActionsCard";
 import { DiagnosticsPage } from "../diagnostics/DiagnosticsPage";
 
+function maskOnboardingRef(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "none";
+  }
+  if (normalized === "operational") {
+    return normalized;
+  }
+  if (normalized.length <= 7) {
+    return `**********${normalized}`;
+  }
+  return `**********${normalized.slice(-7)}`;
+}
+
+function getTelemetryAgeSeconds(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return null;
+  }
+  const parsed = Date.parse(normalized);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+  return Math.max(0, Math.floor((Date.now() - parsed) / 1000));
+}
+
+function formatTelemetryAge(value) {
+  if (value === null || value === undefined) {
+    return "none";
+  }
+  if (value < 60) {
+    return `${value}s`;
+  }
+  if (value < 3600) {
+    return `${Math.floor(value / 60)}m`;
+  }
+  if (value < 86400) {
+    return `${Math.floor(value / 3600)}h`;
+  }
+  return `${Math.floor(value / 86400)}d`;
+}
+
+function telemetryFreshnessFromAge(ageSeconds, connected) {
+  if (!connected) {
+    return "offline";
+  }
+  if (ageSeconds === null) {
+    return "unknown";
+  }
+  if (ageSeconds <= 300) {
+    return "fresh";
+  }
+  if (ageSeconds <= 1800) {
+    return "stale";
+  }
+  return "inactive";
+}
+
 export function OperationalDashboard({
   currentSection,
   sections = [],
@@ -28,6 +86,9 @@ export function OperationalDashboard({
   pendingApprovalNodeId,
   diagnosticsProps,
 }) {
+  const telemetryAgeSeconds = getTelemetryAgeSeconds(runtimeHealth?.lastTelemetryTimestamp);
+  const telemetryFreshness = telemetryFreshnessFromAge(telemetryAgeSeconds, coreConnection?.connected);
+
   return (
     <OperationalShell
       currentSection={currentSection}
@@ -49,11 +110,17 @@ export function OperationalDashboard({
                   <span>Core API</span>
                   <code>{coreConnection.coreApiEndpoint || "unavailable"}</code>
                   <span>Operational MQTT</span>
-                  <code>{coreConnection.operationalMqttAddress || "unavailable"}</code>
+                  <code>
+                    {coreConnection.operationalMqttAddress || (coreConnection.connected ? "connected" : "unavailable")}
+                  </code>
                   <span>Connection</span>
                   <HealthIndicator value={coreConnection.connected ? "connected" : "disconnected"} />
                   <span>Onboarding Ref</span>
-                  <code>{coreConnection.onboardingReference || "none"}</code>
+                  <code>{maskOnboardingRef(coreConnection.onboardingReference)}</code>
+                  <span>Telemetry Freshness</span>
+                  <HealthIndicator value={telemetryFreshness} />
+                  <span>Telemetry Age</span>
+                  <code>{formatTelemetryAge(telemetryAgeSeconds)}</code>
                 </div>
               </article>
             ) : null}

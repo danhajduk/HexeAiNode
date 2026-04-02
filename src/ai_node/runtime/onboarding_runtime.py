@@ -54,6 +54,8 @@ class OnboardingRuntime:
         node_software_version: str = "0.1.0",
         protocol_version: str = "1.0",
         hostname: Optional[str] = None,
+        ui_endpoint: Optional[str] = None,
+        api_base_url: Optional[str] = None,
         trust_state_path: str = ".run/trust_state.json",
         finalize_poll_interval_seconds: float = 2.0,
     ) -> None:
@@ -65,6 +67,8 @@ class OnboardingRuntime:
         self._node_software_version = node_software_version
         self._protocol_version = protocol_version
         self._hostname = hostname
+        self._ui_endpoint = ui_endpoint
+        self._api_base_url = api_base_url
         self._finalize_poll_interval_seconds = finalize_poll_interval_seconds
         self._http_adapter = HttpxJsonAdapter()
         self._registration_client = RegistrationClient(
@@ -160,6 +164,8 @@ class OnboardingRuntime:
             protocol_version=self._protocol_version,
             node_nonce=node_nonce,
             hostname=self._hostname,
+            ui_endpoint=self._ui_endpoint,
+            api_base_url=self._api_base_url,
         )
         status = (
             response.get("status")

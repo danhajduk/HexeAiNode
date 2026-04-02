@@ -1,9 +1,8 @@
 :root[data-theme="light"] {
   color-scheme: light;
-  --color-bg: 0 0% 100%;
-  --color-panel: 210 40% 98%;
-  --color-border: 214 32% 91%;
-
-  --color-text: 222 84% 5%;
-  --color-text-muted: 215 16% 47%;
+  --sx-bg: 0 0% 100%;
+  --sx-panel: 210 40% 98%;
+  --sx-border: 214 32% 91%;
+  --sx-text: 222 84% 5%;
+  --sx-text-muted: 215 16% 47%;
 }

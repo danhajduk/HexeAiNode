@@ -65,6 +65,9 @@ function getStageState(stageId, activeStage, lifecycleState) {
   const activeIndex = STAGE_ORDER.indexOf(activeStage);
   const currentIndex = STAGE_ORDER.indexOf(stageId);
   if (stageId === activeStage) {
+    if (stageId === "ready" && (lifecycleState === "operational" || lifecycleState === "degraded")) {
+      return "completed";
+    }
     if (lifecycleState === "capability_declaration_failed_retry_pending" && stageId === "capability_declaration") {
       return "error";
     }

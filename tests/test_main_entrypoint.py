@@ -1,12 +1,52 @@
-import unittest
-import tempfile
 import json
+import tempfile
+import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from ai_node.main import run
+from ai_node.main import _default_node_api_base_url, _default_node_hostname, _default_node_ui_endpoint, run
 
 
 class MainEntrypointTests(unittest.TestCase):
+    def test_default_node_ui_endpoint_uses_detected_ip(self):
+        with patch("ai_node.main._detect_primary_ip", return_value="192.168.1.55"):
+            self.assertEqual(
+                _default_node_ui_endpoint(node_ui_endpoint=None, node_ui_port=8081),
+                "http://192.168.1.55:8081/",
+            )
+
+    def test_default_node_ui_endpoint_preserves_explicit_value(self):
+        with patch("ai_node.main._detect_primary_ip", return_value="192.168.1.55"):
+            self.assertEqual(
+                _default_node_ui_endpoint(
+                    node_ui_endpoint="http://10.0.0.9:9090/",
+                    node_ui_port=8081,
+                ),
+                "http://10.0.0.9:9090/",
+            )
+
+    def test_default_node_hostname_uses_detected_ip(self):
+        with patch("ai_node.main._detect_primary_ip", return_value="192.168.1.55"):
+            self.assertEqual(_default_node_hostname(None), "192.168.1.55")
+
+    def test_default_node_hostname_preserves_explicit_value(self):
+        with patch("ai_node.main._detect_primary_ip", return_value="192.168.1.55"):
+            self.assertEqual(_default_node_hostname("main-ai-node.local"), "main-ai-node.local")
+
+    def test_default_node_api_base_url_uses_detected_ip(self):
+        with patch("ai_node.main._detect_primary_ip", return_value="192.168.1.55"):
+            self.assertEqual(
+                _default_node_api_base_url(node_api_base_url=None, api_port=9002),
+                "http://192.168.1.55:9002",
+            )
+
+    def test_default_node_api_base_url_preserves_explicit_value(self):
+        with patch("ai_node.main._detect_primary_ip", return_value="192.168.1.55"):
+            self.assertEqual(
+                _default_node_api_base_url(node_api_base_url="http://10.0.0.9:9100", api_port=9002),
+                "http://10.0.0.9:9100",
+            )
+
     def test_run_once_returns_success(self):
         with tempfile.TemporaryDirectory() as tmp:
             rc = run(
@@ -18,6 +58,37 @@ class MainEntrypointTests(unittest.TestCase):
                 log_file=f"{tmp}/backend.log",
             )
             self.assertEqual(rc, 0)
+
+    def test_run_once_accepts_node_ui_endpoint_configuration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("ai_node.main._detect_primary_ip", return_value="192.168.1.55"):
+                rc = run(
+                    once=True,
+                    interval_seconds=0.01,
+                    api_port=0,
+                    bootstrap_config_path=f"{tmp}/bootstrap_config.json",
+                    trust_state_path=f"{tmp}/trust_state.json",
+                    node_identity_path=f"{tmp}/node_identity.json",
+                    node_ui_endpoint="http://node-ui.local:8081/",
+                    log_file=f"{tmp}/backend.log",
+                )
+                self.assertEqual(rc, 0)
+
+    def test_run_once_can_derive_node_ui_endpoint_from_detected_ip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("ai_node.main._detect_primary_ip", return_value="192.168.1.55"):
+                rc = run(
+                    once=True,
+                    interval_seconds=0.01,
+                    api_port=0,
+                    bootstrap_config_path=f"{tmp}/bootstrap_config.json",
+                    trust_state_path=f"{tmp}/trust_state.json",
+                    node_identity_path=f"{tmp}/node_identity.json",
+                    node_ui_endpoint="",
+                    node_ui_port=8081,
+                    log_file=f"{tmp}/backend.log",
+                )
+                self.assertEqual(rc, 0)
 
     def test_run_once_creates_node_identity_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -65,7 +136,7 @@ class MainEntrypointTests(unittest.TestCase):
             trust_path.write_text(
                 json.dumps(
                     {
-                        "node_id": "legacy-node-001",
+                        "node_id": "123e4567-e89b-42d3-a456-426614174000",
                         "node_name": "main-ai-node",
                         "node_type": "ai-node",
                         "paired_core_id": "core-main",
@@ -73,7 +144,7 @@ class MainEntrypointTests(unittest.TestCase):
                         "node_trust_token": "token",
                         "initial_baseline_policy": {"policy_version": "1.0"},
                         "baseline_policy_version": "1.0",
-                        "operational_mqtt_identity": "main-ai-node",
+                        "operational_mqtt_identity": "hn_node-123e4567-e89b-42d3-a456-426614174000",
                         "operational_mqtt_token": "mqtt-token",
                         "operational_mqtt_host": "10.0.0.100",
                         "operational_mqtt_port": 1883,
@@ -94,8 +165,8 @@ class MainEntrypointTests(unittest.TestCase):
             )
             self.assertEqual(rc, 0)
             payload = json.loads(identity_path.read_text(encoding="utf-8"))
-            self.assertEqual(payload["node_id"], "legacy-node-001")
-            self.assertEqual(payload["id_format"], "legacy")
+            self.assertEqual(payload["node_id"], "node-123e4567-e89b-42d3-a456-426614174000")
+            self.assertEqual(payload["id_format"], "uuidv4")
 
     def test_run_once_fails_when_trust_state_node_id_mismatches_identity(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -103,7 +174,7 @@ class MainEntrypointTests(unittest.TestCase):
             identity_path.write_text(
                 json.dumps(
                     {
-                        "node_id": "123e4567-e89b-42d3-a456-426614174000",
+                        "node_id": "node-123e4567-e89b-42d3-a456-426614174000",
                         "created_at": "2026-03-11T00:00:00Z",
                         "id_format": "uuidv4",
                     }
@@ -114,7 +185,7 @@ class MainEntrypointTests(unittest.TestCase):
             trust_path.write_text(
                 json.dumps(
                     {
-                        "node_id": "legacy-node-002",
+                        "node_id": "node-223e4567-e89b-42d3-a456-426614174000",
                         "node_name": "main-ai-node",
                         "node_type": "ai-node",
                         "paired_core_id": "core-main",
@@ -122,7 +193,7 @@ class MainEntrypointTests(unittest.TestCase):
                         "node_trust_token": "token",
                         "initial_baseline_policy": {"policy_version": "1.0"},
                         "baseline_policy_version": "1.0",
-                        "operational_mqtt_identity": "main-ai-node",
+                        "operational_mqtt_identity": "hn_node-223e4567-e89b-42d3-a456-426614174000",
                         "operational_mqtt_token": "mqtt-token",
                         "operational_mqtt_host": "10.0.0.100",
                         "operational_mqtt_port": 1883,
@@ -149,7 +220,7 @@ class MainEntrypointTests(unittest.TestCase):
             identity_path.write_text(
                 json.dumps(
                     {
-                        "node_id": "123e4567-e89b-42d3-a456-426614174000",
+                        "node_id": "node-123e4567-e89b-42d3-a456-426614174000",
                         "created_at": "2026-03-11T00:00:00Z",
                         "id_format": "uuidv4",
                     }
@@ -160,7 +231,7 @@ class MainEntrypointTests(unittest.TestCase):
             trust_path.write_text(
                 json.dumps(
                     {
-                        "node_id": "123e4567-e89b-42d3-a456-426614174000",
+                        "node_id": "node-123e4567-e89b-42d3-a456-426614174000",
                         "node_name": "main-ai-node",
                         "node_type": "ai-node",
                         "paired_core_id": "core-main",
@@ -168,7 +239,7 @@ class MainEntrypointTests(unittest.TestCase):
                         "node_trust_token": "token",
                         "initial_baseline_policy": {"policy_version": "1.0"},
                         "baseline_policy_version": "1.0",
-                        "operational_mqtt_identity": "main-ai-node",
+                        "operational_mqtt_identity": "hn_node-123e4567-e89b-42d3-a456-426614174000",
                         "operational_mqtt_token": "mqtt-token",
                         "operational_mqtt_host": "10.0.0.100",
                         "operational_mqtt_port": 1883,
@@ -199,7 +270,7 @@ class MainEntrypointTests(unittest.TestCase):
             identity_path.write_text(
                 json.dumps(
                     {
-                        "node_id": "123e4567-e89b-42d3-a456-426614174000",
+                        "node_id": "node-123e4567-e89b-42d3-a456-426614174000",
                         "created_at": "2026-03-11T00:00:00Z",
                         "id_format": "uuidv4",
                     }
@@ -210,7 +281,7 @@ class MainEntrypointTests(unittest.TestCase):
             trust_path.write_text(
                 json.dumps(
                     {
-                        "node_id": "123e4567-e89b-42d3-a456-426614174000",
+                        "node_id": "node-123e4567-e89b-42d3-a456-426614174000",
                         "node_name": "main-ai-node",
                         "node_type": "ai-node",
                         "paired_core_id": "core-main",
@@ -218,7 +289,7 @@ class MainEntrypointTests(unittest.TestCase):
                         "node_trust_token": "token",
                         "initial_baseline_policy": {"policy_version": "1.0"},
                         "baseline_policy_version": "1.0",
-                        "operational_mqtt_identity": "main-ai-node",
+                        "operational_mqtt_identity": "hn_node-123e4567-e89b-42d3-a456-426614174000",
                         "operational_mqtt_token": "mqtt-token",
                         "operational_mqtt_host": "127.0.0.1",
                         "operational_mqtt_port": 1883,

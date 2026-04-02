@@ -5,14 +5,14 @@
         "not_classified"
       ],
       "model_id": "gpt-5-mini",
-      "status": "available"
+      "status": "degraded"
     },
     {
       "blockers": [
         "not_classified"
       ],
       "model_id": "gpt-5-nano",
-      "status": "available"
+      "status": "degraded"
     }
   ],
   "capability_graph_version": "1.0",
@@ -91,7 +91,7 @@
     "vision_input": true,
     "voice_conversation": false
   },
-  "generated_at": "2026-03-22T00:51:19.418250+00:00",
+  "generated_at": "2026-04-02T18:47:04.304398+00:00",
   "resolved_tasks": [
     "task.chat",
     "task.classification",

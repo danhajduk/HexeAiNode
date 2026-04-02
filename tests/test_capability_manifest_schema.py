@@ -18,7 +18,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
 
     def test_create_manifest_with_required_groups(self):
         manifest = create_capability_manifest(
-            node_id="node-001",
+            node_id="node-6d1821d2-a838-4540-a6d5-a5183e59393e",
             node_type="ai-node",
             node_name="main-ai-node",
             node_software_version="0.1.0",
@@ -34,7 +34,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
 
     def test_validate_rejects_enabled_provider_not_supported(self):
         manifest = create_capability_manifest(
-            node_id="node-001",
+            node_id="node-6d1821d2-a838-4540-a6d5-a5183e59393e",
             node_type="ai-node",
             node_name="main-ai-node",
             node_software_version="0.1.0",
@@ -75,7 +75,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
 
     def test_validate_rejects_unknown_task_family(self):
         manifest = create_capability_manifest(
-            node_id="node-001",
+            node_id="node-6d1821d2-a838-4540-a6d5-a5183e59393e",
             node_type="ai-node",
             node_name="main-ai-node",
             node_software_version="0.1.0",
@@ -92,7 +92,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
 
     def test_validate_rejects_unknown_manifest_field(self):
         manifest = create_capability_manifest(
-            node_id="node-001",
+            node_id="node-6d1821d2-a838-4540-a6d5-a5183e59393e",
             node_type="ai-node",
             node_name="main-ai-node",
             node_software_version="0.1.0",
@@ -109,7 +109,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
 
     def test_create_manifest_accepts_provider_intelligence(self):
         manifest = create_capability_manifest(
-            node_id="node-001",
+            node_id="node-6d1821d2-a838-4540-a6d5-a5183e59393e",
             node_type="ai-node",
             node_name="main-ai-node",
             node_software_version="0.1.0",
@@ -141,7 +141,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
 
     def test_validate_rejects_provider_intelligence_for_unsupported_provider(self):
         manifest = create_capability_manifest(
-            node_id="node-001",
+            node_id="node-6d1821d2-a838-4540-a6d5-a5183e59393e",
             node_type="ai-node",
             node_name="main-ai-node",
             node_software_version="0.1.0",
@@ -160,7 +160,7 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
 
     def test_create_manifest_accepts_granular_code_task_families(self):
         manifest = create_capability_manifest(
-            node_id="node-001",
+            node_id="node-6d1821d2-a838-4540-a6d5-a5183e59393e",
             node_type="ai-node",
             node_name="main-ai-node",
             node_software_version="0.1.0",
@@ -175,6 +175,40 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
 
         self.assertTrue(is_valid)
         self.assertIsNone(error)
+
+    def test_validate_rejects_mqtt_style_identity_as_node_id(self):
+        manifest = create_capability_manifest(
+            node_id="node-6d1821d2-a838-4540-a6d5-a5183e59393e",
+            node_type="ai-node",
+            node_name="main-ai-node",
+            node_software_version="0.1.0",
+            task_families=["task.classification"],
+            supported_providers=["openai"],
+            enabled_providers=["openai"],
+            node_features=["telemetry_support"],
+            environment_hints=self._valid_environment_hints(),
+        )
+        manifest["node"]["node_id"] = "hn_6d1821d2-a838-4540-a6d5-a5183e59393e"
+
+        is_valid, error = validate_capability_manifest(manifest)
+
+        self.assertFalse(is_valid)
+        self.assertEqual(error, "invalid_node_id")
+
+    def test_create_manifest_normalizes_plain_uuid_to_node_uuid(self):
+        manifest = create_capability_manifest(
+            node_id="6d1821d2-a838-4540-a6d5-a5183e59393e",
+            node_type="ai-node",
+            node_name="main-ai-node",
+            node_software_version="0.1.0",
+            task_families=["task.classification"],
+            supported_providers=["openai"],
+            enabled_providers=["openai"],
+            node_features=["telemetry_support"],
+            environment_hints=self._valid_environment_hints(),
+        )
+
+        self.assertEqual(manifest["node"]["node_id"], "node-6d1821d2-a838-4540-a6d5-a5183e59393e")
 
 
 if __name__ == "__main__":

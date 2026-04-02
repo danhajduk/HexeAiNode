@@ -11,8 +11,10 @@ from ai_node.runtime.onboarding_runtime import OnboardingRuntime
 class _FakeRegistrationClient:
     def __init__(self, lifecycle: NodeLifecycle):
         self._lifecycle = lifecycle
+        self.last_kwargs = None
 
-    async def register(self, **_kwargs):
+    async def register(self, **kwargs):
+        self.last_kwargs = kwargs
         self._lifecycle.transition_to(NodeLifecycleState.REGISTRATION_PENDING)
         return {
             "status": "pending_approval",
@@ -37,7 +39,7 @@ class _FakeHttpAdapter:
         return {
             "onboarding_status": "approved",
             "activation": {
-                "node_id": "123e4567-e89b-42d3-a456-426614174000",
+                "node_id": "node-123e4567-e89b-42d3-a456-426614174000",
                 "node_type": "ai-node",
                 "paired_core_id": "core-main",
                 "node_trust_token": "token",
@@ -60,7 +62,7 @@ class _FakeHttpAdapterLoopbackHost(_FakeHttpAdapter):
         return {
             "onboarding_status": "approved",
             "activation": {
-                "node_id": "123e4567-e89b-42d3-a456-426614174000",
+                "node_id": "node-123e4567-e89b-42d3-a456-426614174000",
                 "node_type": "ai-node",
                 "paired_core_id": "core-main",
                 "node_trust_token": "token",
@@ -83,7 +85,7 @@ class _FakeHttpAdapterWildcardHost(_FakeHttpAdapter):
         return {
             "onboarding_status": "approved",
             "activation": {
-                "node_id": "123e4567-e89b-42d3-a456-426614174000",
+                "node_id": "node-123e4567-e89b-42d3-a456-426614174000",
                 "node_type": "ai-node",
                 "paired_core_id": "core-main",
                 "node_trust_token": "token",
@@ -97,6 +99,35 @@ class _FakeHttpAdapterWildcardHost(_FakeHttpAdapter):
 
 
 class OnboardingRuntimeTests(unittest.TestCase):
+    def test_registration_threads_ui_endpoint_to_client(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("onboarding-runtime-test"))
+        lifecycle.transition_to(NodeLifecycleState.BOOTSTRAP_CONNECTING)
+        lifecycle.transition_to(NodeLifecycleState.BOOTSTRAP_CONNECTED)
+        lifecycle.transition_to(NodeLifecycleState.CORE_DISCOVERED)
+
+        runtime = OnboardingRuntime(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("onboarding-runtime-test"),
+            node_id="node-123e4567-e89b-42d3-a456-426614174000",
+            ui_endpoint="http://node-ui.local:8081/",
+            api_base_url="http://node-api.local:9002",
+            finalize_poll_interval_seconds=0.01,
+        )
+        fake_registration_client = _FakeRegistrationClient(lifecycle)
+        runtime._registration_client = fake_registration_client
+        runtime._http_adapter = _FakeHttpAdapter()
+
+        asyncio.run(
+            runtime._run_registration_async(
+                bootstrap_payload={"api_base": "http://10.0.0.100:9001", "mqtt_host": "10.0.0.100"},
+                node_name="main-ai-node",
+                run_id=runtime._run_id,
+            )
+        )
+
+        self.assertEqual(fake_registration_client.last_kwargs["ui_endpoint"], "http://node-ui.local:8081/")
+        self.assertEqual(fake_registration_client.last_kwargs["api_base_url"], "http://node-api.local:9002")
+
     def test_transient_finalize_poll_error_does_not_force_degraded(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("onboarding-runtime-test"))
@@ -107,7 +138,7 @@ class OnboardingRuntimeTests(unittest.TestCase):
             runtime = OnboardingRuntime(
                 lifecycle=lifecycle,
                 logger=logging.getLogger("onboarding-runtime-test"),
-                node_id="123e4567-e89b-42d3-a456-426614174000",
+                node_id="node-123e4567-e89b-42d3-a456-426614174000",
                 trust_state_path=f"{tmp}/trust_state.json",
                 finalize_poll_interval_seconds=0.01,
             )
@@ -135,7 +166,7 @@ class OnboardingRuntimeTests(unittest.TestCase):
             runtime = OnboardingRuntime(
                 lifecycle=lifecycle,
                 logger=logging.getLogger("onboarding-runtime-test"),
-                node_id="123e4567-e89b-42d3-a456-426614174000",
+                node_id="node-123e4567-e89b-42d3-a456-426614174000",
                 trust_state_path=trust_state_path,
                 finalize_poll_interval_seconds=0.01,
             )
@@ -164,7 +195,7 @@ class OnboardingRuntimeTests(unittest.TestCase):
             runtime = OnboardingRuntime(
                 lifecycle=lifecycle,
                 logger=logging.getLogger("onboarding-runtime-test"),
-                node_id="123e4567-e89b-42d3-a456-426614174000",
+                node_id="node-123e4567-e89b-42d3-a456-426614174000",
                 trust_state_path=trust_state_path,
                 finalize_poll_interval_seconds=0.01,
             )

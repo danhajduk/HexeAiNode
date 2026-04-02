@@ -6,11 +6,13 @@ from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.capability_declaration_runner import CapabilityDeclarationRunner
 from ai_node.time_utils import local_now_iso
 
+TEST_NODE_ID = "node-123e4567-e89b-42d3-a456-426614174000"
+
 
 class _FakeTrustStore:
     def __init__(self):
         self.payload = {
-            "node_id": "node-001",
+            "node_id": TEST_NODE_ID,
             "node_name": "main-ai-node",
             "node_type": "ai-node",
             "paired_core_id": "core-main",
@@ -18,7 +20,7 @@ class _FakeTrustStore:
             "node_trust_token": "token",
             "initial_baseline_policy": {"policy_version": "1.0"},
             "baseline_policy_version": "1.0",
-            "operational_mqtt_identity": "main-ai-node",
+            "operational_mqtt_identity": f"hn_{TEST_NODE_ID}",
             "operational_mqtt_token": "mqtt-token",
             "operational_mqtt_host": "10.0.0.100",
             "operational_mqtt_port": 1883,
@@ -205,19 +207,19 @@ class _FakeTelemetryPublisher:
         self.last = None
 
     def status_payload(self):
-        return {"published": self.last is not None, "last_topic": "hexe/nodes/node-001/status"}
+        return {"published": self.last is not None, "last_topic": f"hexe/nodes/{TEST_NODE_ID}/status"}
 
     async def publish_status(self, **kwargs):
         self.last = kwargs
-        return {"published": True, "last_error": None, "last_topic": "hexe/nodes/node-001/status"}
+        return {"published": True, "last_error": None, "last_topic": f"hexe/nodes/{TEST_NODE_ID}/status"}
 
 
 class _FakeTelemetryPublisherFailure:
     def status_payload(self):
-        return {"published": False, "last_topic": "hexe/nodes/node-001/status"}
+        return {"published": False, "last_topic": f"hexe/nodes/{TEST_NODE_ID}/status"}
 
     async def publish_status(self, **_kwargs):
-        return {"published": False, "last_error": "mqtt_unavailable", "last_topic": "hexe/nodes/node-001/status"}
+        return {"published": False, "last_error": "mqtt_unavailable", "last_topic": f"hexe/nodes/{TEST_NODE_ID}/status"}
 
 
 class _FakeCapabilityStateStore:
@@ -364,7 +366,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=state_store,
             governance_state_store=governance_store,
             phase2_state_store=phase2_store,
@@ -384,8 +386,8 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(governance_store.saved["policy_version"], "1.0")
         self.assertEqual(runner.status_payload()["governance_status"]["state"], "fresh")
         self.assertIsNotNone(telemetry.last)
-        self.assertEqual(telemetry.last["payload"]["registered_count"], 1)
-        self.assertEqual(telemetry.last["payload"]["probation_count"], 1)
+        self.assertEqual(telemetry.last["payload"]["checks"]["registered_count"], 1)
+        self.assertEqual(telemetry.last["payload"]["checks"]["probation_count"], 1)
         self.assertIsNotNone(phase2_store.saved)
         self.assertIn("enabled_provider_selection", phase2_store.saved)
 
@@ -399,7 +401,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_client=_FakeClientRetry(),
             governance_client=_FakeGovernanceClientSynced(),
             operational_readiness_checker=_FakeOperationalReadinessReady(),
@@ -421,7 +423,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=_FakeCapabilityStateStore(),
             governance_state_store=_FakeGovernanceStateStore(),
             capability_client=_FakeClientAccepted(),
@@ -451,7 +453,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=_FakeCapabilityStateStore(
                 existing={
                     "schema_version": "1.0",
@@ -489,7 +491,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=state_store,
             governance_state_store=governance_store,
             capability_client=_FakeClientAccepted(),
@@ -528,7 +530,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=state_store,
             capability_client=_FakeClientAccepted(),
             governance_client=_FakeGovernanceClientSynced(),
@@ -551,7 +553,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=_FakeCapabilityStateStore(
                 existing={
                     "schema_version": "1.0",
@@ -597,7 +599,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=_FakeCapabilityStateStore(existing=None),
             governance_state_store=_FakeGovernanceStateStore(existing=None),
             capability_client=_FakeClientAccepted(),
@@ -622,7 +624,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=_FakeCapabilityStateStore(
                 existing={
                     "schema_version": "1.0",
@@ -671,7 +673,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=_FakeCapabilityStateStore(),
             capability_client=_FakeClientAccepted(),
             governance_client=_FakeGovernanceClientRetry(),
@@ -707,7 +709,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             governance_state_store=governance_store,
             capability_client=_FakeClientAccepted(),
             governance_client=_FakeGovernanceClientRetry(),
@@ -727,7 +729,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_client=client,
             governance_client=_FakeGovernanceClientSynced(),
             operational_readiness_checker=_FakeOperationalReadinessReady(),
@@ -751,7 +753,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_client=client,
             governance_client=_FakeGovernanceClientSynced(),
             operational_readiness_checker=_FakeOperationalReadinessReady(),
@@ -781,7 +783,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_client=client,
             governance_client=_FakeGovernanceClientSynced(),
             operational_readiness_checker=_FakeOperationalReadinessReady(),
@@ -810,7 +812,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=_FakeCapabilityStateStore(),
             governance_state_store=_FakeGovernanceStateStore(),
             capability_client=_FakeClientAccepted(),
@@ -835,7 +837,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=_FakeCapabilityStateStore(),
             governance_state_store=_FakeGovernanceStateStore(),
             capability_client=_FakeClientAccepted(),
@@ -861,7 +863,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id="node-323e4567-e89b-42d3-a456-426614174000",
             capability_state_store=_FakeCapabilityStateStore(),
             governance_state_store=_FakeGovernanceStateStore(),
             capability_client=client,
@@ -875,9 +877,9 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["status"], "accepted")
         self.assertEqual(len(client.manifests), 2)
-        self.assertEqual(client.manifests[0]["node"]["node_id"], "node-001")
-        self.assertEqual(client.manifests[1]["node"]["node_id"], "main-ai-node")
-        self.assertEqual(runner.status_payload()["last_manifest_payload"]["node"]["node_id"], "main-ai-node")
+        self.assertEqual(client.manifests[0]["node"]["node_id"], "node-323e4567-e89b-42d3-a456-426614174000")
+        self.assertEqual(client.manifests[1]["node"]["node_id"], TEST_NODE_ID)
+        self.assertEqual(runner.status_payload()["last_manifest_payload"]["node"]["node_id"], TEST_NODE_ID)
 
     async def test_recover_from_degraded_to_capability_setup_pending(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
@@ -892,7 +894,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=_FakeCapabilityStateStore(),
             governance_state_store=_FakeGovernanceStateStore(),
             capability_client=_FakeClientAccepted(),
@@ -915,7 +917,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=_FakeCapabilityStateStore(),
             governance_state_store=_FakeGovernanceStateStore(),
             capability_client=_FakeClientAccepted(),
@@ -940,7 +942,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             trust_store=_FakeTrustStore(),
             provider_selection_store=_FakeProviderSelectionStore(),
             task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
-            node_id="node-001",
+            node_id=TEST_NODE_ID,
             capability_state_store=_FakeCapabilityStateStore(),
             governance_state_store=_FakeGovernanceStateStore(),
             capability_client=_FakeClientAccepted(),
@@ -956,9 +958,49 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(result["published"])
         self.assertIsNotNone(telemetry.last)
-        self.assertEqual(telemetry.last["payload"]["event_type"], "workflow_request")
-        self.assertEqual(telemetry.last["payload"]["workflow_request"], "openai_model_classification_refresh")
-        self.assertEqual(telemetry.last["payload"]["workflow_status"], "done")
+        self.assertEqual(telemetry.last["payload"]["health_status"], "unknown")
+        self.assertEqual(telemetry.last["payload"]["ttl_s"], 300)
+        self.assertEqual(telemetry.last["payload"]["details"]["event_type"], "workflow_request")
+        self.assertEqual(
+            telemetry.last["payload"]["details"]["workflow_request"],
+            "openai_model_classification_refresh",
+        )
+        self.assertEqual(telemetry.last["payload"]["details"]["workflow_status"], "done")
+
+    async def test_emit_periodic_status_telemetry_publishes_heartbeat_payload(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
+        lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        telemetry = _FakeTelemetryPublisher()
+        runner = CapabilityDeclarationRunner(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("capability-runner-test"),
+            trust_store=_FakeTrustStore(),
+            provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
+            node_id=TEST_NODE_ID,
+            capability_state_store=_FakeCapabilityStateStore(),
+            governance_state_store=_FakeGovernanceStateStore(),
+            capability_client=_FakeClientAccepted(),
+            governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
+            telemetry_publisher=telemetry,
+            phase2_state_store=_FakePhase2StateStore(),
+        )
+
+        result = await runner.emit_periodic_status_telemetry()
+
+        self.assertTrue(result["published"])
+        self.assertIsNotNone(telemetry.last)
+        self.assertEqual(telemetry.last["payload"]["health_status"], "unknown")
+        self.assertEqual(telemetry.last["payload"]["ttl_s"], 300)
+        self.assertEqual(telemetry.last["payload"]["details"]["event_type"], "heartbeat")
+        self.assertEqual(telemetry.last["payload"]["details"]["heartbeat_interval_seconds"], 60)
+        self.assertEqual(telemetry.last["payload"]["details"]["message_expiry_interval_seconds"], 1800)
+        self.assertEqual(
+            telemetry.last["payload"]["details"]["overall_status"],
+            "capability_setup_pending",
+        )
 
 
 if __name__ == "__main__":

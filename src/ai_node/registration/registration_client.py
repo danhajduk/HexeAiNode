@@ -9,6 +9,28 @@ def _require_non_empty_string(value: object, name: str) -> str:
     return value.strip()
 
 
+def _normalize_ui_endpoint(value: object) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    if not (normalized.startswith("http://") or normalized.startswith("https://")):
+        raise ValueError("ui_endpoint must be an absolute http/https URL")
+    return normalized
+
+
+def _normalize_api_base_url(value: object) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    if not (normalized.startswith("http://") or normalized.startswith("https://")):
+        raise ValueError("api_base_url must be an absolute http/https URL")
+    return normalized
+
+
 class RegistrationClient:
     def __init__(self, *, lifecycle: NodeLifecycle, http_adapter, logger) -> None:
         if lifecycle is None:
@@ -30,6 +52,8 @@ class RegistrationClient:
         protocol_version: str,
         node_nonce: str,
         hostname: str | None = None,
+        ui_endpoint: str | None = None,
+        api_base_url: str | None = None,
     ) -> dict:
         if not isinstance(bootstrap_payload, dict):
             raise ValueError("bootstrap_payload is required")
@@ -56,6 +80,12 @@ class RegistrationClient:
         }
         if hostname is not None and hostname.strip():
             payload["hostname"] = hostname.strip()
+        normalized_ui_endpoint = _normalize_ui_endpoint(ui_endpoint)
+        if normalized_ui_endpoint is not None:
+            payload["ui_endpoint"] = normalized_ui_endpoint
+        normalized_api_base_url = _normalize_api_base_url(api_base_url)
+        if normalized_api_base_url is not None:
+            payload["api_base_url"] = normalized_api_base_url
 
         self._lifecycle.transition_to(NodeLifecycleState.REGISTRATION_PENDING)
         self._diag.registration_attempt(
@@ -64,6 +94,8 @@ class RegistrationClient:
                 "node_id": payload["node_id"],
                 "node_name": payload["node_name"],
                 "protocol_version": payload["protocol_version"],
+                "ui_endpoint": payload.get("ui_endpoint"),
+                "api_base_url": payload.get("api_base_url"),
             }
         )
         if hasattr(self._logger, "info"):
@@ -75,6 +107,8 @@ class RegistrationClient:
                     "node_name": payload["node_name"],
                     "node_type": payload["node_type"],
                     "protocol_version": payload["protocol_version"],
+                    "ui_endpoint": payload.get("ui_endpoint"),
+                    "api_base_url": payload.get("api_base_url"),
                 },
             )
         return await self._http_adapter.post_json(resolved_url, payload)

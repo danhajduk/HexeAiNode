@@ -1,5 +1,7 @@
 from typing import Tuple
 
+from ai_node.identity.node_ids import derive_operational_mqtt_identity, is_valid_canonical_node_id, normalize_node_id
+
 
 REQUIRED_TRUST_FIELDS = (
     "node_id",
@@ -28,7 +30,8 @@ def parse_trust_activation_payload(payload: object) -> Tuple[bool, object]:
         if key not in payload:
             return False, f"missing_{key}"
 
-    if not _is_non_empty_string(payload["node_id"]):
+    normalized_node_id = normalize_node_id(payload["node_id"])
+    if not _is_non_empty_string(normalized_node_id) or not is_valid_canonical_node_id(normalized_node_id):
         return False, "invalid_node_id"
     node_type = str(payload.get("node_type", "ai-node")).strip()
     if not _is_non_empty_string(node_type):
@@ -39,8 +42,6 @@ def parse_trust_activation_payload(payload: object) -> Tuple[bool, object]:
         return False, "invalid_node_trust_token"
     if not isinstance(payload["initial_baseline_policy"], dict):
         return False, "invalid_initial_baseline_policy"
-    if not _is_non_empty_string(payload["operational_mqtt_identity"]):
-        return False, "invalid_operational_mqtt_identity"
     if not _is_non_empty_string(payload["operational_mqtt_token"]):
         return False, "invalid_operational_mqtt_token"
     if not _is_non_empty_string(payload["operational_mqtt_host"]):
@@ -56,12 +57,12 @@ def parse_trust_activation_payload(payload: object) -> Tuple[bool, object]:
     return (
         True,
         {
-            "node_id": payload["node_id"].strip(),
+            "node_id": normalized_node_id,
             "node_type": node_type,
             "paired_core_id": payload["paired_core_id"].strip(),
             "node_trust_token": payload["node_trust_token"].strip(),
             "initial_baseline_policy": payload["initial_baseline_policy"],
-            "operational_mqtt_identity": payload["operational_mqtt_identity"].strip(),
+            "operational_mqtt_identity": derive_operational_mqtt_identity(normalized_node_id),
             "operational_mqtt_token": payload["operational_mqtt_token"].strip(),
             "operational_mqtt_host": payload["operational_mqtt_host"].strip(),
             "operational_mqtt_port": mqtt_port,

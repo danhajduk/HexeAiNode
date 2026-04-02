@@ -8,6 +8,7 @@ from ai_node.capabilities.node_features import (
     TELEMETRY_SUPPORT,
     create_node_feature_declarations,
 )
+from ai_node.identity.node_ids import is_valid_canonical_node_id, normalize_node_id
 from ai_node.capabilities.environment_hints import (
     collect_environment_hints,
 )
@@ -143,7 +144,7 @@ def create_capability_manifest(
     manifest = {
         "manifest_version": CAPABILITY_MANIFEST_SCHEMA_VERSION,
         "node": {
-            "node_id": str(node_id).strip(),
+            "node_id": normalize_node_id(node_id),
             "node_type": str(node_type).strip() or "ai-node",
             "node_name": str(node_name).strip(),
             "node_software_version": str(node_software_version).strip() or "0.1.0",
@@ -189,8 +190,8 @@ def validate_capability_manifest(data: object) -> Tuple[bool, Optional[str]]:
         return False, f"unknown_node_field:{unknown_node_keys[0]}"
     if not _is_non_empty_string(node.get("node_id")):
         return False, "invalid_node_id"
-    node_id = str(node.get("node_id")).strip()
-    if len(node_id) < 3 or len(node_id) > 128 or not node_id.startswith("node-"):
+    node_id = normalize_node_id(node.get("node_id"))
+    if len(node_id) < 3 or len(node_id) > 128 or not is_valid_canonical_node_id(node_id):
         return False, "invalid_node_id"
     if not _is_non_empty_string(node.get("node_type")):
         return False, "invalid_node_type"
