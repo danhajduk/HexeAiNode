@@ -7,6 +7,7 @@ import { CapabilitySummaryCard } from "./cards/CapabilitySummaryCard";
 import { ResolvedTasksCard } from "./cards/ResolvedTasksCard";
 import { RuntimeServicesCard } from "./cards/RuntimeServicesCard";
 import { RecentActivityCard } from "./cards/RecentActivityCard";
+import { ClientCostCard } from "./cards/ClientCostCard";
 import { OperationalActionsCard } from "./cards/OperationalActionsCard";
 import { DiagnosticsPage } from "../diagnostics/DiagnosticsPage";
 
@@ -81,6 +82,8 @@ export function OperationalDashboard({
   runtimeServicesProps,
   operationalActions,
   activityItems = [],
+  clientCostItems = [],
+  clientUsageMonth = "",
   onboardingSteps = [],
   onboardingProgress = {},
   pendingApprovalNodeId,
@@ -180,6 +183,14 @@ export function OperationalDashboard({
             </article>
             <RecentActivityCard items={activityItems} degraded={Boolean(degradedBanner)} />
           </>
+        ) : null}
+
+        {currentSection === "clients" ? (
+          <ClientCostCard
+            clients={clientCostItems}
+            currentMonth={clientUsageMonth}
+            className="operational-card-full-span"
+          />
         ) : null}
 
         {currentSection === "diagnostics" ? <DiagnosticsPage {...diagnosticsProps} /> : null}

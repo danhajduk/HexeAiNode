@@ -4,6 +4,7 @@ import { apiAdminGet, apiAdminPost, apiGet, apiPost, getApiBase } from "./api";
 import { buildDashboardUiState } from "./uiStateModel";
 import { CardHeader, SeverityIndicator, StatusBadge } from "./components/uiPrimitives";
 import { IdentityScreen } from "./features/node-ui/IdentityScreen";
+import { BackendUnavailableScreen } from "./features/node-ui/BackendUnavailableScreen";
 import { resolveUiMode } from "./features/node-ui/uiModeResolver";
 import {
   buildOperationalRoute,
@@ -169,6 +170,14 @@ function formatBudgetCurrency(cents) {
   return `$${(normalized / 100).toFixed(2)}`;
 }
 
+function formatUsdExact(value) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized) || normalized < 0) {
+    return "$0.000000";
+  }
+  return `$${normalized.toFixed(normalized >= 1 ? 2 : 6)}`;
+}
+
 function formatProviderLabel(providerId) {
   const normalized = String(providerId || "").trim().toLowerCase();
   if (!normalized) {
@@ -205,12 +214,17 @@ function summarizeProviderBudgets({ providerConfig, budgetState }) {
       const usage = budgetByProvider.get(normalizedProviderId);
       const budgetLimitCents = Number(usage?.budget_limit_cents);
       const remainingCostCents = Number(usage?.remaining_cost_cents);
+      const budgetLimitUsdExact = Number(usage?.budget_limit_usd_exact);
+      const remainingCostUsdExact = Number(usage?.remaining_cost_usd_exact);
       const period = String(usage?.period || settings?.period || "monthly").trim().toLowerCase() || "monthly";
       return {
         providerId: normalizedProviderId,
         period,
         budgetLimitCents: Number.isFinite(budgetLimitCents) ? budgetLimitCents : configuredBudget,
         remainingCostCents: Number.isFinite(remainingCostCents) ? remainingCostCents : configuredBudget,
+        budgetLimitUsdExact: Number.isFinite(budgetLimitUsdExact) ? budgetLimitUsdExact : configuredBudget / 100,
+        remainingCostUsdExact: Number.isFinite(remainingCostUsdExact) ? remainingCostUsdExact : configuredBudget / 100,
+        usedCostUsdExact: Number(usage?.used_cost_usd_exact),
       };
     })
     .filter(Boolean)
@@ -233,7 +247,45 @@ function providerBudgetTone(summary) {
 }
 
 function formatProviderBudgetPill(summary) {
-  return `${formatProviderLabel(summary?.providerId)} ${formatBudgetCurrency(summary?.remainingCostCents)}/${formatBudgetCurrency(summary?.budgetLimitCents)} ${String(summary?.period || "monthly").toLowerCase()}`;
+  return `${formatProviderLabel(summary?.providerId)} ${formatUsdExact(summary?.remainingCostUsdExact)}/${formatUsdExact(summary?.budgetLimitUsdExact)} ${String(summary?.period || "monthly").toLowerCase()} · spent ${formatUsdExact(summary?.usedCostUsdExact)}`;
+}
+
+function normalizeClientUsagePayload(payload) {
+  const clients = Array.isArray(payload?.clients) ? payload.clients : [];
+  return {
+    currentMonth: String(payload?.current_month || "").trim(),
+    clients: clients.map((client) => ({
+      clientId: String(client?.client_id || "").trim() || "unknown-client",
+      clientLabel: String(client?.client_id || "").trim() || "unknown-client",
+      customerId: String(client?.customer_id || "").trim(),
+      grant: client?.grant && typeof client.grant === "object"
+        ? {
+            grantName: String(client.grant?.grant_name || "").trim(),
+            validFrom: String(client.grant?.valid_from || "").trim(),
+            validTo: String(client.grant?.valid_to || "").trim(),
+            status: String(client.grant?.status || "").trim(),
+          }
+        : null,
+      lifetime: client?.lifetime || {},
+      current_month: client?.current_month || {},
+      prompts: Array.isArray(client?.prompts)
+        ? client.prompts.map((prompt) => ({
+            promptId: String(prompt?.prompt_id || "").trim() || "unattributed-prompt",
+            promptLabel: String(prompt?.prompt_id || "").trim() || "unattributed-prompt",
+            lifetime: prompt?.lifetime || {},
+            current_month: prompt?.current_month || {},
+            models: Array.isArray(prompt?.models)
+              ? prompt.models.map((model) => ({
+                  modelId: String(model?.model_id || "").trim() || "unknown-model",
+                  modelLabel: String(model?.model_id || "").trim() || "unknown-model",
+                  lifetime: model?.lifetime || {},
+                  current_month: model?.current_month || {},
+                }))
+              : [],
+          }))
+        : [],
+    })),
+  };
 }
 
 function formatModelFamily(value) {
@@ -345,6 +397,7 @@ export default function App() {
   const [redeclaringCapabilities, setRedeclaringCapabilities] = useState(false);
   const [restartingServiceTarget, setRestartingServiceTarget] = useState("");
   const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
+  const [retryingBackend, setRetryingBackend] = useState(false);
   const [providerCredentials, setProviderCredentials] = useState(null);
   const [providerBudgetSummaries, setProviderBudgetSummaries] = useState([]);
   const [openaiCatalogModels, setOpenaiCatalogModels] = useState([]);
@@ -365,6 +418,7 @@ export default function App() {
   const [savingModelPreference, setSavingModelPreference] = useState(false);
   const [savingManualPricing, setSavingManualPricing] = useState(false);
   const [savingBulkManualPricing, setSavingBulkManualPricing] = useState(false);
+  const [declaringBudget, setDeclaringBudget] = useState(false);
   const [refreshingLatestModels, setRefreshingLatestModels] = useState(false);
   const [pricingRefreshState, setPricingRefreshState] = useState("");
   const [showModelPricingPopup, setShowModelPricingPopup] = useState(false);
@@ -374,6 +428,7 @@ export default function App() {
   const [popupPricingOutput, setPopupPricingOutput] = useState("");
   const [savingPopupPricing, setSavingPopupPricing] = useState(false);
   const [capabilityDiagnostics, setCapabilityDiagnostics] = useState(null);
+  const [clientUsageSummary, setClientUsageSummary] = useState({ currentMonth: "", clients: [] });
   const [runningAdminAction, setRunningAdminAction] = useState("");
   const [adminActionState, setAdminActionState] = useState("");
   const [uiState, setUiState] = useState(() =>
@@ -403,6 +458,7 @@ export default function App() {
       capabilityConfigResult,
       servicesResult,
       budgetResult,
+      clientUsageResult,
       capabilityDiagnosticsResult,
     ] = await Promise.allSettled([
       apiGet("/api/node/status"),
@@ -419,6 +475,7 @@ export default function App() {
       apiGet("/api/capabilities/config"),
       apiGet("/api/services/status"),
       apiGet("/api/budgets/state"),
+      apiGet("/api/usage/clients"),
       apiAdminGet("/api/capabilities/diagnostics"),
     ]);
 
@@ -456,6 +513,7 @@ export default function App() {
     const capabilityConfigPayload = capabilityConfigResult.status === "fulfilled" ? capabilityConfigResult.value : null;
     const servicePayload = servicesResult.status === "fulfilled" ? servicesResult.value : null;
     const budgetPayload = budgetResult.status === "fulfilled" ? budgetResult.value : null;
+    const clientUsagePayload = clientUsageResult.status === "fulfilled" ? clientUsageResult.value : null;
     const capabilityDiagnosticsPayload = capabilityDiagnosticsResult.status === "fulfilled" ? capabilityDiagnosticsResult.value : null;
     const partialFailures = [];
     if (governanceResult.status !== "fulfilled") {
@@ -497,7 +555,9 @@ export default function App() {
     if (budgetResult.status !== "fulfilled") {
       partialFailures.push("budget_state_unavailable");
     }
-
+    if (clientUsageResult.status !== "fulfilled") {
+      partialFailures.push("client_usage_unavailable");
+    }
     setBackendStatus(payload.status || "unknown");
     setPendingApprovalUrl(payload.pending_approval_url || "");
     setNodeId(payload.node_id || "");
@@ -520,6 +580,7 @@ export default function App() {
     setOpenaiModelFeatures(Array.isArray(modelFeaturesPayload?.entries) ? modelFeaturesPayload.entries : []);
     setResolvedNodeCapabilities(nodeCapabilitiesPayload);
     setCapabilityDiagnostics(capabilityDiagnosticsPayload);
+    setClientUsageSummary(normalizeClientUsagePayload(clientUsagePayload));
     setProviderBudgetSummaries(summarizeProviderBudgets({ providerConfig: providerPayload, budgetState: budgetPayload }));
     setError("");
     if (!providerSetupDirty && providerCredentialsPayload?.credentials?.project_name) {
@@ -592,6 +653,18 @@ export default function App() {
       }
     };
   }, []);
+
+  async function onRetryBackendConnection() {
+    if (retryingBackend) {
+      return;
+    }
+    setRetryingBackend(true);
+    try {
+      await loadStatus();
+    } finally {
+      setRetryingBackend(false);
+    }
+  }
 
   useEffect(() => {
     function onHashChange() {
@@ -998,6 +1071,26 @@ function formatTokenHint(value) {
     }
   }
 
+  async function onDeclareOpenAiBudget() {
+    if (declaringBudget) {
+      return;
+    }
+    setDeclaringBudget(true);
+    setSavingProvider(true);
+    setError("");
+    try {
+      await persistProviderSelectionConfig();
+      await apiPost("/api/budgets/declare", { provider_id: "openai" });
+      await loadStatus();
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+    } finally {
+      setSavingProvider(false);
+      setDeclaringBudget(false);
+    }
+  }
+
   async function onRefreshGovernance() {
     setError("");
     try {
@@ -1329,9 +1422,16 @@ function formatTokenHint(value) {
               <span>Scope</span>
               <code>provider.openai</code>
             </div>
+            <p className="muted tiny">
+              Save stores the node-local OpenAI ceiling. Declare Budget To Core submits the Core budget declaration for this
+              provider.
+            </p>
             <div className="row">
-              <button className="btn btn-primary" type="submit" disabled={savingProvider}>
+              <button className="btn" type="submit" disabled={savingProvider || declaringBudget}>
                 {savingProvider ? "Saving..." : "Save Provider Budget"}
+              </button>
+              <button className="btn btn-primary" type="button" onClick={onDeclareOpenAiBudget} disabled={savingProvider || declaringBudget}>
+                {declaringBudget ? "Declaring..." : "Declare Budget To Core"}
               </button>
             </div>
           </form>
@@ -1684,6 +1784,7 @@ function formatTokenHint(value) {
     ["capabilities", "Capabilities"],
     ["runtime", "Runtime"],
     ["activity", "Activity"],
+    ["clients", "Clients"],
     ["diagnostics", "Diagnostics"],
   ].map(([id, label]) => ({
     id,
@@ -1719,6 +1820,8 @@ function formatTokenHint(value) {
       hint: "Most recent UI or runtime visible warning.",
     },
   ];
+  const clientCostItems = Array.isArray(clientUsageSummary?.clients) ? clientUsageSummary.clients : [];
+  const clientUsageMonth = clientUsageSummary?.currentMonth || "";
   const completionState =
     isSetupMode && (uiState.lifecycle.current === "operational" || uiState.lifecycle.current === "degraded")
       ? {
@@ -1828,6 +1931,8 @@ function formatTokenHint(value) {
     },
     operationalActions,
     activityItems: recentActivityItems,
+    clientCostItems,
+    clientUsageMonth,
     onboardingSteps,
     onboardingProgress: uiState.onboarding.progress,
     pendingApprovalNodeId: isPendingApproval && nodeId ? nodeId : "",
@@ -1841,10 +1946,21 @@ function formatTokenHint(value) {
       uiState,
     },
   };
+  const isBackendUnavailable = !uiState.meta.apiReachable;
 
   return (
     <div className="shell">
       <main className="app-frame">
+      {isBackendUnavailable ? (
+        <BackendUnavailableScreen
+          apiBase={getApiBase()}
+          error={error}
+          lastUpdatedAt={formatLocalTimestamp(uiState.meta.lastUpdatedAt) || "never"}
+          retrying={retryingBackend}
+          onRetry={onRetryBackendConnection}
+        />
+      ) : (
+        <>
       {showModelPricingPopup && pricingReviewModel ? (
         <section className="modal-overlay pricing-modal-overlay" role="dialog" aria-modal="true" aria-label="Model pricing">
           <article className="card modal-card">
@@ -1975,6 +2091,8 @@ function formatTokenHint(value) {
       ) : isOperationalMode ? (
         <OperationalDashboard {...operationalDashboardProps} />
       ) : null}
+        </>
+      )}
       </main>
     </div>
   );

@@ -218,6 +218,7 @@ Task 235: Add section extractor for audio/realtime pricing - Completed on 03/14/
 Task 236: Add section extractor for image generation pricing - Completed on 03/14/2026 18:23
 Task 237: Add section extractor for video pricing - Completed on 03/14/2026 18:24
 Task 238: Add section extractor for STT/TTS/other model pricing - Completed on 03/14/2026 18:24
+Task 419: Compact Client Usage Card Layout Refinement - Completed on 04/03/2026 10:06
 Task 419: Create internal cleanup document - Completed on 03/20/2026 19:45
 Task 420: Audit remaining `Synthia` references - Completed on 03/20/2026 19:45
 Task 421: Rename internal helpers and constants - Completed on 03/20/2026 19:45

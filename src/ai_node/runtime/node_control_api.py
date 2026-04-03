@@ -12,6 +12,7 @@ from ai_node.config.bootstrap_config import BOOTSTRAP_PORT, BOOTSTRAP_TOPIC, cre
 from ai_node.execution.gateway import ExecutionGateway
 from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.config.provider_credentials_config import summarize_provider_credentials
+from ai_node.core_api.budget_declaration_client import BudgetDeclarationClient
 from ai_node.core_api.trust_status_client import TrustStatusClient
 from ai_node.providers.openai_model_catalog import select_representative_openai_model_ids
 from ai_node.prompts import PromptRegistry
@@ -33,6 +34,15 @@ class CapabilityDeclarationPrerequisiteError(ValueError):
         super().__init__(str(payload.get("message") or "capability declaration prerequisites are not satisfied"))
 
 
+def _mask_grant_name(value: object) -> str | None:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return None
+    if len(normalized) <= 10:
+        return normalized[:2] + ("*" * max(len(normalized) - 4, 0)) + normalized[-2:]
+    return normalized[:6] + ("*" * max(len(normalized) - 10, 1)) + normalized[-4:]
+
+
 class NodeControlState:
     def __init__(
         self,
@@ -51,7 +61,9 @@ class NodeControlState:
         governance_state_store=None,
         prompt_service_state_store=None,
         budget_state_store=None,
+        client_usage_store=None,
         trust_status_client=None,
+        budget_declaration_client=None,
         execution_gateway=None,
         provider_runtime_manager=None,
         budget_manager=None,
@@ -76,7 +88,9 @@ class NodeControlState:
         self._prompt_service_state_store = prompt_service_state_store
         self._prompt_registry = None
         self._budget_state_store = budget_state_store
+        self._client_usage_store = client_usage_store
         self._trust_status_client = trust_status_client or TrustStatusClient(logger=logger)
+        self._budget_declaration_client = budget_declaration_client or BudgetDeclarationClient(logger=logger)
         self._execution_gateway = execution_gateway or ExecutionGateway()
         self._provider_runtime_manager = provider_runtime_manager
         self._budget_manager = budget_manager
@@ -586,6 +600,72 @@ class NodeControlState:
             return {"configured": False, "policy_status": "unconfigured", "grant_count": 0, "grants": []}
         return self._budget_manager.status_payload()
 
+    def client_usage_payload(self) -> dict:
+        if self._client_usage_store is None or not hasattr(self._client_usage_store, "summary_payload"):
+            return {"configured": False, "current_month": local_now_iso()[:7], "clients": []}
+        payload = self._client_usage_store.summary_payload()
+        return self._attach_client_grants(payload=payload)
+
+    def _attach_client_grants(self, *, payload: dict) -> dict:
+        clients = list(payload.get("clients") or []) if isinstance(payload, dict) else []
+        budget_state = self.budget_state_payload()
+        grants = list(budget_state.get("grants") or []) if isinstance(budget_state, dict) else []
+        if not grants:
+            governance_bundle = self._governance_bundle_payload()
+            governance_budget_policy = {}
+            if isinstance(governance_bundle.get("budget_policy"), dict):
+                governance_budget_policy = governance_bundle.get("budget_policy") or {}
+            elif isinstance(governance_bundle.get("raw_response"), dict):
+                raw_response = governance_bundle.get("raw_response") or {}
+                nested_bundle = raw_response.get("governance_bundle") if isinstance(raw_response.get("governance_bundle"), dict) else {}
+                governance_budget_policy = nested_bundle.get("budget_policy") if isinstance(nested_bundle.get("budget_policy"), dict) else {}
+            grants = list(governance_budget_policy.get("grants") or []) if isinstance(governance_budget_policy, dict) else []
+        enriched_clients = []
+        for client in clients:
+            client_payload = dict(client) if isinstance(client, dict) else {}
+            customer_id = str(client_payload.get("customer_id") or "").strip()
+            client_id = str(client_payload.get("client_id") or "").strip()
+            client_payload["grant"] = self._select_client_grant(
+                grants=grants,
+                customer_id=customer_id or None,
+                client_id=client_id or None,
+            )
+            enriched_clients.append(client_payload)
+        return {**(payload if isinstance(payload, dict) else {}), "clients": enriched_clients}
+
+    @staticmethod
+    def _select_client_grant(*, grants: list[dict], customer_id: str | None, client_id: str | None) -> dict | None:
+        customer_key = str(customer_id or "").strip()
+        client_key = str(client_id or "").strip()
+        matched = None
+        node_scope_grants: list[dict] = []
+        for grant in grants:
+            if not isinstance(grant, dict):
+                continue
+            scope_kind = str(grant.get("scope_kind") or "").strip().lower()
+            subject_id = str(grant.get("subject_id") or "").strip()
+            if scope_kind == "customer" and customer_key and subject_id == customer_key:
+                matched = grant
+                break
+            if scope_kind == "service" and client_key and subject_id == client_key:
+                matched = grant
+                break
+            if scope_kind == "node" and str(grant.get("status") or "").strip().lower() == "active":
+                node_scope_grants.append(grant)
+        if matched is None:
+            matched = node_scope_grants[0] if len(node_scope_grants) == 1 else None
+        if matched is None:
+            return None
+        return {
+            "grant_name": _mask_grant_name(matched.get("grant_id")),
+            "grant_id": matched.get("grant_id"),
+            "scope_kind": matched.get("scope_kind"),
+            "subject_id": matched.get("subject_id"),
+            "valid_from": matched.get("period_start"),
+            "valid_to": matched.get("period_end"),
+            "status": matched.get("status"),
+        }
+
     def register_prompt_service(
         self,
         *,
@@ -787,6 +867,7 @@ class NodeControlState:
             provider_resolver=provider_resolver,
             logger=self._logger,
             budget_manager=self._budget_manager,
+            client_usage_store=self._client_usage_store,
             execution_gateway=self._execution_gateway,
             prompt_registry=self._prompt_registry,
             prompt_services_state_provider=lambda: (
@@ -812,6 +893,109 @@ class NodeControlState:
             trust_state=self._trust_state_payload(),
             governance_bundle=self._governance_bundle_payload(),
         )
+
+    @staticmethod
+    def _build_budget_declaration_available_models(report: dict | None, provider_id: str) -> list[dict]:
+        if not isinstance(report, dict):
+            return []
+        normalized_provider_id = str(provider_id or "").strip().lower()
+        providers = report.get("providers") if isinstance(report.get("providers"), list) else []
+        for provider_entry in providers:
+            if not isinstance(provider_entry, dict):
+                continue
+            entry_provider_id = str(provider_entry.get("provider") or provider_entry.get("provider_id") or "").strip().lower()
+            if entry_provider_id != normalized_provider_id:
+                continue
+            available_models = []
+            for model_entry in provider_entry.get("models") or []:
+                if not isinstance(model_entry, dict):
+                    continue
+                model_id = str(model_entry.get("id") or model_entry.get("model_id") or "").strip()
+                if not model_id:
+                    continue
+                status = str(model_entry.get("status") or "available").strip().lower()
+                if status not in {"available", "degraded"}:
+                    continue
+                payload = {"model_id": model_id}
+                pricing = model_entry.get("pricing")
+                if isinstance(pricing, dict):
+                    payload["pricing"] = pricing
+                latency_metrics = model_entry.get("latency_metrics")
+                if isinstance(latency_metrics, dict):
+                    payload["latency_metrics"] = latency_metrics
+                available_models.append(payload)
+            return available_models
+        return []
+
+    def _provider_capability_report_payload(self) -> dict:
+        capability_payload = (
+            self._capability_runner.status_payload()
+            if self._capability_runner is not None and hasattr(self._capability_runner, "status_payload")
+            else {}
+        )
+        report = capability_payload.get("provider_capability_report") if isinstance(capability_payload, dict) else {}
+        return report if isinstance(report, dict) else {}
+
+    def _build_budget_declaration_payload(self, *, provider_id: str) -> dict:
+        provider_payload = self.provider_selection_payload()
+        providers = provider_payload.get("config", {}).get("providers") if isinstance(provider_payload, dict) else {}
+        enabled_providers = providers.get("enabled") if isinstance(providers, dict) else []
+        budget_limits = providers.get("budget_limits") if isinstance(providers, dict) else {}
+        normalized_provider_id = str(provider_id or "").strip().lower()
+        if normalized_provider_id not in [str(item).strip().lower() for item in (enabled_providers or [])]:
+            raise ValueError(f"{normalized_provider_id} must be enabled before declaring budget")
+        provider_budget = budget_limits.get(normalized_provider_id) if isinstance(budget_limits, dict) else None
+        if not isinstance(provider_budget, dict):
+            raise ValueError(f"{normalized_provider_id} budget must be saved before declaring to Core")
+        max_cost_cents = provider_budget.get("max_cost_cents")
+        if not isinstance(max_cost_cents, int) or max_cost_cents <= 0:
+            raise ValueError(f"{normalized_provider_id} budget must be a positive whole number of cents")
+        period = str(provider_budget.get("period") or "monthly").strip().lower()
+        if period not in {"weekly", "monthly"}:
+            raise ValueError("provider budget period must be weekly or monthly")
+        report = self._provider_capability_report_payload()
+        return {
+            "service_capacity": {
+                "service": "ai.inference",
+                "period": period,
+                "limits": {"max_cost_cents": max_cost_cents},
+            },
+            "provider_intelligence": [
+                {
+                    "provider": normalized_provider_id,
+                    "capacity": {
+                        "period": period,
+                        "limits": {"max_cost_cents": max_cost_cents},
+                    },
+                    "available_models": self._build_budget_declaration_available_models(report, normalized_provider_id),
+                }
+            ],
+            "node_available": True,
+            "observed_at": str(report.get("generated_at") or local_now_iso()).strip(),
+        }
+
+    async def declare_budget_to_core(self, *, provider_id: str = "openai") -> dict:
+        trust_state = self._trust_state_payload()
+        node_id = str(trust_state.get("node_id") or self._node_id or "").strip()
+        trust_token = str(trust_state.get("node_trust_token") or "").strip()
+        core_api_endpoint = str(trust_state.get("core_api_endpoint") or "").strip()
+        if not node_id or not trust_token or not core_api_endpoint:
+            raise ValueError("trusted Core connection is required before declaring budget")
+        declaration_payload = self._build_budget_declaration_payload(provider_id=provider_id)
+        result = await self._budget_declaration_client.submit_declaration(
+            core_api_endpoint=core_api_endpoint,
+            trust_token=trust_token,
+            node_id=node_id,
+            declaration_payload=declaration_payload,
+        )
+        return {
+            "status": result.status,
+            "retryable": result.retryable,
+            "error": result.error,
+            "provider_id": str(provider_id or "").strip().lower(),
+            "declaration_payload": declaration_payload,
+            "result": result.payload,
+        }
 
     def restart_service(self, *, target: str) -> dict:
         if self._service_manager is None or not hasattr(self._service_manager, "restart"):
@@ -1712,6 +1896,10 @@ class OpenAIEnabledModelsRequest(BaseModel):
     model_ids: list[str]
 
 
+class BudgetDeclarationRequest(BaseModel):
+    provider_id: str = "openai"
+
+
 class RefreshTriggerRequest(BaseModel):
     force_refresh: bool = True
 
@@ -1813,6 +2001,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/governance/status",
                 "/api/governance/refresh",
                 "/api/budgets/state",
+                "/api/budgets/declare",
                 "/api/budgets/refresh",
                 "/api/capabilities/providers/refresh",
                 "/api/node/recover",
@@ -2073,6 +2262,17 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/budgets/state")
     def get_budget_state():
         return state.budget_state_payload()
+
+    @app.get("/api/usage/clients")
+    def get_client_usage():
+        return state.client_usage_payload()
+
+    @app.post("/api/budgets/declare")
+    async def post_budget_declare(payload: BudgetDeclarationRequest):
+        try:
+            return await state.declare_budget_to_core(provider_id=payload.provider_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/budgets/refresh")
     async def post_budget_refresh():

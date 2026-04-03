@@ -31,6 +31,7 @@ class TaskExecutionService:
         provider_resolver,
         logger,
         budget_manager=None,
+        client_usage_store=None,
         prompt_registry=None,
         lifecycle_tracker: ExecutionLifecycleTracker | None = None,
         execution_gateway: ExecutionGateway | None = None,
@@ -46,6 +47,7 @@ class TaskExecutionService:
         self._provider_resolver = provider_resolver
         self._logger = logger
         self._budget_manager = budget_manager
+        self._client_usage_store = client_usage_store
         self._prompt_registry = prompt_registry
         self._task_executor = RuntimeManagerProviderTaskExecutor(provider_runtime_manager=self._provider_runtime_manager)
         self._lifecycle_tracker = lifecycle_tracker or ExecutionLifecycleTracker()
@@ -73,6 +75,20 @@ class TaskExecutionService:
     @property
     def lifecycle_tracker(self) -> ExecutionLifecycleTracker:
         return self._lifecycle_tracker
+
+    @staticmethod
+    def _lifecycle_context_details(*, request: TaskExecutionRequest, extras: dict | None = None) -> dict:
+        details = {
+            "requested_by": request.requested_by,
+            "service_id": request.service_id,
+            "customer_id": request.customer_id,
+            "prompt_id": request.prompt_id,
+            "prompt_version": request.prompt_version,
+            "trace_id": request.trace_id,
+        }
+        if isinstance(extras, dict):
+            details.update(extras)
+        return {key: value for key, value in details.items() if value not in (None, "")}
 
     async def execute(self, request: TaskExecutionRequest) -> TaskExecutionResult:
         started = time.perf_counter()
@@ -249,6 +265,7 @@ class TaskExecutionService:
             lease_id=request.lease_id,
             provider_id=resolution.provider_id,
             model_id=resolution.model_id,
+            details=self._lifecycle_context_details(request=request),
         )
         self._lifecycle_tracker.update(
             task_id=request.task_id,
@@ -256,6 +273,7 @@ class TaskExecutionService:
             lease_id=request.lease_id,
             provider_id=resolution.provider_id,
             model_id=resolution.model_id,
+            details=self._lifecycle_context_details(request=request),
         )
         await self._emit_execution_event(
             event_type="task_started",
@@ -310,7 +328,16 @@ class TaskExecutionService:
             lease_id=request.lease_id,
             provider_id=response.provider_id,
             model_id=response.model_id,
-            details={"finish_reason": response.finish_reason},
+            details=self._lifecycle_context_details(
+                request=request,
+                extras={
+                    "finish_reason": response.finish_reason,
+                    "estimated_cost": response.estimated_cost,
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                },
+            ),
         )
         await self._emit_execution_event(
             event_type="task_completed",
@@ -354,6 +381,12 @@ class TaskExecutionService:
                 model_id=response.model_id,
                 details=budget_result,
             )
+        self._record_client_usage(
+            request=request,
+            metrics=result.metrics,
+            completed_at=completed_at,
+            model_id=result.model_used,
+        )
         self._record_prompt_execution(request=request, status="completed", error_code=None)
         return result
 
@@ -515,7 +548,14 @@ class TaskExecutionService:
             lease_id=request.lease_id,
             provider_id=provider_id,
             model_id=model_id,
-            details={"error_code": error_code},
+            details=self._lifecycle_context_details(
+                request=request,
+                extras={
+                    "error_code": error_code,
+                    "retries": max(int(retries), 0),
+                    "fallback_used": bool(fallback_used),
+                },
+            ),
         )
         event_type = "task_rejected" if state in {"rejected", "unsupported"} else "task_failed"
         if error_code == "execution_timeout":
@@ -595,6 +635,27 @@ class TaskExecutionService:
                 status=status,
                 recorded_at=_iso_now(),
                 error_code=error_code,
+            )
+        except Exception:
+            pass
+
+    def _record_client_usage(self, *, request: TaskExecutionRequest, metrics, completed_at: str, model_id: str | None) -> None:
+        if self._client_usage_store is None or not hasattr(self._client_usage_store, "record_execution"):
+            return
+        try:
+            client_id = str(request.requested_by or request.service_id or "unknown-client").strip() or "unknown-client"
+            prompt_id = str(request.prompt_id or "unattributed-prompt").strip() or "unattributed-prompt"
+            customer_id = str(request.customer_id or "").strip() or None
+            self._client_usage_store.record_execution(
+                client_id=client_id,
+                prompt_id=prompt_id,
+                model_id=str(model_id or request.requested_model or "").strip() or None,
+                customer_id=customer_id,
+                prompt_tokens=max(int(getattr(metrics, "prompt_tokens", 0) or 0), 0),
+                completion_tokens=max(int(getattr(metrics, "completion_tokens", 0) or 0), 0),
+                total_tokens=max(int(getattr(metrics, "total_tokens", 0) or 0), 0),
+                cost_usd=max(float(getattr(metrics, "estimated_cost", 0.0) or 0.0), 0.0),
+                used_at=completed_at,
             )
         except Exception:
             pass

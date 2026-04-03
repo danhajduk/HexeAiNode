@@ -30,6 +30,13 @@ from ai_node.persistence.governance_state_store import GovernanceStateStore
 from ai_node.persistence.phase2_state_store import Phase2StateStore
 from ai_node.persistence.prompt_service_state_store import PromptServiceStateStore
 from ai_node.persistence.budget_state_store import BudgetStateStore
+from ai_node.persistence.client_usage_store import (
+    ClientUsageStore,
+    aggregate_provider_execution_log,
+    aggregate_provider_execution_log_by_model,
+    aggregate_provider_metrics,
+    aggregate_provider_metrics_by_model,
+)
 from ai_node.persistence.provider_capability_report_store import ProviderCapabilityReportStore
 from ai_node.providers.runtime_manager import ProviderRuntimeManager
 from ai_node.trust.trust_store import TrustStateStore
@@ -302,6 +309,7 @@ def run(
     provider_capability_report_path: str = ".run/provider_capability_report.json",
     prompt_service_state_path: str = ".run/prompt_service_state.json",
     budget_state_path: str = ".run/budget_state.json",
+    client_usage_db_path: str = ".run/client_usage.db",
     provider_capability_refresh_interval_seconds: int = 14400,
     openai_pricing_catalog_path: str = "providers/openai/provider_model_pricing.json",
     openai_pricing_refresh_interval_seconds: int = 86400,
@@ -361,6 +369,7 @@ def run(
         logger=LOGGER,
     )
     budget_state_store = BudgetStateStore(path=budget_state_path, logger=LOGGER)
+    client_usage_store = ClientUsageStore(path=client_usage_db_path, logger=LOGGER)
     provider_runtime_manager = ProviderRuntimeManager(
         logger=LOGGER,
         provider_selection_store=provider_selection_store,
@@ -372,6 +381,118 @@ def run(
         pricing_stale_tolerance_seconds=openai_pricing_stale_tolerance_seconds,
     )
     prompt_service_state_store = PromptServiceStateStore(path=prompt_service_state_path, logger=LOGGER)
+    needs_usage_seed = (
+        not client_usage_store.has_usage_data()
+        and client_usage_store.get_metadata(key="historical_seed_completed") != "1"
+    )
+    needs_model_seed = not client_usage_store.has_model_usage_data()
+    if needs_usage_seed or needs_model_seed:
+        prompt_state = prompt_service_state_store.load_or_create()
+        budget_state = budget_state_store.load_or_create()
+        prompt_services = list(prompt_state.get("prompt_services") or []) if isinstance(prompt_state, dict) else []
+        primary_prompt = prompt_services[0] if prompt_services else {}
+        historical_client_id = str(primary_prompt.get("service_id") or primary_prompt.get("owner_service") or "node-email").strip() or "node-email"
+        historical_prompt_id = str(primary_prompt.get("prompt_id") or "prompt.email.classifier").strip() or "prompt.email.classifier"
+        customer_candidates = {
+            str(entry.get("customer_id") or "").strip()
+            for entry in list(budget_state.get("recent_denials") or [])
+            if isinstance(entry, dict) and str(entry.get("customer_id") or "").strip()
+        } if isinstance(budget_state, dict) else set()
+        historical_customer_id = next(iter(customer_candidates)) if len(customer_candidates) == 1 else None
+        log_totals = aggregate_provider_execution_log(log_file)
+        log_totals_by_model = aggregate_provider_execution_log_by_model(log_file)
+        metrics_totals = aggregate_provider_metrics(provider_runtime_manager.metrics_snapshot())
+        metrics_totals_by_model = aggregate_provider_metrics_by_model(provider_runtime_manager.metrics_snapshot())
+        seed_used_at = str(log_totals.get("last_used_at") or local_now_iso()).strip() or local_now_iso()
+        if needs_usage_seed:
+            client_usage_store.seed_historical_usage(
+                client_id=historical_client_id,
+                prompt_id=historical_prompt_id,
+                customer_id=historical_customer_id,
+                calls=max(int(log_totals.get("calls") or 0), 0),
+                prompt_tokens=max(int(log_totals.get("prompt_tokens") or 0), 0),
+                completion_tokens=max(int(log_totals.get("completion_tokens") or 0), 0),
+                total_tokens=max(int(log_totals.get("total_tokens") or 0), 0),
+                cost_usd=max(float(log_totals.get("cost_usd") or 0.0), 0.0),
+                used_at=seed_used_at,
+            )
+            delta_calls = max(int(metrics_totals.get("calls") or 0) - int(log_totals.get("calls") or 0), 0)
+            delta_prompt_tokens = max(int(metrics_totals.get("prompt_tokens") or 0) - int(log_totals.get("prompt_tokens") or 0), 0)
+            delta_completion_tokens = max(
+                int(metrics_totals.get("completion_tokens") or 0) - int(log_totals.get("completion_tokens") or 0),
+                0,
+            )
+            delta_total_tokens = max(int(metrics_totals.get("total_tokens") or 0) - int(log_totals.get("total_tokens") or 0), 0)
+            delta_cost_usd = max(float(metrics_totals.get("cost_usd") or 0.0) - float(log_totals.get("cost_usd") or 0.0), 0.0)
+            client_usage_store.seed_historical_usage(
+                client_id=historical_client_id,
+                prompt_id=historical_prompt_id,
+                customer_id=historical_customer_id,
+                calls=delta_calls,
+                prompt_tokens=delta_prompt_tokens,
+                completion_tokens=delta_completion_tokens,
+                total_tokens=delta_total_tokens,
+                cost_usd=delta_cost_usd,
+                used_at=seed_used_at,
+            )
+        historical_model_ids = sorted(set(log_totals_by_model) | set(metrics_totals_by_model))
+        if needs_model_seed:
+            for model_id in historical_model_ids:
+                model_log_totals = log_totals_by_model.get(model_id, {})
+                model_metrics_totals = metrics_totals_by_model.get(model_id, {})
+                model_seed_used_at = str(model_log_totals.get("last_used_at") or seed_used_at).strip() or seed_used_at
+                client_usage_store.seed_historical_usage(
+                    client_id=historical_client_id,
+                    prompt_id=historical_prompt_id,
+                    model_id=model_id,
+                    include_aggregate=False,
+                    customer_id=historical_customer_id,
+                    calls=max(int(model_log_totals.get("calls") or 0), 0),
+                    prompt_tokens=max(int(model_log_totals.get("prompt_tokens") or 0), 0),
+                    completion_tokens=max(int(model_log_totals.get("completion_tokens") or 0), 0),
+                    total_tokens=max(int(model_log_totals.get("total_tokens") or 0), 0),
+                    cost_usd=max(float(model_log_totals.get("cost_usd") or 0.0), 0.0),
+                    used_at=model_seed_used_at,
+                )
+                client_usage_store.seed_historical_usage(
+                    client_id=historical_client_id,
+                    prompt_id=historical_prompt_id,
+                    model_id=model_id,
+                    include_aggregate=False,
+                    customer_id=historical_customer_id,
+                    calls=max(int(model_metrics_totals.get("calls") or 0) - int(model_log_totals.get("calls") or 0), 0),
+                    prompt_tokens=max(
+                        int(model_metrics_totals.get("prompt_tokens") or 0)
+                        - int(model_log_totals.get("prompt_tokens") or 0),
+                        0,
+                    ),
+                    completion_tokens=max(
+                        int(model_metrics_totals.get("completion_tokens") or 0)
+                        - int(model_log_totals.get("completion_tokens") or 0),
+                        0,
+                    ),
+                    total_tokens=max(
+                        int(model_metrics_totals.get("total_tokens") or 0) - int(model_log_totals.get("total_tokens") or 0),
+                        0,
+                    ),
+                    cost_usd=max(
+                        float(model_metrics_totals.get("cost_usd") or 0.0)
+                        - float(model_log_totals.get("cost_usd") or 0.0),
+                        0.0,
+                    ),
+                    used_at=model_seed_used_at,
+                )
+        if needs_usage_seed:
+            client_usage_store.set_metadata(key="historical_seed_completed", value="1")
+        LOGGER.info(
+            "[client-usage-seeded] %s",
+            {
+                "client_id": historical_client_id,
+                "prompt_id": historical_prompt_id,
+                "log_calls": int(log_totals.get("calls") or 0),
+                "metrics_calls": int(metrics_totals.get("calls") or 0),
+            },
+        )
     trust_status_client = TrustStatusClient(logger=LOGGER)
     budget_policy_client = BudgetPolicyClient(logger=LOGGER)
     budget_manager = BudgetManager(
@@ -502,6 +623,7 @@ def run(
         governance_state_store=governance_state_store,
         prompt_service_state_store=prompt_service_state_store,
         budget_state_store=budget_state_store,
+        client_usage_store=client_usage_store,
         trust_status_client=trust_status_client,
         provider_runtime_manager=provider_runtime_manager,
         budget_manager=budget_manager,
@@ -558,6 +680,7 @@ def main() -> int:
         provider_capability_report_path=args.provider_capability_report_path,
         prompt_service_state_path=args.prompt_service_state_path,
         budget_state_path=args.budget_state_path,
+        client_usage_db_path=os.environ.get("SYNTHIA_CLIENT_USAGE_DB_PATH", ".run/client_usage.db"),
         provider_capability_refresh_interval_seconds=args.provider_capability_refresh_interval_seconds,
         openai_pricing_catalog_path=args.openai_pricing_catalog_path,
         openai_pricing_refresh_interval_seconds=args.openai_pricing_refresh_interval_seconds,

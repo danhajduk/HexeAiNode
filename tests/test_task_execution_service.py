@@ -6,6 +6,7 @@ from pathlib import Path
 from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.persistence.budget_state_store import BudgetStateStore
 from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
+from ai_node.persistence.client_usage_store import ClientUsageStore
 from ai_node.runtime.provider_resolver import ProviderResolutionResult
 from ai_node.runtime.budget_manager import BudgetManager
 from ai_node.runtime.task_execution_service import TaskExecutionService
@@ -160,6 +161,9 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(runtime_manager.last_request.requested_provider, "openai")
         self.assertEqual(runtime_manager.last_request.requested_model, "gpt-5-mini")
         self.assertEqual(service.lifecycle_tracker.history_payload()["history"][0]["state"], "completed")
+        self.assertEqual(service.lifecycle_tracker.history_payload()["history"][0]["details"]["requested_by"], "service.alpha")
+        self.assertEqual(service.lifecycle_tracker.history_payload()["history"][0]["details"]["prompt_id"], "prompt.alpha")
+        self.assertEqual(service.lifecycle_tracker.history_payload()["history"][0]["details"]["estimated_cost"], 0.001)
         self.assertEqual(result.metrics.provider_avg_latency_ms, 15.0)
         self.assertEqual(result.metrics.provider_p95_latency_ms, 20.0)
         self.assertEqual(result.metrics.provider_success_rate, 0.95)
@@ -256,6 +260,62 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.status, "completed")
             self.assertIn("budget_reservation", [item["event_type"] for item in telemetry.calls])
             self.assertIn("budget_finalized", [item["event_type"] for item in telemetry.calls])
+
+    async def test_execute_records_completed_usage_in_client_usage_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            usage_store = ClientUsageStore(
+                path=str(Path(tmp) / "client_usage.db"),
+                logger=logging.getLogger("client-usage-test"),
+            )
+            service = TaskExecutionService(
+                provider_runtime_manager=_FakeProviderRuntimeManager(),
+                provider_resolver=_FakeProviderResolver(
+                    ProviderResolutionResult(
+                        allowed=True,
+                        provider_id="openai",
+                        model_id="gpt-5-mini",
+                        provider_order=["openai"],
+                        fallback_provider_ids=[],
+                        model_allowlist_by_provider={"openai": ["gpt-5-mini"]},
+                        timeout_s=45,
+                        retry_count=1,
+                        rejection_reason=None,
+                    )
+                ),
+                logger=logging.getLogger("task-execution-service-test"),
+                client_usage_store=usage_store,
+                prompt_services_state_provider=lambda: {
+                    "prompt_services": [
+                        {"prompt_id": "prompt.email.classifier", "task_family": "task.classification", "status": "registered"}
+                    ]
+                },
+                declared_task_families_provider=lambda: ["task.classification"],
+                accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
+            )
+
+            result = await service.execute(
+                TaskExecutionRequest.model_validate(
+                    {
+                        "task_id": "task-usage-001",
+                        "prompt_id": "prompt.email.classifier",
+                        "task_family": "task.classification",
+                        "requested_by": "node-email",
+                        "customer_id": "local-user",
+                        "requested_provider": "openai",
+                        "requested_model": "gpt-5-mini",
+                        "inputs": {"text": "hello world"},
+                        "timeout_s": 45,
+                        "trace_id": "trace-usage-001",
+                    }
+                )
+            )
+
+            self.assertEqual(result.status, "completed")
+            payload = usage_store.summary_payload(month_key=str(result.completed_at)[:7])
+            self.assertEqual(payload["clients"][0]["client_id"], "node-email")
+            self.assertEqual(payload["clients"][0]["current_month"]["calls"], 1)
+            self.assertEqual(payload["clients"][0]["prompts"][0]["prompt_id"], "prompt.email.classifier")
+            self.assertEqual(payload["clients"][0]["prompts"][0]["models"][0]["model_id"], "gpt-5-mini")
 
     async def test_execute_returns_unsupported_for_non_canonical_family(self):
         service = TaskExecutionService(

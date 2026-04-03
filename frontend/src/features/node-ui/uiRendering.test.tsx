@@ -4,12 +4,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { SetupModeView } from "../setup/SetupModeView";
 import { buildSetupFlowModel } from "../setup/setupFlowModel";
 import { OperationalDashboard } from "../operational/OperationalDashboard";
+import { BackendUnavailableScreen } from "./BackendUnavailableScreen";
 
 function buildOperationalProps(overrides = {}) {
   return {
     currentSection: "overview",
     sections: [
       { id: "overview", label: "Overview", onClick: () => {} },
+      { id: "clients", label: "Clients", onClick: () => {} },
       { id: "diagnostics", label: "Diagnostics", onClick: () => {} },
     ],
     healthStripProps: {
@@ -73,6 +75,8 @@ function buildOperationalProps(overrides = {}) {
       onOpenDiagnostics: () => {},
     },
     activityItems: [{ label: "Last declaration", value: "accepted" }],
+    clientCostItems: [],
+    clientUsageMonth: "2026-04",
     onboardingSteps: [{ key: "registration", label: "Registration" }],
     onboardingProgress: { registration: "completed" },
     pendingApprovalNodeId: "",
@@ -178,5 +182,108 @@ describe("OperationalDashboard", () => {
     expect(overviewMarkup).toContain("Paired Hexe Core");
     expect(overviewMarkup).toContain("Telemetry Freshness");
     expect(overviewMarkup).toContain("Telemetry Age");
+  });
+
+  it("shows client cost breakdowns on the clients section", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "clients",
+          clientCostItems: [
+            {
+              clientId: "node-email",
+              clientLabel: "node-email",
+              customerId: "local-user",
+              grant: {
+                grantName: "grant:***************user",
+                validFrom: "2026-04-01T00:00:00+00:00",
+                validTo: "2026-05-01T00:00:00+00:00",
+                status: "active",
+              },
+              lifetime: { calls: 502, total_tokens: 229217, cost_usd: 0.0672463 },
+              current_month: { calls: 502, total_tokens: 229217, cost_usd: 0.0672463 },
+              prompts: [
+                {
+                  promptId: "prompt.email.classify",
+                  promptLabel: "prompt.email.classify",
+                  lifetime: { calls: 502, total_tokens: 229217, cost_usd: 0.0672463 },
+                  current_month: { calls: 502, total_tokens: 229217, cost_usd: 0.0672463 },
+                  models: [
+                    {
+                      modelId: "gpt-5.4-nano",
+                      modelLabel: "gpt-5.4-nano",
+                      lifetime: { calls: 501, total_tokens: 229107, cost_usd: 0.0672463 },
+                      current_month: { calls: 501, total_tokens: 229107, cost_usd: 0.0672463 },
+                    },
+                    {
+                      modelId: "gpt-5.4",
+                      modelLabel: "gpt-5.4",
+                      lifetime: { calls: 1, total_tokens: 110, cost_usd: 0 },
+                      current_month: { calls: 1, total_tokens: 110, cost_usd: 0 },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })}
+      />
+    );
+
+    expect(markup).toContain("Client Usage");
+    expect(markup).toContain("node-email");
+    expect(markup).toContain("local-user");
+    expect(markup).toContain("Grant:");
+    expect(markup).toContain("grant:***************user");
+    expect(markup).toContain("2026-04-01T00:00:00+00:00 -&gt; 2026-05-01T00:00:00+00:00");
+    expect(markup).toContain("Model");
+    expect(markup).toContain("April 2026");
+    expect(markup).toContain("prompt.email.classify");
+    expect(markup).toContain("Lifetime $0.067246");
+    expect(markup).toContain("April 2026 $0.067246");
+    expect(markup).toContain("gpt-5.4-nano");
+    expect(markup).toContain("502");
+  });
+
+  it("keeps the activity section focused on onboarding and recent activity", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "activity",
+          clientCostItems: [
+            {
+              clientId: "node-email",
+              clientLabel: "node-email",
+              customerId: "local-user",
+              lifetime: { calls: 1, total_tokens: 10, cost_usd: 0.01 },
+              current_month: { calls: 1, total_tokens: 10, cost_usd: 0.01 },
+              prompts: [],
+            },
+          ],
+        })}
+      />
+    );
+
+    expect(markup).toContain("Onboarding");
+    expect(markup).toContain("Recent Activity");
+    expect(markup).not.toContain("Client Usage");
+  });
+});
+
+describe("BackendUnavailableScreen", () => {
+  it("renders a dedicated backend unavailable page", () => {
+    const markup = renderToStaticMarkup(
+      <BackendUnavailableScreen
+        apiBase="http://localhost:9002"
+        error="fetch failed"
+        lastUpdatedAt="Apr 03, 2026, 9:01:00 AM"
+        onRetry={() => {}}
+      />
+    );
+
+    expect(markup).toContain("Backend Unavailable");
+    expect(markup).toContain("Retry Connection");
+    expect(markup).toContain("http://localhost:9002");
+    expect(markup).toContain("fetch failed");
   });
 });
