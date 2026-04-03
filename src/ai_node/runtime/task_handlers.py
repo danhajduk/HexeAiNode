@@ -17,11 +17,22 @@ SUMMARIZATION_TASK_FAMILIES = (
 )
 
 
+DEFAULT_CLASSIFICATION_SYSTEM_PROMPT = (
+    "Return only a JSON object for the classification result. "
+    'Use the shape {"label": string, "confidence": number|null, "reasoning": string}. '
+    "Do not include markdown fences or extra prose."
+)
+
+
 def _build_unified_execution_request(*, request, resolution, normalized_inputs) -> UnifiedExecutionRequest:
     resolution_plan = resolution.get("plan") if isinstance(resolution, dict) else resolution
     authorization = resolution.get("authorization") if isinstance(resolution, dict) else None
     prompt_definition = authorization.prompt_definition if authorization is not None and isinstance(authorization.prompt_definition, dict) else {}
-    system_prompt = normalized_inputs.system_prompt or prompt_definition.get("system_prompt")
+    system_prompt = (
+        normalized_inputs.system_prompt
+        or prompt_definition.get("system_prompt")
+        or (DEFAULT_CLASSIFICATION_SYSTEM_PROMPT if str(request.task_family or "").strip().startswith("task.classification") else None)
+    )
     return UnifiedExecutionRequest(
         task_family=request.task_family,
         prompt=normalized_inputs.prompt,

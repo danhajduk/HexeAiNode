@@ -76,7 +76,14 @@ class MockProviderAdapter(ProviderAdapter):
             raw_provider_response_ref=f"mock:{self._calls}",
         )
 
-    def estimate_cost(self, *, model_id: str, prompt_tokens: int, completion_tokens: int):
+    def estimate_cost(
+        self,
+        *,
+        model_id: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cached_input_tokens: int = 0,
+    ):
         return 0.0
 
     def collect_metrics(self) -> dict:

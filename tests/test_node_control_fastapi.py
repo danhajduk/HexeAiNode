@@ -177,6 +177,28 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "registration_timestamp": "2026-03-11T00:00:00Z",
             }
 
+    class _FakeBudgetDeclarationClient:
+        def __init__(self):
+            self.calls = []
+
+        async def submit_declaration(self, *, core_api_endpoint: str, trust_token: str, node_id: str, declaration_payload: dict):
+            self.calls.append(
+                {
+                    "core_api_endpoint": core_api_endpoint,
+                    "trust_token": trust_token,
+                    "node_id": node_id,
+                    "declaration_payload": declaration_payload,
+                }
+            )
+
+            class _Result:
+                status = "accepted"
+                payload = {"status": "accepted", "declaration_id": "budget-decl-1"}
+                retryable = False
+                error = None
+
+            return _Result()
+
     class _FakeServiceManager:
         def __init__(self):
             self.status = {"backend": "running", "frontend": "running", "node": "running"}
@@ -451,6 +473,7 @@ class NodeControlFastApiTests(unittest.TestCase):
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
             runtime_manager = self._FakeProviderRuntimeManager()
             capability_runner = self._FakeCapabilityRunner()
+            budget_declaration_client = self._FakeBudgetDeclarationClient()
             config_path = Path(tmp) / "bootstrap_config.json"
             state = NodeControlState(
                 lifecycle=lifecycle,
@@ -460,6 +483,8 @@ class NodeControlFastApiTests(unittest.TestCase):
                 provider_credentials_store=self._FakeProviderCredentialsStore(),
                 task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
                 capability_runner=capability_runner,
+                trust_state_store=self._FakeTrustStateStore(),
+                budget_declaration_client=budget_declaration_client,
                 provider_runtime_manager=runtime_manager,
                 service_manager=self._FakeServiceManager(),
                 prompt_service_state_store=self._FakePromptServiceStateStore(),
@@ -515,6 +540,18 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(
                 provider_set_response.json()["config"]["providers"]["budget_limits"]["openai"]["period"],
                 "weekly",
+            )
+
+            budget_declare_response = client.post("/api/budgets/declare", json={"provider_id": "openai"})
+            self.assertEqual(budget_declare_response.status_code, 200)
+            self.assertEqual(budget_declare_response.json()["status"], "accepted")
+            self.assertEqual(
+                budget_declaration_client.calls[0]["declaration_payload"]["service_capacity"],
+                {
+                    "service": "ai.inference",
+                    "period": "weekly",
+                    "limits": {"max_cost_cents": 2500},
+                },
             )
 
             credentials_get_response = client.get("/api/providers/openai/credentials")

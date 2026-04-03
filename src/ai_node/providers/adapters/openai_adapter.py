@@ -156,6 +156,8 @@ class OpenAIProviderAdapter(ProviderAdapter):
             "model": model,
             "messages": messages,
         }
+        if request.task_family in {TASK_CLASSIFICATION, TASK_CLASSIFICATION_TEXT}:
+            payload["response_format"] = {"type": "json_object"}
         if request.temperature is not None:
             payload["temperature"] = request.temperature
         if request.max_tokens is not None:
@@ -176,8 +178,10 @@ class OpenAIProviderAdapter(ProviderAdapter):
             first = choices[0] if isinstance(choices, list) and choices else {}
             msg = first.get("message") if isinstance(first, dict) else {}
             usage_raw = data.get("usage") if isinstance(data, dict) else {}
+            prompt_details = usage_raw.get("prompt_tokens_details") if isinstance(usage_raw, dict) else {}
             usage = UnifiedExecutionUsage(
                 prompt_tokens=int(usage_raw.get("prompt_tokens") or 0),
+                cached_input_tokens=int((prompt_details or {}).get("cached_tokens") or 0),
                 completion_tokens=int(usage_raw.get("completion_tokens") or 0),
                 total_tokens=int(usage_raw.get("total_tokens") or 0),
             )
@@ -185,6 +189,7 @@ class OpenAIProviderAdapter(ProviderAdapter):
                 model_id=model,
                 prompt_tokens=usage.prompt_tokens,
                 completion_tokens=usage.completion_tokens,
+                cached_input_tokens=usage.cached_input_tokens,
             )
             latency_ms = round((time.perf_counter() - started) * 1000.0, 3)
             return UnifiedExecutionResponse(
@@ -202,18 +207,34 @@ class OpenAIProviderAdapter(ProviderAdapter):
             self._metrics["failures"] += 1
             raise RuntimeError(str(exc).strip() or "openai_execute_failed") from exc
 
-    def estimate_cost(self, *, model_id: str, prompt_tokens: int, completion_tokens: int) -> float | None:
+    def estimate_cost(
+        self,
+        *,
+        model_id: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cached_input_tokens: int = 0,
+    ) -> float | None:
         pricing = get_openai_model_pricing(model_id, pricing_service=self._pricing_catalog_service)
         if not isinstance(pricing, dict):
             return None
         if str(pricing.get("pricing_status") or "").strip() not in {"ok", "manual"}:
             return None
         in_rate = pricing.get("input_per_1m_tokens")
+        cached_in_rate = pricing.get("cached_input_per_1m_tokens")
         out_rate = pricing.get("output_per_1m_tokens")
         if not isinstance(in_rate, (int, float)) or not isinstance(out_rate, (int, float)):
             return None
-        estimated = ((prompt_tokens / 1_000_000.0) * in_rate) + ((completion_tokens / 1_000_000.0) * out_rate)
-        return round(estimated, 8)
+        total_input_tokens = max(int(prompt_tokens), 0)
+        cached_tokens = max(min(int(cached_input_tokens), total_input_tokens), 0)
+        uncached_tokens = max(total_input_tokens - cached_tokens, 0)
+        estimated = (uncached_tokens * float(in_rate)) / 1_000_000.0
+        if cached_tokens > 0 and isinstance(cached_in_rate, (int, float)):
+            estimated += (cached_tokens * float(cached_in_rate)) / 1_000_000.0
+        else:
+            estimated += (cached_tokens * float(in_rate)) / 1_000_000.0
+        estimated += (max(int(completion_tokens), 0) * float(out_rate)) / 1_000_000.0
+        return estimated
 
     def collect_metrics(self) -> dict[str, Any]:
         calls = int(self._metrics.get("calls") or 0)

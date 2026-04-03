@@ -24,7 +24,14 @@ class ProviderAdapter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def estimate_cost(self, *, model_id: str, prompt_tokens: int, completion_tokens: int) -> float | None:
+    def estimate_cost(
+        self,
+        *,
+        model_id: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cached_input_tokens: int = 0,
+    ) -> float | None:
         raise NotImplementedError
 
     @abstractmethod

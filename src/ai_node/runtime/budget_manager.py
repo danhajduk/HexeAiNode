@@ -1,6 +1,7 @@
 import math
 from datetime import datetime, timedelta
 
+from ai_node.providers.openai_catalog import get_openai_model_pricing
 from ai_node.time_utils import local_now, local_now_iso
 
 
@@ -31,6 +32,16 @@ def _normalize_int(value: object, *, default: int = 0) -> int:
     try:
         normalized = int(value)
     except (TypeError, ValueError):
+        return default
+    return normalized
+
+
+def _normalize_float(value: object, *, default: float = 0.0) -> float:
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError):
+        return default
+    if normalized < 0:
         return default
     return normalized
 
@@ -144,6 +155,7 @@ class BudgetManager:
         policy = state.get("budget_policy") if isinstance(state.get("budget_policy"), dict) else None
         grant_usage = state.get("grant_usage") if isinstance(state.get("grant_usage"), dict) else {}
         provider_budget_usage = state.get("provider_budget_usage") if isinstance(state.get("provider_budget_usage"), dict) else {}
+        runtime_spend_by_provider = self._provider_runtime_exact_spend_by_provider()
         grants = list(policy.get("grants") or []) if isinstance(policy, dict) else []
         active_reservations = 0
         for usage in grant_usage.values():
@@ -158,6 +170,15 @@ class BudgetManager:
                 provider_id=provider_id,
                 settings=settings,
             )
+            used_cost_usd_exact = self._provider_budget_used_cost_usd_exact(
+                usage=usage,
+                runtime_spend_by_provider=runtime_spend_by_provider,
+            )
+            used_cost_cents = self._provider_budget_used_cost_cents(
+                usage=usage,
+                runtime_spend_by_provider=runtime_spend_by_provider,
+            )
+            reserved_cost_cents = _normalize_int(usage.get("reserved_cost_cents"), default=0)
             reservations = usage.get("reservations") if isinstance(usage, dict) else {}
             if isinstance(reservations, dict):
                 active_reservations += len(reservations)
@@ -168,13 +189,24 @@ class BudgetManager:
                     "period_start": usage.get("period_start"),
                     "period_end": usage.get("period_end"),
                     "budget_limit_cents": usage.get("budget_limit_cents"),
-                    "used_cost_cents": _normalize_int(usage.get("used_cost_cents"), default=0),
-                    "reserved_cost_cents": _normalize_int(usage.get("reserved_cost_cents"), default=0),
+                    "used_cost_cents": used_cost_cents,
+                    "used_cost_usd_exact": used_cost_usd_exact,
+                    "reserved_cost_cents": reserved_cost_cents,
                     "remaining_cost_cents": max(
                         _normalize_int(usage.get("budget_limit_cents"), default=0)
-                        - _normalize_int(usage.get("used_cost_cents"), default=0)
-                        - _normalize_int(usage.get("reserved_cost_cents"), default=0),
+                        - used_cost_cents
+                        - reserved_cost_cents,
                         0,
+                    ),
+                    "budget_limit_usd_exact": round(_normalize_int(usage.get("budget_limit_cents"), default=0) / 100.0, 10),
+                    "remaining_cost_usd_exact": round(
+                        max(
+                            (_normalize_int(usage.get("budget_limit_cents"), default=0) / 100.0)
+                            - used_cost_usd_exact
+                            - (reserved_cost_cents / 100.0),
+                            0.0,
+                        ),
+                        10,
                     ),
                 }
             )
@@ -371,7 +403,13 @@ class BudgetManager:
                 self._queue_usage_summary(state=state, grant_id=_normalize_string(usage.get("grant_id")), usage=usage)
             usage["updated_at"] = _now_iso()
             finalized.append({"grant_id": usage.get("grant_id"), "final_cost_cents": applied_cost})
-        provider_finalized = self._finalize_provider_budget(state=state, reservation_id=reservation_id, final_cost_cents=final_cost_cents, status=status)
+        provider_finalized = self._finalize_provider_budget(
+            state=state,
+            reservation_id=reservation_id,
+            final_cost_cents=final_cost_cents,
+            status=status,
+            metrics=metrics,
+        )
         if finalized:
             self._save_state(state)
         elif provider_finalized:
@@ -525,6 +563,7 @@ class BudgetManager:
             "period_end": period_end,
             "budget_limit_cents": _normalize_int(settings.get("max_cost_cents"), default=0),
             "used_cost_cents": 0,
+            "used_cost_usd_exact": 0.0,
             "reserved_cost_cents": 0,
             "reservations": {},
             "updated_at": state.get("updated_at") or _now_iso(),
@@ -559,6 +598,7 @@ class BudgetManager:
                 "period_end": period_end,
                 "budget_limit_cents": _normalize_int(settings.get("max_cost_cents"), default=0),
                 "used_cost_cents": 0,
+                "used_cost_usd_exact": 0.0,
                 "reserved_cost_cents": 0,
                 "reservations": {},
                 "updated_at": _now_iso(),
@@ -573,8 +613,17 @@ class BudgetManager:
         usage = self._ensure_provider_budget_usage_entry(state=state, provider_id=provider_id, settings=settings)
         if reservation_id in usage["reservations"]:
             return {"allowed": False, "reason": "reservation_conflict"}
-        remaining = _normalize_int(usage.get("budget_limit_cents")) - _normalize_int(usage.get("used_cost_cents")) - _normalize_int(usage.get("reserved_cost_cents"))
-        if remaining < reserved_cost_cents:
+        runtime_spend_by_provider = self._provider_runtime_exact_spend_by_provider()
+        used_cost_usd_exact = self._provider_budget_used_cost_usd_exact(
+            usage=usage,
+            runtime_spend_by_provider=runtime_spend_by_provider,
+        )
+        remaining_exact_cents = (
+            _normalize_int(usage.get("budget_limit_cents"))
+            - (used_cost_usd_exact * 100.0)
+            - _normalize_int(usage.get("reserved_cost_cents"))
+        )
+        if remaining_exact_cents < reserved_cost_cents:
             return {"allowed": False, "reason": "provider_budget_exhausted"}
         usage["reservations"][reservation_id] = {
             "reservation_id": reservation_id,
@@ -588,7 +637,15 @@ class BudgetManager:
         usage["updated_at"] = _now_iso()
         return {"allowed": True}
 
-    def _finalize_provider_budget(self, *, state: dict, reservation_id: str, final_cost_cents: int | None, status: str) -> list[dict]:
+    def _finalize_provider_budget(
+        self,
+        *,
+        state: dict,
+        reservation_id: str,
+        final_cost_cents: int | None,
+        status: str,
+        metrics,
+    ) -> list[dict]:
         finalized = []
         for usage in (state.get("provider_budget_usage") or {}).values():
             if not isinstance(usage, dict):
@@ -603,10 +660,109 @@ class BudgetManager:
             usage["reserved_cost_cents"] = max(_normalize_int(usage.get("reserved_cost_cents")) - reserved_cost_cents, 0)
             applied_cost = final_cost_cents if final_cost_cents is not None else reserved_cost_cents
             if status == "completed":
-                usage["used_cost_cents"] = _normalize_int(usage.get("used_cost_cents")) + max(applied_cost, 0)
+                usage["used_cost_usd_exact"] = round(
+                    _normalize_float(usage.get("used_cost_usd_exact"))
+                    + self._final_cost_usd_exact(metrics=metrics, fallback_cost_cents=applied_cost),
+                    10,
+                )
+                usage["used_cost_cents"] = max(math.ceil(_normalize_float(usage.get("used_cost_usd_exact")) * 100.0), 0)
             usage["updated_at"] = _now_iso()
             finalized.append({"provider_id": usage.get("provider_id"), "final_cost_cents": applied_cost})
         return finalized
+
+    def _final_cost_usd_exact(self, *, metrics, fallback_cost_cents: int) -> float:
+        estimated_cost = getattr(metrics, "estimated_cost", None) if metrics is not None else None
+        if isinstance(estimated_cost, (int, float)) and float(estimated_cost) >= 0:
+            return float(estimated_cost)
+        return max(int(fallback_cost_cents), 0) / 100.0
+
+    def _provider_budget_used_cost_usd_exact(self, *, usage: dict, runtime_spend_by_provider: dict[str, float]) -> float:
+        provider_id = _normalize_string(usage.get("provider_id"))
+        fallback = runtime_spend_by_provider.get(provider_id)
+        if isinstance(fallback, (int, float)) and float(fallback) >= 0:
+            return round(float(fallback), 10)
+        exact = usage.get("used_cost_usd_exact")
+        if isinstance(exact, (int, float)) and float(exact) > 0:
+            return round(float(exact), 10)
+        return round(_normalize_int(usage.get("used_cost_cents")) / 100.0, 10)
+
+    def _provider_budget_used_cost_cents(self, *, usage: dict, runtime_spend_by_provider: dict[str, float]) -> int:
+        used_cost_usd_exact = self._provider_budget_used_cost_usd_exact(
+            usage=usage,
+            runtime_spend_by_provider=runtime_spend_by_provider,
+        )
+        if used_cost_usd_exact > 0:
+            return max(math.ceil(used_cost_usd_exact * 100.0), 0)
+        return max(_normalize_int(usage.get("used_cost_cents")), 0)
+
+    def _provider_runtime_exact_spend_by_provider(self) -> dict[str, float]:
+        runtime = self._provider_runtime_manager
+        if runtime is None:
+            return {}
+        spend_by_provider: dict[str, float] = {}
+        metrics_collector = getattr(runtime, "_metrics", None)
+        metrics_snapshot = metrics_collector.snapshot() if metrics_collector is not None and hasattr(metrics_collector, "snapshot") else {}
+        providers = metrics_snapshot.get("providers") if isinstance(metrics_snapshot, dict) else {}
+        registry = getattr(runtime, "_registry", None)
+        pricing_service = getattr(runtime, "_pricing_catalog_service", None)
+
+        if isinstance(providers, dict):
+            for provider_id, provider_payload in providers.items():
+                if not isinstance(provider_payload, dict):
+                    continue
+                models = provider_payload.get("models")
+                if not isinstance(models, dict):
+                    continue
+                total_spend = 0.0
+                for model_id, model_metrics in models.items():
+                    if not isinstance(model_metrics, dict):
+                        continue
+                    prompt_tokens = _normalize_int(model_metrics.get("prompt_tokens"), default=0)
+                    completion_tokens = _normalize_int(model_metrics.get("completion_tokens"), default=0)
+                    input_rate = None
+                    output_rate = None
+                    if registry is not None and hasattr(registry, "get_model"):
+                        registry_model = registry.get_model(provider_id=str(provider_id), model_id=str(model_id))
+                        if registry_model is not None:
+                            input_rate = getattr(registry_model, "pricing_input", None)
+                            output_rate = getattr(registry_model, "pricing_output", None)
+                    if not isinstance(input_rate, (int, float)) or not isinstance(output_rate, (int, float)):
+                        pricing = get_openai_model_pricing(str(model_id), pricing_service=pricing_service) if str(provider_id).lower() == "openai" else None
+                        if isinstance(pricing, dict):
+                            input_rate = pricing.get("input_per_1m_tokens")
+                            output_rate = pricing.get("output_per_1m_tokens")
+                    if not isinstance(input_rate, (int, float)) or not isinstance(output_rate, (int, float)):
+                        continue
+                    total_spend += ((prompt_tokens * float(input_rate)) + (completion_tokens * float(output_rate))) / 1_000_000.0
+                spend_by_provider[_normalize_string(provider_id)] = round(total_spend, 10)
+
+        if spend_by_provider:
+            return spend_by_provider
+
+        if hasattr(runtime, "intelligence_payload"):
+            payload = runtime.intelligence_payload()
+            providers_payload = payload.get("providers") if isinstance(payload, dict) else None
+            if isinstance(providers_payload, list):
+                for provider in providers_payload:
+                    if not isinstance(provider, dict):
+                        continue
+                    provider_id = _normalize_string(provider.get("provider_id"))
+                    if not provider_id:
+                        continue
+                    total_spend = 0.0
+                    for model in provider.get("models") or []:
+                        if not isinstance(model, dict):
+                            continue
+                        usage_metrics = model.get("usage_metrics") if isinstance(model.get("usage_metrics"), dict) else {}
+                        prompt_tokens = _normalize_int(usage_metrics.get("prompt_tokens"), default=0)
+                        completion_tokens = _normalize_int(usage_metrics.get("completion_tokens"), default=0)
+                        input_rate = model.get("pricing_input")
+                        output_rate = model.get("pricing_output")
+                        if not isinstance(input_rate, (int, float)) or not isinstance(output_rate, (int, float)):
+                            continue
+                        total_spend += ((prompt_tokens * float(input_rate)) + (completion_tokens * float(output_rate))) / 1_000_000.0
+                    spend_by_provider[provider_id] = round(total_spend, 10)
+        return spend_by_provider
 
     def _release_provider_budget(self, *, state: dict, reservation_id: str, reason: str) -> list[dict]:
         released = []

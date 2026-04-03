@@ -29,7 +29,14 @@ class LocalProviderAdapter(ProviderAdapter):
     async def execute_prompt(self, request: UnifiedExecutionRequest) -> UnifiedExecutionResponse:
         raise RuntimeError("local_provider_not_implemented")
 
-    def estimate_cost(self, *, model_id: str, prompt_tokens: int, completion_tokens: int) -> float | None:
+    def estimate_cost(
+        self,
+        *,
+        model_id: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cached_input_tokens: int = 0,
+    ) -> float | None:
         return 0.0
 
     def collect_metrics(self) -> dict[str, Any]:

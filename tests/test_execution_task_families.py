@@ -59,6 +59,17 @@ class Phase3TaskFamilyVocabularyTests(unittest.TestCase):
         self.assertFalse(result.allowed)
         self.assertEqual(result.reason, "task_family_not_accepted")
 
+    def test_validate_allows_email_alias_when_parent_family_declared_and_accepted(self):
+        result = validate_execution_task_family(
+            task_family="task.classification.email",
+            declared_task_families=["task.classification", "task.chat"],
+            accepted_capability_profile={"declared_task_families": ["task.classification", "task.chat"]},
+        )
+
+        self.assertTrue(result.allowed)
+        self.assertEqual(result.reason, "task_family_allowed")
+        self.assertEqual(result.canonical_task_family, "task.classification.email")
+
 
 if __name__ == "__main__":
     unittest.main()

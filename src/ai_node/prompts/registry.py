@@ -5,6 +5,7 @@ from ai_node.prompts.registration import (
     create_prompt_service_registration,
     find_prompt_entry,
     transition_prompt_lifecycle,
+    normalize_prompt_lifecycle_state,
     update_prompt_service_definition,
 )
 
@@ -63,8 +64,11 @@ class PromptRegistry:
         version: str | None = None,
         status: str = "active",
     ) -> dict:
-        if find_prompt_entry(prompt_services_state=self._state, prompt_id=prompt_id) is not None:
-            raise ValueError("duplicate_prompt_id")
+        existing_entry = find_prompt_entry(prompt_services_state=self._state, prompt_id=prompt_id)
+        if isinstance(existing_entry, dict):
+            existing_state = normalize_prompt_lifecycle_state(existing_entry.get("status") or "active")
+            if existing_state != "retired":
+                raise ValueError("duplicate_prompt_id")
         registration = create_prompt_service_registration(
             prompt_id=prompt_id,
             service_id=service_id,
@@ -81,7 +85,15 @@ class PromptRegistry:
             status=status,
         )
         services = self._state.setdefault("prompt_services", [])
-        services.append(registration)
+        if isinstance(existing_entry, dict):
+            for index, entry in enumerate(services):
+                if entry is existing_entry:
+                    services[index] = registration
+                    break
+            else:
+                services.append(registration)
+        else:
+            services.append(registration)
         self._state["updated_at"] = registration["updated_at"]
         return self.save()
 

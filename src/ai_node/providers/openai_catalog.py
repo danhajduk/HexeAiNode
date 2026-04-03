@@ -129,6 +129,12 @@ _DISPLAY_NAME_ALIASES = {
     "gpt realtime mini": "gpt-realtime-mini",
     "gpt image 1": "gpt-image-1",
 }
+_OPENAI_MANUAL_RATE_FALLBACKS = {
+    "gpt-5.4": {"input_price": 2.50, "cached_input_price": 0.25, "output_price": 15.00},
+    "gpt-5.4-2026-03-05": {"input_price": 2.50, "cached_input_price": 0.25, "output_price": 15.00},
+    "gpt-5.4-nano": {"input_price": 0.20, "cached_input_price": 0.02, "output_price": 1.25},
+    "gpt-5.4-nano-2026-03-17": {"input_price": 0.20, "cached_input_price": 0.02, "output_price": 1.25},
+}
 
 
 def _iso_now() -> str:
@@ -1965,8 +1971,9 @@ class OpenAIPricingCatalogService:
 
     def get_pricing_entry(self, model_id: str) -> OpenAIPricingEntry | None:
         snapshot = self.load_snapshot()
+        fallback_entry = _fallback_openai_pricing_entry(model_id)
         if snapshot is None:
-            return None
+            return fallback_entry
         target = resolve_openai_base_model_id(model_id)
         for candidate in (_normalize_string(model_id).lower(), target):
             if not candidate:
@@ -1974,9 +1981,9 @@ class OpenAIPricingCatalogService:
             for entry in snapshot.entries:
                 if entry.model_id == candidate:
                     if self.is_stale(snapshot):
-                        return entry.model_copy(update={"extraction_status": "stale"})
+                        return fallback_entry or entry.model_copy(update={"extraction_status": "stale"})
                     return entry
-        return None
+        return fallback_entry
 
     def merge_model_capabilities(self, models: list) -> tuple[list, list[str]]:
         snapshot = self.load_snapshot()
@@ -2154,6 +2161,36 @@ def get_openai_model_pricing(model_id: str, *, pricing_service: OpenAIPricingCat
         "normalized_price": entry.normalized_price,
         "normalized_unit": entry.normalized_unit,
     }
+
+
+def _fallback_openai_pricing_entry(model_id: str) -> OpenAIPricingEntry | None:
+    normalized_model_id = _normalize_string(model_id).lower()
+    target_model_id = resolve_openai_base_model_id(normalized_model_id)
+    pricing = _OPENAI_MANUAL_RATE_FALLBACKS.get(normalized_model_id) or _OPENAI_MANUAL_RATE_FALLBACKS.get(target_model_id)
+    if not isinstance(pricing, dict):
+        return None
+    input_price = _normalize_price(pricing.get("input_price"))
+    cached_input_price = _normalize_price(pricing.get("cached_input_price"))
+    output_price = _normalize_price(pricing.get("output_price"))
+    return OpenAIPricingEntry(
+        model_id=target_model_id or normalized_model_id,
+        family="llm",
+        pricing_basis="per_1m_tokens",
+        input_price=input_price,
+        cached_input_price=cached_input_price,
+        output_price=output_price,
+        normalized_price=_compute_normalized_price(
+            basis="per_1m_tokens",
+            input_price=input_price,
+            output_price=output_price,
+            normalized_price=None,
+        ),
+        normalized_unit="per_1m_tokens",
+        source_url="manual://built_in_gpt54_rates",
+        extracted_at=_iso_now(),
+        extraction_status="manual",
+        notes=["manual_pricing_fallback", "source:user_supplied_gpt54_rates"],
+    )
 
 
 class _NullLogger:

@@ -18,6 +18,10 @@ def _is_non_empty_string(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def _is_non_negative_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and value >= 0
+
+
 def create_budget_state() -> dict:
     return {
         "schema_version": BUDGET_STATE_SCHEMA_VERSION,
@@ -133,6 +137,9 @@ def validate_budget_state(data: object) -> Tuple[bool, Optional[str]]:
             value = entry.get(field_name, 0)
             if not isinstance(value, int) or value < 0:
                 return False, f"invalid_provider_budget_usage_{field_name}"
+        used_cost_usd_exact = entry.get("used_cost_usd_exact", 0.0)
+        if not _is_non_negative_number(used_cost_usd_exact):
+            return False, "invalid_provider_budget_usage_used_cost_usd_exact"
         reservations = entry.get("reservations")
         if not isinstance(reservations, dict):
             return False, "invalid_provider_budget_usage_reservations"

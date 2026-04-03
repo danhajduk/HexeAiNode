@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES, canonicalize_task_family, validate_task_family_capabilities
+from ai_node.config.task_capability_selection_config import LEGACY_DECLARATION_TASK_FAMILY_ALIASES
 
 PHASE3_TASK_FAMILY_V1 = tuple(CANONICAL_TASK_FAMILIES)
 
@@ -45,6 +46,13 @@ def _accepted_profile_families(profile: dict | None) -> set[str]:
     return normalized
 
 
+def _declaration_family(task_family: str | None) -> str | None:
+    canonical = canonicalize_phase3_task_family(str(task_family or ""))
+    if canonical is None:
+        return None
+    return LEGACY_DECLARATION_TASK_FAMILY_ALIASES.get(canonical, canonical)
+
+
 def validate_execution_task_family(
     *,
     task_family: str,
@@ -62,7 +70,8 @@ def validate_execution_task_family(
         )
 
     declared = _normalized_capability_families(declared_task_families or [])
-    if declared and canonical not in declared:
+    declaration_family = _declaration_family(canonical)
+    if declared and declaration_family not in declared:
         return TaskFamilyValidationResult(
             allowed=False,
             reason="task_family_not_declared",
@@ -71,7 +80,7 @@ def validate_execution_task_family(
         )
 
     accepted = _accepted_profile_families(accepted_capability_profile)
-    if accepted and canonical not in accepted:
+    if accepted and declaration_family not in accepted:
         return TaskFamilyValidationResult(
             allowed=False,
             reason="task_family_not_accepted",

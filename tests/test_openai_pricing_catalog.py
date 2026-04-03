@@ -855,6 +855,20 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(merged_models[0].pricing_input, 3.0)
             self.assertEqual(merged_models[0].pricing_output, 15.0)
 
+    async def test_builtin_fallback_pricing_for_current_gpt_54_models(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = OpenAIPricingCatalogService(
+                logger=logging.getLogger("openai-pricing-test"),
+                catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
+            )
+
+            pricing = get_openai_model_pricing("gpt-5.4-nano-2026-03-17", pricing_service=service)
+
+            self.assertEqual(pricing["pricing_status"], "manual")
+            self.assertEqual(pricing["input_per_1m_tokens"], 0.20)
+            self.assertEqual(pricing["cached_input_per_1m_tokens"], 0.02)
+            self.assertEqual(pricing["output_per_1m_tokens"], 1.25)
+
     async def test_merge_keeps_free_moderation_model_available_when_fallback_pricing_is_used(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = OpenAIPricingCatalogService(
@@ -867,7 +881,7 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
                     stale=False,
                     source_urls=["https://developers.openai.com/api/docs/pricing.md"],
                     source_url_used="https://developers.openai.com/api/docs/pricing.md",
-                    scraped_at="2026-03-20T12:00:00+00:00",
+                    scraped_at="2026-04-02T12:00:00+00:00",
                     extraction_source="ai_extraction_family_prompts_partial",
                     entries=[
                         OpenAIPricingEntry(

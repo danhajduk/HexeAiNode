@@ -231,6 +231,29 @@ class NodeControlApiTests(unittest.TestCase):
         def load(self):
             return self.payload
 
+    class _FakeBudgetDeclarationClient:
+        def __init__(self, response=None):
+            self.response = response or {"status": "accepted", "declaration_id": "budget-decl-1"}
+            self.calls = []
+
+        async def submit_declaration(self, *, core_api_endpoint: str, trust_token: str, node_id: str, declaration_payload: dict):
+            self.calls.append(
+                {
+                    "core_api_endpoint": core_api_endpoint,
+                    "trust_token": trust_token,
+                    "node_id": node_id,
+                    "declaration_payload": declaration_payload,
+                }
+            )
+
+            class _Result:
+                status = "accepted"
+                payload = self.response
+                retryable = False
+                error = None
+
+            return _Result()
+
     class _FakePromptServiceStateStore:
         def __init__(self):
             self.payload = {
@@ -644,6 +667,75 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(payload["config"]["providers"]["budget_limits"]["openai"]["max_cost_cents"], 2500)
             self.assertEqual(payload["config"]["providers"]["budget_limits"]["openai"]["period"], "weekly")
 
+    def test_declare_budget_to_core_uses_saved_provider_budget(self):
+        class _BudgetCapabilityRunner(self._FakeCapabilityRunner):
+            def status_payload(self):
+                payload = super().status_payload()
+                payload["provider_capability_report"] = {
+                    "generated_at": "2026-04-02T01:02:03Z",
+                    "providers": [
+                        {
+                            "provider": "openai",
+                            "models": [
+                                {
+                                    "id": "gpt-5-mini",
+                                    "status": "available",
+                                    "pricing": {"input_per_1m_tokens": 0.25, "output_per_1m_tokens": 2.0},
+                                },
+                                {"id": "gpt-5-pro", "status": "unavailable"},
+                            ],
+                        }
+                    ],
+                }
+                return payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            client = self._FakeBudgetDeclarationClient()
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_selection_store=self._FakeProviderSelectionStore(),
+                capability_runner=_BudgetCapabilityRunner(),
+                trust_state_store=self._FakeTrustStateStore(),
+                budget_declaration_client=client,
+            )
+            state.update_provider_selection(
+                openai_enabled=True,
+                provider_budget_limits={"openai": {"max_cost_cents": 2500, "period": "weekly"}},
+            )
+
+            payload = asyncio.run(state.declare_budget_to_core(provider_id="openai"))
+
+            self.assertEqual(payload["status"], "accepted")
+            self.assertEqual(client.calls[0]["core_api_endpoint"], "http://10.0.0.100:9001")
+            self.assertEqual(client.calls[0]["node_id"], "123e4567-e89b-42d3-a456-426614174000")
+            self.assertEqual(
+                client.calls[0]["declaration_payload"]["service_capacity"],
+                {
+                    "service": "ai.inference",
+                    "period": "weekly",
+                    "limits": {"max_cost_cents": 2500},
+                },
+            )
+            self.assertEqual(
+                client.calls[0]["declaration_payload"]["provider_intelligence"][0]["capacity"],
+                {
+                    "period": "weekly",
+                    "limits": {"max_cost_cents": 2500},
+                },
+            )
+            self.assertEqual(
+                client.calls[0]["declaration_payload"]["provider_intelligence"][0]["available_models"],
+                [
+                    {
+                        "model_id": "gpt-5-mini",
+                        "pricing": {"input_per_1m_tokens": 0.25, "output_per_1m_tokens": 2.0},
+                    }
+                ],
+            )
+
     def test_update_task_capability_selection_persists_selected_families(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
@@ -971,6 +1063,48 @@ class NodeControlApiTests(unittest.TestCase):
             )
             self.assertFalse(denied["allowed"])
             self.assertEqual(denied["reason"], "prompt_in_probation")
+
+    def test_retired_prompt_registration_allows_overwrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                prompt_service_state_store=self._FakePromptServiceStateStore(),
+            )
+
+            initial = state.register_prompt_service(
+                prompt_id="prompt.alpha",
+                service_id="svc-alpha",
+                task_family="task.classification.email",
+                prompt_name="Prompt Alpha",
+                definition={"system_prompt": "Old classifier."},
+                metadata={"generation": "old"},
+            )
+            self.assertEqual(initial["state"]["prompt_services"][0]["status"], "active")
+
+            retired = state.transition_prompt_service(
+                prompt_id="prompt.alpha",
+                state="retired",
+                reason="replace_definition",
+            )
+            self.assertEqual(retired["state"]["prompt_services"][0]["status"], "retired")
+
+            overwritten = state.register_prompt_service(
+                prompt_id="prompt.alpha",
+                service_id="svc-beta",
+                task_family="task.classification.email",
+                prompt_name="Prompt Alpha Replacement",
+                definition={"system_prompt": "New classifier."},
+                metadata={"generation": "new"},
+            )
+            self.assertEqual(len(overwritten["state"]["prompt_services"]), 1)
+            prompt = overwritten["state"]["prompt_services"][0]
+            self.assertEqual(prompt["service_id"], "svc-beta")
+            self.assertEqual(prompt["status"], "active")
+            self.assertEqual(prompt["versions"][0]["definition"]["system_prompt"], "New classifier.")
+            self.assertEqual(prompt["metadata"]["generation"], "new")
 
 
 if __name__ == "__main__":

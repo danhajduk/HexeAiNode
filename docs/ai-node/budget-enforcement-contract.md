@@ -83,4 +83,5 @@ The implemented local execution flow is:
 
 - usage summaries are queued locally but not yet flushed to the Core usage-summary route automatically
 - pre-dispatch reservation estimates use request-side cost ceilings first and fall back to a lightweight local pricing estimate when possible
+- provider-budget exhaustion decisions reconcile against accumulated exact provider spend so sub-cent model calls do not consume a full cent each at enforcement time
 - budget reset is driven by grant period changes observed in fresh policy/grant snapshots

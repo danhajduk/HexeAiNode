@@ -13,9 +13,10 @@ from ai_node.time_utils import local_now
 
 
 class _FakeRuntimeManager:
-    def __init__(self, provider_budget_limits=None):
+    def __init__(self, provider_budget_limits=None, intelligence_payload=None):
         self._registry = ProviderRegistry()
         self._provider_budget_limits = provider_budget_limits or {}
+        self._intelligence_payload = intelligence_payload or {"providers": []}
         self._registry.set_models_for_provider(
             provider_id="openai",
             models=[
@@ -31,6 +32,9 @@ class _FakeRuntimeManager:
 
     def provider_selection_context_payload(self):
         return {"provider_budget_limits": self._provider_budget_limits}
+
+    def intelligence_payload(self):
+        return self._intelligence_payload
 
 
 def _active_budget_policy() -> dict:
@@ -199,13 +203,58 @@ class BudgetManagerTests(unittest.TestCase):
                     model_id="gpt-5-mini",
                     governance_bundle=None,
                 )
+                payload = manager.status_payload()
 
             self.assertTrue(reserved.allowed)
-            payload = manager.status_payload()
             self.assertEqual(payload["provider_budgets"][0]["provider_id"], "openai")
             self.assertEqual(payload["provider_budgets"][0]["period"], "weekly")
             self.assertEqual(payload["provider_budgets"][0]["period_start"], "2026-03-16T00:00:00-07:00")
             self.assertEqual(payload["provider_budgets"][0]["period_end"], "2026-03-22T23:59:59.999999-07:00")
+
+    def test_finalize_execution_updates_provider_budget_usage_without_crashing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-manager-test"))
+            manager = BudgetManager(
+                store=store,
+                logger=logging.getLogger("budget-manager-test"),
+                provider_runtime_manager=_FakeRuntimeManager(
+                    provider_budget_limits={"openai": {"max_cost_cents": 25, "period": "monthly"}}
+                ),
+            )
+            request = TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-provider-budget",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "service_id": "service.alpha",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5-mini",
+                    "inputs": {"text": "hello"},
+                    "constraints": {"max_cost_cents": 10},
+                    "trace_id": "trace-provider-budget",
+                }
+            )
+
+            reserved = manager.reserve_execution(
+                task_id=request.task_id,
+                request=request,
+                provider_id="openai",
+                model_id="gpt-5-mini",
+                governance_bundle=None,
+            )
+
+            self.assertTrue(reserved.allowed)
+            finalized = manager.finalize_execution(
+                task_id=request.task_id,
+                metrics=type("Metrics", (), {"estimated_cost": 0.05, "total_tokens": 20})(),
+                status="completed",
+            )
+
+            self.assertEqual(len(finalized["provider_finalized"]), 1)
+            payload = manager.status_payload()
+            self.assertEqual(payload["provider_budgets"][0]["provider_id"], "openai")
+            self.assertEqual(payload["provider_budgets"][0]["used_cost_cents"], 5)
+            self.assertEqual(payload["provider_budgets"][0]["used_cost_usd_exact"], 0.05)
 
     def test_status_payload_includes_configured_provider_budget_before_usage(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -225,7 +274,95 @@ class BudgetManagerTests(unittest.TestCase):
             self.assertEqual(payload["provider_budgets"][0]["budget_limit_cents"], 2500)
             self.assertEqual(payload["provider_budgets"][0]["remaining_cost_cents"], 2500)
             self.assertEqual(payload["provider_budgets"][0]["used_cost_cents"], 0)
+            self.assertEqual(payload["provider_budgets"][0]["used_cost_usd_exact"], 0.0)
             self.assertEqual(payload["provider_budgets"][0]["reserved_cost_cents"], 0)
+
+    def test_status_payload_falls_back_to_runtime_exact_spend_for_provider_budget(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-manager-test"))
+            manager = BudgetManager(
+                store=store,
+                logger=logging.getLogger("budget-manager-test"),
+                provider_runtime_manager=_FakeRuntimeManager(
+                    provider_budget_limits={"openai": {"max_cost_cents": 500, "period": "monthly"}},
+                    intelligence_payload={
+                        "providers": [
+                            {
+                                "provider_id": "openai",
+                                "models": [
+                                    {
+                                        "pricing_input": 2.5,
+                                        "pricing_output": 15.0,
+                                        "usage_metrics": {"prompt_tokens": 69, "completion_tokens": 41},
+                                    },
+                                    {
+                                        "pricing_input": 0.2,
+                                        "pricing_output": 1.25,
+                                        "usage_metrics": {"prompt_tokens": 5575, "completion_tokens": 732},
+                                    },
+                                ],
+                            }
+                        ]
+                    },
+                ),
+            )
+
+            payload = manager.status_payload()
+
+            self.assertAlmostEqual(payload["provider_budgets"][0]["used_cost_usd_exact"], 0.0028175, places=10)
+            self.assertAlmostEqual(payload["provider_budgets"][0]["remaining_cost_usd_exact"], 4.9971825, places=10)
+
+    def test_status_payload_prefers_runtime_exact_spend_over_stale_saved_usd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-manager-test"))
+            state = store.load_or_create()
+            state["provider_budget_usage"] = {
+                "openai:monthly:2026-04-01T00:00:00-07:00": {
+                    "provider_id": "openai",
+                    "period": "monthly",
+                    "period_start": "2026-04-01T00:00:00-07:00",
+                    "period_end": "2026-04-30T23:59:59.999999-07:00",
+                    "budget_limit_cents": 500,
+                    "used_cost_cents": 16,
+                    "used_cost_usd_exact": 0.16,
+                    "reserved_cost_cents": 0,
+                    "reservations": {},
+                    "updated_at": "2026-04-02T18:41:57.203779-07:00",
+                }
+            }
+            store.save(state)
+            manager = BudgetManager(
+                store=store,
+                logger=logging.getLogger("budget-manager-test"),
+                provider_runtime_manager=_FakeRuntimeManager(
+                    provider_budget_limits={"openai": {"max_cost_cents": 500, "period": "monthly"}},
+                    intelligence_payload={
+                        "providers": [
+                            {
+                                "provider_id": "openai",
+                                "models": [
+                                    {
+                                        "pricing_input": 2.5,
+                                        "pricing_output": 15.0,
+                                        "usage_metrics": {"prompt_tokens": 69, "completion_tokens": 41},
+                                    },
+                                    {
+                                        "pricing_input": 0.2,
+                                        "pricing_output": 1.25,
+                                        "usage_metrics": {"prompt_tokens": 5575, "completion_tokens": 732},
+                                    },
+                                ],
+                            }
+                        ]
+                    },
+                ),
+            )
+
+            payload = manager.status_payload()
+
+            self.assertAlmostEqual(payload["provider_budgets"][0]["used_cost_usd_exact"], 0.0028175, places=10)
+            self.assertEqual(payload["provider_budgets"][0]["used_cost_cents"], 1)
+            self.assertAlmostEqual(payload["provider_budgets"][0]["remaining_cost_usd_exact"], 4.9971825, places=10)
 
     def test_provider_budget_can_deny_before_core_policy_exists(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -261,6 +398,99 @@ class BudgetManagerTests(unittest.TestCase):
 
             self.assertFalse(result.allowed)
             self.assertEqual(result.reason, "provider_budget_exhausted")
+
+    def test_provider_budget_uses_exact_spend_for_reservation_decisions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-manager-test"))
+            state = store.load_or_create()
+            state["provider_budget_usage"] = {
+                "openai:monthly:2026-04-01T00:00:00-07:00": {
+                    "provider_id": "openai",
+                    "period": "monthly",
+                    "period_start": "2026-04-01T00:00:00-07:00",
+                    "period_end": "2026-04-30T23:59:59.999999-07:00",
+                    "budget_limit_cents": 500,
+                    "used_cost_cents": 485,
+                    "used_cost_usd_exact": 0.06520515,
+                    "reserved_cost_cents": 15,
+                    "reservations": {},
+                    "updated_at": "2026-04-03T08:49:49.463475-07:00",
+                }
+            }
+            store.save(state)
+            manager = BudgetManager(
+                store=store,
+                logger=logging.getLogger("budget-manager-test"),
+                provider_runtime_manager=_FakeRuntimeManager(
+                    provider_budget_limits={"openai": {"max_cost_cents": 500, "period": "monthly"}}
+                ),
+            )
+            request = TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-provider-exact-spend",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "service_id": "service.alpha",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5-mini",
+                    "inputs": {"text": "hello"},
+                    "constraints": {"max_cost_cents": 1},
+                    "trace_id": "trace-provider-exact-spend",
+                }
+            )
+
+            result = manager.reserve_execution(
+                task_id=request.task_id,
+                request=request,
+                provider_id="openai",
+                model_id="gpt-5-mini",
+                governance_bundle=None,
+            )
+
+            self.assertTrue(result.allowed)
+
+    def test_finalize_provider_budget_rewrites_saved_cents_from_exact_spend(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-manager-test"))
+            manager = BudgetManager(
+                store=store,
+                logger=logging.getLogger("budget-manager-test"),
+                provider_runtime_manager=_FakeRuntimeManager(
+                    provider_budget_limits={"openai": {"max_cost_cents": 500, "period": "monthly"}}
+                ),
+            )
+            request = TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-provider-exact-finalize",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "service_id": "service.alpha",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5-mini",
+                    "inputs": {"text": "hello"},
+                    "constraints": {"max_cost_cents": 1},
+                    "trace_id": "trace-provider-exact-finalize",
+                }
+            )
+
+            reserved = manager.reserve_execution(
+                task_id=request.task_id,
+                request=request,
+                provider_id="openai",
+                model_id="gpt-5-mini",
+                governance_bundle=None,
+            )
+            self.assertTrue(reserved.allowed)
+
+            manager.finalize_execution(
+                task_id=request.task_id,
+                metrics=type("Metrics", (), {"estimated_cost": 0.00013015, "total_tokens": 20})(),
+                status="completed",
+            )
+
+            payload = manager.status_payload()
+            self.assertAlmostEqual(payload["provider_budgets"][0]["used_cost_usd_exact"], 0.00013015, places=10)
+            self.assertEqual(payload["provider_budgets"][0]["used_cost_cents"], 1)
 
 
 if __name__ == "__main__":
