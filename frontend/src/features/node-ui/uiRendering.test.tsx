@@ -60,6 +60,10 @@ function buildOperationalProps(overrides = {}) {
       providerSetupEnabled: true,
       providerHint: "Saved token: sk-**** | Default model: gpt-5.4",
     },
+    providerRefreshProps: {
+      lastRefreshedAt: "2026-04-03T16:10:00Z",
+      lastSubmittedAt: "2026-04-03T16:12:00Z",
+    },
     resolvedTasks: ["task.classification"],
     runtimeServicesProps: {
       serviceStatus: {
@@ -142,8 +146,10 @@ describe("OperationalDashboard", () => {
 
     expect(markup).toContain("Node Overview");
     expect(markup).toContain("Actions");
+    expect(markup).toContain("Runtime Controls");
     expect(markup).toContain("Last Heartbeat");
     expect(markup).not.toContain("Advanced inspection and admin controls");
+    expect(markup).not.toContain("Admin &amp; Diagnostics");
   });
 
   it("shows diagnostics only on the diagnostics section", () => {
@@ -179,6 +185,9 @@ describe("OperationalDashboard", () => {
     const overviewMarkup = renderToStaticMarkup(<OperationalDashboard {...buildOperationalProps()} />);
 
     expect(capabilitiesMarkup).toContain("Classification");
+    expect(capabilitiesMarkup).toContain("Provider Refresh");
+    expect(capabilitiesMarkup).toContain("Last Catalog Refresh");
+    expect(capabilitiesMarkup).toContain("Last Submitted To Core");
     expect(overviewMarkup).toContain("Paired Hexe Core");
     expect(overviewMarkup).toContain("Telemetry Freshness");
     expect(overviewMarkup).toContain("Telemetry Age");
@@ -195,10 +204,13 @@ describe("OperationalDashboard", () => {
               clientLabel: "node-email",
               customerId: "local-user",
               grant: {
+                grantDisplayName: "node 4000",
                 grantName: "grant:***************user",
+                grantId: "grant:node-123e4567-e89b-42d3-a456-426614174000:node",
                 validFrom: "2026-04-01T00:00:00+00:00",
                 validTo: "2026-05-01T00:00:00+00:00",
                 status: "active",
+                budgetCents: 500,
               },
               lifetime: { calls: 502, total_tokens: 229217, cost_usd: 0.0672463 },
               current_month: { calls: 502, total_tokens: 229217, cost_usd: 0.0672463 },
@@ -233,9 +245,9 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Client Usage");
     expect(markup).toContain("node-email");
     expect(markup).toContain("local-user");
-    expect(markup).toContain("Grant:");
-    expect(markup).toContain("grant:***************user");
-    expect(markup).toContain("2026-04-01T00:00:00+00:00 -&gt; 2026-05-01T00:00:00+00:00");
+    expect(markup).toContain("node 4000");
+    expect(markup).toContain("$5.00");
+    expect(markup).toContain("Apr 1, 2026 - May 1, 2026");
     expect(markup).toContain("Model");
     expect(markup).toContain("April 2026");
     expect(markup).toContain("prompt.email.classify");

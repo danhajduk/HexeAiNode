@@ -37,6 +37,14 @@ class _FakeRuntimeManager:
         return self._intelligence_payload
 
 
+class _FakeNotificationService:
+    def __init__(self):
+        self.calls = []
+
+    def notify(self, **kwargs):
+        self.calls.append(kwargs)
+
+
 def _active_budget_policy() -> dict:
     return {
         "node_id": "node-001",
@@ -255,6 +263,143 @@ class BudgetManagerTests(unittest.TestCase):
             self.assertEqual(payload["provider_budgets"][0]["provider_id"], "openai")
             self.assertEqual(payload["provider_budgets"][0]["used_cost_cents"], 5)
             self.assertEqual(payload["provider_budgets"][0]["used_cost_usd_exact"], 0.05)
+
+    def test_provider_budget_threshold_warning_emits_once_above_ninety_percent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-manager-test"))
+            notifications = _FakeNotificationService()
+            manager = BudgetManager(
+                store=store,
+                logger=logging.getLogger("budget-manager-test"),
+                provider_runtime_manager=_FakeRuntimeManager(
+                    provider_budget_limits={"openai": {"max_cost_cents": 25, "period": "monthly"}}
+                ),
+                notification_service=notifications,
+            )
+            request = TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-threshold",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "service_id": "service.alpha",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5-mini",
+                    "inputs": {"text": "hello"},
+                    "constraints": {"max_cost_cents": 10},
+                    "trace_id": "trace-threshold",
+                }
+            )
+
+            for index in range(2):
+                task_id = f"task-threshold-{index}"
+                reserved = manager.reserve_execution(
+                    task_id=task_id,
+                    request=request.model_copy(update={"task_id": task_id}),
+                    provider_id="openai",
+                    model_id="gpt-5-mini",
+                    governance_bundle=None,
+                )
+                self.assertTrue(reserved.allowed)
+                manager.finalize_execution(
+                    task_id=task_id,
+                    metrics=type("Metrics", (), {"estimated_cost": 0.115, "total_tokens": 20})(),
+                    status="completed",
+                )
+
+            warning_calls = [
+                call for call in notifications.calls if call.get("event_type") == "provider_budget_threshold_warning"
+            ]
+            self.assertEqual(len(warning_calls), 1)
+            self.assertEqual(warning_calls[0]["severity"], "warning")
+
+    def test_new_provider_budget_period_emits_period_started_notification(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-manager-test"))
+            notifications = _FakeNotificationService()
+            manager = BudgetManager(
+                store=store,
+                logger=logging.getLogger("budget-manager-test"),
+                provider_runtime_manager=_FakeRuntimeManager(
+                    provider_budget_limits={"openai": {"max_cost_cents": 25, "period": "monthly"}}
+                ),
+                notification_service=notifications,
+            )
+            request = TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-period",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "service_id": "service.alpha",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5-mini",
+                    "inputs": {"text": "hello"},
+                    "constraints": {"max_cost_cents": 10},
+                    "trace_id": "trace-period",
+                }
+            )
+            march_now = local_now().replace(year=2026, month=3, day=31, hour=9, minute=0, second=0, microsecond=0)
+            april_now = local_now().replace(year=2026, month=4, day=1, hour=9, minute=0, second=0, microsecond=0)
+
+            with patch("ai_node.runtime.budget_manager._now", return_value=march_now):
+                reserved = manager.reserve_execution(
+                    task_id="task-period-1",
+                    request=request.model_copy(update={"task_id": "task-period-1"}),
+                    provider_id="openai",
+                    model_id="gpt-5-mini",
+                    governance_bundle=None,
+                )
+                self.assertTrue(reserved.allowed)
+
+            with patch("ai_node.runtime.budget_manager._now", return_value=april_now):
+                reserved = manager.reserve_execution(
+                    task_id="task-period-2",
+                    request=request.model_copy(update={"task_id": "task-period-2"}),
+                    provider_id="openai",
+                    model_id="gpt-5-mini",
+                    governance_bundle=None,
+                )
+                self.assertTrue(reserved.allowed)
+
+            period_calls = [call for call in notifications.calls if call.get("event_type") == "provider_budget_period_started"]
+            self.assertEqual(len(period_calls), 1)
+            self.assertEqual(period_calls[0]["data"]["provider_id"], "openai")
+
+    def test_budget_denial_emits_user_notification(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BudgetStateStore(path=str(Path(tmp) / "budget_state.json"), logger=logging.getLogger("budget-manager-test"))
+            notifications = _FakeNotificationService()
+            manager = BudgetManager(
+                store=store,
+                logger=logging.getLogger("budget-manager-test"),
+                notification_service=notifications,
+            )
+            manager.cache_policy_from_governance(governance_bundle={"budget_policy": _active_budget_policy()})
+            request = TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-denial",
+                    "task_family": "task.classification",
+                    "requested_by": "service.beta",
+                    "service_id": "service.beta",
+                    "customer_id": "missing-customer",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5-mini",
+                    "inputs": {"text": "hello"},
+                    "trace_id": "trace-denial",
+                }
+            )
+
+            result = manager.reserve_execution(
+                task_id=request.task_id,
+                request=request,
+                provider_id="other-provider",
+                model_id="gpt-5-mini",
+                governance_bundle={"budget_policy": _active_budget_policy()},
+            )
+
+            self.assertFalse(result.allowed)
+            denial_calls = [call for call in notifications.calls if call.get("event_type") == "budget_denial"]
+            self.assertEqual(len(denial_calls), 1)
+            self.assertEqual(denial_calls[0]["severity"], "warning")
 
     def test_status_payload_includes_configured_provider_budget_before_usage(self):
         with tempfile.TemporaryDirectory() as tmp:

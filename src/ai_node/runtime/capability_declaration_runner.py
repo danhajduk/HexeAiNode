@@ -53,6 +53,7 @@ class CapabilityDeclarationRunner:
         provider_capability_refresh_interval_seconds: int = DEFAULT_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS,
         operational_readiness_checker=None,
         telemetry_publisher=None,
+        notification_service=None,
     ) -> None:
         self._lifecycle = lifecycle
         self._logger = logger
@@ -80,6 +81,7 @@ class CapabilityDeclarationRunner:
             logger=logger
         )
         self._telemetry_publisher = telemetry_publisher or TrustedStatusTelemetryPublisher(logger=logger)
+        self._notification_service = notification_service
         self._status = "idle"
         self._last_error = None
         self._last_submitted_at = None
@@ -98,6 +100,99 @@ class CapabilityDeclarationRunner:
         self._load_governance_bundle()
         self._load_provider_capability_report()
         self._load_phase2_state()
+
+    def _notify(
+        self,
+        *,
+        title: str,
+        message: str,
+        severity: str = "info",
+        priority: str = "normal",
+        urgency: str | None = None,
+        event_type: str | None = None,
+        dedupe_key: str | None = None,
+        data: dict | None = None,
+    ) -> None:
+        if self._notification_service is None or not hasattr(self._notification_service, "notify"):
+            return
+        trust_state = self._trust_store.load() if self._trust_store is not None and hasattr(self._trust_store, "load") else {}
+        self._notification_service.notify(
+            title=title,
+            message=message,
+            kind="event",
+            severity=severity,
+            priority=priority,
+            urgency=urgency,
+            component="capability_runner",
+            label="Capability Runner",
+            event_type=event_type,
+            dedupe_key=dedupe_key,
+            data=data,
+            trust_state=trust_state,
+        )
+
+    def _notify_degraded(self, *, source: str, error: object, retryable: object = None) -> None:
+        normalized_source = str(source or "runtime").strip() or "runtime"
+        normalized_error = str(error or f"{normalized_source}_failed").strip()
+        self._notify(
+            title="Node needs attention",
+            message=f"The node entered degraded mode because {normalized_source} failed: {normalized_error}.",
+            severity="error",
+            priority="high",
+            urgency="actions_needed",
+            event_type="node_degraded",
+            dedupe_key=f"node-degraded:{normalized_source}:{self._node_id}",
+            data={
+                "source": normalized_source,
+                "error": normalized_error,
+                "retryable": bool(retryable),
+                "node_id": self._node_id,
+            },
+        )
+
+    def _notify_governance_stale(self, *, error: object) -> None:
+        normalized_error = str(error or "governance_refresh_failed").strip()
+        self._notify(
+            title="Governance data is stale",
+            message=f"The node could not refresh governance and is now operating with stale governance data: {normalized_error}.",
+            severity="warning",
+            priority="high",
+            urgency="actions_needed",
+            event_type="governance_stale",
+            dedupe_key=f"governance-stale:{self._node_id}",
+            data={"node_id": self._node_id, "error": normalized_error},
+        )
+
+    def _notify_operational_readiness_warning(self, *, error: object) -> None:
+        normalized_error = str(error or "operational_mqtt_not_ready").strip()
+        self._notify(
+            title="Operational MQTT needs attention",
+            message=f"The node is operational, but operational MQTT readiness reported an issue: {normalized_error}.",
+            severity="warning",
+            priority="high",
+            urgency="actions_needed",
+            event_type="operational_mqtt_warning",
+            dedupe_key=f"operational-mqtt-warning:{self._node_id}:{normalized_error}",
+            data={"node_id": self._node_id, "error": normalized_error},
+        )
+
+    def _notify_recovered(self, *, target_state: str, governance_state: object, operational_ready: bool) -> None:
+        normalized_target = str(target_state or "").strip() or "unknown"
+        self._notify(
+            title="Node recovered",
+            message=f"The node recovered from degraded mode and moved to {normalized_target}.",
+            severity="success",
+            priority="normal",
+            urgency="notification",
+            event_type="node_recovered",
+            dedupe_key=f"node-recovered:{self._node_id}:{normalized_target}",
+            data={
+                "node_id": self._node_id,
+                "target_state": normalized_target,
+                "governance_state": str(governance_state or "").strip() or None,
+                "operational_mqtt_ready": bool(operational_ready),
+            },
+        )
 
     def status_payload(self) -> dict:
         return {
@@ -479,6 +574,11 @@ class CapabilityDeclarationRunner:
                 self._diag.degraded_recovery(
                     {"node_id": self._node_id, "event": "degraded", "source": "governance_sync", "error": governance_result.error}
                 )
+                self._notify_degraded(
+                    source="governance_sync",
+                    error=governance_result.error,
+                    retryable=governance_result.retryable,
+                )
                 self._status = "retry_pending" if governance_result.retryable else "rejected"
                 self._last_error = governance_result.error
                 return {
@@ -524,6 +624,7 @@ class CapabilityDeclarationRunner:
                             "action": "operational_transition_continues",
                         },
                     )
+                self._notify_operational_readiness_warning(error=self._last_error)
 
             self._lifecycle.transition_to(
                 NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED,
@@ -564,6 +665,11 @@ class CapabilityDeclarationRunner:
         )
         self._diag.degraded_recovery(
             {"node_id": self._node_id, "event": "degraded", "source": "capability_submission", "error": result.error}
+        )
+        self._notify_degraded(
+            source="capability_submission",
+            error=result.error,
+            retryable=result.retryable,
         )
         self._status = "retry_pending" if result.retryable else "rejected"
         self._last_error = result.error
@@ -764,6 +870,7 @@ class CapabilityDeclarationRunner:
             }
         )
         if self._governance_status.get("state") == "stale":
+            self._notify_governance_stale(error=governance_result.error)
             await self._emit_status_telemetry(
                 trust_state=trust_state,
                 lifecycle_state=self._lifecycle.get_state().value,
@@ -808,6 +915,11 @@ class CapabilityDeclarationRunner:
                 "governance_state": self._governance_status.get("state"),
                 "operational_mqtt_ready": operational_ready,
             }
+        )
+        self._notify_recovered(
+            target_state=target_state.value,
+            governance_state=self._governance_status.get("state"),
+            operational_ready=operational_ready,
         )
         if target_state == NodeLifecycleState.OPERATIONAL:
             self._status = "accepted"

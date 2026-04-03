@@ -4,6 +4,7 @@ import { NodeHealthStrip } from "./NodeHealthStrip";
 import { DegradedStateBanner } from "./DegradedStateBanner";
 import { NodeOverviewCard } from "./cards/NodeOverviewCard";
 import { CapabilitySummaryCard } from "./cards/CapabilitySummaryCard";
+import { ProviderRefreshCard } from "./cards/ProviderRefreshCard";
 import { ResolvedTasksCard } from "./cards/ResolvedTasksCard";
 import { RuntimeServicesCard } from "./cards/RuntimeServicesCard";
 import { RecentActivityCard } from "./cards/RecentActivityCard";
@@ -78,6 +79,7 @@ export function OperationalDashboard({
   coreConnection,
   runtimeHealth,
   capabilitySummaryProps,
+  providerRefreshProps,
   resolvedTasks = [],
   runtimeServicesProps,
   operationalActions,
@@ -134,6 +136,7 @@ export function OperationalDashboard({
         {currentSection === "capabilities" ? (
           <>
             <CapabilitySummaryCard {...capabilitySummaryProps} />
+            <ProviderRefreshCard {...providerRefreshProps} />
             <ResolvedTasksCard tasks={resolvedTasks} />
           </>
         ) : null}
@@ -193,7 +196,9 @@ export function OperationalDashboard({
           />
         ) : null}
 
-        {currentSection === "diagnostics" ? <DiagnosticsPage {...diagnosticsProps} /> : null}
+        {currentSection === "diagnostics" ? (
+          <DiagnosticsPage {...diagnosticsProps} className="operational-card-full-span" />
+        ) : null}
       </section>
     </OperationalShell>
   );

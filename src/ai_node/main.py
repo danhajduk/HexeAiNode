@@ -25,6 +25,7 @@ from ai_node.runtime.capability_declaration_runner import CapabilityDeclarationR
 from ai_node.runtime.node_control_api import NodeControlState, create_node_control_app
 from ai_node.runtime.onboarding_runtime import OnboardingRuntime
 from ai_node.runtime.service_manager import UserSystemdServiceManager
+from ai_node.runtime.user_notification_service import UserNotificationService
 from ai_node.persistence.capability_state_store import CapabilityStateStore
 from ai_node.persistence.governance_state_store import GovernanceStateStore
 from ai_node.persistence.phase2_state_store import Phase2StateStore
@@ -495,11 +496,17 @@ def run(
         )
     trust_status_client = TrustStatusClient(logger=LOGGER)
     budget_policy_client = BudgetPolicyClient(logger=LOGGER)
+    notification_service = UserNotificationService(
+        logger=LOGGER,
+        trust_state_provider=lambda: trust_state_store.load() if hasattr(trust_state_store, "load") else {},
+    )
     budget_manager = BudgetManager(
         store=budget_state_store,
         logger=LOGGER,
         provider_runtime_manager=provider_runtime_manager,
         budget_policy_client=budget_policy_client,
+        notification_service=notification_service,
+        trust_state_provider=lambda: trust_state_store.load() if hasattr(trust_state_store, "load") else {},
     )
     LOGGER.info("[node-identity] %s", {"node_id": node_identity["node_id"], "path": node_identity_path})
     if isinstance(trust_state, dict):
@@ -600,6 +607,7 @@ def run(
         prompt_service_state_store=prompt_service_state_store,
         provider_runtime_manager=provider_runtime_manager,
         provider_capability_refresh_interval_seconds=provider_capability_refresh_interval_seconds,
+        notification_service=notification_service,
     )
     if startup_mode == "trusted_resume":
         try:
@@ -627,6 +635,7 @@ def run(
         trust_status_client=trust_status_client,
         provider_runtime_manager=provider_runtime_manager,
         budget_manager=budget_manager,
+        notification_service=notification_service,
         service_manager=service_manager,
         provider_refresh_interval_seconds=provider_capability_refresh_interval_seconds,
         startup_mode=startup_mode,

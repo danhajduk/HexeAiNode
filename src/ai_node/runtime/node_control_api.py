@@ -43,6 +43,20 @@ def _mask_grant_name(value: object) -> str | None:
     return normalized[:6] + ("*" * max(len(normalized) - 10, 1)) + normalized[-4:]
 
 
+def _short_grant_name(value: object, *, scope_kind: object = None) -> str | None:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return None
+    parts = [part for part in normalized.split(":") if part]
+    scope = str(scope_kind or (parts[-1] if parts else "")).strip().lower() or "grant"
+    candidate = parts[-2] if len(parts) >= 2 else normalized
+    candidate_alnum = "".join(ch for ch in str(candidate) if ch.isalnum())
+    suffix = candidate_alnum[-4:] if len(candidate_alnum) >= 4 else candidate_alnum
+    if suffix:
+        return f"{scope} {suffix}".strip()
+    return scope
+
+
 class NodeControlState:
     def __init__(
         self,
@@ -67,6 +81,7 @@ class NodeControlState:
         execution_gateway=None,
         provider_runtime_manager=None,
         budget_manager=None,
+        notification_service=None,
         service_manager=None,
         task_execution_service=None,
         provider_refresh_interval_seconds: int = 900,
@@ -94,6 +109,7 @@ class NodeControlState:
         self._execution_gateway = execution_gateway or ExecutionGateway()
         self._provider_runtime_manager = provider_runtime_manager
         self._budget_manager = budget_manager
+        self._notification_service = notification_service
         self._service_manager = service_manager or NullServiceManager()
         self._task_execution_service = task_execution_service
         self._provider_refresh_interval_seconds = max(int(provider_refresh_interval_seconds), 60)
@@ -657,6 +673,7 @@ class NodeControlState:
         if matched is None:
             return None
         return {
+            "grant_display_name": _short_grant_name(matched.get("grant_id"), scope_kind=matched.get("scope_kind")),
             "grant_name": _mask_grant_name(matched.get("grant_id")),
             "grant_id": matched.get("grant_id"),
             "scope_kind": matched.get("scope_kind"),
@@ -664,6 +681,7 @@ class NodeControlState:
             "valid_from": matched.get("period_start"),
             "valid_to": matched.get("period_end"),
             "status": matched.get("status"),
+            "budget_cents": ((matched.get("limits") or {}).get("max_cost_cents") if isinstance(matched.get("limits"), dict) else None),
         }
 
     def register_prompt_service(
@@ -1591,10 +1609,48 @@ class NodeControlState:
 
     async def start_background_jobs(self) -> None:
         self._start_bootstrap_listener_if_available()
+        try:
+            result = await self.refresh_provider_capabilities(force_refresh=False)
+            if hasattr(self._logger, "info"):
+                self._logger.info(
+                    "[provider-intelligence-refresh-startup] %s",
+                    {
+                        "status": result.get("status"),
+                        "changed": result.get("changed"),
+                        "core_submission": result.get("core_submission"),
+                    },
+                )
+        except Exception as exc:
+            if hasattr(self._logger, "warning"):
+                self._logger.warning("[provider-intelligence-refresh-startup-error] %s", {"error": str(exc)})
+        self._notify_back_online()
         if self._provider_refresh_task is None or self._provider_refresh_task.done():
             self._provider_refresh_task = asyncio.create_task(self._provider_refresh_loop())
         if self._status_telemetry_task is None or self._status_telemetry_task.done():
             self._status_telemetry_task = asyncio.create_task(self._status_telemetry_loop())
+
+    def _notify_back_online(self) -> None:
+        if self._notification_service is None or not hasattr(self._notification_service, "notify"):
+            return
+        trust_state = self._trust_state_payload()
+        node_id = str(trust_state.get("node_id") or self._node_id or "").strip()
+        node_name = str(trust_state.get("node_name") or "").strip() or node_id
+        if not node_id:
+            return
+        self._notification_service.notify(
+            title=f"{node_name} is back online",
+            message=f"{node_name} {node_id} is back online.",
+            kind="event",
+            severity="success",
+            priority="high",
+            urgency="notification",
+            component="node_control_api",
+            label="Hexe AI Node",
+            event_type="node_back_online",
+            dedupe_key=f"node-back-online:{node_id}",
+            data={"node_id": node_id, "node_name": node_name},
+            trust_state=trust_state,
+        )
 
     async def stop_background_jobs(self) -> None:
         if self._provider_refresh_task is not None:

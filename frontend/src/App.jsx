@@ -260,10 +260,13 @@ function normalizeClientUsagePayload(payload) {
       customerId: String(client?.customer_id || "").trim(),
       grant: client?.grant && typeof client.grant === "object"
         ? {
+            grantDisplayName: String(client.grant?.grant_display_name || "").trim(),
             grantName: String(client.grant?.grant_name || "").trim(),
+            grantId: String(client.grant?.grant_id || "").trim(),
             validFrom: String(client.grant?.valid_from || "").trim(),
             validTo: String(client.grant?.valid_to || "").trim(),
             status: String(client.grant?.status || "").trim(),
+            budgetCents: Number(client.grant?.budget_cents),
           }
         : null,
       lifetime: client?.lifetime || {},
@@ -1849,7 +1852,6 @@ function formatTokenHint(value) {
       : "");
   const operationalActions = {
     setupActions: [
-      { label: "Open Setup", onClick: navigateToSetup },
       { label: "Configure OpenAI Provider", onClick: navigateToOpenAiProviderSetup, disabled: !canManageOpenAiCredentials },
       { label: "Refresh Governance", onClick: onRefreshGovernance },
       { label: refreshingLatestModels ? "Refreshing Models..." : "Refresh Provider Models", onClick: refreshOpenAiModels, disabled: refreshingLatestModels },
@@ -1924,6 +1926,10 @@ function formatTokenHint(value) {
           : `Saved token: ${formatTokenHint(openaiCredentialSummary.api_token_hint)} | Default model: ${
               openaiCredentialSummary.default_model_id || "not_selected"
             }`,
+    },
+    providerRefreshProps: {
+      lastRefreshedAt: capabilityDiagnostics?.provider_capability_report?.generated_at,
+      lastSubmittedAt: capabilityDiagnostics?.provider_intelligence_last_submitted_at,
     },
     resolvedTasks: resolvedNodeTasks,
     runtimeServicesProps: {
@@ -2042,6 +2048,11 @@ function formatTokenHint(value) {
           <div className="app-header-bottom">
             <ThemeToggle />
             <div className="app-header-actions">
+              {isOperationalMode ? (
+                <button className="btn" onClick={navigateToSetup}>
+                  Open Setup
+                </button>
+              ) : null}
               {isPendingApproval && pendingApprovalUrl ? (
                 <a className="btn btn-primary" href={pendingApprovalUrl} target="_blank" rel="noreferrer">
                   Approve In Hexe Core

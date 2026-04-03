@@ -19,6 +19,7 @@ export function DiagnosticsPage({
   onCopyDiagnostics,
   copiedDiagnostics,
   uiState,
+  className = "",
 }) {
   const resolvedTasks = capabilityDiagnostics?.resolved_tasks || [];
   const resolvedTaskSummary = resolvedTasks.length
@@ -31,7 +32,7 @@ export function DiagnosticsPage({
     : "none";
 
   return (
-    <article className="card diagnostics-card">
+    <article className={`card diagnostics-card ${className}`.trim()}>
       <CardHeader title="Diagnostics" subtitle="Advanced inspection and admin controls live here instead of the main dashboard." />
 
       <Section title="Capability Diagnostics" subtitle="Current model visibility and capability graph summary." defaultOpen>

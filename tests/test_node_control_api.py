@@ -12,6 +12,13 @@ from ai_node.runtime.node_control_api import NodeControlState
 
 
 class NodeControlApiTests(unittest.TestCase):
+    class _FakeNotificationService:
+        def __init__(self):
+            self.calls = []
+
+        def notify(self, **kwargs):
+            self.calls.append(kwargs)
+
     class _FakeProviderRuntimeManager:
         def __init__(self):
             self.refresh_calls = 0
@@ -617,11 +624,14 @@ class NodeControlApiTests(unittest.TestCase):
             lifecycle.transition_to(NodeLifecycleState.TRUSTED, {"source": "test"})
             lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING, {"source": "test"})
             runner = self._FakeBootstrapRunner()
+            notifications = self._FakeNotificationService()
             state = NodeControlState(
                 lifecycle=lifecycle,
                 config_path=str(Path(tmp) / "bootstrap_config.json"),
                 logger=logging.getLogger("node-control-test"),
                 bootstrap_runner=runner,
+                provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                notification_service=notifications,
                 trust_state_store=self._FakeTrustStateStore(),
                 startup_mode="trusted_resume",
                 trusted_runtime_context={"paired_core_id": "core-main"},
@@ -635,6 +645,9 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(runner.calls[0]["port"], 1884)
             self.assertEqual(runner.calls[0]["topic"], "hexe/bootstrap/core")
             self.assertEqual(runner.calls[0]["node_name"], "main-ai-node")
+            self.assertEqual(state._provider_runtime_manager.refresh_calls, 1)
+            self.assertEqual(len(notifications.calls), 1)
+            self.assertEqual(notifications.calls[0]["event_type"], "node_back_online")
 
     def test_update_provider_selection_toggles_openai(self):
         with tempfile.TemporaryDirectory() as tmp:

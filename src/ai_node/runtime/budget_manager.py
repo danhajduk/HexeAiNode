@@ -90,11 +90,15 @@ class BudgetManager:
         logger,
         provider_runtime_manager=None,
         budget_policy_client=None,
+        notification_service=None,
+        trust_state_provider=None,
     ) -> None:
         self._store = store
         self._logger = logger
         self._provider_runtime_manager = provider_runtime_manager
         self._budget_policy_client = budget_policy_client
+        self._notification_service = notification_service
+        self._trust_state_provider = trust_state_provider or (lambda: {})
 
     def _load_state(self) -> dict:
         return self._store.load_or_create()
@@ -102,6 +106,41 @@ class BudgetManager:
     def _save_state(self, state: dict) -> None:
         state["updated_at"] = _now_iso()
         self._store.save(state)
+
+    def _trust_state(self) -> dict:
+        payload = self._trust_state_provider() if callable(self._trust_state_provider) else {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _notify(
+        self,
+        *,
+        title: str,
+        message: str,
+        kind: str = "event",
+        severity: str = "info",
+        priority: str = "normal",
+        urgency: str | None = None,
+        component: str = "budget_manager",
+        event_type: str | None = None,
+        dedupe_key: str | None = None,
+        data: dict | None = None,
+    ) -> None:
+        if self._notification_service is None or not hasattr(self._notification_service, "notify"):
+            return
+        self._notification_service.notify(
+            title=title,
+            message=message,
+            kind=kind,
+            severity=severity,
+            priority=priority,
+            urgency=urgency,
+            component=component,
+            label="Budget Manager",
+            event_type=event_type,
+            dedupe_key=dedupe_key,
+            data=data,
+            trust_state=self._trust_state(),
+        )
 
     def cache_policy_from_governance(self, *, governance_bundle: dict | None) -> dict | None:
         bundle = governance_bundle if isinstance(governance_bundle, dict) else {}
@@ -591,6 +630,7 @@ class BudgetManager:
         usage_map = state.setdefault("provider_budget_usage", {})
         usage = usage_map.get(usage_key)
         if not isinstance(usage, dict):
+            previous_usage = self._latest_provider_budget_usage(provider_budget_usage=usage_map, provider_id=provider_id, period=period)
             usage = {
                 "provider_id": provider_id,
                 "period": period,
@@ -604,6 +644,14 @@ class BudgetManager:
                 "updated_at": _now_iso(),
             }
             usage_map[usage_key] = usage
+            if previous_usage is not None:
+                self._notify_provider_budget_period_started(
+                    state=state,
+                    provider_id=provider_id,
+                    usage_key=usage_key,
+                    usage=usage,
+                    previous_usage=previous_usage,
+                )
         return usage
 
     def _reserve_provider_budget(self, *, state: dict, reservation_id: str, task_id: str, provider_id: str, model_id: str, reserved_cost_cents: int) -> dict | None:
@@ -666,9 +714,99 @@ class BudgetManager:
                     10,
                 )
                 usage["used_cost_cents"] = max(math.ceil(_normalize_float(usage.get("used_cost_usd_exact")) * 100.0), 0)
+                self._notify_provider_budget_threshold_if_needed(state=state, usage=usage)
             usage["updated_at"] = _now_iso()
             finalized.append({"provider_id": usage.get("provider_id"), "final_cost_cents": applied_cost})
         return finalized
+
+    def _latest_provider_budget_usage(self, *, provider_budget_usage: dict, provider_id: str, period: str) -> dict | None:
+        matches = [
+            usage
+            for usage in provider_budget_usage.values()
+            if isinstance(usage, dict)
+            and _normalize_string(usage.get("provider_id")) == provider_id
+            and _normalize_string(usage.get("period")).lower() == period
+        ]
+        if not matches:
+            return None
+        matches.sort(key=lambda item: _normalize_string(item.get("period_start")))
+        return matches[-1]
+
+    def _provider_budget_notification_entry(self, *, state: dict, usage_key: str) -> dict:
+        notifications = state.setdefault("provider_budget_notifications", {})
+        entry = notifications.get(usage_key)
+        if not isinstance(entry, dict):
+            entry = {}
+            notifications[usage_key] = entry
+        return entry
+
+    def _notify_provider_budget_period_started(
+        self,
+        *,
+        state: dict,
+        provider_id: str,
+        usage_key: str,
+        usage: dict,
+        previous_usage: dict,
+    ) -> None:
+        entry = self._provider_budget_notification_entry(state=state, usage_key=usage_key)
+        if entry.get("period_started_notified"):
+            return
+        self._notify(
+            title=f"{provider_id} budget period started",
+            message=(
+                f"A new {usage.get('period') or 'budget'} period started for {provider_id}. "
+                f"Previous period ended at {previous_usage.get('period_end')}, and the new budget window is now active."
+            ),
+            severity="info",
+            urgency="notification",
+            event_type="provider_budget_period_started",
+            dedupe_key=f"provider-budget-period:{provider_id}:{usage.get('period_start')}",
+            data={
+                "provider_id": provider_id,
+                "period": usage.get("period"),
+                "period_start": usage.get("period_start"),
+                "period_end": usage.get("period_end"),
+            },
+        )
+        entry["period_started_notified"] = True
+
+    def _notify_provider_budget_threshold_if_needed(self, *, state: dict, usage: dict) -> None:
+        budget_limit_cents = _normalize_int(usage.get("budget_limit_cents"), default=0)
+        if budget_limit_cents <= 0:
+            return
+        provider_id = _normalize_string(usage.get("provider_id")) or "provider"
+        period = _normalize_string(usage.get("period")).lower() or "monthly"
+        period_start = _normalize_string(usage.get("period_start"))
+        usage_key = f"{provider_id}:{period}:{period_start}"
+        entry = self._provider_budget_notification_entry(state=state, usage_key=usage_key)
+        used_ratio = self._provider_budget_used_cost_usd_exact(
+            usage=usage,
+            runtime_spend_by_provider=self._provider_runtime_exact_spend_by_provider(),
+        ) / (budget_limit_cents / 100.0)
+        if used_ratio < 0.9 or entry.get("threshold_90_notified"):
+            return
+        self._notify(
+            title=f"{provider_id} budget above 90%",
+            message=(
+                f"{provider_id} has used {round(used_ratio * 100)}% of its {period} budget. "
+                f"Usage for the current budget window is now above 90%."
+            ),
+            severity="warning",
+            priority="high",
+            urgency="actions_needed",
+            event_type="provider_budget_threshold_warning",
+            dedupe_key=f"provider-budget-90:{provider_id}:{period_start}",
+            data={
+                "provider_id": provider_id,
+                "period": period,
+                "period_start": usage.get("period_start"),
+                "period_end": usage.get("period_end"),
+                "budget_limit_cents": budget_limit_cents,
+                "used_cost_cents": _normalize_int(usage.get("used_cost_cents"), default=0),
+            },
+        )
+        entry["threshold_90_notified"] = True
 
     def _final_cost_usd_exact(self, *, metrics, fallback_cost_cents: int) -> float:
         estimated_cost = getattr(metrics, "estimated_cost", None) if metrics is not None else None
@@ -841,4 +979,25 @@ class BudgetManager:
             }
         )
         state["recent_denials"] = denials[-50:]
+        if reason in {"provider_budget_exhausted", "budget_exhausted", "missing_budget_grant"}:
+            provider_label = _normalize_string(provider_id) or "provider"
+            self._notify(
+                title=f"{provider_label} budget blocked a request",
+                message=(
+                    f"A request from {_normalize_string(getattr(request, 'requested_by', None)) or 'this node'} "
+                    f"was blocked because of {reason.replace('_', ' ')}."
+                ),
+                severity="error" if reason != "missing_budget_grant" else "warning",
+                priority="high",
+                urgency="actions_needed",
+                event_type="budget_denial",
+                dedupe_key=f"budget-denial:{provider_label}:{reason}",
+                data={
+                    "task_id": _normalize_string(task_id),
+                    "reason": _normalize_string(reason),
+                    "provider_id": _normalize_string(provider_id) or None,
+                    "requested_by": _normalize_string(getattr(request, "requested_by", None)) or None,
+                    "customer_id": _normalize_string(getattr(request, "customer_id", None)) or None,
+                },
+            )
         self._save_state(state)

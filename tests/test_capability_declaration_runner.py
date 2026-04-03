@@ -222,6 +222,14 @@ class _FakeTelemetryPublisherFailure:
         return {"published": False, "last_error": "mqtt_unavailable", "last_topic": f"hexe/nodes/{TEST_NODE_ID}/status"}
 
 
+class _FakeNotificationService:
+    def __init__(self):
+        self.calls = []
+
+    def notify(self, **kwargs):
+        self.calls.append(kwargs)
+
+
 class _FakeCapabilityStateStore:
     def __init__(self, existing=None):
         self.saved = None
@@ -667,6 +675,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
         lifecycle.transition_to(NodeLifecycleState.TRUSTED)
         lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        notifications = _FakeNotificationService()
         runner = CapabilityDeclarationRunner(
             lifecycle=lifecycle,
             logger=logging.getLogger("capability-runner-test"),
@@ -680,11 +689,13 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             operational_readiness_checker=_FakeOperationalReadinessReady(),
             telemetry_publisher=_FakeTelemetryPublisher(),
             phase2_state_store=_FakePhase2StateStore(),
+            notification_service=notifications,
         )
         result = await runner.submit_once()
         self.assertEqual(result["status"], "retryable_failure")
         self.assertEqual(lifecycle.get_state(), NodeLifecycleState.DEGRADED)
         self.assertEqual(runner.status_payload()["status"], "retry_pending")
+        self.assertEqual(notifications.calls[-1]["event_type"], "node_degraded")
 
     async def test_governance_refresh_returns_retryable_with_existing_bundle(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
@@ -806,6 +817,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
         lifecycle.transition_to(NodeLifecycleState.TRUSTED)
         lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        notifications = _FakeNotificationService()
         runner = CapabilityDeclarationRunner(
             lifecycle=lifecycle,
             logger=logging.getLogger("capability-runner-test"),
@@ -820,12 +832,14 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             operational_readiness_checker=_FakeOperationalReadinessNotReady(),
             telemetry_publisher=_FakeTelemetryPublisher(),
             phase2_state_store=_FakePhase2StateStore(),
+            notification_service=notifications,
         )
         result = await runner.submit_once()
         self.assertEqual(result["status"], "accepted")
         self.assertEqual(lifecycle.get_state(), NodeLifecycleState.OPERATIONAL)
         self.assertEqual(runner.status_payload()["status"], "accepted")
         self.assertEqual(runner.status_payload()["last_error"], "connect_timeout")
+        self.assertTrue(any(call.get("event_type") == "operational_mqtt_warning" for call in notifications.calls))
 
     async def test_operational_mqtt_auth_failure_keeps_operational_transition(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
@@ -888,6 +902,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS)
         lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING)
         lifecycle.transition_to(NodeLifecycleState.DEGRADED)
+        notifications = _FakeNotificationService()
         runner = CapabilityDeclarationRunner(
             lifecycle=lifecycle,
             logger=logging.getLogger("capability-runner-test"),
@@ -902,10 +917,12 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             operational_readiness_checker=_FakeOperationalReadinessNotReady(),
             telemetry_publisher=_FakeTelemetryPublisher(),
             phase2_state_store=_FakePhase2StateStore(),
+            notification_service=notifications,
         )
         result = runner.recover_from_degraded()
         self.assertEqual(result["target_state"], NodeLifecycleState.CAPABILITY_SETUP_PENDING.value)
         self.assertEqual(lifecycle.get_state(), NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        self.assertEqual(notifications.calls[-1]["event_type"], "node_recovered")
 
     async def test_telemetry_publish_failure_moves_to_degraded(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
