@@ -9,6 +9,7 @@ class FailureCodesTests(unittest.TestCase):
             sorted(FAILURE_CODE_TAXONOMY.keys()),
             sorted(
                 [
+                    "budget_violation",
                     "unsupported_task_family",
                     "provider_unavailable",
                     "model_unavailable",

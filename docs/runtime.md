@@ -63,7 +63,19 @@
 - temporary capability submission, governance sync, or telemetry failures can transition the node to `degraded`
 - recovery is explicit through the control API and startup resume logic
 
+## Sensitive Runtime Artifacts
+
+- trust and provider credential handling is documented in [security-and-sensitive-state.md](/home/dan/Projects/HexeAiNode/docs/security-and-sensitive-state.md)
+- optional provider debug logs and extraction debug artifacts should be treated as sensitive local runtime output
+
 ## Shutdown Behavior
 
 - bootstrap runner and timeout monitor are stopped when the backend exits
 - provider background tasks are managed through the control app lifecycle
+
+## Runtime Path Ownership
+
+- `.run/` is the canonical local state area for trust, onboarding, identity, capability, governance, prompt, budget, and client-usage persistence
+- `data/` is used for local derived provider snapshots, caches, and debug extraction artifacts
+- `logs/` is the operator-facing log area for backend, frontend, onboarding, and optional provider debug logs
+- current path ownership and standard-alignment decision are documented in [runtime-path-ownership.md](/home/dan/Projects/HexeAiNode/docs/runtime-path-ownership.md)

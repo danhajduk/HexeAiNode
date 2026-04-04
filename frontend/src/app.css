@@ -464,8 +464,17 @@
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
+}
+
+.client-cost-prompt-title-block {
+  display: grid;
+  gap: 2px;
+}
+
+.client-cost-prompt-meta {
+  margin: 0;
 }
 
 .client-cost-prompt-costs {

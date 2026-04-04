@@ -33,6 +33,9 @@ Backend runtime:
 - `SYNTHIA_PROVIDER_REGISTRY_PATH` default `data/provider_registry.json`
 - `SYNTHIA_PROVIDER_METRICS_PATH` default `data/provider_metrics.json`
 - `SYNTHIA_OPENAI_PRICING_CATALOG_PATH` default `providers/openai/provider_model_pricing.json`
+- `SYNTHIA_OPENAI_PRICING_MANUAL_CONFIG_PATH` default `config/openai-pricing.yaml`
+- `SYNTHIA_DEBUG_AOPENAI` optional boolean; when true, writes full OpenAI request/response debug payloads
+- `SYNTHIA_DEBUG_AOPENAI_LOG_PATH` default `logs/openai_debug.jsonl`
 - `SYNTHIA_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS` default `86400`
 - `SYNTHIA_OPENAI_PRICING_STALE_TOLERANCE_SECONDS` default `172800`
 - `SYNTHIA_OPENAI_PRICING_SOURCE_URLS` optional comma-separated OpenAI pricing URLs, including `https://developers.openai.com/...`
@@ -54,28 +57,34 @@ Provider-specific:
 - `.run/*.json`: persisted node runtime state
 - `.run/provider_selection_config.json`: provider enablement and optional per-provider budget ceiling state, including `max_cost_cents` plus `period`
 - `.run/provider_credentials.json`: restricted-permission provider credential store
+- `.run/provider_credentials.json` may include `debug_aopenai` and `debug_aopenai_log_path` under `providers.openai`
 - `.run/budget_state.json`: cached budget policy, grant usage, reservations, and recent denial state
 - `data/provider_registry.json`: provider capability snapshot
 - `data/provider_metrics.json`: provider metrics snapshot
 - `providers/openai/provider_model_classifications.json`: canonical deterministic OpenAI model capability classifications
 - `providers/openai/provider_model_pricing.json`: canonical OpenAI pricing catalog after extraction + validation
 - `providers/openai/provider_model_pricing_overrides.json`: optional manual pricing overrides merged after extraction
+- `config/openai-pricing.yaml`: manual per-model OpenAI pricing file; `Input`, `Cached input`, and `Output` override fetched/catalog prices
+- `logs/openai_debug.jsonl`: optional OpenAI full request/response debug log when `debug_aopenai` is enabled
 - `providers/openai/pricing_page_text_cache.json`: cached extracted pricing page text used for diagnostics
 - `providers/openai/pricing_page_text_normalized_cache.json`: normalized pricing source text cache
 - `providers/openai/pricing_page_sections_cache.json`: sectioned pricing source + family diagnostics cache
 - `data/response.json`: raw + parsed AI pricing extraction response debug artifact (when debug path is enabled)
 - `data/promtp_sent.txt`: debug copy of prompts sent to OpenAI extraction calls (when enabled)
 
-## Repository Data Snapshots
+## Repository Runtime Artifacts
 
-- `data/provider_registry.json` and `data/provider_metrics.json` are project snapshots and may be committed when they reflect the desired current node/provider state.
-- `.run/*.json` remains local runtime state and should not be committed.
+- `.run/` remains local runtime state and should not be committed.
+- `logs/` remains local runtime logging and should not be committed.
+- `data/` is also treated as local runtime output in this repository and is gitignored by default.
+- runtime path ownership is documented in [runtime-path-ownership.md](/home/dan/Projects/HexeAiNode/docs/runtime-path-ownership.md).
 
 ## Secrets Handling
 
 - Trust tokens and operational MQTT tokens are stored in trust state and must not be logged or committed.
 - OpenAI provider credentials may be supplied through environment or saved locally in `.run/provider_credentials.json`; they must not be logged or committed.
 - `.run/`, `.venv/`, `logs/`, and local Core doc symlinks are ignored in git.
+- detailed verified handling for trust tokens, provider credentials, redaction, and debug artifacts is documented in [security-and-sensitive-state.md](/home/dan/Projects/HexeAiNode/docs/security-and-sensitive-state.md).
 
 ## Defaults And Required Values
 

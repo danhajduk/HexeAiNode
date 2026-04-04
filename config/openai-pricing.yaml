@@ -1,0 +1,65 @@
+# Manual OpenAI pricing overrides used by the node.
+# Edit the values below as needed. Use null to leave a field unset.
+# Units are USD per 1M tokens.
+version: 1
+models:
+  gpt-5-mini:
+    Input: 0.25
+    Cached input: 0.025
+    Output: 2
+  gpt-5-nano:
+    Input: 0.05
+    Cached input: 0.005
+    Output: 0.4
+  gpt-5.4:
+    Input: 2.5
+    Cached input: 0.25
+    Output: 15
+  gpt-5.4-mini:
+    Input: 0.75
+    Cached input: 0.075
+    Output: 4.5
+  gpt-5.4-nano:
+    Input: 0.2
+    Cached input: 0.02
+    Output: 1.25
+  gpt-5.4-pro:
+    Input: 30
+    Cached input: null
+    Output: 180
+  gpt-image-1-mini:
+    Input: null
+    Cached input: null
+    Output: null
+  gpt-image-1.5:
+    Input: null
+    Cached input: null
+    Output: null
+  gpt-realtime-1.5:
+    Input: null
+    Cached input: null
+    Output: null
+  gpt-realtime-mini:
+    Input: null
+    Cached input: null
+    Output: null
+  omni-moderation:
+    Input: null
+    Cached input: null
+    Output: null
+  sora-2:
+    Input: null
+    Cached input: null
+    Output: null
+  text-embedding-3-small:
+    Input: 0.02
+    Cached input: null
+    Output: null
+  tts-1-hd:
+    Input: null
+    Cached input: null
+    Output: null
+  whisper-1:
+    Input: null
+    Cached input: null
+    Output: null

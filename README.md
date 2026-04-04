@@ -57,6 +57,9 @@ Config knobs:
 - `SYNTHIA_TASK_CAPABILITY_SELECTION_CONFIG_PATH` (default: `.run/task_capability_selection_config.json`)
 - `SYNTHIA_PROMPT_SERVICE_STATE_PATH` (default: `.run/prompt_service_state.json`)
 - `SYNTHIA_OPENAI_PRICING_CATALOG_PATH` (default: `providers/openai/provider_model_pricing.json`)
+- `SYNTHIA_OPENAI_PRICING_MANUAL_CONFIG_PATH` (default: `config/openai-pricing.yaml`)
+- `SYNTHIA_DEBUG_AOPENAI` (optional; `true` enables full OpenAI request/response debug capture)
+- `SYNTHIA_DEBUG_AOPENAI_LOG_PATH` (default: `logs/openai_debug.jsonl`)
 - `SYNTHIA_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS` (default: `86400`)
 - `SYNTHIA_OPENAI_PRICING_STALE_TOLERANCE_SECONDS` (default: `172800`)
 - `SYNTHIA_OPENAI_PRICING_SOURCE_URLS` (optional comma-separated OpenAI pricing URLs; defaults include `https://developers.openai.com/api/docs/pricing`)
@@ -84,7 +87,7 @@ Tracked runtime snapshots:
 - `data/provider_registry.json`: current discovered provider/model registry snapshot
 - `data/provider_metrics.json`: current provider metrics snapshot
 
-These `data/` snapshots are intended to stay in the repository for this project and are not omitted from commits unless you explicitly want them excluded.
+These `data/` snapshots are local runtime artifacts in the current repo model and are gitignored by default. Treat them as regenerated local output rather than committed source-of-truth files.
 
 OpenAI credential + latest-model endpoints:
 
@@ -113,6 +116,18 @@ curl -X POST http://127.0.0.1:9002/api/providers/openai/pricing/manual \
   -d '{"model_id":"gpt-5.4-pro","input_price_per_1m":3.0,"output_price_per_1m":15.0}'
 curl -X POST http://127.0.0.1:9002/api/capabilities/declare
 ```
+
+Manual price file:
+
+- Edit [config/openai-pricing.yaml](/home/dan/Projects/HexeAiNode/config/openai-pricing.yaml)
+- YAML values in that file take precedence over fetched pricing and JSON pricing snapshots
+- Fields are per model: `Input`, `Cached input`, `Output`
+
+OpenAI full debug capture:
+
+- Set `debug_aopenai: true` under the OpenAI entry in `.run/provider_credentials.json`, or set `SYNTHIA_DEBUG_AOPENAI=true`
+- Optional log path: `debug_aopenai_log_path` or `SYNTHIA_DEBUG_AOPENAI_LOG_PATH`
+- Full OpenAI request/response payloads are written to a separate JSONL file, defaulting to `logs/openai_debug.jsonl`
 
 UI behavior:
 

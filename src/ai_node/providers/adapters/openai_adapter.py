@@ -1,5 +1,7 @@
+import json
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -23,12 +25,20 @@ class OpenAIProviderAdapter(ProviderAdapter):
         api_key: str,
         default_model_id: str | None = None,
         base_url: str = "https://api.openai.com/v1",
+        debug_aopenai: bool = False,
+        debug_aopenai_log_path: str | None = None,
         timeout_seconds: float = 20.0,
         pricing_catalog_service: OpenAIPricingCatalogService | None = None,
     ) -> None:
         self._api_key = str(api_key or "").strip()
         self._default_model_id = str(default_model_id or "").strip() or "gpt-4o-mini"
         self._base_url = str(base_url or "https://api.openai.com/v1").rstrip("/")
+        self._debug_aopenai = bool(debug_aopenai)
+        self._debug_aopenai_log_path = (
+            Path(str(debug_aopenai_log_path).strip())
+            if str(debug_aopenai_log_path or "").strip()
+            else Path("logs/openai_debug.jsonl")
+        )
         self._timeout_seconds = float(timeout_seconds)
         self._pricing_catalog_service = pricing_catalog_service
         self._metrics = {
@@ -42,6 +52,66 @@ class OpenAIProviderAdapter(ProviderAdapter):
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
+
+    def _write_debug_aopenai_log(
+        self,
+        *,
+        request: UnifiedExecutionRequest,
+        url: str,
+        request_headers: dict[str, str],
+        request_payload: dict[str, Any],
+        response_status: int | None = None,
+        response_payload: Any = None,
+        error: str | None = None,
+    ) -> None:
+        if not self._debug_aopenai:
+            return
+        redacted_headers = dict(request_headers)
+        if "Authorization" in redacted_headers:
+            redacted_headers["Authorization"] = "***REDACTED***"
+        record = {
+            "recorded_at": _iso_now(),
+            "provider_id": self.provider_id,
+            "task_family": request.task_family,
+            "prompt_id": str((request.metadata or {}).get("prompt_id") or "").strip() or None,
+            "prompt_version": str((request.metadata or {}).get("prompt_version") or "").strip() or None,
+            "requested_model": str(request.requested_model or "").strip() or None,
+            "url": url,
+            "request_headers": redacted_headers,
+            "request_payload": request_payload,
+            "response_status": response_status,
+            "response_payload": response_payload,
+            "error": error,
+        }
+        self._debug_aopenai_log_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._debug_aopenai_log_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True))
+            handle.write("\n")
+
+    @staticmethod
+    def _structured_output_schema(request: UnifiedExecutionRequest) -> dict[str, Any] | None:
+        metadata = request.metadata if isinstance(request.metadata, dict) else {}
+        schema = metadata.get("structured_output_schema")
+        return schema if isinstance(schema, dict) else None
+
+    @classmethod
+    def _response_format_payload(cls, request: UnifiedExecutionRequest) -> dict[str, Any] | None:
+        schema = cls._structured_output_schema(request)
+        if isinstance(schema, dict):
+            prompt_id = str((request.metadata or {}).get("prompt_id") or "structured_output").strip().replace(".", "_")
+            version = str((request.metadata or {}).get("prompt_version") or "").strip().replace(".", "_")
+            schema_name = f"{prompt_id}_{version}" if version else prompt_id
+            return {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_name[:64] or "structured_output",
+                    "strict": True,
+                    "schema": schema,
+                },
+            }
+        if request.task_family in {TASK_CLASSIFICATION, TASK_CLASSIFICATION_TEXT}:
+            return {"type": "json_object"}
+        return None
 
     async def health_check(self) -> dict[str, Any]:
         if not self._api_key:
@@ -156,18 +226,29 @@ class OpenAIProviderAdapter(ProviderAdapter):
             "model": model,
             "messages": messages,
         }
-        if request.task_family in {TASK_CLASSIFICATION, TASK_CLASSIFICATION_TEXT}:
-            payload["response_format"] = {"type": "json_object"}
+        response_format = self._response_format_payload(request)
+        if response_format is not None:
+            payload["response_format"] = response_format
         if request.temperature is not None:
             payload["temperature"] = request.temperature
         if request.max_tokens is not None:
             payload["max_tokens"] = request.max_tokens
 
         try:
+            request_headers = self._headers()
             async with httpx.AsyncClient(timeout=request_timeout) as client:
-                response = await client.post(f"{self._base_url}/chat/completions", headers=self._headers(), json=payload)
+                url = f"{self._base_url}/chat/completions"
+                response = await client.post(url, headers=request_headers, json=payload)
             self._metrics["calls"] += 1
             data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+            self._write_debug_aopenai_log(
+                request=request,
+                url=url,
+                request_headers=request_headers,
+                request_payload=payload,
+                response_status=response.status_code,
+                response_payload=data,
+            )
             if response.status_code >= 400:
                 self._metrics["failures"] += 1
                 error_detail = data.get("error") if isinstance(data, dict) else None
@@ -205,6 +286,13 @@ class OpenAIProviderAdapter(ProviderAdapter):
         except Exception as exc:
             self._metrics["calls"] += 1
             self._metrics["failures"] += 1
+            self._write_debug_aopenai_log(
+                request=request,
+                url=f"{self._base_url}/chat/completions",
+                request_headers=self._headers(),
+                request_payload=payload,
+                error=str(exc).strip() or type(exc).__name__,
+            )
             raise RuntimeError(str(exc).strip() or "openai_execute_failed") from exc
 
     def estimate_cost(

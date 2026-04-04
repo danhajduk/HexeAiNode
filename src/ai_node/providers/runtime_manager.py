@@ -23,6 +23,7 @@ from ai_node.providers.metrics import ProviderMetricsCollector
 from ai_node.providers.models import UnifiedExecutionRequest, UnifiedExecutionResponse
 from ai_node.providers.openai_catalog import (
     DEFAULT_OPENAI_PRICING_CATALOG_PATH,
+    DEFAULT_OPENAI_PRICING_MANUAL_CONFIG_PATH,
     DEFAULT_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS,
     DEFAULT_OPENAI_PRICING_STALE_TOLERANCE_SECONDS,
     OpenAIPricingCatalogService,
@@ -55,6 +56,7 @@ class ProviderRuntimeManager:
         registry_path: str = "data/provider_registry.json",
         metrics_path: str = "data/provider_metrics.json",
         pricing_catalog_path: str = DEFAULT_OPENAI_PRICING_CATALOG_PATH,
+        pricing_manual_config_path: str = DEFAULT_OPENAI_PRICING_MANUAL_CONFIG_PATH,
         pricing_refresh_interval_seconds: int = DEFAULT_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS,
         pricing_stale_tolerance_seconds: int = DEFAULT_OPENAI_PRICING_STALE_TOLERANCE_SECONDS,
         provider_model_catalog_path: str = DEFAULT_OPENAI_PROVIDER_MODEL_CATALOG_PATH,
@@ -77,6 +79,7 @@ class ProviderRuntimeManager:
         self._pricing_catalog_service = OpenAIPricingCatalogService(
             logger=logger,
             catalog_path=pricing_catalog_path,
+            manual_config_path=pricing_manual_config_path,
             refresh_interval_seconds=pricing_refresh_interval_seconds,
             stale_tolerance_seconds=pricing_stale_tolerance_seconds,
         )
@@ -227,7 +230,9 @@ class ProviderRuntimeManager:
                     "model_id": response.model_id,
                     "latency_ms": response.latency_ms,
                     "prompt_tokens": response.usage.prompt_tokens,
+                    "cached_input_tokens": response.usage.cached_input_tokens,
                     "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
                     "estimated_cost": response.estimated_cost,
                     "success": True,
                 },
@@ -289,6 +294,7 @@ class ProviderRuntimeManager:
                         },
                         "usage_metrics": {
                             "prompt_tokens": model_metrics.get("prompt_tokens", 0),
+                            "cached_input_tokens": model_metrics.get("cached_input_tokens", 0),
                             "completion_tokens": model_metrics.get("completion_tokens", 0),
                             "total_tokens": model_metrics.get("total_tokens", 0),
                             "estimated_cost": model_metrics.get("estimated_cost", 0.0),
@@ -746,6 +752,8 @@ class ProviderRuntimeManager:
                 api_key=settings.api_key or "",
                 default_model_id=settings.default_model_id,
                 base_url=settings.base_url or "https://api.openai.com/v1",
+                debug_aopenai=bool(getattr(settings, "debug_aopenai", False)),
+                debug_aopenai_log_path=getattr(settings, "debug_aopenai_log_path", None),
                 timeout_seconds=settings.timeout_seconds,
                 pricing_catalog_service=self._pricing_catalog_service,
             )

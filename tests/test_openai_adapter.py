@@ -1,47 +1,99 @@
+import json
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from ai_node.providers.adapters.openai_adapter import OpenAIProviderAdapter
+from ai_node.providers.openai_catalog import OpenAIPricingCatalogService
 from ai_node.providers.models import UnifiedExecutionRequest
+
+
+TEST_OPENAI_CREDENTIAL = "placeholder-openai-credential"
 
 
 class OpenAIAdapterCostTests(unittest.TestCase):
     def test_estimate_cost_uses_current_gpt_54_rates(self):
-        adapter = OpenAIProviderAdapter(api_key="test-key")
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = OpenAIProviderAdapter(
+                api_key=TEST_OPENAI_CREDENTIAL,
+                pricing_catalog_service=OpenAIPricingCatalogService(
+                    logger=None,
+                    catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
+                    manual_config_path=str(Path(tmp) / "openai-pricing.yaml"),
+                ),
+            )
 
-        cost = adapter.estimate_cost(
-            model_id="gpt-5.4",
-            prompt_tokens=169,
-            completion_tokens=127,
-        )
+            cost = adapter.estimate_cost(
+                model_id="gpt-5.4",
+                prompt_tokens=169,
+                completion_tokens=127,
+            )
 
-        self.assertIsNotNone(cost)
-        self.assertAlmostEqual(cost, 0.0023275, places=10)
+            self.assertIsNotNone(cost)
+            self.assertAlmostEqual(cost, 0.0023275, places=10)
+
+    def test_estimate_cost_uses_current_gpt_54_mini_rates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = OpenAIProviderAdapter(
+                api_key=TEST_OPENAI_CREDENTIAL,
+                pricing_catalog_service=OpenAIPricingCatalogService(
+                    logger=None,
+                    catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
+                    manual_config_path=str(Path(tmp) / "openai-pricing.yaml"),
+                ),
+            )
+
+            cost = adapter.estimate_cost(
+                model_id="gpt-5.4-mini",
+                prompt_tokens=250,
+                cached_input_tokens=100,
+                completion_tokens=50,
+            )
+
+            self.assertIsNotNone(cost)
+            self.assertAlmostEqual(cost, 0.000345, places=10)
 
     def test_estimate_cost_uses_current_gpt_54_nano_rates(self):
-        adapter = OpenAIProviderAdapter(api_key="test-key")
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = OpenAIProviderAdapter(
+                api_key=TEST_OPENAI_CREDENTIAL,
+                pricing_catalog_service=OpenAIPricingCatalogService(
+                    logger=None,
+                    catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
+                    manual_config_path=str(Path(tmp) / "openai-pricing.yaml"),
+                ),
+            )
 
-        cost = adapter.estimate_cost(
-            model_id="gpt-5.4-nano",
-            prompt_tokens=353,
-            completion_tokens=191,
-        )
+            cost = adapter.estimate_cost(
+                model_id="gpt-5.4-nano",
+                prompt_tokens=353,
+                completion_tokens=191,
+            )
 
-        self.assertIsNotNone(cost)
-        self.assertAlmostEqual(cost, 0.00030935, places=10)
+            self.assertIsNotNone(cost)
+            self.assertAlmostEqual(cost, 0.00030935, places=10)
 
     def test_estimate_cost_uses_cached_input_rate_when_available(self):
-        adapter = OpenAIProviderAdapter(api_key="test-key")
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = OpenAIProviderAdapter(
+                api_key=TEST_OPENAI_CREDENTIAL,
+                pricing_catalog_service=OpenAIPricingCatalogService(
+                    logger=None,
+                    catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
+                    manual_config_path=str(Path(tmp) / "openai-pricing.yaml"),
+                ),
+            )
 
-        cost = adapter.estimate_cost(
-            model_id="gpt-5.4",
-            prompt_tokens=250,
-            cached_input_tokens=100,
-            completion_tokens=50,
-        )
+            cost = adapter.estimate_cost(
+                model_id="gpt-5.4",
+                prompt_tokens=250,
+                cached_input_tokens=100,
+                completion_tokens=50,
+            )
 
-        self.assertIsNotNone(cost)
-        self.assertAlmostEqual(cost, 0.00115, places=10)
+            self.assertIsNotNone(cost)
+            self.assertAlmostEqual(cost, 0.00115, places=10)
 
 
 class _FakeResponse:
@@ -84,7 +136,7 @@ class OpenAIAdapterExecutionTests(unittest.IsolatedAsyncioTestCase):
         def _client_factory(*args, **kwargs):
             return _FakeAsyncClient(capture=capture, payload=response_payload, **kwargs)
 
-        adapter = OpenAIProviderAdapter(api_key="test-key")
+        adapter = OpenAIProviderAdapter(api_key=TEST_OPENAI_CREDENTIAL)
         request = UnifiedExecutionRequest(
             task_family="task.classification",
             prompt="Classify this email",
@@ -97,6 +149,48 @@ class OpenAIAdapterExecutionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.output_text, "{\"label\":\"marketing\"}")
         self.assertEqual(capture["json"]["response_format"], {"type": "json_object"})
 
+    async def test_structured_output_schema_uses_json_schema_response_format(self):
+        capture: dict = {}
+        response_payload = {
+            "id": "resp-789",
+            "choices": [{"message": {"content": "{\"primary_label\":\"ORDER\"}"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+
+        def _client_factory(*args, **kwargs):
+            return _FakeAsyncClient(capture=capture, payload=response_payload, **kwargs)
+
+        adapter = OpenAIProviderAdapter(api_key=TEST_OPENAI_CREDENTIAL)
+        request = UnifiedExecutionRequest(
+            task_family="task.classification",
+            prompt="Analyze this email",
+            requested_model="gpt-5.4-mini",
+            metadata={
+                "prompt_id": "prompt.email.action_decision",
+                "prompt_version": "v1.4",
+                "structured_output_schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "primary_label": {"type": "string"},
+                    },
+                    "required": ["primary_label"],
+                },
+            },
+        )
+
+        with patch("ai_node.providers.adapters.openai_adapter.httpx.AsyncClient", side_effect=_client_factory):
+            response = await adapter.execute_prompt(request)
+
+        self.assertEqual(response.output_text, "{\"primary_label\":\"ORDER\"}")
+        self.assertEqual(capture["json"]["response_format"]["type"], "json_schema")
+        self.assertEqual(capture["json"]["response_format"]["json_schema"]["strict"], True)
+        self.assertEqual(
+            capture["json"]["response_format"]["json_schema"]["schema"]["required"],
+            ["primary_label"],
+        )
+        self.assertAlmostEqual(response.estimated_cost or 0.0, 0.00003, places=12)
+
     async def test_non_classification_requests_do_not_force_json_response_format(self):
         capture: dict = {}
         response_payload = {
@@ -108,7 +202,7 @@ class OpenAIAdapterExecutionTests(unittest.IsolatedAsyncioTestCase):
         def _client_factory(*args, **kwargs):
             return _FakeAsyncClient(capture=capture, payload=response_payload, **kwargs)
 
-        adapter = OpenAIProviderAdapter(api_key="test-key")
+        adapter = OpenAIProviderAdapter(api_key=TEST_OPENAI_CREDENTIAL)
         request = UnifiedExecutionRequest(
             task_family="task.summarization.text",
             prompt="Summarize this email",
@@ -120,6 +214,43 @@ class OpenAIAdapterExecutionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.output_text, "summary text")
         self.assertNotIn("response_format", capture["json"])
+
+    async def test_debug_aopenai_writes_full_request_and_response_to_separate_log(self):
+        capture: dict = {}
+        response_payload = {
+            "id": "resp-debug",
+            "choices": [{"message": {"content": "{\"ok\":true}"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+
+        def _client_factory(*args, **kwargs):
+            return _FakeAsyncClient(capture=capture, payload=response_payload, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            debug_log_path = Path(tmp) / "openai_debug.jsonl"
+            adapter = OpenAIProviderAdapter(
+                api_key=TEST_OPENAI_CREDENTIAL,
+                debug_aopenai=True,
+                debug_aopenai_log_path=str(debug_log_path),
+            )
+            request = UnifiedExecutionRequest(
+                task_family="task.classification",
+                prompt="Analyze this email",
+                requested_model="gpt-5.4-mini",
+                metadata={"prompt_id": "prompt.email.action_decision"},
+            )
+
+            with patch("ai_node.providers.adapters.openai_adapter.httpx.AsyncClient", side_effect=_client_factory):
+                response = await adapter.execute_prompt(request)
+
+            self.assertEqual(response.output_text, "{\"ok\":true}")
+            self.assertTrue(debug_log_path.exists())
+            records = [json.loads(line) for line in debug_log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["prompt_id"], "prompt.email.action_decision")
+            self.assertEqual(records[0]["request_payload"]["model"], "gpt-5.4-mini")
+            self.assertEqual(records[0]["response_payload"]["id"], "resp-debug")
+            self.assertEqual(records[0]["request_headers"]["Authorization"], "***REDACTED***")
 
 
 if __name__ == "__main__":

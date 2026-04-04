@@ -27,12 +27,16 @@ DEFAULT_CLASSIFICATION_SYSTEM_PROMPT = (
 def _build_unified_execution_request(*, request, resolution, normalized_inputs) -> UnifiedExecutionRequest:
     resolution_plan = resolution.get("plan") if isinstance(resolution, dict) else resolution
     authorization = resolution.get("authorization") if isinstance(resolution, dict) else None
+    request_inputs = request.inputs if isinstance(getattr(request, "inputs", None), dict) else {}
     prompt_definition = authorization.prompt_definition if authorization is not None and isinstance(authorization.prompt_definition, dict) else {}
     system_prompt = (
         normalized_inputs.system_prompt
         or prompt_definition.get("system_prompt")
         or (DEFAULT_CLASSIFICATION_SYSTEM_PROMPT if str(request.task_family or "").strip().startswith("task.classification") else None)
     )
+    structured_output_schema = request_inputs.get("structured_output_schema")
+    if not isinstance(structured_output_schema, dict):
+        structured_output_schema = request_inputs.get("json_schema")
     return UnifiedExecutionRequest(
         task_family=request.task_family,
         prompt=normalized_inputs.prompt,
@@ -46,9 +50,10 @@ def _build_unified_execution_request(*, request, resolution, normalized_inputs) 
             "task_id": request.task_id,
             "requested_by": request.requested_by,
             "trace_id": request.trace_id,
-            "prompt_id": request.prompt_id,
-            "prompt_version": request.prompt_version,
-            "lease_id": request.lease_id,
+            "prompt_id": getattr(request, "prompt_id", None),
+            "prompt_version": getattr(request, "prompt_version", None),
+            "lease_id": getattr(request, "lease_id", None),
+            "structured_output_schema": structured_output_schema if isinstance(structured_output_schema, dict) else None,
             **(normalized_inputs.metadata if isinstance(normalized_inputs.metadata, dict) else {}),
         },
     )

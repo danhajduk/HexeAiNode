@@ -17,6 +17,18 @@ import {
 import { SetupModeView } from "./features/setup/SetupModeView";
 import { buildSetupFlowModel } from "./features/setup/setupFlowModel";
 import { OperationalDashboard } from "./features/operational/OperationalDashboard";
+import { normalizeClientUsagePayload } from "./features/operational/clientUsageSummary";
+import {
+  formatModelFamily,
+  getCapabilityBadges,
+  getModelPricingRows,
+  groupOpenAiCatalogModels,
+} from "./features/operational/openaiModelPresentation";
+import {
+  formatProviderBudgetPill,
+  providerBudgetTone,
+  summarizeProviderBudgets,
+} from "./features/operational/providerBudgetSummary";
 import {
   SetupApprovalPanel,
   SetupCapabilityDeclarationPanel,
@@ -27,6 +39,12 @@ import {
   SetupRegistrationPanel,
   SetupTrustActivationPanel,
 } from "./features/setup/SetupStagePanels";
+import {
+  formatBudgetPeriod,
+  formatLocalTimestamp,
+  formatTierLabel,
+  formatTokenHint,
+} from "./shared/formatters";
 import "./app.css";
 
 const REFRESH_INTERVAL_MS = 5000;
@@ -54,28 +72,10 @@ const TASK_CAPABILITY_OPTIONS = [
   "task.image_generation",
 ];
 const OPENAI_TOKEN_FORMAT = /^[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9._-]+)+$/;
-const OPENAI_MODEL_GROUPS = [
-  ["llm", "LLM"],
-  ["image_generation", "Image Generation"],
-  ["video_generation", "Video Generation"],
-  ["realtime_voice", "Realtime Voice"],
-  ["speech_to_text", "STT"],
-  ["text_to_speech", "TTS"],
-  ["embeddings", "Embeddings"],
-  ["moderation", "Moderation"],
-];
 const PROVIDER_BUDGET_PERIOD_OPTIONS = [
   ["monthly", "Monthly"],
   ["weekly", "Weekly (Mon-Sun)"],
 ];
-const PRICING_STAGE_LABELS = [
-  ["source_fetched", "Source Fetched"],
-  ["source_normalized", "Source Normalized"],
-  ["sections_extracted", "Sections Extracted"],
-  ["family_pricing_extracted", "Family Pricing Extracted"],
-  ["validation_complete", "Validation Complete"],
-];
-
 function ThemeToggle() {
   const [theme, setLocalTheme] = useState(getTheme());
 
@@ -90,293 +90,6 @@ function ThemeToggle() {
       Theme: {theme}
     </button>
   );
-}
-
-function formatPrice(value) {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return "unavailable";
-  }
-  return `$${value.toFixed(value >= 1 ? 2 : 3)}/1M`;
-}
-
-function formatCreatedAt(value) {
-  if (typeof value !== "number" || value <= 0) {
-    return "unknown";
-  }
-  return new Date(value * 1000).toISOString().slice(0, 10);
-}
-
-function parseIsoTimestamp(value) {
-  const parsed = Date.parse(String(value || ""));
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
-
-function formatLocalTimestamp(value) {
-  const normalized = String(value || "").trim();
-  if (!normalized) {
-    return "";
-  }
-  const parsed = Date.parse(normalized);
-  if (Number.isNaN(parsed)) {
-    return normalized;
-  }
-  return new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(new Date(parsed));
-}
-
-function formatTierLabel(value) {
-  const normalized = String(value || "unknown").replaceAll("_", " ");
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-
-function formatRecommendedTask(value) {
-  return String(value || "")
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatStageStatus(value) {
-  const normalized = String(value || "pending").trim().toLowerCase();
-  if (!normalized) {
-    return "pending";
-  }
-  return normalized.replaceAll("_", " ");
-}
-
-function formatBudgetPeriod(value) {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (normalized === "weekly") {
-    return "Weekly (Mon-Sun)";
-  }
-  if (normalized === "monthly") {
-    return "Monthly";
-  }
-  return "not_set";
-}
-
-function formatBudgetCurrency(cents) {
-  const normalized = Number(cents);
-  if (!Number.isFinite(normalized)) {
-    return "$0.00";
-  }
-  return `$${(normalized / 100).toFixed(2)}`;
-}
-
-function formatUsdExact(value) {
-  const normalized = Number(value);
-  if (!Number.isFinite(normalized) || normalized < 0) {
-    return "$0.000000";
-  }
-  return `$${normalized.toFixed(normalized >= 1 ? 2 : 6)}`;
-}
-
-function formatProviderLabel(providerId) {
-  const normalized = String(providerId || "").trim().toLowerCase();
-  if (!normalized) {
-    return "Provider";
-  }
-  if (normalized === "openai") {
-    return "OpenAI";
-  }
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-
-function summarizeProviderBudgets({ providerConfig, budgetState }) {
-  const configuredLimits = providerConfig?.config?.providers?.budget_limits;
-  const configuredEntries =
-    configuredLimits && typeof configuredLimits === "object" ? Object.entries(configuredLimits) : [];
-  const budgetEntries = Array.isArray(budgetState?.provider_budgets) ? budgetState.provider_budgets : [];
-  const budgetByProvider = new Map();
-
-  budgetEntries.forEach((entry) => {
-    const providerId = String(entry?.provider_id || "").trim().toLowerCase();
-    if (!providerId) {
-      return;
-    }
-    budgetByProvider.set(providerId, entry);
-  });
-
-  return configuredEntries
-    .map(([providerId, settings]) => {
-      const normalizedProviderId = String(providerId || "").trim().toLowerCase();
-      const configuredBudget = Number(settings?.max_cost_cents);
-      if (!normalizedProviderId || !Number.isFinite(configuredBudget) || configuredBudget < 0) {
-        return null;
-      }
-      const usage = budgetByProvider.get(normalizedProviderId);
-      const budgetLimitCents = Number(usage?.budget_limit_cents);
-      const remainingCostCents = Number(usage?.remaining_cost_cents);
-      const budgetLimitUsdExact = Number(usage?.budget_limit_usd_exact);
-      const remainingCostUsdExact = Number(usage?.remaining_cost_usd_exact);
-      const period = String(usage?.period || settings?.period || "monthly").trim().toLowerCase() || "monthly";
-      return {
-        providerId: normalizedProviderId,
-        period,
-        budgetLimitCents: Number.isFinite(budgetLimitCents) ? budgetLimitCents : configuredBudget,
-        remainingCostCents: Number.isFinite(remainingCostCents) ? remainingCostCents : configuredBudget,
-        budgetLimitUsdExact: Number.isFinite(budgetLimitUsdExact) ? budgetLimitUsdExact : configuredBudget / 100,
-        remainingCostUsdExact: Number.isFinite(remainingCostUsdExact) ? remainingCostUsdExact : configuredBudget / 100,
-        usedCostUsdExact: Number(usage?.used_cost_usd_exact),
-      };
-    })
-    .filter(Boolean)
-    .sort((left, right) => left.providerId.localeCompare(right.providerId));
-}
-
-function providerBudgetTone(summary) {
-  const budgetLimitCents = Number(summary?.budgetLimitCents);
-  const remainingCostCents = Number(summary?.remainingCostCents);
-  if (!Number.isFinite(budgetLimitCents) || budgetLimitCents <= 0) {
-    return "meta";
-  }
-  if (!Number.isFinite(remainingCostCents) || remainingCostCents <= 0) {
-    return "danger";
-  }
-  if (remainingCostCents / budgetLimitCents <= 0.2) {
-    return "warning";
-  }
-  return "success";
-}
-
-function formatProviderBudgetPill(summary) {
-  return `${formatProviderLabel(summary?.providerId)} ${formatUsdExact(summary?.remainingCostUsdExact)}/${formatUsdExact(summary?.budgetLimitUsdExact)} ${String(summary?.period || "monthly").toLowerCase()} · spent ${formatUsdExact(summary?.usedCostUsdExact)}`;
-}
-
-function normalizeClientUsagePayload(payload) {
-  const clients = Array.isArray(payload?.clients) ? payload.clients : [];
-  return {
-    currentMonth: String(payload?.current_month || "").trim(),
-    clients: clients.map((client) => ({
-      clientId: String(client?.client_id || "").trim() || "unknown-client",
-      clientLabel: String(client?.client_id || "").trim() || "unknown-client",
-      customerId: String(client?.customer_id || "").trim(),
-      grant: client?.grant && typeof client.grant === "object"
-        ? {
-            grantDisplayName: String(client.grant?.grant_display_name || "").trim(),
-            grantName: String(client.grant?.grant_name || "").trim(),
-            grantId: String(client.grant?.grant_id || "").trim(),
-            validFrom: String(client.grant?.valid_from || "").trim(),
-            validTo: String(client.grant?.valid_to || "").trim(),
-            status: String(client.grant?.status || "").trim(),
-            budgetCents: Number(client.grant?.budget_cents),
-          }
-        : null,
-      lifetime: client?.lifetime || {},
-      current_month: client?.current_month || {},
-      prompts: Array.isArray(client?.prompts)
-        ? client.prompts.map((prompt) => ({
-            promptId: String(prompt?.prompt_id || "").trim() || "unattributed-prompt",
-            promptLabel: String(prompt?.prompt_id || "").trim() || "unattributed-prompt",
-            lifetime: prompt?.lifetime || {},
-            current_month: prompt?.current_month || {},
-            models: Array.isArray(prompt?.models)
-              ? prompt.models.map((model) => ({
-                  modelId: String(model?.model_id || "").trim() || "unknown-model",
-                  modelLabel: String(model?.model_id || "").trim() || "unknown-model",
-                  lifetime: model?.lifetime || {},
-                  current_month: model?.current_month || {},
-                }))
-              : [],
-          }))
-        : [],
-    })),
-  };
-}
-
-function formatModelFamily(value) {
-  const normalized = String(value || "unknown").trim();
-  if (!normalized) {
-    return "Unknown";
-  }
-  return normalized
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part.toUpperCase() === "LLM" ? "LLM" : part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatNormalizedUnit(value) {
-  const normalized = String(value || "").trim();
-  if (!normalized) {
-    return "custom unit";
-  }
-  return normalized
-    .replaceAll("_", " ")
-    .replace(/\bper\b/gi, "/")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function formatNormalizedPrice(pricing) {
-  if (!pricing || typeof pricing.normalized_price !== "number" || Number.isNaN(pricing.normalized_price)) {
-    return "unavailable";
-  }
-  return `$${pricing.normalized_price.toFixed(pricing.normalized_price >= 1 ? 2 : 3)} ${formatNormalizedUnit(pricing.normalized_unit)}`;
-}
-
-function getModelPricingRows(pricing) {
-  if (!pricing || typeof pricing !== "object") {
-    return [
-      ["Pricing", "unavailable"],
-      ["Status", "not cached"],
-    ];
-  }
-  if (pricing.pricing_basis === "per_1m_tokens") {
-    return [
-      ["Input", formatPrice(pricing.input_per_1m_tokens)],
-      ["Output", formatPrice(pricing.output_per_1m_tokens)],
-      ["Cached Input", formatPrice(pricing.cached_input_per_1m_tokens)],
-    ];
-  }
-  return [
-    ["Pricing", formatNormalizedPrice(pricing)],
-    ["Basis", formatModelFamily(pricing.pricing_basis)],
-    ["Status", formatTierLabel(pricing.pricing_status || "unavailable")],
-  ];
-}
-
-function getCapabilityBadges(capabilityEntry) {
-  if (!capabilityEntry || typeof capabilityEntry !== "object") {
-    return [];
-  }
-  const featureFlags = capabilityEntry.feature_flags && typeof capabilityEntry.feature_flags === "object"
-    ? capabilityEntry.feature_flags
-    : {};
-  const badges = [
-    featureFlags.chat ? "Chat" : null,
-    capabilityEntry.reasoning ? "Reasoning" : null,
-    featureFlags.code_generation ? "Code Gen" : null,
-    featureFlags.code_review ? "Code Review" : null,
-    featureFlags.classification ? "Classification" : null,
-    featureFlags.summarization ? "Summarization" : null,
-    featureFlags.translation ? "Translation" : null,
-    featureFlags.json_output ? "JSON" : null,
-    capabilityEntry.structured_output ? "Structured" : null,
-    capabilityEntry.tool_calling || featureFlags.function_calling || featureFlags.tool_calling ? "Tools" : null,
-    capabilityEntry.long_context ? "Long Context" : null,
-    featureFlags.embeddings ? "Embeddings" : null,
-    featureFlags.moderation ? "Moderation" : null,
-    featureFlags.image_generation ? "Image Gen" : null,
-    featureFlags.image_editing ? "Image Edit" : null,
-    featureFlags.image_variation ? "Image Variation" : null,
-    featureFlags.speech_to_text ? "Speech To Text" : null,
-    featureFlags.text_to_speech ? "Text To Speech" : null,
-    capabilityEntry.audio_input ? "Audio In" : null,
-    capabilityEntry.audio_output ? "Audio Out" : null,
-    capabilityEntry.realtime ? "Realtime" : null,
-    featureFlags.voice_conversation ? "Voice" : null,
-    featureFlags.semantic_search ? "Semantic Search" : null,
-    capabilityEntry.vision || featureFlags.vision_input || featureFlags.image_understanding ? "Vision" : null,
-  ].filter(Boolean);
-  return [...new Set(badges)];
 }
 
 export default function App() {
@@ -462,6 +175,7 @@ export default function App() {
       servicesResult,
       budgetResult,
       clientUsageResult,
+      promptServicesResult,
       capabilityDiagnosticsResult,
     ] = await Promise.allSettled([
       apiGet("/api/node/status"),
@@ -479,6 +193,7 @@ export default function App() {
       apiGet("/api/services/status"),
       apiGet("/api/budgets/state"),
       apiGet("/api/usage/clients"),
+      apiGet("/api/prompts/services"),
       apiAdminGet("/api/capabilities/diagnostics"),
     ]);
 
@@ -517,6 +232,7 @@ export default function App() {
     const servicePayload = servicesResult.status === "fulfilled" ? servicesResult.value : null;
     const budgetPayload = budgetResult.status === "fulfilled" ? budgetResult.value : null;
     const clientUsagePayload = clientUsageResult.status === "fulfilled" ? clientUsageResult.value : null;
+    const promptServicesPayload = promptServicesResult.status === "fulfilled" ? promptServicesResult.value : null;
     const capabilityDiagnosticsPayload = capabilityDiagnosticsResult.status === "fulfilled" ? capabilityDiagnosticsResult.value : null;
     const partialFailures = [];
     if (governanceResult.status !== "fulfilled") {
@@ -561,6 +277,9 @@ export default function App() {
     if (clientUsageResult.status !== "fulfilled") {
       partialFailures.push("client_usage_unavailable");
     }
+    if (promptServicesResult.status !== "fulfilled") {
+      partialFailures.push("prompt_services_unavailable");
+    }
     setBackendStatus(payload.status || "unknown");
     setPendingApprovalUrl(payload.pending_approval_url || "");
     setNodeId(payload.node_id || "");
@@ -583,7 +302,7 @@ export default function App() {
     setOpenaiModelFeatures(Array.isArray(modelFeaturesPayload?.entries) ? modelFeaturesPayload.entries : []);
     setResolvedNodeCapabilities(nodeCapabilitiesPayload);
     setCapabilityDiagnostics(capabilityDiagnosticsPayload);
-    setClientUsageSummary(normalizeClientUsagePayload(clientUsagePayload));
+    setClientUsageSummary(normalizeClientUsagePayload(clientUsagePayload, promptServicesPayload));
     setProviderBudgetSummaries(summarizeProviderBudgets({ providerConfig: providerPayload, budgetState: budgetPayload }));
     setError("");
     if (!providerSetupDirty && providerCredentialsPayload?.credentials?.project_name) {
@@ -776,18 +495,7 @@ export default function App() {
   const openaiCapabilityById = Object.fromEntries(
     openaiModelCapabilities.map((entry) => [entry.model_id, entry])
   );
-  const groupedOpenAiCatalogModels = OPENAI_MODEL_GROUPS.map(([family, label]) => ({
-    family,
-    label,
-    models: openaiCatalogModels
-      .filter((model) => model.family === family)
-      .slice()
-      .sort(
-        (left, right) =>
-          (Number(openaiModelCreatedById[right.model_id] || 0) || parseIsoTimestamp(right.discovered_at)) -
-          (Number(openaiModelCreatedById[left.model_id] || 0) || parseIsoTimestamp(left.discovered_at))
-      ),
-  })).filter((group) => group.models.length > 0);
+  const groupedOpenAiCatalogModels = groupOpenAiCatalogModels(openaiCatalogModels, openaiModelCreatedById);
   const resolvedCapabilityFlags = resolvedOpenaiCapabilities?.capabilities || {};
   const openaiFeatureUnion = openaiModelFeatures.reduce((acc, entry) => {
     if (!entry || typeof entry !== "object" || !entry.features || typeof entry.features !== "object") {
@@ -829,8 +537,6 @@ export default function App() {
   const pricingReviewModelId = pricingReviewModelIds[pricingReviewIndex] || "";
   const pricingReviewModel = latestOpenaiModels.find((model) => model.model_id === pricingReviewModelId) || null;
   const pricingDiagnostics = capabilityDiagnostics?.pricing_diagnostics || {};
-  const pricingStageStatuses = pricingDiagnostics?.stage_statuses || {};
-  const pricingFamilyStatuses = pricingDiagnostics?.family_statuses || {};
   const setupReadinessFlags = uiState.capabilitySummary.setupReadinessFlags || {};
   const setupBlockingReasons = uiState.capabilitySummary.setupBlockingReasons || [];
   const capabilityDeclareAllowed = uiState.capabilitySummary.declarationAllowed;
@@ -851,13 +557,6 @@ export default function App() {
     setupReadinessFlags,
     setupBlockingReasons,
   });
-
-  function stepStateLabel(value) {
-    if (value === "completed") return "Completed";
-    if (value === "in_progress") return "In Progress";
-    if (value === "failed") return "Failed";
-    return "Pending";
-  }
 
   function navigateToDashboard() {
     window.location.hash = buildOperationalRoute();
@@ -926,15 +625,6 @@ export default function App() {
       }
       return TASK_CAPABILITY_OPTIONS.filter((item) => existing.has(item));
   });
-}
-
-function formatTokenHint(value) {
-  const normalized = String(value || "").trim();
-  if (!normalized || normalized === "not_saved") {
-    return "not_saved";
-  }
-  const suffix = normalized.replace(/\*/g, "").slice(-5) || normalized.slice(-5);
-  return `********${suffix}`;
 }
 
   async function persistOpenAiPreferences(nextSelectedModelIds, { refreshModels = false } = {}) {

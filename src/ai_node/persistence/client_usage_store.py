@@ -17,6 +17,7 @@ def aggregate_provider_metrics(payload: dict | None) -> dict:
     totals = {
         "calls": 0,
         "prompt_tokens": 0,
+        "cached_input_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,
         "cost_usd": 0.0,
@@ -32,6 +33,7 @@ def aggregate_provider_metrics(payload: dict | None) -> dict:
                 continue
             totals["calls"] += max(int(model_payload.get("successful_requests") or 0), 0)
             totals["prompt_tokens"] += max(int(model_payload.get("prompt_tokens") or 0), 0)
+            totals["cached_input_tokens"] += max(int(model_payload.get("cached_input_tokens") or 0), 0)
             totals["completion_tokens"] += max(int(model_payload.get("completion_tokens") or 0), 0)
             totals["total_tokens"] += max(int(model_payload.get("total_tokens") or 0), 0)
             totals["cost_usd"] += max(float(model_payload.get("estimated_cost") or 0.0), 0.0)
@@ -57,6 +59,7 @@ def aggregate_provider_metrics_by_model(payload: dict | None) -> dict[str, dict]
                 {
                     "calls": 0,
                     "prompt_tokens": 0,
+                    "cached_input_tokens": 0,
                     "completion_tokens": 0,
                     "total_tokens": 0,
                     "cost_usd": 0.0,
@@ -65,6 +68,7 @@ def aggregate_provider_metrics_by_model(payload: dict | None) -> dict[str, dict]
             )
             totals["calls"] += max(int(model_payload.get("successful_requests") or 0), 0)
             totals["prompt_tokens"] += max(int(model_payload.get("prompt_tokens") or 0), 0)
+            totals["cached_input_tokens"] += max(int(model_payload.get("cached_input_tokens") or 0), 0)
             totals["completion_tokens"] += max(int(model_payload.get("completion_tokens") or 0), 0)
             totals["total_tokens"] += max(int(model_payload.get("total_tokens") or 0), 0)
             totals["cost_usd"] += max(float(model_payload.get("estimated_cost") or 0.0), 0.0)
@@ -78,6 +82,7 @@ def aggregate_provider_execution_log(log_path: str) -> dict:
     totals = {
         "calls": 0,
         "prompt_tokens": 0,
+        "cached_input_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,
         "cost_usd": 0.0,
@@ -97,9 +102,11 @@ def aggregate_provider_execution_log(log_path: str) -> dict:
         if not isinstance(payload, dict) or not payload.get("success"):
             continue
         prompt_tokens = max(int(payload.get("prompt_tokens") or 0), 0)
+        cached_input_tokens = max(int(payload.get("cached_input_tokens") or 0), 0)
         completion_tokens = max(int(payload.get("completion_tokens") or 0), 0)
         totals["calls"] += 1
         totals["prompt_tokens"] += prompt_tokens
+        totals["cached_input_tokens"] += cached_input_tokens
         totals["completion_tokens"] += completion_tokens
         totals["total_tokens"] += prompt_tokens + completion_tokens
         totals["cost_usd"] += max(float(payload.get("estimated_cost") or 0.0), 0.0)
@@ -131,6 +138,7 @@ def aggregate_provider_execution_log_by_model(log_path: str) -> dict[str, dict]:
             {
                 "calls": 0,
                 "prompt_tokens": 0,
+                "cached_input_tokens": 0,
                 "completion_tokens": 0,
                 "total_tokens": 0,
                 "cost_usd": 0.0,
@@ -138,9 +146,11 @@ def aggregate_provider_execution_log_by_model(log_path: str) -> dict[str, dict]:
             },
         )
         prompt_tokens = max(int(payload.get("prompt_tokens") or 0), 0)
+        cached_input_tokens = max(int(payload.get("cached_input_tokens") or 0), 0)
         completion_tokens = max(int(payload.get("completion_tokens") or 0), 0)
         totals["calls"] += 1
         totals["prompt_tokens"] += prompt_tokens
+        totals["cached_input_tokens"] += cached_input_tokens
         totals["completion_tokens"] += completion_tokens
         totals["total_tokens"] += prompt_tokens + completion_tokens
         totals["cost_usd"] += max(float(payload.get("estimated_cost") or 0.0), 0.0)
@@ -174,6 +184,7 @@ class ClientUsageStore:
                     customer_id TEXT,
                     calls INTEGER NOT NULL DEFAULT 0,
                     prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                    cached_input_tokens INTEGER NOT NULL DEFAULT 0,
                     completion_tokens INTEGER NOT NULL DEFAULT 0,
                     total_tokens INTEGER NOT NULL DEFAULT 0,
                     cost_usd REAL NOT NULL DEFAULT 0,
@@ -202,6 +213,7 @@ class ClientUsageStore:
                     customer_id TEXT,
                     calls INTEGER NOT NULL DEFAULT 0,
                     prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                    cached_input_tokens INTEGER NOT NULL DEFAULT 0,
                     completion_tokens INTEGER NOT NULL DEFAULT 0,
                     total_tokens INTEGER NOT NULL DEFAULT 0,
                     cost_usd REAL NOT NULL DEFAULT 0,
@@ -211,6 +223,18 @@ class ClientUsageStore:
                 )
                 """
             )
+            self._ensure_column(connection=connection, table="usage_rollups", column="cached_input_tokens", definition="INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(connection=connection, table="model_usage_rollups", column="cached_input_tokens", definition="INTEGER NOT NULL DEFAULT 0")
+
+    @staticmethod
+    def _ensure_column(*, connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+        columns = {
+            str(row["name"])
+            for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if column in columns:
+            return
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def has_usage_data(self) -> bool:
         with self._connect() as connection:
@@ -242,6 +266,7 @@ class ClientUsageStore:
         model_id: str | None = None,
         customer_id: str | None,
         prompt_tokens: int,
+        cached_input_tokens: int = 0,
         completion_tokens: int,
         total_tokens: int,
         cost_usd: float,
@@ -254,6 +279,7 @@ class ClientUsageStore:
             customer_id=customer_id,
             calls=1,
             prompt_tokens=prompt_tokens,
+            cached_input_tokens=cached_input_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             cost_usd=cost_usd,
@@ -270,6 +296,7 @@ class ClientUsageStore:
         customer_id: str | None,
         calls: int,
         prompt_tokens: int,
+        cached_input_tokens: int = 0,
         completion_tokens: int,
         total_tokens: int,
         cost_usd: float,
@@ -285,6 +312,7 @@ class ClientUsageStore:
             customer_id=customer_id,
             calls=calls,
             prompt_tokens=prompt_tokens,
+            cached_input_tokens=cached_input_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             cost_usd=cost_usd,
@@ -301,6 +329,7 @@ class ClientUsageStore:
         customer_id: str | None,
         calls: int,
         prompt_tokens: int,
+        cached_input_tokens: int = 0,
         completion_tokens: int,
         total_tokens: int,
         cost_usd: float,
@@ -320,13 +349,14 @@ class ClientUsageStore:
                         """
                         INSERT INTO usage_rollups(
                             scope, period_key, client_id, prompt_id, customer_id,
-                            calls, prompt_tokens, completion_tokens, total_tokens, cost_usd, last_used_at, updated_at
+                            calls, prompt_tokens, cached_input_tokens, completion_tokens, total_tokens, cost_usd, last_used_at, updated_at
                         )
-                        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(scope, period_key, client_id, prompt_id) DO UPDATE SET
                             customer_id = COALESCE(excluded.customer_id, usage_rollups.customer_id),
                             calls = usage_rollups.calls + excluded.calls,
                             prompt_tokens = usage_rollups.prompt_tokens + excluded.prompt_tokens,
+                            cached_input_tokens = usage_rollups.cached_input_tokens + excluded.cached_input_tokens,
                             completion_tokens = usage_rollups.completion_tokens + excluded.completion_tokens,
                             total_tokens = usage_rollups.total_tokens + excluded.total_tokens,
                             cost_usd = usage_rollups.cost_usd + excluded.cost_usd,
@@ -345,6 +375,7 @@ class ClientUsageStore:
                             normalized_customer_id,
                             max(int(calls), 0),
                             max(int(prompt_tokens), 0),
+                            max(int(cached_input_tokens), 0),
                             max(int(completion_tokens), 0),
                             max(int(total_tokens), 0),
                             max(float(cost_usd), 0.0),
@@ -357,13 +388,14 @@ class ClientUsageStore:
                         """
                         INSERT INTO model_usage_rollups(
                             scope, period_key, client_id, prompt_id, model_id, customer_id,
-                            calls, prompt_tokens, completion_tokens, total_tokens, cost_usd, last_used_at, updated_at
+                            calls, prompt_tokens, cached_input_tokens, completion_tokens, total_tokens, cost_usd, last_used_at, updated_at
                         )
-                        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(scope, period_key, client_id, prompt_id, model_id) DO UPDATE SET
                             customer_id = COALESCE(excluded.customer_id, model_usage_rollups.customer_id),
                             calls = model_usage_rollups.calls + excluded.calls,
                             prompt_tokens = model_usage_rollups.prompt_tokens + excluded.prompt_tokens,
+                            cached_input_tokens = model_usage_rollups.cached_input_tokens + excluded.cached_input_tokens,
                             completion_tokens = model_usage_rollups.completion_tokens + excluded.completion_tokens,
                             total_tokens = model_usage_rollups.total_tokens + excluded.total_tokens,
                             cost_usd = model_usage_rollups.cost_usd + excluded.cost_usd,
@@ -383,6 +415,7 @@ class ClientUsageStore:
                             normalized_customer_id,
                             max(int(calls), 0),
                             max(int(prompt_tokens), 0),
+                            max(int(cached_input_tokens), 0),
                             max(int(completion_tokens), 0),
                             max(int(total_tokens), 0),
                             max(float(cost_usd), 0.0),
@@ -396,7 +429,7 @@ class ClientUsageStore:
         with self._connect() as connection:
             lifetime_rows = connection.execute(
                 """
-                SELECT client_id, prompt_id, customer_id, calls, prompt_tokens, completion_tokens, total_tokens, cost_usd, last_used_at
+                SELECT client_id, prompt_id, customer_id, calls, prompt_tokens, cached_input_tokens, completion_tokens, total_tokens, cost_usd, last_used_at
                 FROM usage_rollups
                 WHERE scope = 'lifetime' AND period_key = 'all'
                 ORDER BY cost_usd DESC, total_tokens DESC, calls DESC
@@ -404,7 +437,7 @@ class ClientUsageStore:
             ).fetchall()
             monthly_rows = connection.execute(
                 """
-                SELECT client_id, prompt_id, customer_id, calls, prompt_tokens, completion_tokens, total_tokens, cost_usd, last_used_at
+                SELECT client_id, prompt_id, customer_id, calls, prompt_tokens, cached_input_tokens, completion_tokens, total_tokens, cost_usd, last_used_at
                 FROM usage_rollups
                 WHERE scope = 'monthly' AND period_key = ?
                 ORDER BY cost_usd DESC, total_tokens DESC, calls DESC
@@ -413,7 +446,7 @@ class ClientUsageStore:
             ).fetchall()
             model_lifetime_rows = connection.execute(
                 """
-                SELECT client_id, prompt_id, model_id, customer_id, calls, prompt_tokens, completion_tokens, total_tokens, cost_usd, last_used_at
+                SELECT client_id, prompt_id, model_id, customer_id, calls, prompt_tokens, cached_input_tokens, completion_tokens, total_tokens, cost_usd, last_used_at
                 FROM model_usage_rollups
                 WHERE scope = 'lifetime' AND period_key = 'all'
                 ORDER BY cost_usd DESC, total_tokens DESC, calls DESC
@@ -421,7 +454,7 @@ class ClientUsageStore:
             ).fetchall()
             model_monthly_rows = connection.execute(
                 """
-                SELECT client_id, prompt_id, model_id, customer_id, calls, prompt_tokens, completion_tokens, total_tokens, cost_usd, last_used_at
+                SELECT client_id, prompt_id, model_id, customer_id, calls, prompt_tokens, cached_input_tokens, completion_tokens, total_tokens, cost_usd, last_used_at
                 FROM model_usage_rollups
                 WHERE scope = 'monthly' AND period_key = ?
                 ORDER BY cost_usd DESC, total_tokens DESC, calls DESC
@@ -451,6 +484,7 @@ class ClientUsageStore:
                     "lifetime": {
                         "calls": max(int(lifetime["calls"] or 0), 0),
                         "prompt_tokens": max(int(lifetime["prompt_tokens"] or 0), 0),
+                        "cached_input_tokens": max(int(lifetime["cached_input_tokens"] or 0), 0),
                         "completion_tokens": max(int(lifetime["completion_tokens"] or 0), 0),
                         "total_tokens": max(int(lifetime["total_tokens"] or 0), 0),
                         "cost_usd": round(max(float(lifetime["cost_usd"] or 0.0), 0.0), 10),
@@ -459,6 +493,7 @@ class ClientUsageStore:
                     "current_month": {
                         "calls": max(int(monthly.get("calls") or 0), 0),
                         "prompt_tokens": max(int(monthly.get("prompt_tokens") or 0), 0),
+                        "cached_input_tokens": max(int(monthly.get("cached_input_tokens") or 0), 0),
                         "completion_tokens": max(int(monthly.get("completion_tokens") or 0), 0),
                         "total_tokens": max(int(monthly.get("total_tokens") or 0), 0),
                         "cost_usd": round(max(float(monthly.get("cost_usd") or 0.0), 0.0), 10),
@@ -478,8 +513,8 @@ class ClientUsageStore:
                 {
                     "client_id": client_id,
                     "customer_id": customer_id or None,
-                    "lifetime": {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
-                    "current_month": {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
+                    "lifetime": {"calls": 0, "prompt_tokens": 0, "cached_input_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
+                    "current_month": {"calls": 0, "prompt_tokens": 0, "cached_input_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
                     "prompts": [],
                 },
             )
@@ -488,6 +523,7 @@ class ClientUsageStore:
             for bucket_name, source in (("lifetime", lifetime), ("current_month", monthly)):
                 client_entry[bucket_name]["calls"] += max(int(source.get("calls") or 0), 0)
                 client_entry[bucket_name]["prompt_tokens"] += max(int(source.get("prompt_tokens") or 0), 0)
+                client_entry[bucket_name]["cached_input_tokens"] += max(int(source.get("cached_input_tokens") or 0), 0)
                 client_entry[bucket_name]["completion_tokens"] += max(int(source.get("completion_tokens") or 0), 0)
                 client_entry[bucket_name]["total_tokens"] += max(int(source.get("total_tokens") or 0), 0)
                 client_entry[bucket_name]["cost_usd"] += max(float(source.get("cost_usd") or 0.0), 0.0)
@@ -498,6 +534,7 @@ class ClientUsageStore:
                     "lifetime": {
                         "calls": max(int(lifetime["calls"] or 0), 0),
                         "prompt_tokens": max(int(lifetime["prompt_tokens"] or 0), 0),
+                        "cached_input_tokens": max(int(lifetime["cached_input_tokens"] or 0), 0),
                         "completion_tokens": max(int(lifetime["completion_tokens"] or 0), 0),
                         "total_tokens": max(int(lifetime["total_tokens"] or 0), 0),
                         "cost_usd": round(max(float(lifetime["cost_usd"] or 0.0), 0.0), 10),
@@ -506,6 +543,7 @@ class ClientUsageStore:
                     "current_month": {
                         "calls": max(int(monthly.get("calls") or 0), 0),
                         "prompt_tokens": max(int(monthly.get("prompt_tokens") or 0), 0),
+                        "cached_input_tokens": max(int(monthly.get("cached_input_tokens") or 0), 0),
                         "completion_tokens": max(int(monthly.get("completion_tokens") or 0), 0),
                         "total_tokens": max(int(monthly.get("total_tokens") or 0), 0),
                         "cost_usd": round(max(float(monthly.get("cost_usd") or 0.0), 0.0), 10),

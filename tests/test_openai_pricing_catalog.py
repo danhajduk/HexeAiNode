@@ -831,6 +831,7 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
             service = OpenAIPricingCatalogService(
                 logger=logging.getLogger("openai-pricing-test"),
                 catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
+                manual_config_path=str(Path(tmp) / "openai-pricing.yaml"),
             )
             payload = service.save_manual_pricing(
                 model_id="gpt-5.4-pro-2026-03-05",
@@ -860,10 +861,16 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
             service = OpenAIPricingCatalogService(
                 logger=logging.getLogger("openai-pricing-test"),
                 catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
+                manual_config_path=str(Path(tmp) / "openai-pricing.yaml"),
             )
 
+            mini_pricing = get_openai_model_pricing("gpt-5.4-mini-2026-03-17", pricing_service=service)
             pricing = get_openai_model_pricing("gpt-5.4-nano-2026-03-17", pricing_service=service)
 
+            self.assertEqual(mini_pricing["pricing_status"], "manual")
+            self.assertEqual(mini_pricing["input_per_1m_tokens"], 0.75)
+            self.assertEqual(mini_pricing["cached_input_per_1m_tokens"], 0.075)
+            self.assertEqual(mini_pricing["output_per_1m_tokens"], 4.5)
             self.assertEqual(pricing["pricing_status"], "manual")
             self.assertEqual(pricing["input_per_1m_tokens"], 0.20)
             self.assertEqual(pricing["cached_input_per_1m_tokens"], 0.02)
@@ -874,6 +881,7 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
             service = OpenAIPricingCatalogService(
                 logger=logging.getLogger("openai-pricing-test"),
                 catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
+                manual_config_path=str(Path(tmp) / "openai-pricing.yaml"),
             )
             service._store.save(  # noqa: SLF001
                 OpenAIPricingSnapshot(
@@ -881,7 +889,7 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
                     stale=False,
                     source_urls=["https://developers.openai.com/api/docs/pricing.md"],
                     source_url_used="https://developers.openai.com/api/docs/pricing.md",
-                    scraped_at="2026-04-02T12:00:00+00:00",
+                    scraped_at="2026-04-04T12:00:00+00:00",
                     extraction_source="ai_extraction_family_prompts_partial",
                     entries=[
                         OpenAIPricingEntry(
@@ -894,7 +902,7 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
                             normalized_price=0.0,
                             normalized_unit="per_1m_tokens",
                             source_url="https://developers.openai.com/api/docs/pricing.md",
-                            extracted_at="2026-03-20T00:00:00+00:00",
+                            extracted_at="2026-04-04T12:00:00+00:00",
                             extraction_status="fallback_used",
                             notes=["status:free"],
                         )
@@ -923,6 +931,7 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
                 logger=logging.getLogger("openai-pricing-test"),
                 catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
                 overrides_path=str(Path(tmp) / "provider_model_pricing_overrides.json"),
+                manual_config_path=str(Path(tmp) / "openai-pricing.yaml"),
                 fetcher=_FakeFetcher(html="<section><p>gpt-5-mini Input $0.50 Output $4.00</p></section>"),
             )
             service.save_manual_pricing(
@@ -958,6 +967,90 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(pricing["output_per_1m_tokens"], 2.0)
             overrides_payload = json.loads(Path(tmp, "provider_model_pricing_overrides.json").read_text(encoding="utf-8"))
             self.assertEqual(overrides_payload["models"][0]["model_id"], "gpt-5-mini")
+
+    def test_manual_pricing_yaml_is_scaffolded_from_known_models(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "provider_model_classifications.json").write_text(
+                json.dumps(
+                    {
+                        "entries": [
+                            {"model_id": "gpt-5.4-mini"},
+                            {"model_id": "gpt-realtime-mini"},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = OpenAIPricingCatalogService(
+                logger=logging.getLogger("openai-pricing-test"),
+                catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
+                overrides_path=str(Path(tmp) / "provider_model_pricing_overrides.json"),
+                manual_config_path=str(Path(tmp) / "openai-pricing.yaml"),
+            )
+
+            manual_yaml = Path(tmp, "openai-pricing.yaml").read_text(encoding="utf-8")
+
+            self.assertIsNotNone(service)
+            self.assertIn("models:", manual_yaml)
+            self.assertIn("  gpt-5.4-mini:", manual_yaml)
+            self.assertIn("  gpt-realtime-mini:", manual_yaml)
+
+    def test_manual_pricing_yaml_overrides_catalog_prices(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "provider_model_pricing.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "2.0",
+                        "parser_version": "2.0",
+                        "refresh_state": "ok",
+                        "stale": False,
+                        "entries": [
+                            {
+                                "model_id": "gpt-5.4-mini",
+                                "family": "llm",
+                                "pricing_basis": "per_1m_tokens",
+                                "input_price": 0.375,
+                                "cached_input_price": None,
+                                "output_price": 2.25,
+                                "normalized_price": 2.25,
+                                "normalized_unit": "per_1m_tokens",
+                                "notes": [],
+                                "source_url": "manual://local_override",
+                                "extracted_at": "2026-04-04T00:00:00+00:00",
+                                "extraction_status": "manual",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            Path(tmp, "openai-pricing.yaml").write_text(
+                "\n".join(
+                    [
+                        "version: 1",
+                        "models:",
+                        "  gpt-5.4-mini:",
+                        "    Input: 0.75",
+                        "    Cached input: 0.075",
+                        "    Output: 4.5",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            service = OpenAIPricingCatalogService(
+                logger=logging.getLogger("openai-pricing-test"),
+                catalog_path=str(Path(tmp) / "provider_model_pricing.json"),
+                overrides_path=str(Path(tmp) / "provider_model_pricing_overrides.json"),
+                manual_config_path=str(Path(tmp) / "openai-pricing.yaml"),
+            )
+
+            pricing = get_openai_model_pricing("gpt-5.4-mini", pricing_service=service)
+
+            self.assertEqual(pricing["input_per_1m_tokens"], 0.75)
+            self.assertEqual(pricing["cached_input_per_1m_tokens"], 0.075)
+            self.assertEqual(pricing["output_per_1m_tokens"], 4.5)
+            self.assertEqual(pricing["source_url"], "manual://yaml_override")
 
     def test_validation_rejects_empty_entry_sets(self):
         is_valid, error = validate_openai_pricing_entries([])

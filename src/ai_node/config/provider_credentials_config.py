@@ -48,12 +48,16 @@ def _normalize_provider_payload(payload: object) -> dict:
     api_token = _normalize_string(payload.get("api_token")) or _normalize_string(payload.get("api_key"))
     service_token = _normalize_string(payload.get("service_token")) or _normalize_string(payload.get("admin_key"))
     project_name = _normalize_string(payload.get("project_name")) or _normalize_string(payload.get("user_identifier"))
+    debug_aopenai = bool(payload.get("debug_aopenai")) if "debug_aopenai" in payload else False
+    debug_aopenai_log_path = _normalize_string(payload.get("debug_aopenai_log_path"))
     return {
         "api_token": api_token,
         "service_token": service_token,
         "project_name": project_name,
         "default_model_id": _normalize_string(payload.get("default_model_id")),
         "selected_model_ids": _normalize_string_list(payload.get("selected_model_ids")),
+        "debug_aopenai": debug_aopenai,
+        "debug_aopenai_log_path": debug_aopenai_log_path,
         "updated_at": _normalize_string(payload.get("updated_at")) or _iso_now(),
     }
 
@@ -115,6 +119,8 @@ def summarize_provider_credentials(payload: dict | None) -> dict:
             "project_name": project_name,
             "default_model_id": _normalize_string(provider_payload.get("default_model_id")),
             "selected_model_ids": _normalize_string_list(provider_payload.get("selected_model_ids")),
+            "debug_aopenai": bool(provider_payload.get("debug_aopenai")),
+            "debug_aopenai_log_path": _normalize_string(provider_payload.get("debug_aopenai_log_path")),
             "updated_at": _normalize_string(provider_payload.get("updated_at")),
         }
     return {"configured": bool(summary), "providers": summary}
@@ -201,6 +207,8 @@ class ProviderCredentialsStore:
             "project_name": normalized_project_name,
             "default_model_id": _normalize_string((providers.get("openai") or {}).get("default_model_id")),
             "selected_model_ids": _normalize_string_list((providers.get("openai") or {}).get("selected_model_ids")),
+            "debug_aopenai": bool((providers.get("openai") or {}).get("debug_aopenai")),
+            "debug_aopenai_log_path": _normalize_string((providers.get("openai") or {}).get("debug_aopenai_log_path")),
             "updated_at": _iso_now(),
         }
         self.save(payload)
@@ -222,6 +230,8 @@ class ProviderCredentialsStore:
                 "project_name": None,
                 "default_model_id": None,
                 "selected_model_ids": [],
+                "debug_aopenai": False,
+                "debug_aopenai_log_path": None,
                 "updated_at": _iso_now(),
             }
         normalized_selected = _normalize_string_list(selected_model_ids) if selected_model_ids is not None else _normalize_string_list(existing.get("selected_model_ids"))

@@ -170,6 +170,34 @@ class TaskHandlersTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(executor.last_request.prompt, "Classify the provided image input.")
         self.assertEqual(executor.last_request.metadata["image_url"], "https://example.com/cat.png")
 
+    async def test_handler_preserves_structured_output_schema_in_metadata(self):
+        executor = _FakeTaskExecutor()
+        handler = ClassificationTaskHandler(task_executor=executor)
+        schema = {
+            "type": "object",
+            "properties": {"primary_label": {"type": "string"}},
+            "required": ["primary_label"],
+            "additionalProperties": False,
+        }
+        request = type(
+            "Request",
+            (),
+            {
+                "task_id": "task-006",
+                "task_family": "task.classification",
+                "requested_by": "service.alpha",
+                "trace_id": "trace-006",
+                "prompt_id": "prompt.email.action_decision",
+                "prompt_version": "v1.4",
+                "lease_id": None,
+                "inputs": {"text": "Classify this", "json_schema": schema},
+            },
+        )()
+
+        await handler(request=request, resolution=_Resolution())
+
+        self.assertEqual(executor.last_request.metadata["structured_output_schema"], schema)
+
 
 if __name__ == "__main__":
     unittest.main()

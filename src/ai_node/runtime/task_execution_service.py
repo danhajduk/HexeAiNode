@@ -334,6 +334,7 @@ class TaskExecutionService:
                     "finish_reason": response.finish_reason,
                     "estimated_cost": response.estimated_cost,
                     "prompt_tokens": response.usage.prompt_tokens,
+                    "cached_input_tokens": response.usage.cached_input_tokens,
                     "completion_tokens": response.usage.completion_tokens,
                     "total_tokens": response.usage.total_tokens,
                 },
@@ -358,6 +359,7 @@ class TaskExecutionService:
                     "retries": resolution.retry_count,
                     "fallback_used": bool(resolution.fallback_provider_ids),
                     "prompt_tokens": response.usage.prompt_tokens,
+                    "cached_input_tokens": response.usage.cached_input_tokens,
                     "completion_tokens": response.usage.completion_tokens,
                     "total_tokens": response.usage.total_tokens,
                     "estimated_cost": response.estimated_cost,
@@ -509,6 +511,9 @@ class TaskExecutionService:
             system_prompt = prompt_definition.get("system_prompt")
         max_tokens = inputs.get("max_tokens")
         temperature = inputs.get("temperature")
+        structured_output_schema = inputs.get("structured_output_schema")
+        if not isinstance(structured_output_schema, dict):
+            structured_output_schema = inputs.get("json_schema")
         return UnifiedExecutionRequest(
             task_family=request.task_family,
             prompt=str(prompt or "") if prompt is not None else None,
@@ -525,6 +530,7 @@ class TaskExecutionService:
                 "prompt_id": request.prompt_id,
                 "prompt_version": request.prompt_version,
                 "lease_id": request.lease_id,
+                "structured_output_schema": structured_output_schema if isinstance(structured_output_schema, dict) else None,
             },
         )
 
@@ -652,6 +658,7 @@ class TaskExecutionService:
                 model_id=str(model_id or request.requested_model or "").strip() or None,
                 customer_id=customer_id,
                 prompt_tokens=max(int(getattr(metrics, "prompt_tokens", 0) or 0), 0),
+                cached_input_tokens=max(int(getattr(metrics, "cached_input_tokens", 0) or 0), 0),
                 completion_tokens=max(int(getattr(metrics, "completion_tokens", 0) or 0), 0),
                 total_tokens=max(int(getattr(metrics, "total_tokens", 0) or 0), 0),
                 cost_usd=max(float(getattr(metrics, "estimated_cost", 0.0) or 0.0), 0.0),

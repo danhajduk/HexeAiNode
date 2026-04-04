@@ -127,6 +127,7 @@ class TaskExecutionMetrics(BaseModel):
     retries: int = 0
     fallback_used: bool = False
     prompt_tokens: int = 0
+    cached_input_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     estimated_cost: float | None = None
@@ -148,7 +149,7 @@ class TaskExecutionMetrics(BaseModel):
             raise ValueError("metrics_value_must_be_non_negative")
         return normalized
 
-    @field_validator("retries", "prompt_tokens", "completion_tokens", "total_tokens", "provider_total_requests", "provider_failed_requests")
+    @field_validator("retries", "prompt_tokens", "cached_input_tokens", "completion_tokens", "total_tokens", "provider_total_requests", "provider_failed_requests")
     @classmethod
     def _validate_non_negative_int(cls, value: int) -> int:
         normalized = int(value)

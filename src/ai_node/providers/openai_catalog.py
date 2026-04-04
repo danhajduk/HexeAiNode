@@ -14,6 +14,7 @@ OPENAI_PRICING_SCHEMA_VERSION = "2.0"
 OPENAI_PRICING_PARSER_VERSION = "2.0"
 DEFAULT_OPENAI_PRICING_CATALOG_PATH = "providers/openai/provider_model_pricing.json"
 DEFAULT_OPENAI_PRICING_OVERRIDES_PATH = "providers/openai/provider_model_pricing_overrides.json"
+DEFAULT_OPENAI_PRICING_MANUAL_CONFIG_PATH = "config/openai-pricing.yaml"
 DEFAULT_OPENAI_PRICING_TEXT_CACHE_PATH = "providers/openai/pricing_page_text_cache.json"
 DEFAULT_OPENAI_PRICING_NORMALIZED_TEXT_CACHE_PATH = "providers/openai/pricing_page_text_normalized_cache.json"
 DEFAULT_OPENAI_PRICING_SECTIONS_CACHE_PATH = "providers/openai/pricing_page_sections_cache.json"
@@ -132,6 +133,8 @@ _DISPLAY_NAME_ALIASES = {
 _OPENAI_MANUAL_RATE_FALLBACKS = {
     "gpt-5.4": {"input_price": 2.50, "cached_input_price": 0.25, "output_price": 15.00},
     "gpt-5.4-2026-03-05": {"input_price": 2.50, "cached_input_price": 0.25, "output_price": 15.00},
+    "gpt-5.4-mini": {"input_price": 0.75, "cached_input_price": 0.075, "output_price": 4.50},
+    "gpt-5.4-mini-2026-03-17": {"input_price": 0.75, "cached_input_price": 0.075, "output_price": 4.50},
     "gpt-5.4-nano": {"input_price": 0.20, "cached_input_price": 0.02, "output_price": 1.25},
     "gpt-5.4-nano-2026-03-17": {"input_price": 0.20, "cached_input_price": 0.02, "output_price": 1.25},
 }
@@ -634,6 +637,10 @@ class OpenAIPricingCatalogStore:
         self._path = Path(path)
         self._logger = logger
 
+    @property
+    def path(self) -> str:
+        return str(self._path)
+
     def load(self) -> OpenAIPricingSnapshot | None:
         if not self._path.exists():
             return None
@@ -933,6 +940,155 @@ def _save_pricing_overrides(*, path: str, overrides: dict[str, dict]) -> None:
     temp_path.replace(payload_path)
 
 
+def _load_manual_pricing_yaml(*, path: str) -> dict[str, dict]:
+    payload_path = Path(path)
+    if not payload_path.exists():
+        return {}
+    overrides: dict[str, dict] = {}
+    current_model_id: str | None = None
+    current_fields: dict[str, float | None] = {}
+    for raw_line in payload_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped in {"version: 1", "models:"}:
+            continue
+        if line.startswith("  ") and not line.startswith("    ") and stripped.endswith(":"):
+            if current_model_id is not None:
+                overrides[current_model_id] = dict(current_fields)
+            current_model_id = resolve_openai_base_model_id(stripped[:-1].strip().strip("'\""))
+            current_fields = {}
+            continue
+        if current_model_id is None or not line.startswith("    ") or ":" not in stripped:
+            continue
+        key, raw_value = stripped.split(":", 1)
+        yaml_key = key.strip().lower()
+        value_text = raw_value.strip()
+        if value_text in {"", "null", "~"}:
+            normalized_value = None
+        else:
+            normalized_value = _normalize_price(value_text)
+        if yaml_key == "input":
+            current_fields["input_price"] = normalized_value
+        elif yaml_key == "cached input":
+            current_fields["cached_input_price"] = normalized_value
+        elif yaml_key == "output":
+            current_fields["output_price"] = normalized_value
+    if current_model_id is not None:
+        overrides[current_model_id] = dict(current_fields)
+    return overrides
+
+
+def _save_manual_pricing_yaml(*, path: str, models: list[dict[str, object]]) -> None:
+    payload_path = Path(path)
+    payload_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Manual OpenAI pricing overrides used by the node.",
+        "# Edit the values below as needed. Use null to leave a field unset.",
+        "# Units are USD per 1M tokens.",
+        "version: 1",
+        "models:",
+    ]
+    for model in models:
+        model_id = _normalize_string(model.get("model_id"))
+        if not model_id:
+            continue
+        lines.append(f"  {model_id}:")
+        lines.append(f"    Input: {_yaml_scalar(model.get('input_price'))}")
+        lines.append(f"    Cached input: {_yaml_scalar(model.get('cached_input_price'))}")
+        lines.append(f"    Output: {_yaml_scalar(model.get('output_price'))}")
+    lines.append("")
+    temp_path = payload_path.with_suffix(f"{payload_path.suffix}.tmp")
+    temp_path.write_text("\n".join(lines), encoding="utf-8")
+    temp_path.replace(payload_path)
+
+
+def _yaml_scalar(value: object) -> str:
+    normalized = _normalize_price(value)
+    if normalized is None:
+        return "null"
+    return format(normalized, "g")
+
+
+def _load_known_openai_model_ids(*, catalog_path: str, overrides_path: str, manual_config_path: str) -> list[str]:
+    known_model_ids: set[str] = set()
+    for source_path in (catalog_path, overrides_path, manual_config_path):
+        payload_path = Path(source_path)
+        if not payload_path.exists():
+            continue
+        if payload_path.suffix.lower() in {".yaml", ".yml"}:
+            known_model_ids.update(_load_manual_pricing_yaml(path=str(payload_path)).keys())
+            continue
+        try:
+            payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            for item in payload.get("entries") or []:
+                if isinstance(item, dict):
+                    model_id = resolve_openai_base_model_id(item.get("model_id") or "")
+                    if model_id:
+                        known_model_ids.add(model_id)
+            for item in payload.get("models") or []:
+                if isinstance(item, dict):
+                    model_id = resolve_openai_base_model_id(item.get("model_id") or "")
+                    if model_id:
+                        known_model_ids.add(model_id)
+    classification_path = Path(catalog_path).with_name("provider_model_classifications.json")
+    if classification_path.exists():
+        try:
+            payload = json.loads(classification_path.read_text(encoding="utf-8"))
+        except Exception:
+            payload = {}
+        for item in payload.get("entries") or [] if isinstance(payload, dict) else []:
+            if not isinstance(item, dict):
+                continue
+            model_id = resolve_openai_base_model_id(item.get("model_id") or "")
+            if model_id:
+                known_model_ids.add(model_id)
+    return sorted(known_model_ids)
+
+
+def _build_manual_pricing_yaml_models(
+    *,
+    model_ids: list[str],
+    existing_yaml_overrides: dict[str, dict],
+    snapshot_entries: dict[str, OpenAIPricingEntry],
+    json_overrides: dict[str, dict],
+) -> list[dict[str, object]]:
+    models: list[dict[str, object]] = []
+    for model_id in model_ids:
+        yaml_override = existing_yaml_overrides.get(model_id) or {}
+        snapshot_entry = snapshot_entries.get(model_id)
+        json_override = json_overrides.get(model_id) or {}
+        if yaml_override:
+            input_price = yaml_override.get("input_price")
+            cached_input_price = yaml_override.get("cached_input_price")
+            output_price = yaml_override.get("output_price")
+        elif snapshot_entry is not None and snapshot_entry.pricing_basis == "per_1m_tokens":
+            input_price = snapshot_entry.input_price
+            cached_input_price = snapshot_entry.cached_input_price
+            output_price = snapshot_entry.output_price
+        elif _normalize_string(json_override.get("pricing_basis")).lower() == "per_1m_tokens":
+            input_price = _normalize_price(json_override.get("input_price"))
+            cached_input_price = _normalize_price(json_override.get("cached_input_price"))
+            output_price = _normalize_price(json_override.get("output_price"))
+        else:
+            input_price = None
+            cached_input_price = None
+            output_price = None
+        models.append(
+            {
+                "model_id": model_id,
+                "input_price": input_price,
+                "cached_input_price": cached_input_price,
+                "output_price": output_price,
+            }
+        )
+    return models
+
+
 def _apply_overrides(*, entries: list[OpenAIPricingEntry], overrides: dict[str, dict], source_url: str, extracted_at: str) -> list[OpenAIPricingEntry]:
     if not overrides:
         return entries
@@ -1007,6 +1163,7 @@ class OpenAIPricingCatalogService:
         parser=None,
         store=None,
         overrides_path: str = DEFAULT_OPENAI_PRICING_OVERRIDES_PATH,
+        manual_config_path: str = DEFAULT_OPENAI_PRICING_MANUAL_CONFIG_PATH,
         text_cache_path: str = DEFAULT_OPENAI_PRICING_TEXT_CACHE_PATH,
         normalized_text_cache_path: str = DEFAULT_OPENAI_PRICING_NORMALIZED_TEXT_CACHE_PATH,
         sections_cache_path: str = DEFAULT_OPENAI_PRICING_SECTIONS_CACHE_PATH,
@@ -1030,6 +1187,7 @@ class OpenAIPricingCatalogService:
         self._parser = parser or OpenAIPricingPageParser()
         self._store = store or OpenAIPricingCatalogStore(path=catalog_path, logger=logger)
         self._overrides_path = resolved_overrides_path
+        self._manual_config_path = str(manual_config_path or DEFAULT_OPENAI_PRICING_MANUAL_CONFIG_PATH).strip() or DEFAULT_OPENAI_PRICING_MANUAL_CONFIG_PATH
         self._text_cache_path = Path(text_cache_path)
         self._normalized_text_cache_path = Path(normalized_text_cache_path)
         self._sections_cache_path = Path(sections_cache_path)
@@ -1053,6 +1211,34 @@ class OpenAIPricingCatalogService:
             if str(configured_prompt_path or "").strip()
             else None
         )
+        self._ensure_manual_pricing_config()
+
+    def _ensure_manual_pricing_config(self) -> None:
+        try:
+            snapshot = self.load_snapshot()
+            snapshot_entries = {
+                entry.model_id: entry
+                for entry in (snapshot.entries if snapshot is not None else [])
+            }
+            json_overrides = _load_pricing_overrides(path=self._overrides_path)
+            existing_yaml_overrides = _load_manual_pricing_yaml(path=self._manual_config_path)
+            known_model_ids = _load_known_openai_model_ids(
+                catalog_path=self._store.path if self._store is not None and hasattr(self._store, "path") else DEFAULT_OPENAI_PRICING_CATALOG_PATH,
+                overrides_path=self._overrides_path,
+                manual_config_path=self._manual_config_path,
+            )
+            if not known_model_ids:
+                return
+            yaml_models = _build_manual_pricing_yaml_models(
+                model_ids=known_model_ids,
+                existing_yaml_overrides=existing_yaml_overrides,
+                snapshot_entries=snapshot_entries,
+                json_overrides=json_overrides,
+            )
+            _save_manual_pricing_yaml(path=self._manual_config_path, models=yaml_models)
+        except Exception:
+            if hasattr(self._logger, "warning"):
+                self._logger.warning("[openai-manual-pricing-config-sync-failed] %s", {"path": self._manual_config_path})
 
     def load_snapshot(self) -> OpenAIPricingSnapshot | None:
         return self._store.load() if self._store is not None and hasattr(self._store, "load") else None
@@ -1967,9 +2153,13 @@ class OpenAIPricingCatalogService:
             override_payload = merged_override
         existing_overrides[normalized_model_id] = override_payload
         _save_pricing_overrides(path=self._overrides_path, overrides=existing_overrides)
+        self._ensure_manual_pricing_config()
         return {"status": "manual_saved", "changed": True, "snapshot": snapshot.model_dump(), "model_id": normalized_model_id}
 
     def get_pricing_entry(self, model_id: str) -> OpenAIPricingEntry | None:
+        yaml_entry = _manual_pricing_yaml_entry(model_id, manual_config_path=self._manual_config_path)
+        if yaml_entry is not None:
+            return yaml_entry
         snapshot = self.load_snapshot()
         fallback_entry = _fallback_openai_pricing_entry(model_id)
         if snapshot is None:
@@ -2142,6 +2332,10 @@ def get_openai_model_pricing(model_id: str, *, pricing_service: OpenAIPricingCat
                 str(DEFAULT_OPENAI_PRICING_STALE_TOLERANCE_SECONDS),
             )
         ),
+        manual_config_path=os.environ.get(
+            "SYNTHIA_OPENAI_PRICING_MANUAL_CONFIG_PATH",
+            DEFAULT_OPENAI_PRICING_MANUAL_CONFIG_PATH,
+        ),
     )
     entry = service.get_pricing_entry(model_id)
     if entry is None:
@@ -2190,6 +2384,47 @@ def _fallback_openai_pricing_entry(model_id: str) -> OpenAIPricingEntry | None:
         extracted_at=_iso_now(),
         extraction_status="manual",
         notes=["manual_pricing_fallback", "source:user_supplied_gpt54_rates"],
+    )
+
+
+def _manual_pricing_yaml_entry(model_id: str, *, manual_config_path: str) -> OpenAIPricingEntry | None:
+    normalized_model_id = resolve_openai_base_model_id(model_id)
+    if not normalized_model_id:
+        return None
+    manual_overrides = _load_manual_pricing_yaml(path=manual_config_path)
+    payload = manual_overrides.get(normalized_model_id)
+    if not isinstance(payload, dict):
+        return None
+    input_price = _normalize_price(payload.get("input_price"))
+    cached_input_price = _normalize_price(payload.get("cached_input_price"))
+    output_price = _normalize_price(payload.get("output_price"))
+    if input_price is None and cached_input_price is None and output_price is None:
+        return None
+    family = _normalize_family(None, model_id=normalized_model_id)
+    basis = _default_pricing_basis_for_family(family)
+    normalized_unit = _default_normalized_unit(basis)
+    if basis == "per_1m_tokens":
+        normalized_price = _compute_normalized_price(
+            basis=basis,
+            input_price=input_price,
+            output_price=output_price,
+            normalized_price=None,
+        )
+    else:
+        normalized_price = output_price if output_price is not None else input_price
+    return OpenAIPricingEntry(
+        model_id=normalized_model_id,
+        family=family,
+        pricing_basis=basis,
+        input_price=input_price,
+        cached_input_price=cached_input_price if basis == "per_1m_tokens" else None,
+        output_price=output_price,
+        normalized_price=normalized_price,
+        normalized_unit=normalized_unit,
+        source_url="manual://yaml_override",
+        extracted_at=_iso_now(),
+        extraction_status="manual",
+        notes=["manual_pricing_yaml_override"],
     )
 
 

@@ -317,7 +317,7 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["clients"][0]["prompts"][0]["prompt_id"], "prompt.email.classifier")
             self.assertEqual(payload["clients"][0]["prompts"][0]["models"][0]["model_id"], "gpt-5-mini")
 
-    async def test_execute_returns_unsupported_for_non_canonical_family(self):
+    async def test_execute_rejects_undeclared_canonical_family(self):
         service = TaskExecutionService(
             provider_runtime_manager=_FakeProviderRuntimeManager(),
             provider_resolver=_FakeProviderResolver(
@@ -341,17 +341,17 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
         result = await service.execute(
             TaskExecutionRequest.model_validate(
                 {
-                    "task_id": "task-unsupported",
-                    "task_family": "task.chat_response",
+                    "task_id": "task-rejected",
+                    "task_family": "task.chat",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello"},
-                    "trace_id": "trace-unsupported",
+                    "trace_id": "trace-rejected",
                 }
             )
         )
 
-        self.assertEqual(result.status, "unsupported")
-        self.assertEqual(result.error_code, "unsupported_task_family")
+        self.assertEqual(result.status, "rejected")
+        self.assertEqual(result.error_code, "task_family_not_declared")
 
     async def test_execute_rejects_prompt_in_probation(self):
         service = TaskExecutionService(

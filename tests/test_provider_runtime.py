@@ -34,6 +34,8 @@ class _CredentialsStore:
                     "service_token": "service-token-1234",
                     "project_name": "ops",
                     "selected_model_ids": ["gpt-5-mini"],
+                    "debug_aopenai": True,
+                    "debug_aopenai_log_path": "logs/openai_debug_test.jsonl",
                 }
             },
         }
@@ -124,6 +126,22 @@ class _FakePricingCatalogService:
 
 
 class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_runtime_builds_openai_adapter_with_debug_aopenai_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["openai"]),
+                provider_credentials_store=_CredentialsStore(),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+            )
+
+            settings = runtime._loader.load_provider_settings(provider_id="openai", enabled=True)  # noqa: SLF001
+            adapter = runtime._build_adapter(provider_id="openai", settings=settings)  # noqa: SLF001
+
+            self.assertTrue(adapter._debug_aopenai)  # noqa: SLF001
+            self.assertEqual(str(adapter._debug_aopenai_log_path), "logs/openai_debug_test.jsonl")  # noqa: SLF001
+
     async def test_execution_router_falls_back_when_primary_fails(self):
         registry = ProviderRegistry()
         with tempfile.TemporaryDirectory() as tmp:

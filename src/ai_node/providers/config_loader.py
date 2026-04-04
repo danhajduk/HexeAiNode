@@ -13,6 +13,8 @@ class ProviderSettings:
     api_key: str | None = None
     default_model_id: str | None = None
     base_url: str | None = None
+    debug_aopenai: bool = False
+    debug_aopenai_log_path: str | None = None
     timeout_seconds: float = 20.0
     retry_count: int = 1
     max_cost_cents: int | None = None
@@ -93,6 +95,14 @@ class ProviderConfigLoader:
                     )
                 ),
                 base_url=str(os.environ.get("SYNTHIA_OPENAI_BASE_URL") or "https://api.openai.com/v1").strip(),
+                debug_aopenai=_parse_bool(
+                    os.environ.get("SYNTHIA_DEBUG_AOPENAI"),
+                    default=bool(stored_openai.get("debug_aopenai")) if isinstance(stored_openai, dict) else False,
+                ),
+                debug_aopenai_log_path=_first_non_empty_string(
+                    str(os.environ.get("SYNTHIA_DEBUG_AOPENAI_LOG_PATH") or "").strip() or None,
+                    stored_openai.get("debug_aopenai_log_path") if isinstance(stored_openai, dict) else None,
+                ),
                 timeout_seconds=max(timeout, 1.0),
                 retry_count=max(retries, 0),
                 max_cost_cents=int(max_cost_cents) if max_cost_cents is not None else None,
@@ -152,3 +162,14 @@ def _first_non_empty_string(*values: str | None) -> str | None:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
+
+
+def _parse_bool(value: str | None, *, default: bool) -> bool:
+    if value is None:
+        return default
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off", ""}:
+        return False
+    return default

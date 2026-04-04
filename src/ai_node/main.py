@@ -247,6 +247,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to persisted OpenAI pricing catalog cache",
     )
     parser.add_argument(
+        "--openai-pricing-manual-config-path",
+        default=os.environ.get("SYNTHIA_OPENAI_PRICING_MANUAL_CONFIG_PATH", "config/openai-pricing.yaml"),
+        help="Path to manual OpenAI pricing YAML overrides",
+    )
+    parser.add_argument(
         "--openai-pricing-refresh-interval-seconds",
         type=int,
         default=int(os.environ.get("SYNTHIA_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS", "86400")),
@@ -313,6 +318,7 @@ def run(
     client_usage_db_path: str = ".run/client_usage.db",
     provider_capability_refresh_interval_seconds: int = 14400,
     openai_pricing_catalog_path: str = "providers/openai/provider_model_pricing.json",
+    openai_pricing_manual_config_path: str = "config/openai-pricing.yaml",
     openai_pricing_refresh_interval_seconds: int = 86400,
     openai_pricing_stale_tolerance_seconds: int = 172800,
     finalize_poll_interval_seconds: float = 2.0,
@@ -378,6 +384,7 @@ def run(
         registry_path=os.environ.get("SYNTHIA_PROVIDER_REGISTRY_PATH", "data/provider_registry.json"),
         metrics_path=os.environ.get("SYNTHIA_PROVIDER_METRICS_PATH", "data/provider_metrics.json"),
         pricing_catalog_path=openai_pricing_catalog_path,
+        pricing_manual_config_path=openai_pricing_manual_config_path,
         pricing_refresh_interval_seconds=openai_pricing_refresh_interval_seconds,
         pricing_stale_tolerance_seconds=openai_pricing_stale_tolerance_seconds,
     )
@@ -692,6 +699,7 @@ def main() -> int:
         client_usage_db_path=os.environ.get("SYNTHIA_CLIENT_USAGE_DB_PATH", ".run/client_usage.db"),
         provider_capability_refresh_interval_seconds=args.provider_capability_refresh_interval_seconds,
         openai_pricing_catalog_path=args.openai_pricing_catalog_path,
+        openai_pricing_manual_config_path=args.openai_pricing_manual_config_path,
         openai_pricing_refresh_interval_seconds=args.openai_pricing_refresh_interval_seconds,
         openai_pricing_stale_tolerance_seconds=args.openai_pricing_stale_tolerance_seconds,
         finalize_poll_interval_seconds=args.finalize_poll_interval_seconds,

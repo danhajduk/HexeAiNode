@@ -415,3 +415,23 @@ Task 414: Verify task pipeline - Completed on 03/20/2026 19:38
 Task 415: Verify notification flow - Completed on 03/20/2026 19:38
 Task 417: Namespace verification checklist - Completed on 03/20/2026 19:38
 Task 418: Phase 2 completion report - Completed on 03/20/2026 19:38
+Task 419: Create repo-local AI node standards alignment overview doc - Completed on 04/04/2026 14:44
+Task 420: Update docs index to include standards alignment, provider-boundary, and scheduler docs - Completed on 04/04/2026 14:44
+Task 421: Update documentation policy to reference the Hexe node standards set - Completed on 04/04/2026 14:44
+Task 422: Create repo-local AI node compliance summary doc - Completed on 04/04/2026 14:44
+Task 423: Create repo-specific provider boundary documentation - Completed on 04/04/2026 14:46
+Task 424: Document AI node provider modules and provider-specific APIs - Completed on 04/04/2026 14:46
+Task 425: Create repo-specific scheduler and background-task documentation - Completed on 04/04/2026 14:46
+Task 426: Document recurring work ownership, persisted state, and readiness impact - Completed on 04/04/2026 14:46
+Task 427: Audit App.jsx and identify remaining frontend modularity extraction targets - Completed on 04/04/2026 14:54
+Task 428: Extract remaining large UI and formatting logic out of App.jsx into feature or shared modules - Completed on 04/04/2026 14:54
+Task 429: Add or extend frontend tests for extracted modular UI logic - Completed on 04/04/2026 14:54
+Task 430: Create API map doc grouped by the Hexe node standard route families - Completed on 04/04/2026 14:54
+Task 431: Mark canonical versus compatibility routes in the AI node API map - Completed on 04/04/2026 14:54
+Task 432: Document runtime state and path ownership for .run, data, and logs - Completed on 04/04/2026 15:09
+Task 433: Decide and document whether current runtime paths remain an allowed variant or need migration planning - Completed on 04/04/2026 15:09
+Task 434: Tighten scripts and operations documentation against the Hexe node operations standard - Completed on 04/04/2026 15:10
+Task 435: Add status.sh or document stack-control.sh status as the standard status path - Completed on 04/04/2026 15:10
+Task 436: Expand security and sensitive-state documentation for trust tokens, provider credentials, and debug artifacts - Completed on 04/04/2026 15:12
+Task 437: Cross-check repo security docs against src/ai_node/security helpers - Completed on 04/04/2026 15:12
+Task 438: Create a formal AI node standards compliance appendix with code and doc evidence - Completed on 04/04/2026 15:13

@@ -218,6 +218,8 @@ describe("OperationalDashboard", () => {
                 {
                   promptId: "prompt.email.classify",
                   promptLabel: "prompt.email.classify",
+                  currentVersion: "v3",
+                  registeredAt: "2026-03-22T00:00:00Z",
                   lifetime: { calls: 502, total_tokens: 229217, cost_usd: 0.0672463 },
                   current_month: { calls: 502, total_tokens: 229217, cost_usd: 0.0672463 },
                   models: [
@@ -251,6 +253,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Model");
     expect(markup).toContain("April 2026");
     expect(markup).toContain("prompt.email.classify");
+    expect(markup).toContain("v3");
+    expect(markup).toContain("registered Mar 22, 2026");
     expect(markup).toContain("Lifetime $0.067246");
     expect(markup).toContain("April 2026 $0.067246");
     expect(markup).toContain("gpt-5.4-nano");

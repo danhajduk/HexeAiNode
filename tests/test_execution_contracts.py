@@ -229,7 +229,7 @@ class ExecutionContractsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.metrics.provider_success_rate, 0.98)
         self.assertIn("task_completed", [item["event_type"] for item in telemetry.calls])
 
-    async def test_unsupported_task_rejection_contract(self):
+    async def test_undeclared_task_rejection_contract(self):
         service = TaskExecutionService(
             provider_runtime_manager=_FakeProviderRuntimeManager(),
             provider_resolver=_FakeProviderResolver(
@@ -253,17 +253,17 @@ class ExecutionContractsTests(unittest.IsolatedAsyncioTestCase):
         result = await service.execute(
             TaskExecutionRequest.model_validate(
                 {
-                    "task_id": "task-unsupported",
-                    "task_family": "task.chat_response",
+                    "task_id": "task-undeclared",
+                    "task_family": "task.chat",
                     "requested_by": "service.alpha",
                     "inputs": {"text": "hello"},
-                    "trace_id": "trace-unsupported",
+                    "trace_id": "trace-undeclared",
                 }
             )
         )
 
-        self.assertEqual(result.status, "unsupported")
-        self.assertEqual(result.error_code, "unsupported_task_family")
+        self.assertEqual(result.status, "rejected")
+        self.assertEqual(result.error_code, "task_family_not_declared")
 
     async def test_provider_fallback_contract(self):
         telemetry = _FakeExecutionTelemetryPublisher()

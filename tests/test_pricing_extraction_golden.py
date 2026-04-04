@@ -24,10 +24,10 @@ class PricingExtractionGoldenTests(unittest.IsolatedAsyncioTestCase):
         extraction_output = (FIXTURE_DIR / "pricing_extraction_ai_output.json").read_text(encoding="utf-8")
         expected = json.loads((FIXTURE_DIR / "pricing_extraction_expected.json").read_text(encoding="utf-8"))
 
-        captured = {"prompt": ""}
+        captured = {"prompts": []}
 
         async def fake_execute(_model: str, _system_prompt: str, user_prompt: str) -> str:
-            captured["prompt"] = user_prompt
+            captured["prompts"].append(user_prompt)
             return extraction_output
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -55,12 +55,13 @@ class PricingExtractionGoldenTests(unittest.IsolatedAsyncioTestCase):
             )
 
             self.assertEqual(result["status"], "refreshed")
-            self.assertIn("- gpt-5-mini", captured["prompt"])
-            self.assertNotIn("- gpt-5-chat-latest", captured["prompt"])
+            all_prompts = "\n\n".join(captured["prompts"])
+            self.assertIn("- gpt-5-mini", all_prompts)
+            self.assertNotIn("- gpt-5-chat-latest", all_prompts)
 
             snapshot = service.load_snapshot()
             self.assertIsNotNone(snapshot)
-            self.assertEqual(snapshot.extraction_source, "ai_extraction")
+            self.assertEqual(snapshot.extraction_source, "ai_extraction_family_prompts")
 
             actual = [
                 {

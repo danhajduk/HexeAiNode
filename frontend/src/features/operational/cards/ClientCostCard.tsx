@@ -21,6 +21,19 @@ function formatPromptLabel(value) {
   return normalized || "unattributed prompt";
 }
 
+function formatPromptMeta(version, registeredAt) {
+  const parts = [];
+  const normalizedVersion = String(version || "").trim();
+  const normalizedRegisteredAt = formatShortDate(registeredAt);
+  if (normalizedVersion) {
+    parts.push(normalizedVersion);
+  }
+  if (normalizedRegisteredAt) {
+    parts.push(`registered ${normalizedRegisteredAt}`);
+  }
+  return parts.join(" | ");
+}
+
 function formatModelLabel(value) {
   const normalized = String(value || "").trim();
   return normalized || "unknown-model";
@@ -195,7 +208,14 @@ export function ClientCostCard({ clients = [], currentMonth = "", className = ""
                 {client.prompts.map((prompt) => (
                   <div key={`${client.clientId}:${prompt.promptId}`} className="client-cost-model-section">
                     <div className="client-cost-prompt-header">
-                      <strong>{formatPromptLabel(prompt.promptLabel)}</strong>
+                      <div className="client-cost-prompt-title-block">
+                        <strong>{formatPromptLabel(prompt.promptLabel)}</strong>
+                        {formatPromptMeta(prompt.currentVersion, prompt.registeredAt) ? (
+                          <p className="muted tiny client-cost-prompt-meta">
+                            {formatPromptMeta(prompt.currentVersion, prompt.registeredAt)}
+                          </p>
+                        ) : null}
+                      </div>
                       <div className="client-cost-prompt-costs">
                         <span className="muted tiny">Lifetime {formatUsd(prompt?.lifetime?.cost_usd)}</span>
                         <span className="muted tiny">{currentMonthLabel} {formatUsd(prompt?.current_month?.cost_usd)}</span>

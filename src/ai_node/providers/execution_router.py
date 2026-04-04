@@ -56,6 +56,7 @@ class ProviderExecutionRouter:
                         model_id=response.model_id,
                         latency_ms=response.latency_ms,
                         prompt_tokens=response.usage.prompt_tokens,
+                        cached_input_tokens=response.usage.cached_input_tokens,
                         completion_tokens=response.usage.completion_tokens,
                         estimated_cost=response.estimated_cost,
                     )

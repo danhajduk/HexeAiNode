@@ -25,6 +25,7 @@ Hexe Core owns:
 - shared payload contracts
 - global platform terminology
 - platform-wide architecture
+- shared Hexe node standards under `/docs/standards/Node/`
 
 ## Local Core Docs Convenience
 
@@ -33,3 +34,11 @@ Hexe Core owns:
 - Canonical references must always use the Hexe Core GitHub links listed in [core-references.md](./core-references.md).
 - Local symlink paths are provided only as developer convenience.
 - The docs in this repo must stay readable on GitHub even when `docs/Core-Documents/` does not exist.
+
+## Standards Reference
+
+This repo should align to the Hexe node standards set owned by Hexe Core:
+
+- `/home/dan/Projects/Hexe/docs/standards/Node/`
+
+This repository may add repo-local alignment and compliance documents, but it should not redefine the shared node standards here.

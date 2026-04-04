@@ -13,6 +13,7 @@ class _ModelMetricState:
     failed_requests: int = 0
     failure_classes: dict[str, int] = field(default_factory=dict)
     prompt_tokens: int = 0
+    cached_input_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     estimated_cost: float = 0.0
@@ -34,6 +35,7 @@ class ProviderMetricsCollector:
         model_id: str,
         latency_ms: float,
         prompt_tokens: int,
+        cached_input_tokens: int,
         completion_tokens: int,
         estimated_cost: float | None,
     ) -> None:
@@ -42,6 +44,7 @@ class ProviderMetricsCollector:
         state.successful_requests += 1
         state.latency_samples_ms.append(max(float(latency_ms), 0.0))
         state.prompt_tokens += max(int(prompt_tokens), 0)
+        state.cached_input_tokens += max(int(cached_input_tokens), 0)
         state.completion_tokens += max(int(completion_tokens), 0)
         state.total_tokens += max(int(prompt_tokens) + int(completion_tokens), 0)
         state.estimated_cost += max(float(estimated_cost or 0.0), 0.0)
@@ -114,6 +117,7 @@ class ProviderMetricsCollector:
                 failures = model_payload.get("failure_classes")
                 state.failure_classes = failures if isinstance(failures, dict) else {}
                 state.prompt_tokens = int(model_payload.get("prompt_tokens") or 0)
+                state.cached_input_tokens = int(model_payload.get("cached_input_tokens") or 0)
                 state.completion_tokens = int(model_payload.get("completion_tokens") or 0)
                 state.total_tokens = int(model_payload.get("total_tokens") or 0)
                 state.estimated_cost = float(model_payload.get("estimated_cost") or 0.0)
@@ -145,6 +149,7 @@ class ProviderMetricsCollector:
             "failure_classes": dict(state.failure_classes),
             "success_rate": success_rate,
             "prompt_tokens": state.prompt_tokens,
+            "cached_input_tokens": state.cached_input_tokens,
             "completion_tokens": state.completion_tokens,
             "total_tokens": state.total_tokens,
             "estimated_cost": round(state.estimated_cost, 8),

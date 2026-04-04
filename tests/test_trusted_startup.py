@@ -10,7 +10,7 @@ from ai_node.trust.trusted_startup import TrustedStartupManager
 
 def _sample_trust_state() -> dict:
     return {
-        "node_id": "node-ai-001",
+        "node_id": "node-123e4567-e89b-42d3-a456-426614174000",
         "node_name": "main-ai-node",
         "node_type": "ai-node",
         "paired_core_id": "core-main",
@@ -18,7 +18,7 @@ def _sample_trust_state() -> dict:
         "node_trust_token": "node-token",
         "initial_baseline_policy": {"policy_version": "v1"},
         "baseline_policy_version": "v1",
-        "operational_mqtt_identity": "main-ai-node",
+        "operational_mqtt_identity": "hn_node-123e4567-e89b-42d3-a456-426614174000",
         "operational_mqtt_token": "mqtt-token",
         "operational_mqtt_host": "192.168.1.50",
         "operational_mqtt_port": 1883,
