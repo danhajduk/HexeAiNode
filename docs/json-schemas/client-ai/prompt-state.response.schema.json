@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai/prompt-state.response.schema.json",
+  "title": "Prompt State Response",
+  "description": "Response payload for GET /api/prompts/services and write operations that return prompt state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "prompt_services",
+    "probation",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "2.0"
+    },
+    "prompt_services": {
+      "type": "array",
+      "items": {
+        "$ref": "prompt-record.schema.json"
+      }
+    },
+    "probation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "active_prompt_ids",
+        "reasons",
+        "updated_at"
+      ],
+      "properties": {
+        "active_prompt_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

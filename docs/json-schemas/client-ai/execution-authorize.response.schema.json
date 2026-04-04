@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai/execution-authorize.response.schema.json",
+  "title": "Execution Authorize Response",
+  "description": "Response payload for POST /api/execution/authorize.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "allowed",
+    "reason",
+    "prompt_id",
+    "task_family",
+    "prompt_version",
+    "prompt_state"
+  ],
+  "properties": {
+    "allowed": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Examples include authorized, prompt_not_registered, prompt_in_probation, prompt_state_invalid, prompt_task_family_mismatch, and invalid_prompt_version."
+    },
+    "prompt_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "task_family": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "prompt_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "prompt_state": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "probation",
+        "active",
+        "restricted",
+        "suspended",
+        "retired",
+        "expired",
+        null
+      ]
+    }
+  }
+}

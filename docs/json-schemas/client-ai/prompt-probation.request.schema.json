@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai/prompt-probation.request.schema.json",
+  "title": "Prompt Probation Request",
+  "description": "Request payload for POST /api/prompts/services/{prompt_id}/probation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "action"
+  ],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "start",
+        "clear"
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

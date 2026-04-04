@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai/prompt-record.schema.json",
+  "title": "Prompt Record",
+  "description": "Normalized prompt object returned by prompt lookup and prompt state endpoints.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "prompt_id",
+    "prompt_name",
+    "service_id",
+    "owner_service",
+    "task_family",
+    "status",
+    "privacy_class",
+    "execution_policy",
+    "provider_preferences",
+    "constraints",
+    "metadata",
+    "current_version",
+    "versions",
+    "lifecycle_history",
+    "usage",
+    "registered_at",
+    "updated_at",
+    "retired_at"
+  ],
+  "properties": {
+    "prompt_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "prompt_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "service_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "owner_service": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_family": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "probation",
+        "active",
+        "restricted",
+        "suspended",
+        "retired",
+        "expired"
+      ]
+    },
+    "privacy_class": {
+      "type": "string",
+      "enum": [
+        "public",
+        "internal",
+        "restricted",
+        "sensitive"
+      ]
+    },
+    "execution_policy": {
+      "$ref": "prompt-register.request.schema.json#/$defs/executionPolicy"
+    },
+    "provider_preferences": {
+      "$ref": "prompt-register.request.schema.json#/$defs/providerPreferences"
+    },
+    "constraints": {
+      "$ref": "prompt-register.request.schema.json#/$defs/promptConstraints"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "current_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "versions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "definition",
+          "metadata",
+          "created_at"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "definition": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "system_prompt",
+              "prompt_template",
+              "template_variables",
+              "default_inputs"
+            ],
+            "properties": {
+              "system_prompt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "prompt_template": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "template_variables": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true
+              },
+              "default_inputs": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "lifecycle_history": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "state",
+          "reason",
+          "changed_at"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "probation",
+              "active",
+              "restricted",
+              "suspended",
+              "retired",
+              "expired"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "changed_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "execution_count",
+        "success_count",
+        "failure_count",
+        "denial_count",
+        "last_used_at",
+        "last_denial_reason",
+        "last_denied_at",
+        "last_failure_reason",
+        "last_failure_at",
+        "last_execution_status"
+      ],
+      "properties": {
+        "execution_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "success_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failure_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "denial_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_used_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "last_denial_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_denied_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "last_failure_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_failure_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "last_execution_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "registered_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "retired_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  }
+}

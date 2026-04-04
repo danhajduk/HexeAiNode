@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai/prompt-get.response.schema.json",
+  "title": "Prompt Lookup Response",
+  "description": "Response payload for GET /api/prompts/services/{prompt_id}.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "configured",
+    "prompt"
+  ],
+  "properties": {
+    "configured": {
+      "type": "boolean",
+      "const": true
+    },
+    "prompt": {
+      "$ref": "prompt-record.schema.json"
+    }
+  }
+}

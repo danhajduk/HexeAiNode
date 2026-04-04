@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai/ai-request.response.schema.json",
+  "title": "Direct AI Response",
+  "description": "Response payload for POST /api/execution/direct.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_id",
+    "status",
+    "output",
+    "metrics",
+    "error_code",
+    "error_message",
+    "provider_used",
+    "model_used",
+    "completed_at"
+  ],
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "completed",
+        "failed",
+        "rejected",
+        "degraded",
+        "unsupported"
+      ]
+    },
+    "output": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": true
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "execution_duration_ms",
+        "provider_latency_ms",
+        "provider_avg_latency_ms",
+        "provider_p95_latency_ms",
+        "provider_success_rate",
+        "provider_total_requests",
+        "provider_failed_requests",
+        "retries",
+        "fallback_used",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "estimated_cost"
+      ],
+      "properties": {
+        "execution_duration_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "provider_latency_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "provider_avg_latency_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "provider_p95_latency_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "provider_success_rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "provider_total_requests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "provider_failed_requests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fallback_used": {
+          "type": "boolean"
+        },
+        "prompt_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "completion_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimated_cost": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "error_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "error_message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "provider_used": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_used": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "completed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  }
+}

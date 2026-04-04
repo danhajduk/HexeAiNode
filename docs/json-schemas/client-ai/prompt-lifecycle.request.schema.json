@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai/prompt-lifecycle.request.schema.json",
+  "title": "Prompt Lifecycle Request",
+  "description": "Request payload for POST /api/prompts/services/{prompt_id}/lifecycle.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "state"
+  ],
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "probation",
+        "active",
+        "restricted",
+        "suspended",
+        "retired",
+        "expired"
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

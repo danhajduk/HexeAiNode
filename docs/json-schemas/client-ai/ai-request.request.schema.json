@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai/ai-request.request.schema.json",
+  "title": "Direct AI Request",
+  "description": "Request payload for POST /api/execution/direct.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_id",
+    "task_family",
+    "requested_by",
+    "trace_id"
+  ],
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "prompt_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "prompt_version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "task_family": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "requested_by": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "service_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "customer_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "requested_provider": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "requested_model": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": true,
+      "default": {}
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": true,
+      "default": {}
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "background",
+        "low",
+        "normal",
+        "high"
+      ],
+      "default": "normal"
+    },
+    "timeout_s": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600,
+      "default": 60
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "lease_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    }
+  }
+}

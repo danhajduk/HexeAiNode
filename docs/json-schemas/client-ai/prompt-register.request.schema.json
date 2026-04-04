@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai/prompt-register.request.schema.json",
+  "title": "Prompt Register Request",
+  "description": "Request payload for POST /api/prompts/services.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "prompt_id",
+    "service_id",
+    "task_family"
+  ],
+  "properties": {
+    "prompt_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "service_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_family": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Canonical task-family name accepted by the node."
+    },
+    "prompt_name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "owner_service": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "privacy_class": {
+      "type": "string",
+      "enum": [
+        "public",
+        "internal",
+        "restricted",
+        "sensitive"
+      ],
+      "default": "internal"
+    },
+    "execution_policy": {
+      "$ref": "#/$defs/executionPolicy"
+    },
+    "provider_preferences": {
+      "$ref": "#/$defs/providerPreferences"
+    },
+    "constraints": {
+      "$ref": "#/$defs/promptConstraints"
+    },
+    "definition": {
+      "$ref": "#/$defs/promptDefinition"
+    },
+    "version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "description": "Defaults to v1 when omitted."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "probation",
+        "active",
+        "restricted",
+        "suspended",
+        "retired",
+        "expired"
+      ],
+      "default": "active"
+    },
+    "metadata": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "executionPolicy": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "allow_direct_execution": {
+          "type": "boolean"
+        },
+        "allow_version_pinning": {
+          "type": "boolean"
+        }
+      }
+    },
+    "providerPreferences": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "preferred_providers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "preferred_models": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "default_provider": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "default_model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "promptConstraints": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "max_timeout_s": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "structured_output_required": {
+          "type": "boolean"
+        },
+        "allowed_model_overrides": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "promptDefinition": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "system_prompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt_template": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "template_variables": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "default_inputs": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

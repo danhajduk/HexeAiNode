@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai/prompt-update.request.schema.json",
+  "title": "Prompt Update Request",
+  "description": "Request payload for PUT /api/prompts/services/{prompt_id}.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "prompt_name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "owner_service": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "task_family": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "privacy_class": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "public",
+        "internal",
+        "restricted",
+        "sensitive",
+        null
+      ]
+    },
+    "execution_policy": {
+      "$ref": "prompt-register.request.schema.json#/$defs/executionPolicy"
+    },
+    "provider_preferences": {
+      "$ref": "prompt-register.request.schema.json#/$defs/providerPreferences"
+    },
+    "constraints": {
+      "$ref": "prompt-register.request.schema.json#/$defs/promptConstraints"
+    },
+    "definition": {
+      "$ref": "prompt-register.request.schema.json#/$defs/promptDefinition"
+    },
+    "version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "metadata": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": true
+    }
+  }
+}
