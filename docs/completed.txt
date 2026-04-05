@@ -435,3 +435,16 @@ Task 435: Add status.sh or document stack-control.sh status as the standard stat
 Task 436: Expand security and sensitive-state documentation for trust tokens, provider credentials, and debug artifacts - Completed on 04/04/2026 15:12
 Task 437: Cross-check repo security docs against src/ai_node/security helpers - Completed on 04/04/2026 15:12
 Task 438: Create a formal AI node standards compliance appendix with code and doc evidence - Completed on 04/04/2026 15:13
+Task 439: Update prompt model to add the review_due lifecycle state across registration, persistence, schemas, and docs - Completed on 04/04/2026 16:59
+Task 440: Define executable versus non-executable prompt states so review_due remains visible but policy-controlled - Completed on 04/04/2026 16:59
+Task 441: Add prompt review metadata fields such as last_reviewed_at reviewed_by and review_reason to prompt state - Completed on 04/04/2026 16:59
+Task 442: Add explicit prompt access-scope policy fields instead of relying only on privacy_class - Completed on 04/04/2026 16:59
+Task 443: Enforce prompt access scope in execution authorization so prompts are not implicitly node-global by default - Completed on 04/04/2026 16:59
+Task 444: Keep PUT /api/prompts/services/{prompt_id} as the canonical prompt update path and align docs clients and UI flows around it - Completed on 04/04/2026 16:59
+Task 445: Audit current prompt update behavior and close any gaps that still require retire-and-reregister workflows - Completed on 04/04/2026 16:59
+Task 446: Extend prompt lifecycle APIs and request models to support review_due review actions and access-policy updates - Completed on 04/04/2026 16:59
+Task 447: Add bulk prompt migration support to mark all existing prompt records as review_due with a policy_migration_review_due lifecycle reason - Completed on 04/04/2026 16:59
+Task 448: Apply the migration so all current prompt records become review_due without losing usage counters versions or history - Completed on 04/04/2026 16:59
+Task 449: Add prompt list filtering and operator visibility for review_due access scope and review metadata in the frontend - Completed on 04/04/2026 16:59
+Task 450: Add tests for prompt lifecycle transitions review_due authorization access-scope enforcement and migration behavior - Completed on 04/04/2026 16:59
+Task 451: Update prompt contract API docs and JSON schemas to match the implemented lifecycle freshness and access policy - Completed on 04/04/2026 16:59

@@ -601,6 +601,13 @@ class NodeControlState:
             "state": self._prompt_service_state,
             "summary": {
                 "prompt_count": len(prompt_list),
+                "review_due_count": len(
+                    [
+                        item
+                        for item in prompt_list
+                        if isinstance(item, dict) and str(item.get("status") or "").strip().lower() == "review_due"
+                    ]
+                ),
                 "active_count": len(
                     [
                         item
@@ -693,7 +700,12 @@ class NodeControlState:
         metadata: dict | None = None,
         prompt_name: str | None = None,
         owner_service: str | None = None,
+        owner_client_id: str | None = None,
         privacy_class: str = "internal",
+        access_scope: str = "service",
+        allowed_services: list[str] | None = None,
+        allowed_clients: list[str] | None = None,
+        allowed_customers: list[str] | None = None,
         execution_policy: dict | None = None,
         provider_preferences: dict | None = None,
         constraints: dict | None = None,
@@ -710,7 +722,12 @@ class NodeControlState:
             metadata=metadata,
             prompt_name=prompt_name,
             owner_service=owner_service,
+            owner_client_id=owner_client_id,
             privacy_class=privacy_class,
+            access_scope=access_scope,
+            allowed_services=allowed_services,
+            allowed_clients=allowed_clients,
+            allowed_customers=allowed_customers,
             execution_policy=execution_policy,
             provider_preferences=provider_preferences,
             constraints=constraints,
@@ -726,8 +743,13 @@ class NodeControlState:
         prompt_id: str,
         prompt_name: str | None = None,
         owner_service: str | None = None,
+        owner_client_id: str | None = None,
         task_family: str | None = None,
         privacy_class: str | None = None,
+        access_scope: str | None = None,
+        allowed_services: list[str] | None = None,
+        allowed_clients: list[str] | None = None,
+        allowed_customers: list[str] | None = None,
         execution_policy: dict | None = None,
         provider_preferences: dict | None = None,
         constraints: dict | None = None,
@@ -741,8 +763,13 @@ class NodeControlState:
             prompt_id=prompt_id,
             prompt_name=prompt_name,
             owner_service=owner_service,
+            owner_client_id=owner_client_id,
             task_family=task_family,
             privacy_class=privacy_class,
+            access_scope=access_scope,
+            allowed_services=allowed_services,
+            allowed_clients=allowed_clients,
+            allowed_customers=allowed_customers,
             execution_policy=execution_policy,
             provider_preferences=provider_preferences,
             constraints=constraints,
@@ -769,12 +796,44 @@ class NodeControlState:
         self._prompt_service_state = self._prompt_registry.update_probation(prompt_id=prompt_id, action=action, reason=reason)
         return self.prompt_service_state_payload()
 
+    def review_prompt_service(
+        self,
+        *,
+        prompt_id: str,
+        reviewed_by: str | None = None,
+        review_reason: str | None = None,
+        state: str | None = "active",
+    ) -> dict:
+        if self._prompt_registry is None:
+            raise ValueError("prompt service state store is not configured")
+        self._prompt_service_state = self._prompt_registry.review_prompt(
+            prompt_id=prompt_id,
+            reviewed_by=reviewed_by,
+            review_reason=review_reason,
+            state=state,
+        )
+        return self.prompt_service_state_payload()
+
+    def migrate_prompt_services_to_review_due(self, *, reason: str = "policy_migration_review_due") -> dict:
+        if self._prompt_registry is None:
+            raise ValueError("prompt service state store is not configured")
+        migrated = self._prompt_registry.migrate_all_to_review_due(reason=reason)
+        self._prompt_service_state = {
+            key: value for key, value in migrated.items() if key != "migration"
+        }
+        payload = self.prompt_service_state_payload()
+        payload["migration"] = migrated.get("migration") if isinstance(migrated, dict) else None
+        return payload
+
     def authorize_execution(
         self,
         *,
         prompt_id: str,
         task_family: str,
         prompt_version: str | None = None,
+        requested_by: str | None = None,
+        service_id: str | None = None,
+        customer_id: str | None = None,
         requested_provider: str | None = None,
         requested_model: str | None = None,
         inputs: dict | None = None,
@@ -787,6 +846,9 @@ class NodeControlState:
             task_family=task_family,
             prompt_services_state=state,
             prompt_version=prompt_version,
+            requested_by=requested_by,
+            service_id=service_id,
+            customer_id=customer_id,
             requested_provider=requested_provider,
             requested_model=requested_model,
             inputs=inputs,
@@ -1966,7 +2028,12 @@ class PromptServiceRegisterRequest(BaseModel):
     task_family: str
     prompt_name: str | None = None
     owner_service: str | None = None
+    owner_client_id: str | None = None
     privacy_class: str = "internal"
+    access_scope: str = "service"
+    allowed_services: list[str] | None = None
+    allowed_clients: list[str] | None = None
+    allowed_customers: list[str] | None = None
     execution_policy: dict | None = None
     provider_preferences: dict | None = None
     constraints: dict | None = None
@@ -1979,8 +2046,13 @@ class PromptServiceRegisterRequest(BaseModel):
 class PromptServiceUpdateRequest(BaseModel):
     prompt_name: str | None = None
     owner_service: str | None = None
+    owner_client_id: str | None = None
     task_family: str | None = None
     privacy_class: str | None = None
+    access_scope: str | None = None
+    allowed_services: list[str] | None = None
+    allowed_clients: list[str] | None = None
+    allowed_customers: list[str] | None = None
     execution_policy: dict | None = None
     provider_preferences: dict | None = None
     constraints: dict | None = None
@@ -1999,10 +2071,23 @@ class PromptLifecycleRequest(BaseModel):
     reason: str | None = None
 
 
+class PromptReviewRequest(BaseModel):
+    reviewed_by: str | None = None
+    review_reason: str | None = None
+    state: str | None = "active"
+
+
+class PromptReviewDueMigrationRequest(BaseModel):
+    reason: str | None = "policy_migration_review_due"
+
+
 class ExecutionAuthorizeRequest(BaseModel):
     prompt_id: str
     task_family: str
     prompt_version: str | None = None
+    requested_by: str | None = None
+    service_id: str | None = None
+    customer_id: str | None = None
     requested_provider: str | None = None
     requested_model: str | None = None
     inputs: dict | None = None
@@ -2381,7 +2466,12 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 metadata=payload.metadata,
                 prompt_name=payload.prompt_name,
                 owner_service=payload.owner_service,
+                owner_client_id=payload.owner_client_id,
                 privacy_class=payload.privacy_class,
+                access_scope=payload.access_scope,
+                allowed_services=payload.allowed_services,
+                allowed_clients=payload.allowed_clients,
+                allowed_customers=payload.allowed_customers,
                 execution_policy=payload.execution_policy,
                 provider_preferences=payload.provider_preferences,
                 constraints=payload.constraints,
@@ -2406,8 +2496,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 prompt_id=prompt_id,
                 prompt_name=payload.prompt_name,
                 owner_service=payload.owner_service,
+                owner_client_id=payload.owner_client_id,
                 task_family=payload.task_family,
                 privacy_class=payload.privacy_class,
+                access_scope=payload.access_scope,
+                allowed_services=payload.allowed_services,
+                allowed_clients=payload.allowed_clients,
+                allowed_customers=payload.allowed_customers,
                 execution_policy=payload.execution_policy,
                 provider_preferences=payload.provider_preferences,
                 constraints=payload.constraints,
@@ -2436,12 +2531,34 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.post("/api/prompts/services/{prompt_id}/review")
+    def post_prompt_review(prompt_id: str, payload: PromptReviewRequest):
+        try:
+            return state.review_prompt_service(
+                prompt_id=prompt_id,
+                reviewed_by=payload.reviewed_by,
+                review_reason=payload.review_reason,
+                state=payload.state,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/prompts/services/migrations/review-due")
+    def post_prompt_review_due_migration(payload: PromptReviewDueMigrationRequest):
+        try:
+            return state.migrate_prompt_services_to_review_due(reason=payload.reason or "policy_migration_review_due")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post("/api/execution/authorize")
     def post_execution_authorize(payload: ExecutionAuthorizeRequest):
         return state.authorize_execution(
             prompt_id=payload.prompt_id,
             task_family=payload.task_family,
             prompt_version=payload.prompt_version,
+            requested_by=payload.requested_by,
+            service_id=payload.service_id,
+            customer_id=payload.customer_id,
             requested_provider=payload.requested_provider,
             requested_model=payload.requested_model,
             inputs=payload.inputs,

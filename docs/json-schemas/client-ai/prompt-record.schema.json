@@ -10,9 +10,14 @@
     "prompt_name",
     "service_id",
     "owner_service",
+    "owner_client_id",
     "task_family",
     "status",
     "privacy_class",
+    "access_scope",
+    "allowed_services",
+    "allowed_clients",
+    "allowed_customers",
     "execution_policy",
     "provider_preferences",
     "constraints",
@@ -21,6 +26,9 @@
     "versions",
     "lifecycle_history",
     "usage",
+    "last_reviewed_at",
+    "reviewed_by",
+    "review_reason",
     "registered_at",
     "updated_at",
     "retired_at"
@@ -42,6 +50,12 @@
       "type": "string",
       "minLength": 1
     },
+    "owner_client_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "task_family": {
       "type": "string",
       "minLength": 1
@@ -51,6 +65,7 @@
       "enum": [
         "probation",
         "active",
+        "review_due",
         "restricted",
         "suspended",
         "retired",
@@ -65,6 +80,39 @@
         "restricted",
         "sensitive"
       ]
+    },
+    "access_scope": {
+      "type": "string",
+      "enum": [
+        "private",
+        "service",
+        "shared",
+        "public"
+      ]
+    },
+    "allowed_services": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "allowed_clients": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "allowed_customers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
     },
     "execution_policy": {
       "$ref": "prompt-register.request.schema.json#/$defs/executionPolicy"
@@ -164,6 +212,7 @@
             "enum": [
               "probation",
               "active",
+              "review_due",
               "restricted",
               "suspended",
               "retired",
@@ -252,6 +301,25 @@
           ]
         }
       }
+    },
+    "last_reviewed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "reviewed_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "review_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "registered_at": {
       "type": "string",

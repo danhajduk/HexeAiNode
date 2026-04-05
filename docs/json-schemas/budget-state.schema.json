@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Local JSON contract validated by src/ai_node/persistence/budget_state_store.py.",
+  "properties": {
+    "budget_policy": {
+      "properties": {
+        "budget_policy_version": {
+          "type": "string"
+        },
+        "governance_version": {
+          "type": "string"
+        },
+        "grants": {
+          "items": {
+            "properties": {
+              "budget_policy_version": {
+                "type": "string"
+              },
+              "consumer_node_id": {
+                "type": "string"
+              },
+              "governance_version": {
+                "type": "string"
+              },
+              "grant_id": {
+                "type": "string"
+              },
+              "issued_at": {
+                "type": "string"
+              },
+              "limits": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "metadata": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "period_end": {
+                "type": "string"
+              },
+              "period_start": {
+                "type": "string"
+              },
+              "scope_kind": {
+                "enum": [
+                  "customer",
+                  "node",
+                  "provider"
+                ],
+                "type": "string"
+              },
+              "service": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "active",
+                  "expired"
+                ],
+                "type": "string"
+              },
+              "subject_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "grant_id",
+              "consumer_node_id",
+              "service",
+              "period_start",
+              "period_end",
+              "status",
+              "scope_kind",
+              "subject_id",
+              "governance_version",
+              "budget_policy_version",
+              "issued_at"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "issued_at": {
+          "type": "string"
+        },
+        "node_id": {
+          "type": "string"
+        },
+        "period_end": {
+          "type": "string"
+        },
+        "period_start": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "grant_usage": {
+      "type": "object"
+    },
+    "pending_usage_summaries": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "provider_budget_usage": {
+      "type": "object"
+    },
+    "recent_denials": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "updated_at": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "budget_policy",
+    "grant_usage",
+    "provider_budget_usage",
+    "recent_denials",
+    "pending_usage_summaries",
+    "updated_at"
+  ],
+  "title": "Hexe AI Node Budget State",
+  "type": "object"
+}

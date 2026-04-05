@@ -26,6 +26,8 @@
 - [Scheduler And Background Tasks](./scheduler-and-background-tasks.md): recurring work, lease compatibility, and runtime ownership.
 - [Runtime Path Ownership](./runtime-path-ownership.md): `.run`, `data`, and `logs` ownership plus current allowed-variant decision.
 - [Security And Sensitive State](./security-and-sensitive-state.md): verified token, credential, redaction, and debug-artifact handling.
+- [JSON Schemas](./json-schemas/README.md): repo-owned JSON contracts for control API, execution models, and local config/state files.
+- [Prompt Lifecycle And Access Policy](./ai-node/prompt-lifecycle-and-access-policy.md): proposed lifecycle, freshness, ownership, and sharing policy for node-local prompts.
 
 ## Integration With Hexe Core
 

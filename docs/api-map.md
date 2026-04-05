@@ -147,6 +147,8 @@ Canonical routes:
 - `PUT /api/prompts/services/{prompt_id}`
 - `POST /api/prompts/services/{prompt_id}/lifecycle`
 - `POST /api/prompts/services/{prompt_id}/probation`
+- `POST /api/prompts/services/{prompt_id}/review`
+- `POST /api/prompts/services/migrations/review-due`
 
 Compatibility or convenience:
 
@@ -154,7 +156,9 @@ Compatibility or convenience:
 
 Notes:
 
-- Prompt service registration, update, lifecycle, and probation stay under one dedicated route family.
+- Prompt service registration, update, lifecycle, review, and probation stay under one dedicated route family.
+- `PUT /api/prompts/services/{prompt_id}` is the canonical prompt update path for metadata, access, and versioned definition changes.
+- `review_due` is an executable prompt lifecycle state used to flag prompts that require revalidation.
 - `/debug/prompts` is a convenience mirror of prompt state, not the canonical route family.
 
 ### Execution
@@ -171,6 +175,7 @@ Compatibility or convenience:
 Notes:
 
 - Authorization and direct execution are explicitly separated from setup and provider configuration routes.
+- Execution authorization now includes caller-aware prompt access checks through `requested_by`, `service_id`, and `customer_id`.
 - Execution observability currently appears under the debug convenience family.
 
 ### Services And Runtime Control

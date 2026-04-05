@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Local JSON contract validated by src/ai_node/config/provider_selection_config.py.",
+  "properties": {
+    "providers": {
+      "additionalProperties": false,
+      "properties": {
+        "budget_limits": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "max_cost_cents": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "period": {
+                "enum": [
+                  "monthly",
+                  "weekly"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "max_cost_cents",
+              "period"
+            ],
+            "type": "object"
+          },
+          "type": "object"
+        },
+        "enabled": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "supported": {
+          "additionalProperties": false,
+          "properties": {
+            "cloud": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "future": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "local": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "cloud",
+            "local",
+            "future"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "supported",
+        "enabled",
+        "budget_limits"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "services": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "future": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "enabled",
+        "future"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "providers",
+    "services"
+  ],
+  "title": "Hexe AI Node Provider Selection Config",
+  "type": "object"
+}

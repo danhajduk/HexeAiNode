@@ -4,9 +4,10 @@ from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES, canonica
 from ai_node.time_utils import local_now_iso
 
 
-VALID_PROMPT_LIFECYCLE_STATES = {"probation", "active", "restricted", "suspended", "retired", "expired"}
+VALID_PROMPT_LIFECYCLE_STATES = {"probation", "active", "review_due", "restricted", "suspended", "retired", "expired"}
 LEGACY_PROMPT_STATES = {"registered": "active", "probation": "probation"}
 VALID_PROMPT_PRIVACY_CLASSES = {"public", "internal", "restricted", "sensitive"}
+VALID_PROMPT_ACCESS_SCOPES = {"private", "service", "shared", "public"}
 
 
 def _now_iso() -> str:
@@ -56,6 +57,13 @@ def normalize_prompt_privacy_class(value: object) -> str:
     return privacy
 
 
+def normalize_prompt_access_scope(value: object) -> str:
+    scope = str(value or "service").strip().lower()
+    if scope not in VALID_PROMPT_ACCESS_SCOPES:
+        raise ValueError("invalid_access_scope")
+    return scope
+
+
 def normalize_execution_policy(value: object) -> dict:
     payload = _normalize_mapping(value)
     return {
@@ -86,6 +94,23 @@ def normalize_provider_preferences(value: object) -> dict:
         "preferred_models": preferred_models,
         "default_provider": default_provider.lower() if default_provider else None,
         "default_model": default_model.lower() if default_model else None,
+    }
+
+
+def normalize_prompt_access_policy(
+    *,
+    access_scope: object = "service",
+    owner_client_id: object = None,
+    allowed_services: object = None,
+    allowed_clients: object = None,
+    allowed_customers: object = None,
+) -> dict:
+    return {
+        "access_scope": normalize_prompt_access_scope(access_scope),
+        "owner_client_id": _optional_string(owner_client_id),
+        "allowed_services": _normalize_string_list(allowed_services),
+        "allowed_clients": _normalize_string_list(allowed_clients),
+        "allowed_customers": _normalize_string_list(allowed_customers),
     }
 
 
@@ -133,7 +158,12 @@ def create_prompt_service_registration(
     metadata: dict | None = None,
     prompt_name: str | None = None,
     owner_service: str | None = None,
+    owner_client_id: str | None = None,
     privacy_class: str = "internal",
+    access_scope: str = "service",
+    allowed_services: list[str] | None = None,
+    allowed_clients: list[str] | None = None,
+    allowed_customers: list[str] | None = None,
     execution_policy: dict | None = None,
     provider_preferences: dict | None = None,
     constraints: dict | None = None,
@@ -149,15 +179,27 @@ def create_prompt_service_registration(
     version_value = _optional_string(version) or "v1"
     now = _now_iso()
     lifecycle_state = normalize_prompt_lifecycle_state(status)
+    access_policy = normalize_prompt_access_policy(
+        access_scope=access_scope,
+        owner_client_id=owner_client_id,
+        allowed_services=allowed_services,
+        allowed_clients=allowed_clients,
+        allowed_customers=allowed_customers,
+    )
     version_entry = build_prompt_version(version=version_value, definition=definition, metadata=metadata, created_at=now)
     return {
         "prompt_id": prompt,
         "prompt_name": _optional_string(prompt_name) or prompt,
         "service_id": service,
         "owner_service": _optional_string(owner_service) or service,
+        "owner_client_id": access_policy["owner_client_id"],
         "task_family": task,
         "status": lifecycle_state,
         "privacy_class": normalize_prompt_privacy_class(privacy_class),
+        "access_scope": access_policy["access_scope"],
+        "allowed_services": access_policy["allowed_services"],
+        "allowed_clients": access_policy["allowed_clients"],
+        "allowed_customers": access_policy["allowed_customers"],
         "execution_policy": normalize_execution_policy(execution_policy),
         "provider_preferences": normalize_provider_preferences(provider_preferences),
         "constraints": normalize_prompt_constraints(constraints),
@@ -185,6 +227,9 @@ def create_prompt_service_registration(
         },
         "registered_at": now,
         "updated_at": now,
+        "last_reviewed_at": now if lifecycle_state == "active" else None,
+        "reviewed_by": access_policy["owner_client_id"],
+        "review_reason": "created" if lifecycle_state == "active" else None,
         "retired_at": None,
     }
 
@@ -194,8 +239,13 @@ def update_prompt_service_definition(
     *,
     prompt_name: str | None = None,
     owner_service: str | None = None,
+    owner_client_id: str | None = None,
     task_family: str | None = None,
     privacy_class: str | None = None,
+    access_scope: str | None = None,
+    allowed_services: list[str] | None = None,
+    allowed_clients: list[str] | None = None,
+    allowed_customers: list[str] | None = None,
     execution_policy: dict | None = None,
     provider_preferences: dict | None = None,
     constraints: dict | None = None,
@@ -214,8 +264,27 @@ def update_prompt_service_definition(
         entry["prompt_name"] = _non_empty(prompt_name, name="prompt_name")
     if owner_service is not None:
         entry["owner_service"] = _non_empty(owner_service, name="owner_service")
+    if owner_client_id is not None:
+        entry["owner_client_id"] = _optional_string(owner_client_id)
     if privacy_class is not None:
         entry["privacy_class"] = normalize_prompt_privacy_class(privacy_class)
+    if (
+        access_scope is not None
+        or allowed_services is not None
+        or allowed_clients is not None
+        or allowed_customers is not None
+    ):
+        access_policy = normalize_prompt_access_policy(
+            access_scope=access_scope if access_scope is not None else entry.get("access_scope") or "service",
+            owner_client_id=entry.get("owner_client_id"),
+            allowed_services=allowed_services if allowed_services is not None else entry.get("allowed_services"),
+            allowed_clients=allowed_clients if allowed_clients is not None else entry.get("allowed_clients"),
+            allowed_customers=allowed_customers if allowed_customers is not None else entry.get("allowed_customers"),
+        )
+        entry["access_scope"] = access_policy["access_scope"]
+        entry["allowed_services"] = access_policy["allowed_services"]
+        entry["allowed_clients"] = access_policy["allowed_clients"]
+        entry["allowed_customers"] = access_policy["allowed_customers"]
     if execution_policy is not None:
         entry["execution_policy"] = normalize_execution_policy(execution_policy)
     if provider_preferences is not None:
@@ -261,6 +330,25 @@ def transition_prompt_lifecycle(*, entry: dict, state: str, reason: str | None =
         history = []
         entry["lifecycle_history"] = history
     history.append({"state": next_state, "reason": _optional_string(reason) or "manual_transition", "changed_at": now})
+    return entry
+
+
+def record_prompt_review(
+    *,
+    entry: dict,
+    reviewed_by: str | None = None,
+    review_reason: str | None = None,
+    state: str | None = "active",
+) -> dict:
+    if not isinstance(entry, dict):
+        raise ValueError("entry is required")
+    now = _now_iso()
+    entry["last_reviewed_at"] = now
+    entry["reviewed_by"] = _optional_string(reviewed_by)
+    entry["review_reason"] = _optional_string(review_reason) or "manual_review"
+    if state is not None:
+        transition_prompt_lifecycle(entry=entry, state=state, reason=entry["review_reason"])
+        entry["updated_at"] = now
     return entry
 
 

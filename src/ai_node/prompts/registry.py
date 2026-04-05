@@ -4,6 +4,7 @@ from ai_node.prompts.registration import (
     apply_probation_transition,
     create_prompt_service_registration,
     find_prompt_entry,
+    record_prompt_review,
     transition_prompt_lifecycle,
     normalize_prompt_lifecycle_state,
     update_prompt_service_definition,
@@ -56,7 +57,12 @@ class PromptRegistry:
         metadata: dict | None = None,
         prompt_name: str | None = None,
         owner_service: str | None = None,
+        owner_client_id: str | None = None,
         privacy_class: str = "internal",
+        access_scope: str = "service",
+        allowed_services: list[str] | None = None,
+        allowed_clients: list[str] | None = None,
+        allowed_customers: list[str] | None = None,
         execution_policy: dict | None = None,
         provider_preferences: dict | None = None,
         constraints: dict | None = None,
@@ -76,7 +82,12 @@ class PromptRegistry:
             metadata=metadata,
             prompt_name=prompt_name,
             owner_service=owner_service,
+            owner_client_id=owner_client_id,
             privacy_class=privacy_class,
+            access_scope=access_scope,
+            allowed_services=allowed_services,
+            allowed_clients=allowed_clients,
+            allowed_customers=allowed_customers,
             execution_policy=execution_policy,
             provider_preferences=provider_preferences,
             constraints=constraints,
@@ -103,8 +114,13 @@ class PromptRegistry:
         prompt_id: str,
         prompt_name: str | None = None,
         owner_service: str | None = None,
+        owner_client_id: str | None = None,
         task_family: str | None = None,
         privacy_class: str | None = None,
+        access_scope: str | None = None,
+        allowed_services: list[str] | None = None,
+        allowed_clients: list[str] | None = None,
+        allowed_customers: list[str] | None = None,
         execution_policy: dict | None = None,
         provider_preferences: dict | None = None,
         constraints: dict | None = None,
@@ -119,8 +135,13 @@ class PromptRegistry:
             entry,
             prompt_name=prompt_name,
             owner_service=owner_service,
+            owner_client_id=owner_client_id,
             task_family=task_family,
             privacy_class=privacy_class,
+            access_scope=access_scope,
+            allowed_services=allowed_services,
+            allowed_clients=allowed_clients,
+            allowed_customers=allowed_customers,
             execution_policy=execution_policy,
             provider_preferences=provider_preferences,
             constraints=constraints,
@@ -130,6 +151,44 @@ class PromptRegistry:
         )
         self._state["updated_at"] = entry["updated_at"]
         return self.save()
+
+    def review_prompt(
+        self,
+        *,
+        prompt_id: str,
+        reviewed_by: str | None = None,
+        review_reason: str | None = None,
+        state: str | None = "active",
+    ) -> dict:
+        entry = find_prompt_entry(prompt_services_state=self._state, prompt_id=prompt_id)
+        if not isinstance(entry, dict):
+            raise ValueError("prompt_id is not registered")
+        record_prompt_review(entry=entry, reviewed_by=reviewed_by, review_reason=review_reason, state=state)
+        self._state["updated_at"] = entry["updated_at"]
+        return self.save()
+
+    def migrate_all_to_review_due(self, *, reason: str = "policy_migration_review_due") -> dict:
+        prompts = self._state.get("prompt_services")
+        if not isinstance(prompts, list):
+            self._state["prompt_services"] = []
+            prompts = self._state["prompt_services"]
+        changed = 0
+        latest_updated_at = None
+        for entry in prompts:
+            if not isinstance(entry, dict):
+                continue
+            current_state = normalize_prompt_lifecycle_state(entry.get("status") or "active")
+            if current_state in {"retired", "expired"}:
+                continue
+            if current_state != "review_due":
+                transition_prompt_lifecycle(entry=entry, state="review_due", reason=reason)
+                changed += 1
+            latest_updated_at = entry.get("updated_at") or latest_updated_at
+        if latest_updated_at is not None:
+            self._state["updated_at"] = latest_updated_at
+        payload = self.save()
+        payload["migration"] = {"changed": changed, "status": "ok", "target_state": "review_due"}
+        return payload
 
     def transition_prompt(self, *, prompt_id: str, state: str, reason: str | None = None) -> dict:
         entry = find_prompt_entry(prompt_services_state=self._state, prompt_id=prompt_id)

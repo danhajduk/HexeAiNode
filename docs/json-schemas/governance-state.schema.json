@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Local JSON contract validated by src/ai_node/persistence/governance_state_store.py.",
+  "properties": {
+    "feature_gating_defaults": {
+      "type": "object"
+    },
+    "generic_node_class_rules": {
+      "type": "object"
+    },
+    "issued_timestamp": {
+      "type": "string"
+    },
+    "policy_version": {
+      "type": "string"
+    },
+    "raw_response": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "refresh_expectations": {
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "synced_at": {
+      "type": "string"
+    },
+    "telemetry_expectations": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "policy_version",
+    "issued_timestamp",
+    "synced_at",
+    "refresh_expectations",
+    "generic_node_class_rules",
+    "feature_gating_defaults",
+    "telemetry_expectations"
+  ],
+  "title": "Hexe AI Node Governance State",
+  "type": "object"
+}

@@ -1,0 +1,489 @@
+{
+  "$defs": {
+    "TaskExecutionMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "cached_input_tokens": {
+          "default": 0,
+          "title": "Cached Input Tokens",
+          "type": "integer"
+        },
+        "completion_tokens": {
+          "default": 0,
+          "title": "Completion Tokens",
+          "type": "integer"
+        },
+        "estimated_cost": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Cost"
+        },
+        "execution_duration_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Duration Ms"
+        },
+        "fallback_used": {
+          "default": false,
+          "title": "Fallback Used",
+          "type": "boolean"
+        },
+        "prompt_tokens": {
+          "default": 0,
+          "title": "Prompt Tokens",
+          "type": "integer"
+        },
+        "provider_avg_latency_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Avg Latency Ms"
+        },
+        "provider_failed_requests": {
+          "default": 0,
+          "title": "Provider Failed Requests",
+          "type": "integer"
+        },
+        "provider_latency_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Latency Ms"
+        },
+        "provider_p95_latency_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider P95 Latency Ms"
+        },
+        "provider_success_rate": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Success Rate"
+        },
+        "provider_total_requests": {
+          "default": 0,
+          "title": "Provider Total Requests",
+          "type": "integer"
+        },
+        "retries": {
+          "default": 0,
+          "title": "Retries",
+          "type": "integer"
+        },
+        "total_tokens": {
+          "default": 0,
+          "title": "Total Tokens",
+          "type": "integer"
+        }
+      },
+      "title": "TaskExecutionMetrics",
+      "type": "object"
+    },
+    "TaskExecutionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "constraints": {
+          "title": "Constraints",
+          "type": "object"
+        },
+        "customer_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customer Id"
+        },
+        "inputs": {
+          "title": "Inputs",
+          "type": "object"
+        },
+        "lease_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lease Id"
+        },
+        "priority": {
+          "default": "normal",
+          "enum": [
+            "background",
+            "low",
+            "normal",
+            "high"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "prompt_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Id"
+        },
+        "prompt_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Version"
+        },
+        "requested_by": {
+          "title": "Requested By",
+          "type": "string"
+        },
+        "requested_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requested Model"
+        },
+        "requested_provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requested Provider"
+        },
+        "service_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Service Id"
+        },
+        "task_family": {
+          "title": "Task Family",
+          "type": "string"
+        },
+        "task_id": {
+          "title": "Task Id",
+          "type": "string"
+        },
+        "timeout_s": {
+          "default": 60,
+          "title": "Timeout S",
+          "type": "integer"
+        },
+        "trace_id": {
+          "title": "Trace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "task_family",
+        "requested_by",
+        "trace_id"
+      ],
+      "title": "TaskExecutionRequest",
+      "type": "object"
+    },
+    "TaskExecutionResult": {
+      "$defs": {
+        "TaskExecutionMetrics": {
+          "additionalProperties": false,
+          "properties": {
+            "cached_input_tokens": {
+              "default": 0,
+              "title": "Cached Input Tokens",
+              "type": "integer"
+            },
+            "completion_tokens": {
+              "default": 0,
+              "title": "Completion Tokens",
+              "type": "integer"
+            },
+            "estimated_cost": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Estimated Cost"
+            },
+            "execution_duration_ms": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Execution Duration Ms"
+            },
+            "fallback_used": {
+              "default": false,
+              "title": "Fallback Used",
+              "type": "boolean"
+            },
+            "prompt_tokens": {
+              "default": 0,
+              "title": "Prompt Tokens",
+              "type": "integer"
+            },
+            "provider_avg_latency_ms": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Provider Avg Latency Ms"
+            },
+            "provider_failed_requests": {
+              "default": 0,
+              "title": "Provider Failed Requests",
+              "type": "integer"
+            },
+            "provider_latency_ms": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Provider Latency Ms"
+            },
+            "provider_p95_latency_ms": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Provider P95 Latency Ms"
+            },
+            "provider_success_rate": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Provider Success Rate"
+            },
+            "provider_total_requests": {
+              "default": 0,
+              "title": "Provider Total Requests",
+              "type": "integer"
+            },
+            "retries": {
+              "default": 0,
+              "title": "Retries",
+              "type": "integer"
+            },
+            "total_tokens": {
+              "default": 0,
+              "title": "Total Tokens",
+              "type": "integer"
+            }
+          },
+          "title": "TaskExecutionMetrics",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "error_message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Message"
+        },
+        "metrics": {
+          "$ref": "#/$defs/TaskExecutionMetrics"
+        },
+        "model_used": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Used"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output"
+        },
+        "provider_used": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Used"
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "completed",
+            "failed",
+            "rejected",
+            "degraded",
+            "unsupported"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "task_id": {
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "status"
+      ],
+      "title": "TaskExecutionResult",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Catalog of repo-owned execution request/result models defined in src/ai_node/execution/task_models.py.",
+  "title": "Hexe AI Node Task Execution Models",
+  "type": "object"
+}

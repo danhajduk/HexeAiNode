@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Local JSON contract validated by src/ai_node/persistence/provider_capability_report_store.py.",
+  "properties": {
+    "enabled_providers": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "providers": {
+      "items": {
+        "properties": {
+          "latency": {
+            "type": "object"
+          },
+          "models": {
+            "type": "array"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "models",
+          "latency"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "report_version": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0"
+    }
+  },
+  "required": [
+    "schema_version",
+    "report_version",
+    "generated_at",
+    "enabled_providers",
+    "providers"
+  ],
+  "title": "Hexe AI Node Provider Capability Report",
+  "type": "object"
+}

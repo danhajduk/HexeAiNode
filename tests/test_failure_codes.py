@@ -26,6 +26,7 @@ class FailureCodesTests(unittest.TestCase):
         self.assertEqual(classify_failure_code("no_eligible_provider_available"), "provider_unavailable")
         self.assertEqual(classify_failure_code("no_eligible_model_available"), "model_unavailable")
         self.assertEqual(classify_failure_code("prompt_in_probation"), "governance_violation")
+        self.assertEqual(classify_failure_code("prompt_access_denied"), "governance_violation")
         self.assertEqual(classify_failure_code("governance_violation_timeout"), "governance_violation")
         self.assertEqual(classify_failure_code("invalid_input"), "invalid_input")
 

@@ -16,6 +16,12 @@ function buildPromptServiceMap(payload) {
           {
             currentVersion: String(prompt?.current_version || "").trim(),
             registeredAt: String(prompt?.registered_at || "").trim(),
+            status: String(prompt?.status || "").trim(),
+            accessScope: String(prompt?.access_scope || "").trim(),
+            ownerService: String(prompt?.owner_service || "").trim(),
+            ownerClientId: String(prompt?.owner_client_id || "").trim(),
+            lastReviewedAt: String(prompt?.last_reviewed_at || "").trim(),
+            reviewReason: String(prompt?.review_reason || "").trim(),
           },
         ];
       })
@@ -51,6 +57,12 @@ export function normalizeClientUsagePayload(payload, promptServicePayload = null
             promptLabel: String(prompt?.prompt_id || "").trim() || "unattributed-prompt",
             currentVersion: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.currentVersion || "",
             registeredAt: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.registeredAt || "",
+            status: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.status || "",
+            accessScope: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.accessScope || "",
+            ownerService: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.ownerService || "",
+            ownerClientId: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.ownerClientId || "",
+            lastReviewedAt: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.lastReviewedAt || "",
+            reviewReason: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.reviewReason || "",
             lifetime: prompt?.lifetime || {},
             current_month: prompt?.current_month || {},
             models: Array.isArray(prompt?.models)

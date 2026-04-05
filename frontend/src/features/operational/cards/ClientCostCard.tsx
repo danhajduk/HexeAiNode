@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { CardHeader, SeverityIndicator } from "../../../components/uiPrimitives";
 
 function formatUsd(value) {
@@ -32,6 +33,29 @@ function formatPromptMeta(version, registeredAt) {
     parts.push(`registered ${normalizedRegisteredAt}`);
   }
   return parts.join(" | ");
+}
+
+function formatPromptState(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "unknown";
+  }
+  return normalized.replaceAll("_", " ");
+}
+
+function formatAccessScope(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "service";
+  }
+  return normalized;
+}
+
+function matchesPromptFilter(prompt, filter) {
+  if (filter === "all") {
+    return true;
+  }
+  return String(prompt?.status || "").trim() === filter;
 }
 
 function formatModelLabel(value) {
@@ -180,6 +204,15 @@ function ModelUsageTable({ rows = [], currentMonthLabel }) {
 
 export function ClientCostCard({ clients = [], currentMonth = "", className = "" }) {
   const currentMonthLabel = formatMonthHeading(currentMonth);
+  const [promptFilter, setPromptFilter] = useState("all");
+  const visibleClients = clients
+    .map((client) => ({
+      ...client,
+      prompts: Array.isArray(client.prompts)
+        ? client.prompts.filter((prompt) => matchesPromptFilter(prompt, promptFilter))
+        : [],
+    }))
+    .filter((client) => client.prompts.length > 0 || promptFilter === "all");
   return (
     <article className={`card ${className}`.trim()}>
       <CardHeader
@@ -188,7 +221,19 @@ export function ClientCostCard({ clients = [], currentMonth = "", className = ""
       />
       {clients.length ? (
         <div className="client-cost-list">
-          {clients.map((client) => (
+          <div className="card-toolbar">
+            <label className="muted tiny" htmlFor="client-prompt-filter">Prompt state</label>
+            <select
+              id="client-prompt-filter"
+              value={promptFilter}
+              onChange={(event) => setPromptFilter(event.target.value)}
+            >
+              <option value="all">All prompts</option>
+              <option value="review_due">Review due</option>
+              <option value="active">Active</option>
+            </select>
+          </div>
+          {visibleClients.length ? visibleClients.map((client) => (
             <section key={client.clientId} className="client-cost-group">
               <div className="client-cost-group-header">
                 <div className="client-cost-summary">
@@ -215,6 +260,19 @@ export function ClientCostCard({ clients = [], currentMonth = "", className = ""
                             {formatPromptMeta(prompt.currentVersion, prompt.registeredAt)}
                           </p>
                         ) : null}
+                        <p className="muted tiny client-cost-prompt-meta">
+                          State {formatPromptState(prompt.status)} | Access {formatAccessScope(prompt.accessScope)}
+                        </p>
+                        {prompt.ownerService || prompt.ownerClientId ? (
+                          <p className="muted tiny client-cost-prompt-meta">
+                            Owner {prompt.ownerService || "n/a"} / {prompt.ownerClientId || "n/a"}
+                          </p>
+                        ) : null}
+                        {prompt.lastReviewedAt || prompt.reviewReason ? (
+                          <p className="muted tiny client-cost-prompt-meta">
+                            Reviewed {formatShortDate(prompt.lastReviewedAt) || "not yet"}{prompt.reviewReason ? ` | ${prompt.reviewReason}` : ""}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="client-cost-prompt-costs">
                         <span className="muted tiny">Lifetime {formatUsd(prompt?.lifetime?.cost_usd)}</span>
@@ -236,7 +294,9 @@ export function ClientCostCard({ clients = [], currentMonth = "", className = ""
                 ))}
               </div>
             </section>
-          ))}
+          )) : (
+            <p className="muted tiny">No prompts match the selected prompt-state filter.</p>
+          )}
         </div>
       ) : (
         <p className="muted tiny">No persistent client usage history is available yet.</p>

@@ -6,54 +6,40 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version",
-    "prompt_services",
-    "probation",
-    "updated_at"
+    "configured",
+    "state",
+    "summary"
   ],
   "properties": {
-    "schema_version": {
-      "type": "string",
-      "const": "2.0"
+    "configured": {
+      "type": "boolean",
+      "const": true
     },
-    "prompt_services": {
-      "type": "array",
-      "items": {
-        "$ref": "prompt-record.schema.json"
-      }
+    "state": {
+      "$ref": "../prompt-service-state.schema.json"
     },
-    "probation": {
+    "summary": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "active_prompt_ids",
-        "reasons",
-        "updated_at"
+        "prompt_count",
+        "review_due_count",
+        "active_count"
       ],
       "properties": {
-        "active_prompt_ids": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "uniqueItems": true
+        "prompt_count": {
+          "type": "integer",
+          "minimum": 0
         },
-        "reasons": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
+        "review_due_count": {
+          "type": "integer",
+          "minimum": 0
         },
-        "updated_at": {
-          "type": "string",
-          "format": "date-time"
+        "active_count": {
+          "type": "integer",
+          "minimum": 0
         }
       }
-    },
-    "updated_at": {
-      "type": "string",
-      "format": "date-time"
     }
   }
 }

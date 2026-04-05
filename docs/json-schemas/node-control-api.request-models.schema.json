@@ -1,0 +1,861 @@
+{
+  "$defs": {
+    "BudgetDeclarationRequest": {
+      "properties": {
+        "provider_id": {
+          "default": "openai",
+          "title": "Provider Id",
+          "type": "string"
+        }
+      },
+      "title": "BudgetDeclarationRequest",
+      "type": "object"
+    },
+    "ExecutionAuthorizeRequest": {
+      "properties": {
+        "customer_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customer Id"
+        },
+        "inputs": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inputs"
+        },
+        "prompt_id": {
+          "title": "Prompt Id",
+          "type": "string"
+        },
+        "prompt_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Version"
+        },
+        "requested_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requested By"
+        },
+        "requested_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requested Model"
+        },
+        "requested_provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requested Provider"
+        },
+        "service_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Service Id"
+        },
+        "task_family": {
+          "title": "Task Family",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prompt_id",
+        "task_family"
+      ],
+      "title": "ExecutionAuthorizeRequest",
+      "type": "object"
+    },
+    "OnboardingInitiateRequest": {
+      "properties": {
+        "mqtt_host": {
+          "title": "Mqtt Host",
+          "type": "string"
+        },
+        "node_name": {
+          "title": "Node Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mqtt_host",
+        "node_name"
+      ],
+      "title": "OnboardingInitiateRequest",
+      "type": "object"
+    },
+    "OpenAICredentialsRequest": {
+      "properties": {
+        "api_token": {
+          "title": "Api Token",
+          "type": "string"
+        },
+        "project_name": {
+          "title": "Project Name",
+          "type": "string"
+        },
+        "service_token": {
+          "title": "Service Token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "api_token",
+        "service_token",
+        "project_name"
+      ],
+      "title": "OpenAICredentialsRequest",
+      "type": "object"
+    },
+    "OpenAIEnabledModelsRequest": {
+      "properties": {
+        "model_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Model Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "model_ids"
+      ],
+      "title": "OpenAIEnabledModelsRequest",
+      "type": "object"
+    },
+    "OpenAIManualPricingRequest": {
+      "properties": {
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "input_price_per_1m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Price Per 1M"
+        },
+        "model_id": {
+          "title": "Model Id",
+          "type": "string"
+        },
+        "output_price_per_1m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Price Per 1M"
+        }
+      },
+      "required": [
+        "model_id"
+      ],
+      "title": "OpenAIManualPricingRequest",
+      "type": "object"
+    },
+    "OpenAIPreferencesRequest": {
+      "properties": {
+        "default_model_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Model Id"
+        },
+        "selected_model_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selected Model Ids"
+        }
+      },
+      "title": "OpenAIPreferencesRequest",
+      "type": "object"
+    },
+    "OpenAIPricingRefreshRequest": {
+      "properties": {
+        "force_refresh": {
+          "default": true,
+          "title": "Force Refresh",
+          "type": "boolean"
+        }
+      },
+      "title": "OpenAIPricingRefreshRequest",
+      "type": "object"
+    },
+    "PromptLifecycleRequest": {
+      "properties": {
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "title": "PromptLifecycleRequest",
+      "type": "object"
+    },
+    "PromptReviewDueMigrationRequest": {
+      "properties": {
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "policy_migration_review_due",
+          "title": "Reason"
+        }
+      },
+      "title": "PromptReviewDueMigrationRequest",
+      "type": "object"
+    },
+    "PromptReviewRequest": {
+      "properties": {
+        "review_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Reason"
+        },
+        "reviewed_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed By"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "active",
+          "title": "State"
+        }
+      },
+      "title": "PromptReviewRequest",
+      "type": "object"
+    },
+    "PromptProbationRequest": {
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "title": "PromptProbationRequest",
+      "type": "object"
+    },
+    "PromptServiceRegisterRequest": {
+      "properties": {
+        "constraints": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Constraints"
+        },
+        "definition": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition"
+        },
+        "execution_policy": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Policy"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metadata"
+        },
+        "access_scope": {
+          "default": "service",
+          "title": "Access Scope",
+          "type": "string"
+        },
+        "allowed_clients": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Clients"
+        },
+        "allowed_customers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Customers"
+        },
+        "allowed_services": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Services"
+        },
+        "owner_service": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner Service"
+        },
+        "owner_client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner Client Id"
+        },
+        "privacy_class": {
+          "default": "internal",
+          "title": "Privacy Class",
+          "type": "string"
+        },
+        "prompt_id": {
+          "title": "Prompt Id",
+          "type": "string"
+        },
+        "prompt_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Name"
+        },
+        "provider_preferences": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Preferences"
+        },
+        "service_id": {
+          "title": "Service Id",
+          "type": "string"
+        },
+        "status": {
+          "default": "active",
+          "title": "Status",
+          "type": "string"
+        },
+        "task_family": {
+          "title": "Task Family",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "prompt_id",
+        "service_id",
+        "task_family"
+      ],
+      "title": "PromptServiceRegisterRequest",
+      "type": "object"
+    },
+    "PromptServiceUpdateRequest": {
+      "properties": {
+        "constraints": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Constraints"
+        },
+        "definition": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition"
+        },
+        "execution_policy": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Policy"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metadata"
+        },
+        "access_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Access Scope"
+        },
+        "allowed_clients": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Clients"
+        },
+        "allowed_customers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Customers"
+        },
+        "allowed_services": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Services"
+        },
+        "owner_service": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner Service"
+        },
+        "owner_client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner Client Id"
+        },
+        "privacy_class": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Privacy Class"
+        },
+        "prompt_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Name"
+        },
+        "provider_preferences": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Preferences"
+        },
+        "task_family": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Task Family"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "title": "PromptServiceUpdateRequest",
+      "type": "object"
+    },
+    "ProviderCapabilityRefreshRequest": {
+      "properties": {
+        "force_refresh": {
+          "default": false,
+          "title": "Force Refresh",
+          "type": "boolean"
+        }
+      },
+      "title": "ProviderCapabilityRefreshRequest",
+      "type": "object"
+    },
+    "ProviderSelectionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "openai_enabled": {
+          "title": "Openai Enabled",
+          "type": "boolean"
+        },
+        "provider_budget_limits": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Budget Limits"
+        }
+      },
+      "required": [
+        "openai_enabled"
+      ],
+      "title": "ProviderSelectionRequest",
+      "type": "object"
+    },
+    "RefreshTriggerRequest": {
+      "properties": {
+        "force_refresh": {
+          "default": true,
+          "title": "Force Refresh",
+          "type": "boolean"
+        }
+      },
+      "title": "RefreshTriggerRequest",
+      "type": "object"
+    },
+    "ServiceRestartRequest": {
+      "properties": {
+        "target": {
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "title": "ServiceRestartRequest",
+      "type": "object"
+    },
+    "TaskCapabilitySelectionRequest": {
+      "properties": {
+        "selected_task_families": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Selected Task Families",
+          "type": "array"
+        }
+      },
+      "required": [
+        "selected_task_families"
+      ],
+      "title": "TaskCapabilitySelectionRequest",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Catalog of repo-owned FastAPI request models defined in src/ai_node/runtime/node_control_api.py. Individual request schemas live under $defs.",
+  "title": "Hexe AI Node Control API Request Models",
+  "type": "object"
+}

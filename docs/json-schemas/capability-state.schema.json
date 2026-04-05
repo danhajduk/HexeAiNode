@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Local JSON contract validated by src/ai_node/persistence/capability_state_store.py.",
+  "properties": {
+    "acceptance_timestamp": {
+      "type": "string"
+    },
+    "accepted_declaration_version": {
+      "type": "string"
+    },
+    "core_restrictions": {
+      "type": [
+        "object",
+        "array",
+        "null"
+      ]
+    },
+    "raw_response": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "schema_version": {
+      "const": "1.0"
+    }
+  },
+  "required": [
+    "schema_version",
+    "accepted_declaration_version",
+    "acceptance_timestamp"
+  ],
+  "title": "Hexe AI Node Capability State",
+  "type": "object"
+}

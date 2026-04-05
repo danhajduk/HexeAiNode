@@ -1024,6 +1024,7 @@ class NodeControlApiTests(unittest.TestCase):
                 service_id="svc-alpha",
                 task_family="task.classification",
                 prompt_name="Prompt Alpha",
+                owner_client_id="svc-alpha",
                 definition={"system_prompt": "Classify this text."},
                 provider_preferences={"preferred_providers": ["openai"], "default_provider": "openai"},
                 constraints={"max_timeout_s": 30},
@@ -1041,6 +1042,8 @@ class NodeControlApiTests(unittest.TestCase):
             allowed = state.authorize_execution(
                 prompt_id="prompt.alpha",
                 task_family="task.classification",
+                requested_by="svc-alpha",
+                service_id="svc-alpha",
             )
             self.assertTrue(allowed["allowed"])
             self.assertEqual(allowed["prompt_version"], "v2")
@@ -1054,6 +1057,8 @@ class NodeControlApiTests(unittest.TestCase):
             denied_restricted = state.authorize_execution(
                 prompt_id="prompt.alpha",
                 task_family="task.classification",
+                requested_by="svc-alpha",
+                service_id="svc-alpha",
             )
             self.assertFalse(denied_restricted["allowed"])
             self.assertEqual(denied_restricted["reason"], "prompt_state_invalid")
@@ -1073,9 +1078,34 @@ class NodeControlApiTests(unittest.TestCase):
             denied = state.authorize_execution(
                 prompt_id="prompt.alpha",
                 task_family="task.classification",
+                requested_by="svc-alpha",
+                service_id="svc-alpha",
             )
             self.assertFalse(denied["allowed"])
             self.assertEqual(denied["reason"], "prompt_in_probation")
+
+            state.transition_prompt_service(
+                prompt_id="prompt.alpha",
+                state="review_due",
+                reason="policy_refresh",
+            )
+            review_due = state.authorize_execution(
+                prompt_id="prompt.alpha",
+                task_family="task.classification",
+                requested_by="svc-alpha",
+                service_id="svc-alpha",
+            )
+            self.assertTrue(review_due["allowed"])
+            self.assertEqual(review_due["prompt_state"], "review_due")
+
+            access_denied = state.authorize_execution(
+                prompt_id="prompt.alpha",
+                task_family="task.classification",
+                requested_by="svc-beta",
+                service_id="svc-beta",
+            )
+            self.assertFalse(access_denied["allowed"])
+            self.assertEqual(access_denied["reason"], "prompt_access_denied")
 
     def test_retired_prompt_registration_allows_overwrite(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1118,6 +1148,27 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(prompt["status"], "active")
             self.assertEqual(prompt["versions"][0]["definition"]["system_prompt"], "New classifier.")
             self.assertEqual(prompt["metadata"]["generation"], "new")
+
+    def test_migrate_existing_prompts_to_review_due(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                prompt_service_state_store=self._FakePromptServiceStateStore(),
+            )
+            state.register_prompt_service(
+                prompt_id="prompt.alpha",
+                service_id="svc-alpha",
+                task_family="task.classification",
+                prompt_name="Prompt Alpha",
+                definition={"system_prompt": "Classifier."},
+            )
+            migrated = state.migrate_prompt_services_to_review_due()
+            prompt = migrated["state"]["prompt_services"][0]
+            self.assertEqual(prompt["status"], "review_due")
+            self.assertEqual(prompt["lifecycle_history"][-1]["reason"], "policy_migration_review_due")
 
 
 if __name__ == "__main__":

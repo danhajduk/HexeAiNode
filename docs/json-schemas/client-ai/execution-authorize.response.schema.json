@@ -19,7 +19,7 @@
     },
     "reason": {
       "type": "string",
-      "description": "Examples include authorized, prompt_not_registered, prompt_in_probation, prompt_state_invalid, prompt_task_family_mismatch, and invalid_prompt_version."
+      "description": "Examples include authorized, prompt_not_registered, prompt_in_probation, prompt_state_invalid, prompt_access_denied, prompt_task_family_mismatch, and invalid_prompt_version."
     },
     "prompt_id": {
       "type": [
@@ -47,6 +47,7 @@
       "enum": [
         "probation",
         "active",
+        "review_due",
         "restricted",
         "suspended",
         "retired",

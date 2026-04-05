@@ -715,9 +715,10 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "/api/prompts/services",
                 json={
                     "prompt_id": "prompt.alpha",
-                    "service_id": "svc-alpha",
+                    "service_id": "service.alpha",
                     "task_family": "task.classification",
                     "prompt_name": "Prompt Alpha",
+                    "owner_client_id": "service.alpha",
                     "definition": {"system_prompt": "Classify the text."},
                     "constraints": {"max_timeout_s": 30},
                     "metadata": {"owner": "ops"},
@@ -741,7 +742,12 @@ class NodeControlFastApiTests(unittest.TestCase):
 
             exec_authorize_response = client.post(
                 "/api/execution/authorize",
-                json={"prompt_id": "prompt.alpha", "task_family": "task.classification"},
+                json={
+                    "prompt_id": "prompt.alpha",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "service_id": "service.alpha",
+                },
             )
             self.assertEqual(exec_authorize_response.status_code, 200)
             self.assertTrue(exec_authorize_response.json()["allowed"])
@@ -754,7 +760,12 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(prompt_lifecycle_response.status_code, 200)
             restricted_authorize_response = client.post(
                 "/api/execution/authorize",
-                json={"prompt_id": "prompt.alpha", "task_family": "task.classification"},
+                json={
+                    "prompt_id": "prompt.alpha",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "service_id": "service.alpha",
+                },
             )
             self.assertEqual(restricted_authorize_response.status_code, 200)
             self.assertFalse(restricted_authorize_response.json()["allowed"])
@@ -773,7 +784,12 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(prompt_probation_response.status_code, 200)
             exec_denied_response = client.post(
                 "/api/execution/authorize",
-                json={"prompt_id": "prompt.alpha", "task_family": "task.classification"},
+                json={
+                    "prompt_id": "prompt.alpha",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "service_id": "service.alpha",
+                },
             )
             self.assertEqual(exec_denied_response.status_code, 200)
             self.assertFalse(exec_denied_response.json()["allowed"])
@@ -786,6 +802,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                     "prompt_id": "prompt.alpha",
                     "task_family": "task.classification",
                     "requested_by": "service.alpha",
+                    "service_id": "service.alpha",
                     "requested_provider": "openai",
                     "requested_model": "gpt-5-mini",
                     "inputs": {"text": "hello world"},
@@ -796,6 +813,39 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(direct_exec_response.status_code, 200)
             self.assertEqual(direct_exec_response.json()["status"], "rejected")
             self.assertEqual(direct_exec_response.json()["error_code"], "prompt_in_probation")
+
+            prompt_review_due_response = client.post(
+                "/api/prompts/services/prompt.alpha/lifecycle",
+                json={"state": "review_due", "reason": "policy_refresh"},
+            )
+            self.assertEqual(prompt_review_due_response.status_code, 200)
+            exec_review_due_response = client.post(
+                "/api/execution/authorize",
+                json={
+                    "prompt_id": "prompt.alpha",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "service_id": "service.alpha",
+                },
+            )
+            self.assertEqual(exec_review_due_response.status_code, 200)
+            self.assertTrue(exec_review_due_response.json()["allowed"])
+            self.assertEqual(exec_review_due_response.json()["prompt_state"], "review_due")
+
+            prompt_review_response = client.post(
+                "/api/prompts/services/prompt.alpha/review",
+                json={"reviewed_by": "ops", "review_reason": "validated", "state": "active"},
+            )
+            self.assertEqual(prompt_review_response.status_code, 200)
+            self.assertEqual(prompt_review_response.json()["state"]["prompt_services"][0]["status"], "active")
+
+            prompt_migration_response = client.post(
+                "/api/prompts/services/migrations/review-due",
+                json={"reason": "policy_migration_review_due"},
+            )
+            self.assertEqual(prompt_migration_response.status_code, 200)
+            self.assertEqual(prompt_migration_response.json()["state"]["prompt_services"][0]["status"], "review_due")
+            self.assertEqual(prompt_migration_response.json()["migration"]["target_state"], "review_due")
 
             services_status_response = client.get("/api/services/status")
             self.assertEqual(services_status_response.status_code, 200)

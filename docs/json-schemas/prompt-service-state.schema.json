@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Normalized local JSON contract produced by src/ai_node/persistence/prompt_service_state_store.py.",
+  "properties": {
+    "probation": {
+      "additionalProperties": false,
+      "properties": {
+        "active_prompt_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reasons": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "active_prompt_ids",
+        "reasons",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "prompt_services": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "constraints": {
+            "type": "object"
+          },
+          "current_version": {
+            "type": "string"
+          },
+          "execution_policy": {
+            "type": "object"
+          },
+          "lifecycle_history": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "owner_service": {
+            "type": "string"
+          },
+          "owner_client_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "privacy_class": {
+            "type": "string"
+          },
+          "access_scope": {
+            "type": "string"
+          },
+          "allowed_services": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "allowed_clients": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "allowed_customers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "prompt_id": {
+            "type": "string"
+          },
+          "prompt_name": {
+            "type": "string"
+          },
+          "provider_preferences": {
+            "type": "object"
+          },
+          "registered_at": {
+            "type": "string"
+          },
+          "retired_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "task_family": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "last_reviewed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reviewed_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "review_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "usage": {
+            "type": "object"
+          },
+          "versions": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "prompt_id",
+          "prompt_name",
+          "service_id",
+          "owner_service",
+          "owner_client_id",
+          "task_family",
+          "status",
+          "privacy_class",
+          "access_scope",
+          "allowed_services",
+          "allowed_clients",
+          "allowed_customers",
+          "execution_policy",
+          "provider_preferences",
+          "constraints",
+          "metadata",
+          "versions",
+          "current_version",
+          "registered_at",
+          "updated_at",
+          "last_reviewed_at",
+          "reviewed_by",
+          "review_reason",
+          "lifecycle_history",
+          "usage"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "2.0"
+    },
+    "updated_at": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "prompt_services",
+    "probation",
+    "updated_at"
+  ],
+  "title": "Hexe AI Node Prompt Service State",
+  "type": "object"
+}

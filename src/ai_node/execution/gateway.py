@@ -7,6 +7,17 @@ def _normalize_string(value: object) -> str:
     return str(value or "").strip()
 
 
+def _normalize_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[str] = []
+    for item in value:
+        text = _normalize_string(item)
+        if text and text not in normalized:
+            normalized.append(text)
+    return normalized
+
+
 @dataclass(frozen=True)
 class ExecutionAuthorizationResult:
     allowed: bool
@@ -22,6 +33,45 @@ class ExecutionAuthorizationResult:
 
 
 class ExecutionGateway:
+    @staticmethod
+    def _is_caller_allowed(
+        *,
+        matched: dict,
+        requested_by: str | None,
+        service_id: str | None,
+        customer_id: str | None,
+    ) -> bool:
+        access_scope = _normalize_string(matched.get("access_scope") or "service").lower() or "service"
+        owner_service = _normalize_string(matched.get("owner_service") or matched.get("service_id"))
+        owner_client_id = _normalize_string(matched.get("owner_client_id"))
+        caller_client = _normalize_string(requested_by)
+        caller_service = _normalize_string(service_id) or caller_client
+        caller_customer = _normalize_string(customer_id)
+        allowed_services = set(_normalize_string_list(matched.get("allowed_services")))
+        allowed_clients = set(_normalize_string_list(matched.get("allowed_clients")))
+        allowed_customers = set(_normalize_string_list(matched.get("allowed_customers")))
+
+        owner_allowed = bool(
+            (owner_client_id and caller_client == owner_client_id)
+            or (owner_service and caller_service == owner_service)
+        )
+        if access_scope == "public":
+            return True
+        if access_scope == "private":
+            return owner_allowed
+        if access_scope == "service":
+            if not owner_service:
+                return True
+            return bool(owner_service and caller_service == owner_service)
+        if access_scope == "shared":
+            return bool(
+                owner_allowed
+                or (caller_service and caller_service in allowed_services)
+                or (caller_client and caller_client in allowed_clients)
+                or (caller_customer and caller_customer in allowed_customers)
+            )
+        return owner_allowed
+
     def authorize(
         self,
         *,
@@ -29,6 +79,9 @@ class ExecutionGateway:
         task_family: str,
         prompt_services_state: dict | None,
         prompt_version: str | None = None,
+        requested_by: str | None = None,
+        service_id: str | None = None,
+        customer_id: str | None = None,
         requested_provider: str | None = None,
         requested_model: str | None = None,
         inputs: dict | None = None,
@@ -54,8 +107,16 @@ class ExecutionGateway:
         prompt_state = normalize_prompt_lifecycle_state(matched.get("status") or "active")
         if prompt_state == "probation":
             return ExecutionAuthorizationResult(False, "prompt_in_probation", prompt, task, prompt_state=prompt_state)
-        if prompt_state != "active":
+        if prompt_state not in {"active", "review_due"}:
             return ExecutionAuthorizationResult(False, "prompt_state_invalid", prompt, task, prompt_state=prompt_state)
+
+        if not self._is_caller_allowed(
+            matched=matched,
+            requested_by=requested_by,
+            service_id=service_id,
+            customer_id=customer_id,
+        ):
+            return ExecutionAuthorizationResult(False, "prompt_access_denied", prompt, task, prompt_state=prompt_state)
 
         execution_policy = matched.get("execution_policy") if isinstance(matched.get("execution_policy"), dict) else {}
         if execution_policy.get("allow_direct_execution") is False:

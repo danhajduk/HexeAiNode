@@ -34,6 +34,12 @@ describe("client usage summary", () => {
             prompt_id: "prompt-1",
             current_version: "v3",
             registered_at: "2026-04-01T00:00:00Z",
+            status: "review_due",
+            access_scope: "shared",
+            owner_service: "service.alpha",
+            owner_client_id: "client-1",
+            last_reviewed_at: "2026-04-02T00:00:00Z",
+            review_reason: "provider_policy_refresh",
           },
         ],
       }
@@ -45,6 +51,12 @@ describe("client usage summary", () => {
       promptId: "prompt-1",
       currentVersion: "v3",
       registeredAt: "2026-04-01T00:00:00Z",
+      status: "review_due",
+      accessScope: "shared",
+      ownerService: "service.alpha",
+      ownerClientId: "client-1",
+      lastReviewedAt: "2026-04-02T00:00:00Z",
+      reviewReason: "provider_policy_refresh",
     });
     expect(result.clients[0].prompts[0].models[0].modelId).toBe("gpt-4.1-mini");
   });

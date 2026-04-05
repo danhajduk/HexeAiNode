@@ -25,6 +25,7 @@ FAILURE_CODE_TAXONOMY = {
             "task_family_mismatch",
             "prompt_task_family_mismatch",
             "prompt_state_invalid",
+            "prompt_access_denied",
             "invalid_prompt_version",
             "duplicate_prompt_id",
             "duplicate_prompt_version",

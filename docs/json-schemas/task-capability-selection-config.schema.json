@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Local JSON contract validated by src/ai_node/config/task_capability_selection_config.py.",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "selected_task_families": {
+      "items": {
+        "enum": [
+          "task.classification",
+          "task.chat",
+          "task.summarization",
+          "task.reasoning",
+          "task.information_extraction",
+          "task.structured_extraction",
+          "task.translation",
+          "task.sentiment_analysis",
+          "task.task_planning",
+          "task.workflow_reasoning",
+          "task.tool_usage",
+          "task.automation_command",
+          "task.environment_control",
+          "task.coding",
+          "task.code_generation",
+          "task.code_review",
+          "task.code_debugging",
+          "task.code_explanation",
+          "task.vision_analysis",
+          "task.object_detection",
+          "task.image_description",
+          "task.document_ocr",
+          "task.image_generation",
+          "task.image_editing",
+          "task.image_variation",
+          "task.speech_to_text",
+          "task.text_to_speech",
+          "task.voice_conversation",
+          "task.audio_analysis",
+          "task.realtime_voice",
+          "task.streaming_response",
+          "task.low_latency_interaction",
+          "task.embedding_generation",
+          "task.semantic_search",
+          "task.document_indexing",
+          "task.knowledge_retrieval",
+          "task.moderation",
+          "task.policy_check"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "selected_task_families"
+  ],
+  "title": "Hexe AI Node Task Capability Selection Config",
+  "type": "object"
+}

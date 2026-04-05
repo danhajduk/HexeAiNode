@@ -1,7 +1,7 @@
 # AI Node Control API Contract
 
 Status: Implemented
-Last updated: 2026-03-20
+Last updated: 2026-04-04
 
 ## Purpose
 
@@ -16,7 +16,7 @@ This is the canonical source-of-truth contract for:
 - periodic provider intelligence refresh job lifecycle
 - degraded recovery trigger
 - service status/restart controls
-- prompt definition CRUD, versioning, lifecycle, and probation controls
+- prompt definition CRUD, versioning, lifecycle, review, and probation controls
 - execution authorization and prompt diagnostics
 - provider runtime visibility debug endpoints
 
@@ -534,6 +534,7 @@ For OpenAI, this response only includes regular base-model families used for nor
   - `state: object | null`
   - `summary`
     - `prompt_count`
+    - `review_due_count`
     - `active_count`
 
 ### Register prompt/service metadata
@@ -545,13 +546,18 @@ For OpenAI, this response only includes regular base-model families used for nor
   - `task_family: string` (must be canonical task family)
   - `prompt_name?: string`
   - `owner_service?: string`
+  - `owner_client_id?: string`
   - `privacy_class?: public | internal | restricted | sensitive`
+  - `access_scope?: private | service | shared | public`
+  - `allowed_services?: string[]`
+  - `allowed_clients?: string[]`
+  - `allowed_customers?: string[]`
   - `execution_policy?: object`
   - `provider_preferences?: object`
   - `constraints?: object`
   - `definition?: object`
   - `version?: string`
-  - `status?: probation | active | restricted | suspended | retired | expired`
+  - `status?: probation | active | review_due | restricted | suspended | retired | expired`
   - `metadata: object` (optional)
 - Success:
   - updated prompt/service state payload
@@ -573,8 +579,10 @@ For OpenAI, this response only includes regular base-model families used for nor
   - `definition?: object`
   - `version?: string`
 - Behavior:
+  - this is the canonical prompt update path
   - when a new `definition` is supplied, the node creates a new immutable prompt version
   - omitted metadata fields remain unchanged
+  - metadata, access scope, owner fields, constraints, and provider preferences can be updated without retire-and-reregister workflow
 - Success:
   - updated prompt/service state payload
 - Error:
@@ -584,7 +592,7 @@ For OpenAI, this response only includes regular base-model families used for nor
 
 - `POST /api/prompts/services/{prompt_id}/lifecycle`
 - Request:
-  - `state: probation | active | restricted | suspended | retired | expired`
+  - `state: probation | active | review_due | restricted | suspended | retired | expired`
   - `reason?: string`
 - Success:
   - updated prompt/service state payload
@@ -602,6 +610,26 @@ For OpenAI, this response only includes regular base-model families used for nor
 - Error:
   - `400` when prompt is missing/unregistered or action is invalid
 
+### Prompt review
+
+- `POST /api/prompts/services/{prompt_id}/review`
+- Request:
+  - `reviewed_by?: string`
+  - `review_reason?: string`
+  - `state?: string`
+- Behavior:
+  - records review metadata
+  - defaults reviewed prompts back to `active` unless another explicit state is supplied
+
+### Prompt review-due migration
+
+- `POST /api/prompts/services/migrations/review-due`
+- Request:
+  - `reason?: string`
+- Behavior:
+  - transitions all non-retired and non-expired prompts to `review_due`
+  - returns normal prompt state payload plus migration summary
+
 ### Prompt debug visibility
 
 - `GET /debug/prompts`
@@ -617,12 +645,15 @@ For OpenAI, this response only includes regular base-model families used for nor
   - `prompt_id: string`
   - `task_family: string`
   - `prompt_version?: string`
+  - `requested_by?: string`
+  - `service_id?: string`
+  - `customer_id?: string`
   - `requested_provider?: string`
   - `requested_model?: string`
   - `inputs?: object`
 - Response:
   - `allowed: boolean`
-  - `reason: authorized | prompt_not_registered | prompt_in_probation | prompt_state_invalid | prompt_task_family_mismatch | invalid_prompt_version | ...`
+  - `reason: authorized | prompt_not_registered | prompt_in_probation | prompt_state_invalid | prompt_access_denied | prompt_task_family_mismatch | invalid_prompt_version | ...`
   - `prompt_id`
   - `task_family`
   - `prompt_version`
@@ -634,10 +665,11 @@ Current enforcement model:
 - deny while prompt is in probation
 - deny when requested task family mismatches registered task family
 - deny when the requested prompt version is unknown
+- deny when caller identity or service scope is not allowed to use the prompt
 - deny when prompt lifecycle state is `restricted`, `suspended`, `retired`, or `expired`
 - deny when prompt-local provider/model constraints are violated
 - deny when structured output is required but the request omits a schema
-- allow only for `active` prompt versions that match the request contract
+- allow for `active` and `review_due` prompt versions that match the request contract
 
 ### Direct execution request
 

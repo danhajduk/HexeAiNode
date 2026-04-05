@@ -38,6 +38,13 @@
       ],
       "minLength": 1
     },
+    "owner_client_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
     "privacy_class": {
       "type": "string",
       "enum": [
@@ -47,6 +54,49 @@
         "sensitive"
       ],
       "default": "internal"
+    },
+    "access_scope": {
+      "type": "string",
+      "enum": [
+        "private",
+        "service",
+        "shared",
+        "public"
+      ],
+      "default": "service"
+    },
+    "allowed_services": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "allowed_clients": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "allowed_customers": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
     },
     "execution_policy": {
       "$ref": "#/$defs/executionPolicy"
@@ -73,6 +123,7 @@
       "enum": [
         "probation",
         "active",
+        "review_due",
         "restricted",
         "suspended",
         "retired",

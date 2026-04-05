@@ -7,6 +7,7 @@ from ai_node.prompts.registration import (
     apply_probation_transition,
     create_prompt_service_registration,
     find_prompt_entry,
+    normalize_prompt_access_policy,
     normalize_execution_policy,
     normalize_prompt_constraints,
     normalize_prompt_lifecycle_state,
@@ -105,9 +106,21 @@ def _normalize_entry(entry: dict) -> dict:
     normalized["prompt_name"] = str(entry.get("prompt_name") or prompt_id).strip() or prompt_id
     normalized["service_id"] = service_id
     normalized["owner_service"] = str(entry.get("owner_service") or service_id).strip() or service_id
+    access_policy = normalize_prompt_access_policy(
+        access_scope=entry.get("access_scope") or "service",
+        owner_client_id=entry.get("owner_client_id"),
+        allowed_services=entry.get("allowed_services"),
+        allowed_clients=entry.get("allowed_clients"),
+        allowed_customers=entry.get("allowed_customers"),
+    )
+    normalized["owner_client_id"] = access_policy["owner_client_id"]
     normalized["task_family"] = task_family
     normalized["status"] = normalize_prompt_lifecycle_state(entry.get("status") or "active")
     normalized["privacy_class"] = normalize_prompt_privacy_class(entry.get("privacy_class") or "internal")
+    normalized["access_scope"] = access_policy["access_scope"]
+    normalized["allowed_services"] = access_policy["allowed_services"]
+    normalized["allowed_clients"] = access_policy["allowed_clients"]
+    normalized["allowed_customers"] = access_policy["allowed_customers"]
     normalized["execution_policy"] = normalize_execution_policy(entry.get("execution_policy"))
     normalized["provider_preferences"] = normalize_provider_preferences(entry.get("provider_preferences"))
     normalized["constraints"] = normalize_prompt_constraints(entry.get("constraints"))
@@ -117,6 +130,9 @@ def _normalize_entry(entry: dict) -> dict:
     normalized["current_version"] = current_version or str(normalized["versions"][-1]["version"])
     normalized["registered_at"] = str(entry.get("registered_at") or entry.get("updated_at") or _now_iso())
     normalized["updated_at"] = str(entry.get("updated_at") or normalized["registered_at"])
+    normalized["last_reviewed_at"] = str(entry.get("last_reviewed_at") or "").strip() or None
+    normalized["reviewed_by"] = str(entry.get("reviewed_by") or "").strip() or None
+    normalized["review_reason"] = str(entry.get("review_reason") or "").strip() or None
     normalized["retired_at"] = entry.get("retired_at")
     lifecycle_history = entry.get("lifecycle_history")
     if not isinstance(lifecycle_history, list) or not lifecycle_history:
