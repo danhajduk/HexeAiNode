@@ -389,6 +389,47 @@
   margin-top: 8px;
 }
 
+.scheduled-tasks-table-wrap {
+  overflow-x: auto;
+}
+
+.scheduled-tasks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.scheduled-tasks-table th,
+.scheduled-tasks-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid hsl(var(--sx-border) / 0.7);
+  text-align: left;
+  vertical-align: top;
+}
+
+.scheduled-tasks-table th {
+  color: hsl(var(--sx-muted-foreground));
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.scheduled-tasks-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.scheduled-tasks-legend-item {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid hsl(var(--sx-border) / 0.8);
+  border-radius: var(--sx-radius-md);
+  background: hsl(var(--sx-panel));
+}
+
 .client-cost-group {
   display: grid;
   gap: 8px;

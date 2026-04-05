@@ -90,6 +90,7 @@ describe("uiRoutes", () => {
   it("resolves operational sections and setup helpers", () => {
     expect(resolveOperationalSection("#/dashboard/runtime")).toBe("runtime");
     expect(resolveOperationalSection("#/dashboard/clients")).toBe("clients");
+    expect(resolveOperationalSection("#/dashboard/scheduled")).toBe("scheduled");
     expect(resolveOperationalSection("#/dashboard")).toBe("overview");
     expect(isSetupRoute("#/setup/provider/openai")).toBe(true);
     expect(isProviderSetupRoute("#/setup/provider/openai")).toBe(true);

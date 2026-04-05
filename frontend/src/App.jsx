@@ -1501,6 +1501,7 @@ export default function App() {
     ["runtime", "Runtime"],
     ["activity", "Activity"],
     ["clients", "Clients"],
+    ["scheduled", "Scheduled Tasks"],
     ["diagnostics", "Diagnostics"],
   ].map(([id, label]) => ({
     id,
@@ -1655,6 +1656,9 @@ export default function App() {
     clientCostItems,
     clientUsageMonth,
     governanceStatus: governanceStatusPayload,
+    scheduledTasksProps: {
+      scheduler: capabilityDiagnostics?.internal_scheduler || null,
+    },
     onboardingSteps,
     onboardingProgress: uiState.onboarding.progress,
     pendingApprovalNodeId: isPendingApproval && nodeId ? nodeId : "",

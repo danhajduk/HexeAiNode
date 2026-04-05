@@ -11,6 +11,7 @@ function buildOperationalProps(overrides = {}) {
     currentSection: "overview",
     sections: [
       { id: "overview", label: "Overview", onClick: () => {} },
+      { id: "scheduled", label: "Scheduled Tasks", onClick: () => {} },
       { id: "clients", label: "Clients", onClick: () => {} },
       { id: "diagnostics", label: "Diagnostics", onClick: () => {} },
     ],
@@ -87,6 +88,42 @@ function buildOperationalProps(overrides = {}) {
         state: "fresh",
         active_governance_version: "1",
         next_refresh_due_at: "2026-04-05T19:53:49.164289+00:00",
+      },
+    },
+    scheduledTasksProps: {
+      scheduler: {
+        scheduler_status: "running",
+        tasks: {
+          heartbeat: {
+            task_id: "heartbeat",
+            display_name: "HB",
+            task_kind: "local_recurring",
+            schedule_name: "heartbeat_5_seconds",
+            schedule_detail: "Heartbeat every 5 seconds",
+            status: "healthy",
+            last_success_at: "2026-04-05T19:54:00Z",
+            last_failure_at: null,
+            next_run_at: "2026-04-05T19:54:05Z",
+            last_error: null,
+          },
+          telemetry: {
+            task_id: "telemetry",
+            display_name: "Telemetry",
+            task_kind: "local_recurring",
+            schedule_name: "telemetry_50_seconds",
+            schedule_detail: "Telemetry every 50 seconds",
+            status: "scheduled",
+            last_success_at: "2026-04-05T19:53:50Z",
+            last_failure_at: null,
+            next_run_at: "2026-04-05T19:54:40Z",
+            last_error: null,
+          },
+        },
+        schedule_catalog: [
+          { name: "heartbeat_5_seconds", detail: "Heartbeat every 5 seconds" },
+          { name: "telemetry_50_seconds", detail: "Telemetry every 50 seconds" },
+          { name: "every_10_seconds", detail: "Every 10 seconds" },
+        ],
       },
     },
     onboardingSteps: [{ key: "registration", label: "Registration" }],
@@ -180,6 +217,19 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Diagnostics");
     expect(markup).toContain("Internal Scheduler");
     expect(markup).toContain("provider_capability_refresh");
+    expect(markup).not.toContain("Node Overview");
+  });
+
+  it("shows scheduled tasks on the scheduled section", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard {...buildOperationalProps({ currentSection: "scheduled" })} />
+    );
+
+    expect(markup).toContain("Scheduled Tasks");
+    expect(markup).toContain("HB");
+    expect(markup).toContain("heartbeat_5_seconds");
+    expect(markup).toContain("telemetry_50_seconds");
+    expect(markup).toContain("Every 10 seconds");
     expect(markup).not.toContain("Node Overview");
   });
 

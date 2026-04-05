@@ -25,7 +25,10 @@ from ai_node.runtime.service_manager import NullServiceManager
 from ai_node.runtime.capability_resolver import load_task_graph
 from ai_node.runtime.execution_telemetry import ExecutionTelemetryPublisher
 from ai_node.runtime.task_execution_service import TaskExecutionService
-from ai_node.runtime.capability_declaration_runner import STATUS_HEARTBEAT_INTERVAL_SECONDS
+from ai_node.runtime.capability_declaration_runner import (
+    STATUS_HEARTBEAT_INTERVAL_SECONDS,
+    STATUS_TELEMETRY_INTERVAL_SECONDS,
+)
 from ai_node.time_utils import local_now_iso
 
 
@@ -1688,22 +1691,32 @@ class NodeControlState:
             task_id="provider_capability_refresh",
             display_name="Provider Capability Refresh",
             interval_seconds=self._provider_refresh_interval_seconds,
+            schedule_name="interval",
             schedule_detail=f"Every {self._provider_refresh_interval_seconds} seconds after startup refresh",
             task_kind="provider_specific_recurring",
             readiness_critical=False,
         )
         self._internal_scheduler.register_interval_task(
-            task_id="status_telemetry_heartbeat",
-            display_name="Status Telemetry Heartbeat",
+            task_id="heartbeat",
+            display_name="HB",
             interval_seconds=STATUS_HEARTBEAT_INTERVAL_SECONDS,
-            schedule_detail=f"Every {STATUS_HEARTBEAT_INTERVAL_SECONDS} seconds",
-            task_kind="policy_refresh_loop",
+            schedule_name="heartbeat_5_seconds",
+            task_kind="local_recurring",
+            readiness_critical=False,
+        )
+        self._internal_scheduler.register_interval_task(
+            task_id="telemetry",
+            display_name="Telemetry",
+            interval_seconds=STATUS_TELEMETRY_INTERVAL_SECONDS,
+            schedule_name="telemetry_50_seconds",
+            task_kind="local_recurring",
             readiness_critical=False,
         )
         self._internal_scheduler.register_interval_task(
             task_id="operational_mqtt_health",
             display_name="Operational MQTT Health",
             interval_seconds=self._operational_mqtt_health_check_interval_seconds,
+            schedule_name="every_10_seconds",
             schedule_detail=f"Every {self._operational_mqtt_health_check_interval_seconds} seconds with immediate first run",
             task_kind="local_recurring",
             readiness_critical=False,
@@ -1765,9 +1778,14 @@ class NodeControlState:
                 initial_delay_seconds=self._provider_refresh_interval_seconds,
             )
             self._internal_scheduler.start_interval_task(
-                task_id="status_telemetry_heartbeat",
-                coroutine_factory=self._status_telemetry_job_once,
+                task_id="heartbeat",
+                coroutine_factory=self._heartbeat_job_once,
                 initial_delay_seconds=STATUS_HEARTBEAT_INTERVAL_SECONDS,
+            )
+            self._internal_scheduler.start_interval_task(
+                task_id="telemetry",
+                coroutine_factory=self._status_telemetry_job_once,
+                initial_delay_seconds=STATUS_TELEMETRY_INTERVAL_SECONDS,
             )
             self._internal_scheduler.start_interval_task(
                 task_id="operational_mqtt_health",
@@ -1821,7 +1839,18 @@ class NodeControlState:
         result = await self._capability_runner.emit_periodic_status_telemetry()
         if hasattr(self._logger, "info"):
             self._logger.info(
-                "[status-telemetry-heartbeat-job] %s",
+                "[status-telemetry-job] %s",
+                {"published": bool((result or {}).get("published")), "result": result},
+            )
+        return result
+
+    async def _heartbeat_job_once(self) -> dict | None:
+        if self._capability_runner is None or not hasattr(self._capability_runner, "emit_periodic_heartbeat"):
+            return {"status": "skipped", "reason": "capability_runner_not_configured"}
+        result = await self._capability_runner.emit_periodic_heartbeat()
+        if hasattr(self._logger, "info"):
+            self._logger.info(
+                "[heartbeat-job] %s",
                 {"published": bool((result or {}).get("published")), "result": result},
             )
         return result

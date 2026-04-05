@@ -26,7 +26,8 @@ from ai_node.runtime.trusted_status_telemetry import (
 from ai_node.time_utils import local_now, local_now_iso
 
 
-STATUS_HEARTBEAT_INTERVAL_SECONDS = 60
+STATUS_HEARTBEAT_INTERVAL_SECONDS = 5
+STATUS_TELEMETRY_INTERVAL_SECONDS = 50
 
 
 class CapabilityDeclarationRunner:
@@ -1177,6 +1178,24 @@ class CapabilityDeclarationRunner:
         )
 
     async def emit_periodic_status_telemetry(self) -> dict | None:
+        if self._trust_store is None or not hasattr(self._trust_store, "load"):
+            return None
+        trust_state = self._trust_store.load()
+        if not isinstance(trust_state, dict):
+            return None
+        lifecycle_state = self._lifecycle.get_state().value
+        return await self._emit_status_telemetry(
+            trust_state=trust_state,
+            lifecycle_state=lifecycle_state,
+            overall_status=self._derive_overall_status(lifecycle_state),
+            extra_payload={
+                "event_type": "telemetry",
+                "telemetry_interval_seconds": STATUS_TELEMETRY_INTERVAL_SECONDS,
+                "message_expiry_interval_seconds": STATUS_MESSAGE_EXPIRY_SECONDS,
+            },
+        )
+
+    async def emit_periodic_heartbeat(self) -> dict | None:
         if self._trust_store is None or not hasattr(self._trust_store, "load"):
             return None
         trust_state = self._trust_store.load()

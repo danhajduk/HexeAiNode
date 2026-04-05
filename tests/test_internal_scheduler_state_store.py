@@ -30,7 +30,7 @@ class InternalSchedulerStateStoreTests(unittest.TestCase):
                     "task_id": "provider_capability_refresh",
                     "display_name": "Provider Capability Refresh",
                     "task_kind": "provider_specific_recurring",
-                    "schedule_name": "interval",
+                    "schedule_name": "hourly",
                     "schedule_detail": "Every 900 seconds after startup refresh",
                     "interval_seconds": 900,
                     "enabled": True,

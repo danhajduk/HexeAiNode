@@ -82,8 +82,13 @@
 - node-local recurring work is modeled explicitly as internal scheduler tasks instead of anonymous background loops
 - the current recurring tasks are:
   - provider capability refresh
-  - status telemetry heartbeat
+  - heartbeat
+  - telemetry
   - operational MQTT health check
+- default named schedules are:
+  - `heartbeat_5_seconds`
+  - `telemetry_50_seconds`
+  - `every_10_seconds`
 - scheduler task snapshots persist enabled state, schedule details, last success/failure timestamps, current status, and last error for operator visibility
 - `GET /api/capabilities/diagnostics` includes the structured internal scheduler payload for admin inspection
 

@@ -638,6 +638,8 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertIn("resolved_tasks", diagnostics_response.json())
             self.assertIn("internal_scheduler", diagnostics_response.json())
             self.assertIn("provider_capability_refresh", diagnostics_response.json()["internal_scheduler"]["tasks"])
+            self.assertIn("heartbeat", diagnostics_response.json()["internal_scheduler"]["tasks"])
+            self.assertIn("telemetry", diagnostics_response.json()["internal_scheduler"]["tasks"])
 
             pricing_diagnostics_response = client.get("/api/providers/openai/pricing/diagnostics")
             self.assertEqual(pricing_diagnostics_response.status_code, 200)

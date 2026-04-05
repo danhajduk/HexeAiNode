@@ -620,6 +620,10 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertTrue(payload["capability_setup"]["active"])
             self.assertTrue(payload["internal_scheduler"]["configured"])
             self.assertIn("provider_capability_refresh", payload["internal_scheduler"]["tasks"])
+            self.assertIn("heartbeat", payload["internal_scheduler"]["tasks"])
+            self.assertIn("telemetry", payload["internal_scheduler"]["tasks"])
+            self.assertEqual(payload["internal_scheduler"]["tasks"]["heartbeat"]["schedule_name"], "heartbeat_5_seconds")
+            self.assertEqual(payload["internal_scheduler"]["tasks"]["telemetry"]["schedule_name"], "telemetry_50_seconds")
 
     def test_start_background_jobs_starts_bootstrap_listener_from_trust_state(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -453,3 +453,16 @@ Task 202: Persist operator-visible scheduler task state for background loops - C
 Task 203: Expose structured scheduler status in node status and diagnostics APIs - Completed on 04/05/2026 14:37
 Task 204: Update dashboard diagnostics to show internal scheduler task health and schedule details - Completed on 04/05/2026 14:37
 Task 205: Validate scheduler-standard compliance for provider refresh, telemetry heartbeat, and operational MQTT health jobs - Completed on 04/05/2026 14:37
+Task 206: Extend the internal scheduler schedule catalog to include an operator-visible 10 second interval schedule - Completed on 04/05/2026 15:00
+Task 207: Update the Hexe background-task and internal scheduler standard document to include the 10 second interval schedule option - Completed on 04/05/2026 15:00
+Task 208: Split status heartbeat and telemetry into distinct internal scheduler tasks with separate schedule definitions - Completed on 04/05/2026 15:00
+Task 209: Change heartbeat scheduling to a 5 second interval and expose it as an operator-visible HB schedule - Completed on 04/05/2026 15:00
+Task 210: Change telemetry scheduling to a 50 second interval and expose it as an operator-visible telemetry schedule - Completed on 04/05/2026 15:00
+Task 211: Keep operational MQTT health on a 10 second interval schedule and align its scheduler metadata and diagnostics output - Completed on 04/05/2026 15:00
+Task 212: Update node status and diagnostics payloads so heartbeat, telemetry, and MQTT health show their new schedule names and details - Completed on 04/05/2026 15:00
+Task 213: Update frontend diagnostics and any scheduler-facing UI labels to reflect the new HB, telemetry, and 10 second interval schedules - Completed on 04/05/2026 15:00
+Task 214: Add backend and frontend tests covering the new scheduler catalog entries and the split heartbeat versus telemetry timing - Completed on 04/05/2026 15:00
+Task 215: Update node standards and runtime documentation to make heartbeat, telemetry, and operational_mqtt_health mandatory recurring tasks for every node - Completed on 04/05/2026 15:00
+Task 216: Add a mandatory Scheduled Tasks page to the node dashboard using the HexeEmail scheduled-tasks page structure as the implementation reference - Completed on 04/05/2026 15:00
+Task 217: Expose scheduler task list data in a page-oriented format that supports a dedicated Scheduled Tasks table view - Completed on 04/05/2026 15:00
+Task 218: Add frontend tests for the Scheduled Tasks page and verify it shows task cadence, status, and recent execution state - Completed on 04/05/2026 15:00

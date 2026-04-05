@@ -10,6 +10,7 @@ import { RuntimeServicesCard } from "./cards/RuntimeServicesCard";
 import { RecentActivityCard } from "./cards/RecentActivityCard";
 import { ClientCostCard } from "./cards/ClientCostCard";
 import { OperationalActionsCard } from "./cards/OperationalActionsCard";
+import { ScheduledTasksSection } from "./ScheduledTasksSection";
 import { DiagnosticsPage } from "../diagnostics/DiagnosticsPage";
 
 function maskOnboardingRef(value) {
@@ -87,6 +88,7 @@ export function OperationalDashboard({
   clientCostItems = [],
   clientUsageMonth = "",
   governanceStatus = null,
+  scheduledTasksProps = null,
   onboardingSteps = [],
   onboardingProgress = {},
   pendingApprovalNodeId,
@@ -196,6 +198,10 @@ export function OperationalDashboard({
             governanceStatus={governanceStatus}
             className="operational-card-full-span"
           />
+        ) : null}
+
+        {currentSection === "scheduled" ? (
+          <ScheduledTasksSection {...(scheduledTasksProps || {})} />
         ) : null}
 
         {currentSection === "diagnostics" ? (

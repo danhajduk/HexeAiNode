@@ -47,17 +47,3 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-
-[TODO] Task 206: Extend the internal scheduler schedule catalog to include an operator-visible 10 second interval schedule
-[TODO] Task 207: Update the Hexe background-task and internal scheduler standard document to include the 10 second interval schedule option
-[TODO] Task 208: Split status heartbeat and telemetry into distinct internal scheduler tasks with separate schedule definitions
-[TODO] Task 209: Change heartbeat scheduling to a 5 second interval and expose it as an operator-visible HB schedule
-[TODO] Task 210: Change telemetry scheduling to a 50 second interval and expose it as an operator-visible telemetry schedule
-[TODO] Task 211: Keep operational MQTT health on a 10 second interval schedule and align its scheduler metadata and diagnostics output
-[TODO] Task 212: Update node status and diagnostics payloads so heartbeat, telemetry, and MQTT health show their new schedule names and details
-[TODO] Task 213: Update frontend diagnostics and any scheduler-facing UI labels to reflect the new HB, telemetry, and 10 second interval schedules
-[TODO] Task 214: Add backend and frontend tests covering the new scheduler catalog entries and the split heartbeat versus telemetry timing
-[TODO] Task 215: Update node standards and runtime documentation to make heartbeat, telemetry, and operational_mqtt_health mandatory recurring tasks for every node
-[TODO] Task 216: Add a mandatory Scheduled Tasks page to the node dashboard using the HexeEmail scheduled-tasks page structure as the implementation reference
-[TODO] Task 217: Expose scheduler task list data in a page-oriented format that supports a dedicated Scheduled Tasks table view
-[TODO] Task 218: Add frontend tests for the Scheduled Tasks page and verify it shows task cadence, status, and recent execution state

@@ -1,7 +1,9 @@
 import asyncio
 from copy import deepcopy
+from datetime import timedelta
 
-from ai_node.time_utils import local_now_iso
+from ai_node.time_utils import local_now, local_now_iso
+from ai_node.runtime.internal_scheduler_catalog import get_schedule_definition, schedule_catalog_payload
 
 
 class InternalScheduler:
@@ -21,18 +23,20 @@ class InternalScheduler:
         task_id: str,
         display_name: str,
         interval_seconds: int,
-        schedule_detail: str,
+        schedule_name: str = "interval",
+        schedule_detail: str | None = None,
         task_kind: str = "local_recurring",
         readiness_critical: bool = False,
     ) -> None:
         tasks = self._state.setdefault("tasks", {})
         current = dict(tasks.get(task_id) or {})
+        schedule = get_schedule_definition(schedule_name, fallback_detail=schedule_detail)
         tasks[task_id] = {
             "task_id": task_id,
             "display_name": display_name,
             "task_kind": task_kind,
-            "schedule_name": "interval",
-            "schedule_detail": schedule_detail,
+            "schedule_name": schedule["name"],
+            "schedule_detail": schedule["detail"],
             "interval_seconds": max(int(interval_seconds), 1),
             "enabled": bool(current.get("enabled", True)),
             "running": bool(task_id in self._task_handles and not self._task_handles[task_id].done()),
@@ -54,7 +58,9 @@ class InternalScheduler:
 
     def snapshot(self) -> dict:
         self._refresh_running_flags()
-        return deepcopy(self._state)
+        payload = deepcopy(self._state)
+        payload["schedule_catalog"] = schedule_catalog_payload()
+        return payload
 
     def start_interval_task(self, *, task_id: str, coroutine_factory, initial_delay_seconds: int) -> None:
         existing = self._task_handles.get(task_id)
@@ -111,10 +117,11 @@ class InternalScheduler:
 
     def _mark_task_sleeping(self, *, task_id: str, delay_seconds: int) -> None:
         task = self._ensure_task(task_id)
+        next_run_at = local_now() + timedelta(seconds=max(int(delay_seconds), 0))
         task["running"] = False
         task["status"] = "scheduled"
         task["current_error"] = None
-        task["next_run_at"] = local_now_iso() if delay_seconds == 0 else None
+        task["next_run_at"] = next_run_at.isoformat()
         task["updated_at"] = local_now_iso()
         self._save()
 
@@ -138,6 +145,7 @@ class InternalScheduler:
         task["last_result"] = deepcopy(result) if isinstance(result, dict) else None
         task["last_error"] = None
         task["current_error"] = None
+        task["next_run_at"] = None
         task["consecutive_failures"] = 0
         task["updated_at"] = now
         self._save()
@@ -151,6 +159,7 @@ class InternalScheduler:
         task["last_completed_at"] = now
         task["last_error"] = error
         task["current_error"] = error
+        task["next_run_at"] = None
         task["consecutive_failures"] = int(task.get("consecutive_failures") or 0) + 1
         task["updated_at"] = now
         self._save()

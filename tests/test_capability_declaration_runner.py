@@ -984,7 +984,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(telemetry.last["payload"]["details"]["workflow_status"], "done")
 
-    async def test_emit_periodic_status_telemetry_publishes_heartbeat_payload(self):
+    async def test_emit_periodic_status_telemetry_publishes_telemetry_payload(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
         lifecycle.transition_to(NodeLifecycleState.TRUSTED)
         lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
@@ -1011,13 +1011,41 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(telemetry.last)
         self.assertEqual(telemetry.last["payload"]["health_status"], "unknown")
         self.assertEqual(telemetry.last["payload"]["ttl_s"], 300)
-        self.assertEqual(telemetry.last["payload"]["details"]["event_type"], "heartbeat")
-        self.assertEqual(telemetry.last["payload"]["details"]["heartbeat_interval_seconds"], 60)
+        self.assertEqual(telemetry.last["payload"]["details"]["event_type"], "telemetry")
+        self.assertEqual(telemetry.last["payload"]["details"]["telemetry_interval_seconds"], 50)
         self.assertEqual(telemetry.last["payload"]["details"]["message_expiry_interval_seconds"], 1800)
         self.assertEqual(
             telemetry.last["payload"]["details"]["overall_status"],
             "capability_setup_pending",
         )
+
+    async def test_emit_periodic_heartbeat_publishes_heartbeat_payload(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
+        lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        telemetry = _FakeTelemetryPublisher()
+        runner = CapabilityDeclarationRunner(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("capability-runner-test"),
+            trust_store=_FakeTrustStore(),
+            provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
+            node_id=TEST_NODE_ID,
+            capability_state_store=_FakeCapabilityStateStore(),
+            governance_state_store=_FakeGovernanceStateStore(),
+            capability_client=_FakeClientAccepted(),
+            governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
+            telemetry_publisher=telemetry,
+            phase2_state_store=_FakePhase2StateStore(),
+        )
+
+        result = await runner.emit_periodic_heartbeat()
+
+        self.assertTrue(result["published"])
+        self.assertIsNotNone(telemetry.last)
+        self.assertEqual(telemetry.last["payload"]["details"]["event_type"], "heartbeat")
+        self.assertEqual(telemetry.last["payload"]["details"]["heartbeat_interval_seconds"], 5)
 
 
 if __name__ == "__main__":
