@@ -114,6 +114,7 @@ class NodeControlFastApiTests(unittest.TestCase):
         def __init__(self):
             self.workflow_notifications = []
             self.redeclare_calls = []
+            self.reonboarding_cleared = False
 
         async def submit_once(self):
             return {"status": "accepted"}
@@ -130,6 +131,9 @@ class NodeControlFastApiTests(unittest.TestCase):
 
         def recover_from_degraded(self):
             return {"status": "recovered", "target_state": "capability_setup_pending"}
+
+        def clear_local_state_for_reonboarding(self):
+            self.reonboarding_cleared = True
 
         def status_payload(self):
             return {
@@ -159,8 +163,8 @@ class NodeControlFastApiTests(unittest.TestCase):
             return {"published": True, "last_error": None}
 
     class _FakeTrustStateStore:
-        def load(self):
-            return {
+        def __init__(self):
+            self.payload = {
                 "node_id": "node-001",
                 "node_name": "main-ai-node",
                 "node_type": "ai-node",
@@ -176,6 +180,12 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "bootstrap_mqtt_host": "10.0.0.100",
                 "registration_timestamp": "2026-03-11T00:00:00Z",
             }
+
+        def load(self):
+            return self.payload
+
+        def clear(self):
+            self.payload = None
 
     class _FakeBudgetDeclarationClient:
         def __init__(self):
@@ -474,6 +484,7 @@ class NodeControlFastApiTests(unittest.TestCase):
             runtime_manager = self._FakeProviderRuntimeManager()
             capability_runner = self._FakeCapabilityRunner()
             budget_declaration_client = self._FakeBudgetDeclarationClient()
+            trust_state_store = self._FakeTrustStateStore()
             config_path = Path(tmp) / "bootstrap_config.json"
             state = NodeControlState(
                 lifecycle=lifecycle,
@@ -483,7 +494,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 provider_credentials_store=self._FakeProviderCredentialsStore(),
                 task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
                 capability_runner=capability_runner,
-                trust_state_store=self._FakeTrustStateStore(),
+                trust_state_store=trust_state_store,
                 budget_declaration_client=budget_declaration_client,
                 provider_runtime_manager=runtime_manager,
                 service_manager=self._FakeServiceManager(),
@@ -625,6 +636,8 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertIn("feature_catalog", diagnostics_response.json())
             self.assertIn("capability_graph", diagnostics_response.json())
             self.assertIn("resolved_tasks", diagnostics_response.json())
+            self.assertIn("internal_scheduler", diagnostics_response.json())
+            self.assertIn("provider_capability_refresh", diagnostics_response.json()["internal_scheduler"]["tasks"])
 
             pricing_diagnostics_response = client.get("/api/providers/openai/pricing/diagnostics")
             self.assertEqual(pricing_diagnostics_response.status_code, 200)
@@ -710,6 +723,14 @@ class NodeControlFastApiTests(unittest.TestCase):
             node_recover_response = client.post("/api/node/recover")
             self.assertEqual(node_recover_response.status_code, 200)
             self.assertEqual(node_recover_response.json()["status"], "recovered")
+
+            node_retrust_response = client.post("/api/node/retrust")
+            self.assertEqual(node_retrust_response.status_code, 200)
+            self.assertEqual(node_retrust_response.json()["flow"], "trust_rerequest")
+            self.assertEqual(node_retrust_response.json()["lifecycle_state"], "bootstrap_connecting")
+            self.assertTrue(capability_runner.reonboarding_cleared)
+            self.assertIsNone(trust_state_store.load())
+            self.assertTrue(config_path.exists())
 
             prompt_register_response = client.post(
                 "/api/prompts/services",

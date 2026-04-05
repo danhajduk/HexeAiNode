@@ -71,6 +71,10 @@ export function DiagnosticsPage({
         <pre className="json-block">{JSON.stringify(capabilityDiagnostics?.pricing_diagnostics || {}, null, 2)}</pre>
       </Section>
 
+      <Section title="Internal Scheduler" subtitle="Node-local recurring task ownership, schedule, and recent health.">
+        <pre className="json-block">{JSON.stringify(capabilityDiagnostics?.internal_scheduler || {}, null, 2)}</pre>
+      </Section>
+
       <Section title="Capability Graph" subtitle="Full graph payload used for resolved node capabilities.">
         <pre className="json-block">{JSON.stringify(capabilityDiagnostics?.capability_graph || {}, null, 2)}</pre>
       </Section>

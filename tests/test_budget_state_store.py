@@ -48,6 +48,22 @@ class BudgetStateStoreTests(unittest.TestCase):
             loaded = store.load()
             self.assertEqual(loaded, payload)
 
+    def test_not_configured_policy_without_grants_is_valid(self):
+        payload = create_budget_state()
+        payload["budget_policy"] = {
+            "node_id": "node-001",
+            "service": "ai.inference",
+            "status": "not_configured",
+            "budget_policy_version": None,
+            "governance_version": "gov-001",
+            "grants": [],
+        }
+
+        is_valid, error = validate_budget_state(payload)
+
+        self.assertTrue(is_valid)
+        self.assertIsNone(error)
+
 
 if __name__ == "__main__":
     unittest.main()

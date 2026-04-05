@@ -54,6 +54,7 @@ class RegistrationClient:
         hostname: str | None = None,
         ui_endpoint: str | None = None,
         api_base_url: str | None = None,
+        set_pending_state: bool = True,
     ) -> dict:
         if not isinstance(bootstrap_payload, dict):
             raise ValueError("bootstrap_payload is required")
@@ -87,7 +88,8 @@ class RegistrationClient:
         if normalized_api_base_url is not None:
             payload["api_base_url"] = normalized_api_base_url
 
-        self._lifecycle.transition_to(NodeLifecycleState.REGISTRATION_PENDING)
+        if set_pending_state:
+            self._lifecycle.transition_to(NodeLifecycleState.REGISTRATION_PENDING)
         self._diag.registration_attempt(
             {
                 "url": resolved_url,

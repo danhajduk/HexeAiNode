@@ -242,6 +242,39 @@ class CapabilityDeclarationRunner:
         self._governance_status["refresh_state"] = "idle"
         self._governance_status["last_refresh_error"] = None
 
+    def update_node_id(self, node_id: str) -> None:
+        normalized = str(node_id or "").strip()
+        if not normalized:
+            raise ValueError("node_id is required")
+        self._node_id = normalized
+
+    async def check_operational_mqtt_health_once(self) -> dict | None:
+        if self._trust_store is None or not hasattr(self._trust_store, "load"):
+            return None
+        trust_state = self._trust_store.load()
+        if not isinstance(trust_state, dict):
+            return None
+        readiness = await self._operational_readiness_checker.check_once(trust_state=trust_state)
+        healthy = bool(readiness.get("ready"))
+        return {
+            "healthy": healthy,
+            "last_error": None if healthy else str(readiness.get("last_error") or "operational_mqtt_not_ready"),
+            "readiness": readiness,
+            "node_id": self._node_id,
+        }
+
+    def mark_operational_mqtt_unhealthy(self, *, error: object) -> dict:
+        self._last_error = str(error or "operational_mqtt_not_ready")
+        self._diag.degraded_recovery(
+            {"node_id": self._node_id, "event": "degraded", "source": "operational_mqtt", "error": self._last_error}
+        )
+        self._notify_degraded(
+            source="operational_mqtt",
+            error=self._last_error,
+            retryable=True,
+        )
+        return {"status": self._status, "last_error": self._last_error}
+
     def _provider_report_payload(self) -> dict | None:
         if not isinstance(self._provider_capability_report, dict):
             return None

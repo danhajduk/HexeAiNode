@@ -44,11 +44,13 @@ Notes:
 Canonical routes:
 
 - `GET /api/node/status`
+- `POST /api/node/retrust`
 - `POST /api/node/recover`
 
 Notes:
 
 - `/api/node/status` is the repo’s primary lifecycle, trust, onboarding, and readiness status surface.
+- `/api/node/retrust` clears the current trusted linkage and restarts bootstrap onboarding so the node can request trust again.
 - `/api/node/recover` is the explicit degraded recovery action.
 
 ### Onboarding

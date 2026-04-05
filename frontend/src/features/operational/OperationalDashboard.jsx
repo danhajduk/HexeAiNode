@@ -86,6 +86,7 @@ export function OperationalDashboard({
   activityItems = [],
   clientCostItems = [],
   clientUsageMonth = "",
+  governanceStatus = null,
   onboardingSteps = [],
   onboardingProgress = {},
   pendingApprovalNodeId,
@@ -192,6 +193,7 @@ export function OperationalDashboard({
           <ClientCostCard
             clients={clientCostItems}
             currentMonth={clientUsageMonth}
+            governanceStatus={governanceStatus}
             className="operational-card-full-span"
           />
         ) : null}

@@ -1,13 +1,63 @@
-Workflow skill: $synthia-workflow
-(/home/dan/.codex/skills/synthia-workflow/SKILL.md)
+Workflow skill: implementation workflow
 
-Task file rules:
+## Codex Execution Directive
 
-- Tasks must use the format `[TODO] Task NNN: Title`
-- Only one `[WIP]` task may exist at a time
-- Tasks are executed top-to-bottom
-- Keep this file limited to normalized task lines below the divider
-- Preserve extra task detail in `docs/task-details.md` when needed
+You are acting as the Hexe development agent.
+
+Your job is to implement tasks listed in this file sequentially.
+
+Rules:
+
+1. Work through tasks in numerical order.
+2. Continue executing tasks until ALL tasks are completed.
+3. Do not stop after partial implementation.
+4. Do not return summaries unless every task is finished.
+5. If a task cannot be completed:
+   - document the blocker
+   - implement everything else that is possible
+   - continue to the next task.
+
+Execution behavior:
+
+- Read the repository before modifying code.
+- Follow existing architecture and coding conventions.
+- Update or create files as required.
+- Run tests or validation where possible.
+- Commit after each completed task.
+
+Completion criteria:
+
+A task is considered complete only when:
+- implementation exists in the codebase
+- it compiles or runs without breaking existing features
+- any required documentation is updated
+
+Persistence rule:
+
+Continue working autonomously until all tasks in this document are completed.
+Do not stop early.
+
+if there is missing data for the task check in the @Core-Documents folder.for core documentation
+if it is not present and should be core-owned create a ticket for the req. data in the core dodc
+if it is not present and should be node-owned create a file with the new data in the core docs
+
+Standards reference:
+- Main standard entrypoint: `/home/dan/Projects/Hexe/docs/standards/Node/README.md`
+- Detailed standards folder: `/home/dan/Projects/Hexe/docs/standards/Node/`
 
 Do not edit above this line:
 #######################################################################
+
+[TODO] Task 206: Extend the internal scheduler schedule catalog to include an operator-visible 10 second interval schedule
+[TODO] Task 207: Update the Hexe background-task and internal scheduler standard document to include the 10 second interval schedule option
+[TODO] Task 208: Split status heartbeat and telemetry into distinct internal scheduler tasks with separate schedule definitions
+[TODO] Task 209: Change heartbeat scheduling to a 5 second interval and expose it as an operator-visible HB schedule
+[TODO] Task 210: Change telemetry scheduling to a 50 second interval and expose it as an operator-visible telemetry schedule
+[TODO] Task 211: Keep operational MQTT health on a 10 second interval schedule and align its scheduler metadata and diagnostics output
+[TODO] Task 212: Update node status and diagnostics payloads so heartbeat, telemetry, and MQTT health show their new schedule names and details
+[TODO] Task 213: Update frontend diagnostics and any scheduler-facing UI labels to reflect the new HB, telemetry, and 10 second interval schedules
+[TODO] Task 214: Add backend and frontend tests covering the new scheduler catalog entries and the split heartbeat versus telemetry timing
+[TODO] Task 215: Update node standards and runtime documentation to make heartbeat, telemetry, and operational_mqtt_health mandatory recurring tasks for every node
+[TODO] Task 216: Add a mandatory Scheduled Tasks page to the node dashboard using the HexeEmail scheduled-tasks page structure as the implementation reference
+[TODO] Task 217: Expose scheduler task list data in a page-oriented format that supports a dedicated Scheduled Tasks table view
+[TODO] Task 218: Add frontend tests for the Scheduled Tasks page and verify it shows task cadence, status, and recent execution state

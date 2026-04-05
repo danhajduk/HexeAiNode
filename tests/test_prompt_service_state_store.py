@@ -144,6 +144,42 @@ class PromptServiceStateStoreTests(unittest.TestCase):
         self.assertEqual(prompt["access_scope"], "shared")
         self.assertEqual(prompt["allowed_services"], ["svc-beta"])
 
+    def test_normalize_preserves_draft_status(self):
+        payload = normalize_prompt_service_state(
+            {
+                "schema_version": "2.0",
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.alpha",
+                        "prompt_name": "Prompt Alpha",
+                        "service_id": "svc-alpha",
+                        "owner_service": "svc-alpha",
+                        "task_family": "task.classification",
+                        "status": "draft",
+                        "privacy_class": "internal",
+                        "access_scope": "service",
+                        "execution_policy": {"allow_direct_execution": True, "allow_version_pinning": True},
+                        "provider_preferences": {},
+                        "constraints": {},
+                        "metadata": {},
+                        "current_version": "v1",
+                        "versions": [{"version": "v1", "definition": {}, "metadata": {}, "created_at": "2026-03-12T00:00:00Z"}],
+                        "lifecycle_history": [{"state": "draft", "reason": "created", "changed_at": "2026-03-12T00:00:00Z"}],
+                        "usage": {"execution_count": 0, "success_count": 0, "failure_count": 0, "denial_count": 0},
+                        "registered_at": "2026-03-12T00:00:00Z",
+                        "updated_at": "2026-03-12T00:00:00Z",
+                        "last_reviewed_at": None,
+                        "reviewed_by": None,
+                        "review_reason": None,
+                    }
+                ],
+                "probation": {"active_prompt_ids": [], "reasons": {}, "updated_at": "2026-03-12T00:00:00Z"},
+                "updated_at": "2026-03-12T00:00:00Z",
+            }
+        )
+        prompt = payload["prompt_services"][0]
+        self.assertEqual(prompt["status"], "draft")
+
 
 if __name__ == "__main__":
     unittest.main()

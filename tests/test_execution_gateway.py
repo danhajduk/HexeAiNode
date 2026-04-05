@@ -32,6 +32,24 @@ class ExecutionGatewayTests(unittest.TestCase):
         self.assertFalse(result.allowed)
         self.assertEqual(result.reason, "prompt_in_probation")
 
+    def test_deny_when_prompt_is_in_draft(self):
+        gateway = ExecutionGateway()
+        result = gateway.authorize(
+            prompt_id="prompt.alpha",
+            task_family="task.classification",
+            prompt_services_state={
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.alpha",
+                        "task_family": "task.classification",
+                        "status": "draft",
+                    }
+                ]
+            },
+        )
+        self.assertFalse(result.allowed)
+        self.assertEqual(result.reason, "prompt_state_invalid")
+
     def test_allow_registered_prompt(self):
         gateway = ExecutionGateway()
         result = gateway.authorize(

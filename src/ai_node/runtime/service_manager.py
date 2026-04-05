@@ -1,4 +1,5 @@
 import os
+import shlex
 import subprocess
 
 
@@ -36,6 +37,25 @@ class UserSystemdServiceManager:
             self._restart_unit(self._frontend_unit)
             return {"target": "node", "result": "restarted"}
         raise ValueError("unsupported restart target")
+
+    def schedule_restart(self, *, target: str, delay_seconds: int) -> dict:
+        value = str(target or "").strip().lower()
+        delay = max(int(delay_seconds), 0)
+        if value == "backend":
+            unit = self._backend_unit
+        elif value == "frontend":
+            unit = self._frontend_unit
+        else:
+            raise ValueError("unsupported scheduled restart target")
+        command = f"sleep {delay}; systemctl --user restart {shlex.quote(unit)}"
+        subprocess.Popen(
+            ["bash", "-lc", command],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=self._systemd_env(),
+            start_new_session=True,
+        )
+        return {"target": value, "result": "scheduled", "delay_seconds": delay}
 
     def _query_active(self, unit: str) -> str:
         try:
@@ -88,4 +108,7 @@ class NullServiceManager:
         return {"backend": "unknown", "frontend": "unknown", "node": "unknown"}
 
     def restart(self, *, target: str) -> dict:
+        raise ValueError("service manager is not configured")
+
+    def schedule_restart(self, *, target: str, delay_seconds: int) -> dict:
         raise ValueError("service manager is not configured")

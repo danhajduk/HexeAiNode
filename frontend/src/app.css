@@ -383,6 +383,12 @@
   margin-top: 14px;
 }
 
+.client-unused-prompts-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .client-cost-group {
   display: grid;
   gap: 8px;
@@ -433,6 +439,10 @@
   align-items: stretch;
 }
 
+.client-governance-budget-grid {
+  margin-bottom: 12px;
+}
+
 .client-summary-block {
   min-width: 0;
   height: 100%;
@@ -470,11 +480,36 @@
 
 .client-cost-prompt-title-block {
   display: grid;
-  gap: 2px;
+  gap: 4px;
+}
+
+.client-cost-prompt-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .client-cost-prompt-meta {
   margin: 0;
+}
+
+.client-cost-prompt-meta-compact {
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+.client-cost-prompt-state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  border: 1px solid currentColor;
+  border-radius: var(--sx-radius-pill);
+  background: hsl(var(--sx-panel));
+  text-transform: capitalize;
+  line-height: 1;
 }
 
 .client-cost-prompt-costs {

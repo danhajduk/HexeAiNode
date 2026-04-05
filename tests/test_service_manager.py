@@ -56,6 +56,20 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(payload["frontend"], "running")
         self.assertEqual(payload["node"], "running")
 
+    def test_schedule_restart_launches_detached_restart_command(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+        with patch("subprocess.Popen") as fake_popen:
+            result = manager.schedule_restart(target="backend", delay_seconds=10)
+
+        self.assertEqual(result["target"], "backend")
+        self.assertEqual(result["result"], "scheduled")
+        self.assertEqual(result["delay_seconds"], 10)
+        command = fake_popen.call_args.args[0]
+        self.assertEqual(command[:2], ["bash", "-lc"])
+        self.assertIn("sleep 10;", command[2])
+        self.assertIn("systemctl --user restart synthia-ai-node-backend.service", command[2])
+
 
 if __name__ == "__main__":
     unittest.main()

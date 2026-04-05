@@ -22,6 +22,8 @@ from ai_node.runtime.bootstrap_mqtt_runner import BootstrapMqttRunner
 from ai_node.runtime.bootstrap_timeout import BootstrapConnectTimeoutMonitor
 from ai_node.runtime.budget_manager import BudgetManager
 from ai_node.runtime.capability_declaration_runner import CapabilityDeclarationRunner
+from ai_node.runtime.internal_scheduler import InternalScheduler
+from ai_node.runtime.operational_mqtt_recovery_store import OperationalMqttRecoveryStore
 from ai_node.runtime.node_control_api import NodeControlState, create_node_control_app
 from ai_node.runtime.onboarding_runtime import OnboardingRuntime
 from ai_node.runtime.service_manager import UserSystemdServiceManager
@@ -31,6 +33,7 @@ from ai_node.persistence.governance_state_store import GovernanceStateStore
 from ai_node.persistence.phase2_state_store import Phase2StateStore
 from ai_node.persistence.prompt_service_state_store import PromptServiceStateStore
 from ai_node.persistence.budget_state_store import BudgetStateStore
+from ai_node.persistence.internal_scheduler_state_store import InternalSchedulerStateStore
 from ai_node.persistence.client_usage_store import (
     ClientUsageStore,
     aggregate_provider_execution_log,
@@ -269,6 +272,29 @@ def build_parser() -> argparse.ArgumentParser:
         default=float(os.environ.get("SYNTHIA_FINALIZE_POLL_INTERVAL_SECONDS", "2")),
         help="Polling interval for onboarding finalize status",
     )
+    parser.add_argument(
+        "--operational-mqtt-recovery-state-path",
+        default=os.environ.get("SYNTHIA_OPERATIONAL_MQTT_RECOVERY_STATE_PATH", ".run/operational_mqtt_recovery.json"),
+        help="Path to persisted operational MQTT recovery state",
+    )
+    parser.add_argument(
+        "--operational-mqtt-health-check-interval-seconds",
+        type=int,
+        default=int(os.environ.get("SYNTHIA_OPERATIONAL_MQTT_HEALTH_CHECK_INTERVAL_SECONDS", "10")),
+        help="Interval between operational MQTT health checks",
+    )
+    parser.add_argument(
+        "--operational-mqtt-restart-delay-seconds",
+        type=int,
+        default=int(os.environ.get("SYNTHIA_OPERATIONAL_MQTT_RESTART_DELAY_SECONDS", "10")),
+        help="Delay before requesting an automatic backend restart after MQTT health failure",
+    )
+    parser.add_argument(
+        "--operational-mqtt-restart-max-attempts",
+        type=int,
+        default=int(os.environ.get("SYNTHIA_OPERATIONAL_MQTT_RESTART_MAX_ATTEMPTS", "3")),
+        help="Maximum automatic backend restart attempts for operational MQTT recovery",
+    )
     return parser
 
 
@@ -322,6 +348,10 @@ def run(
     openai_pricing_refresh_interval_seconds: int = 86400,
     openai_pricing_stale_tolerance_seconds: int = 172800,
     finalize_poll_interval_seconds: float = 2.0,
+    operational_mqtt_recovery_state_path: str = ".run/operational_mqtt_recovery.json",
+    operational_mqtt_health_check_interval_seconds: int = 10,
+    operational_mqtt_restart_delay_seconds: int = 10,
+    operational_mqtt_restart_max_attempts: int = 3,
 ) -> int:
     configure_logging(log_file)
     LOGGER.info("[Hexe AI Node] starting backend")
@@ -377,6 +407,15 @@ def run(
     )
     budget_state_store = BudgetStateStore(path=budget_state_path, logger=LOGGER)
     client_usage_store = ClientUsageStore(path=client_usage_db_path, logger=LOGGER)
+    operational_mqtt_recovery_store = OperationalMqttRecoveryStore(
+        path=operational_mqtt_recovery_state_path,
+        logger=LOGGER,
+    )
+    internal_scheduler_state_store = InternalSchedulerStateStore(
+        path=".run/internal_scheduler_state.json",
+        logger=LOGGER,
+    )
+    internal_scheduler = InternalScheduler(logger=LOGGER, store=internal_scheduler_state_store)
     provider_runtime_manager = ProviderRuntimeManager(
         logger=LOGGER,
         provider_selection_store=provider_selection_store,
@@ -592,6 +631,7 @@ def run(
         api_base_url=resolved_node_api_base_url,
         trust_state_path=trust_state_path,
         finalize_poll_interval_seconds=finalize_poll_interval_seconds,
+        node_identity_store=node_identity_store,
     )
     bootstrap_runner = BootstrapMqttRunner(
         lifecycle=lifecycle,
@@ -644,10 +684,16 @@ def run(
         budget_manager=budget_manager,
         notification_service=notification_service,
         service_manager=service_manager,
+        internal_scheduler=internal_scheduler,
         provider_refresh_interval_seconds=provider_capability_refresh_interval_seconds,
+        mqtt_recovery_store=operational_mqtt_recovery_store,
+        operational_mqtt_health_check_interval_seconds=operational_mqtt_health_check_interval_seconds,
+        operational_mqtt_restart_delay_seconds=operational_mqtt_restart_delay_seconds,
+        operational_mqtt_restart_max_attempts=operational_mqtt_restart_max_attempts,
         startup_mode=startup_mode,
         trusted_runtime_context=trusted_runtime_context,
     )
+    onboarding_runtime.set_node_identity_changed_callback(control_state.handle_node_identity_change)
     app = create_node_control_app(state=control_state, logger=LOGGER)
     LOGGER.info("[Hexe AI Node] phase1 modules loaded; control API active")
 

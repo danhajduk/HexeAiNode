@@ -2,7 +2,7 @@ import asyncio
 import threading
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Callable, Optional
 from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
@@ -58,6 +58,8 @@ class OnboardingRuntime:
         api_base_url: Optional[str] = None,
         trust_state_path: str = ".run/trust_state.json",
         finalize_poll_interval_seconds: float = 2.0,
+        node_identity_store=None,
+        on_node_identity_changed: Callable[[str], None] | None = None,
     ) -> None:
         self._lifecycle = lifecycle
         self._logger = logger
@@ -77,12 +79,15 @@ class OnboardingRuntime:
             logger=logger,
         )
         self._trust_store = TrustStateStore(path=trust_state_path, logger=logger)
+        self._node_identity_store = node_identity_store
+        self._on_node_identity_changed = on_node_identity_changed or (lambda _node_id: None)
         self._lock = threading.Lock()
         self._inflight = False
         self._run_id = 0
         self._pending_approval_url = None
         self._pending_session_id = None
         self._pending_node_nonce = None
+        self._allow_duplicate_identity_reset = False
 
     def on_core_discovered(self, bootstrap_payload: dict, node_name: str) -> None:
         with self._lock:
@@ -116,6 +121,14 @@ class OnboardingRuntime:
             self._pending_approval_url = None
             self._pending_session_id = None
             self._pending_node_nonce = None
+            self._allow_duplicate_identity_reset = False
+
+    def prepare_retrust(self, *, allow_identity_reset_on_duplicate: bool = False) -> None:
+        with self._lock:
+            self._allow_duplicate_identity_reset = bool(allow_identity_reset_on_duplicate)
+
+    def set_node_identity_changed_callback(self, callback: Callable[[str], None] | None) -> None:
+        self._on_node_identity_changed = callback or (lambda _node_id: None)
 
     def _is_run_active(self, run_id: int) -> bool:
         with self._lock:
@@ -155,17 +168,9 @@ class OnboardingRuntime:
     async def _run_registration_async(self, bootstrap_payload: dict, node_name: str, run_id: int) -> None:
         if not self._is_run_active(run_id):
             return
-        node_nonce = str(uuid.uuid4())
-        response = await self._registration_client.register(
+        response, node_nonce = await self._register_with_duplicate_identity_fallback(
             bootstrap_payload=bootstrap_payload,
-            node_id=self._node_id,
             node_name=node_name,
-            node_software_version=self._node_software_version,
-            protocol_version=self._protocol_version,
-            node_nonce=node_nonce,
-            hostname=self._hostname,
-            ui_endpoint=self._ui_endpoint,
-            api_base_url=self._api_base_url,
         )
         status = (
             response.get("status")
@@ -213,6 +218,67 @@ class OnboardingRuntime:
             run_id=run_id,
             node_nonce=node_nonce,
         )
+
+    async def _register_with_duplicate_identity_fallback(
+        self,
+        *,
+        bootstrap_payload: dict,
+        node_name: str,
+    ) -> tuple[dict, str]:
+        attempted_identity_reset = False
+        while True:
+            node_nonce = str(uuid.uuid4())
+            try:
+                response = await self._registration_client.register(
+                    bootstrap_payload=bootstrap_payload,
+                    node_id=self._node_id,
+                    node_name=node_name,
+                    node_software_version=self._node_software_version,
+                    protocol_version=self._protocol_version,
+                    node_nonce=node_nonce,
+                    hostname=self._hostname,
+                    ui_endpoint=self._ui_endpoint,
+                    api_base_url=self._api_base_url,
+                    set_pending_state=not attempted_identity_reset,
+                )
+                with self._lock:
+                    self._allow_duplicate_identity_reset = False
+                return response, node_nonce
+            except Exception as exc:
+                if not self._should_retry_duplicate_identity(exc=exc, attempted=attempted_identity_reset):
+                    raise
+                attempted_identity_reset = True
+                self._rotate_node_identity_for_retry()
+
+    def _should_retry_duplicate_identity(self, *, exc: Exception, attempted: bool) -> bool:
+        if attempted:
+            return False
+        with self._lock:
+            allowed = self._allow_duplicate_identity_reset
+        if not allowed:
+            return False
+        normalized = str(exc or "").strip().lower()
+        return "duplicate_node_identity" in normalized
+
+    def _rotate_node_identity_for_retry(self) -> None:
+        if self._node_identity_store is None or not hasattr(self._node_identity_store, "create"):
+            raise RuntimeError("duplicate node identity retry requires node identity store create() support")
+        identity = self._node_identity_store.create()
+        new_node_id = str((identity or {}).get("node_id") or "").strip()
+        if not new_node_id:
+            raise RuntimeError("duplicate node identity retry did not produce a valid node_id")
+        old_node_id = self._node_id
+        self._node_id = new_node_id
+        with self._lock:
+            self._pending_approval_url = None
+            self._pending_session_id = None
+            self._pending_node_nonce = None
+        if hasattr(self._logger, "warning"):
+            self._logger.warning(
+                "[registration-duplicate-node-identity-retry] %s",
+                {"from_node_id": old_node_id, "to_node_id": new_node_id},
+            )
+        self._on_node_identity_changed(new_node_id)
 
     @staticmethod
     def _build_finalize_url(*, api_base: str, finalize_path: str, node_nonce: str) -> str:

@@ -9,6 +9,7 @@ from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
 from ai_node.runtime.node_control_api import NodeControlState
+from ai_node.runtime.operational_mqtt_recovery_store import OperationalMqttRecoveryStore
 
 
 class NodeControlApiTests(unittest.TestCase):
@@ -617,6 +618,8 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(payload["trusted_runtime_context"]["paired_core_id"], "core-main")
             self.assertEqual(len(runner.calls), 0)
             self.assertTrue(payload["capability_setup"]["active"])
+            self.assertTrue(payload["internal_scheduler"]["configured"])
+            self.assertIn("provider_capability_refresh", payload["internal_scheduler"]["tasks"])
 
     def test_start_background_jobs_starts_bootstrap_listener_from_trust_state(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1169,6 +1172,148 @@ class NodeControlApiTests(unittest.TestCase):
             prompt = migrated["state"]["prompt_services"][0]
             self.assertEqual(prompt["status"], "review_due")
             self.assertEqual(prompt["lifecycle_history"][-1]["reason"], "policy_migration_review_due")
+
+
+class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    class _FakeCapabilityRunner:
+        def __init__(self, *, healthy: bool, error: str | None = None):
+            self.healthy = healthy
+            self.error = error
+            self.unhealthy_calls = []
+            self.recover_calls = 0
+
+        async def check_operational_mqtt_health_once(self):
+            return {
+                "healthy": self.healthy,
+                "last_error": None if self.healthy else (self.error or "mqtt_down"),
+                "readiness": {"ready": self.healthy, "last_error": self.error},
+            }
+
+        def mark_operational_mqtt_unhealthy(self, *, error):
+            self.unhealthy_calls.append(str(error))
+            return {"last_error": str(error)}
+
+        def recover_from_degraded(self):
+            self.recover_calls += 1
+            return {"target_state": NodeLifecycleState.OPERATIONAL.value}
+
+        def status_payload(self):
+            return {
+                "status": "accepted",
+                "operational_mqtt_readiness": {"ready": self.healthy, "last_error": self.error},
+            }
+
+    class _FakeServiceManager:
+        def __init__(self):
+            self.calls = []
+
+        def get_status(self):
+            return {"backend": "running", "frontend": "running", "node": "running"}
+
+        def schedule_restart(self, *, target: str, delay_seconds: int):
+            payload = {"target": target, "delay_seconds": delay_seconds}
+            self.calls.append(payload)
+            return {"target": target, "result": "scheduled", "delay_seconds": delay_seconds}
+
+    async def test_unhealthy_operational_mqtt_transitions_to_degraded_and_schedules_restart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED)
+            lifecycle.transition_to(NodeLifecycleState.OPERATIONAL)
+            capability_runner = self._FakeCapabilityRunner(healthy=False, error="connection_refused")
+            service_manager = self._FakeServiceManager()
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=capability_runner,
+                service_manager=service_manager,
+                mqtt_recovery_store=OperationalMqttRecoveryStore(
+                    path=str(Path(tmp) / "operational_mqtt_recovery.json"),
+                    logger=logging.getLogger("node-control-test"),
+                ),
+                operational_mqtt_health_check_interval_seconds=5,
+                operational_mqtt_restart_delay_seconds=1,
+                operational_mqtt_restart_max_attempts=3,
+            )
+
+            result = await state.check_operational_mqtt_health_once()
+
+            self.assertEqual(lifecycle.get_state(), NodeLifecycleState.DEGRADED)
+            self.assertTrue(result["restart_scheduled"])
+            self.assertEqual(len(service_manager.calls), 1)
+            self.assertEqual(capability_runner.unhealthy_calls[-1], "connection_refused")
+            self.assertEqual(state.operational_mqtt_recovery_payload()["attempt_count"], 1)
+
+    async def test_unhealthy_operational_mqtt_stops_after_third_attempt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED)
+            lifecycle.transition_to(NodeLifecycleState.OPERATIONAL)
+            capability_runner = self._FakeCapabilityRunner(healthy=False, error="connection_refused")
+            service_manager = self._FakeServiceManager()
+            recovery_store = OperationalMqttRecoveryStore(
+                path=str(Path(tmp) / "operational_mqtt_recovery.json"),
+                logger=logging.getLogger("node-control-test"),
+            )
+            recovery_store.mark_exhausted(error="connection_refused", max_attempts=3)
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=capability_runner,
+                service_manager=service_manager,
+                mqtt_recovery_store=recovery_store,
+                operational_mqtt_health_check_interval_seconds=5,
+                operational_mqtt_restart_delay_seconds=1,
+                operational_mqtt_restart_max_attempts=3,
+            )
+
+            result = await state.check_operational_mqtt_health_once()
+
+            self.assertEqual(result["reason"], "restart_attempts_exhausted")
+            self.assertFalse(result["restart_scheduled"])
+            self.assertEqual(len(service_manager.calls), 0)
+            self.assertTrue(state.operational_mqtt_recovery_payload()["exhausted"])
+
+    async def test_healthy_operational_mqtt_clears_recovery_cycle_and_recovers_degraded_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED)
+            lifecycle.transition_to(NodeLifecycleState.OPERATIONAL)
+            lifecycle.transition_to(NodeLifecycleState.DEGRADED)
+            capability_runner = self._FakeCapabilityRunner(healthy=True)
+            recovery_store = OperationalMqttRecoveryStore(
+                path=str(Path(tmp) / "operational_mqtt_recovery.json"),
+                logger=logging.getLogger("node-control-test"),
+            )
+            recovery_store.record_restart_requested(error="connection_refused", delay_seconds=1, max_attempts=3)
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=capability_runner,
+                service_manager=self._FakeServiceManager(),
+                mqtt_recovery_store=recovery_store,
+                operational_mqtt_health_check_interval_seconds=5,
+                operational_mqtt_restart_delay_seconds=1,
+                operational_mqtt_restart_max_attempts=3,
+            )
+
+            result = await state.check_operational_mqtt_health_once()
+
+            self.assertEqual(result["status"], "healthy")
+            self.assertEqual(capability_runner.recover_calls, 1)
+            self.assertFalse(state.operational_mqtt_recovery_payload()["active"])
 
 
 if __name__ == "__main__":

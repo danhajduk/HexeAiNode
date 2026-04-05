@@ -20,6 +20,7 @@ from ai_node.config.task_capability_selection_config import DECLARABLE_TASK_FAMI
 from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.provider_resolver import ProviderResolver
+from ai_node.runtime.internal_scheduler import InternalScheduler
 from ai_node.runtime.service_manager import NullServiceManager
 from ai_node.runtime.capability_resolver import load_task_graph
 from ai_node.runtime.execution_telemetry import ExecutionTelemetryPublisher
@@ -84,7 +85,12 @@ class NodeControlState:
         notification_service=None,
         service_manager=None,
         task_execution_service=None,
+        internal_scheduler=None,
         provider_refresh_interval_seconds: int = 900,
+        mqtt_recovery_store=None,
+        operational_mqtt_health_check_interval_seconds: int = 10,
+        operational_mqtt_restart_delay_seconds: int = 10,
+        operational_mqtt_restart_max_attempts: int = 3,
         startup_mode: str = "bootstrap_onboarding",
         trusted_runtime_context: dict | None = None,
     ) -> None:
@@ -112,9 +118,12 @@ class NodeControlState:
         self._notification_service = notification_service
         self._service_manager = service_manager or NullServiceManager()
         self._task_execution_service = task_execution_service
+        self._internal_scheduler = internal_scheduler or InternalScheduler(logger=logger)
         self._provider_refresh_interval_seconds = max(int(provider_refresh_interval_seconds), 60)
-        self._provider_refresh_task: asyncio.Task | None = None
-        self._status_telemetry_task: asyncio.Task | None = None
+        self._mqtt_recovery_store = mqtt_recovery_store
+        self._operational_mqtt_health_check_interval_seconds = max(int(operational_mqtt_health_check_interval_seconds), 5)
+        self._operational_mqtt_restart_delay_seconds = max(int(operational_mqtt_restart_delay_seconds), 1)
+        self._operational_mqtt_restart_max_attempts = max(int(operational_mqtt_restart_max_attempts), 1)
         self._startup_mode = startup_mode
         self._trusted_runtime_context = trusted_runtime_context or {}
         self._phase2_diag = Phase2DiagnosticsLogger(logger)
@@ -132,6 +141,7 @@ class NodeControlState:
         self._load_task_capability_selection_config()
         self._load_prompt_service_state()
         self._load_existing_config()
+        self._register_background_scheduler_tasks()
 
     @staticmethod
     def _is_non_empty_string(value: object) -> bool:
@@ -470,9 +480,33 @@ class NodeControlState:
             "task_capability_selection_configured": self._task_capability_selection_config is not None,
             "capability_setup": capability_setup_contract,
             "capability_declaration": capability_context,
+            "operational_mqtt_recovery": self.operational_mqtt_recovery_payload(),
+            "internal_scheduler": self.internal_scheduler_payload(),
             "prompt_service_state": self.prompt_service_state_payload(),
             "services": self.service_status_payload().get("services"),
         }
+
+    def internal_scheduler_payload(self) -> dict:
+        if self._internal_scheduler is None or not hasattr(self._internal_scheduler, "snapshot"):
+            return {"configured": False, "scheduler_status": "unavailable", "tasks": {}}
+        snapshot = self._internal_scheduler.snapshot()
+        return {"configured": True, **(snapshot if isinstance(snapshot, dict) else {})}
+
+    def operational_mqtt_recovery_payload(self) -> dict:
+        if self._mqtt_recovery_store is None or not hasattr(self._mqtt_recovery_store, "snapshot"):
+            return {
+                "configured": False,
+                "active": False,
+                "attempt_count": 0,
+                "max_attempts": self._operational_mqtt_restart_max_attempts,
+                "last_error": None,
+                "last_checked_at": None,
+                "last_restart_requested_at": None,
+                "next_restart_not_before": None,
+                "exhausted": False,
+            }
+        snapshot = self._mqtt_recovery_store.snapshot()
+        return {"configured": True, **(snapshot if isinstance(snapshot, dict) else {})}
 
     def _sync_core_support_status(self) -> None:
         trust_state = (
@@ -517,6 +551,15 @@ class NodeControlState:
         path = getattr(store, "_path", None)
         if isinstance(path, Path) and path.exists():
             path.unlink()
+
+    @classmethod
+    def _clear_persisted_store(cls, store) -> None:
+        if store is None:
+            return
+        if hasattr(store, "clear") and callable(getattr(store, "clear")):
+            store.clear()
+            return
+        cls._delete_store_file(store)
 
     def _reset_for_core_removal(self, *, payload: dict) -> None:
         if hasattr(self._logger, "warning"):
@@ -1632,10 +1675,39 @@ class NodeControlState:
             "pricing_catalog": pricing_catalog,
             "pricing_diagnostics": pricing_diagnostics,
             "node_capabilities": node_capabilities,
+            "internal_scheduler": self.internal_scheduler_payload(),
             "classification_model": resolved.get("classification_model"),
             "last_declaration_payload": capability_status.get("last_manifest_payload"),
             "last_declaration_result": capability_status.get("last_declaration_result"),
         }
+
+    def _register_background_scheduler_tasks(self) -> None:
+        if self._internal_scheduler is None or not hasattr(self._internal_scheduler, "register_interval_task"):
+            return
+        self._internal_scheduler.register_interval_task(
+            task_id="provider_capability_refresh",
+            display_name="Provider Capability Refresh",
+            interval_seconds=self._provider_refresh_interval_seconds,
+            schedule_detail=f"Every {self._provider_refresh_interval_seconds} seconds after startup refresh",
+            task_kind="provider_specific_recurring",
+            readiness_critical=False,
+        )
+        self._internal_scheduler.register_interval_task(
+            task_id="status_telemetry_heartbeat",
+            display_name="Status Telemetry Heartbeat",
+            interval_seconds=STATUS_HEARTBEAT_INTERVAL_SECONDS,
+            schedule_detail=f"Every {STATUS_HEARTBEAT_INTERVAL_SECONDS} seconds",
+            task_kind="policy_refresh_loop",
+            readiness_critical=False,
+        )
+        self._internal_scheduler.register_interval_task(
+            task_id="operational_mqtt_health",
+            display_name="Operational MQTT Health",
+            interval_seconds=self._operational_mqtt_health_check_interval_seconds,
+            schedule_detail=f"Every {self._operational_mqtt_health_check_interval_seconds} seconds with immediate first run",
+            task_kind="local_recurring",
+            readiness_critical=False,
+        )
 
     async def refresh_governance(self) -> dict:
         if self._capability_runner is None or not hasattr(self._capability_runner, "refresh_governance_once"):
@@ -1686,10 +1758,22 @@ class NodeControlState:
             if hasattr(self._logger, "warning"):
                 self._logger.warning("[provider-intelligence-refresh-startup-error] %s", {"error": str(exc)})
         self._notify_back_online()
-        if self._provider_refresh_task is None or self._provider_refresh_task.done():
-            self._provider_refresh_task = asyncio.create_task(self._provider_refresh_loop())
-        if self._status_telemetry_task is None or self._status_telemetry_task.done():
-            self._status_telemetry_task = asyncio.create_task(self._status_telemetry_loop())
+        if self._internal_scheduler is not None and hasattr(self._internal_scheduler, "start_interval_task"):
+            self._internal_scheduler.start_interval_task(
+                task_id="provider_capability_refresh",
+                coroutine_factory=self._provider_refresh_job_once,
+                initial_delay_seconds=self._provider_refresh_interval_seconds,
+            )
+            self._internal_scheduler.start_interval_task(
+                task_id="status_telemetry_heartbeat",
+                coroutine_factory=self._status_telemetry_job_once,
+                initial_delay_seconds=STATUS_HEARTBEAT_INTERVAL_SECONDS,
+            )
+            self._internal_scheduler.start_interval_task(
+                task_id="operational_mqtt_health",
+                coroutine_factory=self._operational_mqtt_health_job_once,
+                initial_delay_seconds=0,
+            )
 
     def _notify_back_online(self) -> None:
         if self._notification_service is None or not hasattr(self._notification_service, "notify"):
@@ -1715,58 +1799,177 @@ class NodeControlState:
         )
 
     async def stop_background_jobs(self) -> None:
-        if self._provider_refresh_task is not None:
-            self._provider_refresh_task.cancel()
-            try:
-                await self._provider_refresh_task
-            except asyncio.CancelledError:
-                pass
-            self._provider_refresh_task = None
-        if self._status_telemetry_task is not None:
-            self._status_telemetry_task.cancel()
-            try:
-                await self._status_telemetry_task
-            except asyncio.CancelledError:
-                pass
-            self._status_telemetry_task = None
+        if self._internal_scheduler is not None and hasattr(self._internal_scheduler, "stop_all"):
+            await self._internal_scheduler.stop_all()
 
-    async def _provider_refresh_loop(self) -> None:
-        while True:
-            await asyncio.sleep(self._provider_refresh_interval_seconds)
-            try:
-                result = await self.refresh_provider_capabilities(force_refresh=False)
-                if hasattr(self._logger, "info"):
-                    self._logger.info(
-                        "[provider-intelligence-refresh-job] %s",
-                        {
-                            "status": result.get("status"),
-                            "changed": result.get("changed"),
-                            "core_submission": result.get("core_submission"),
-                        },
-                    )
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                if hasattr(self._logger, "warning"):
-                    self._logger.warning("[provider-intelligence-refresh-job-error] %s", {"error": str(exc)})
+    async def _provider_refresh_job_once(self) -> dict:
+        result = await self.refresh_provider_capabilities(force_refresh=False)
+        if hasattr(self._logger, "info"):
+            self._logger.info(
+                "[provider-intelligence-refresh-job] %s",
+                {
+                    "status": result.get("status"),
+                    "changed": result.get("changed"),
+                    "core_submission": result.get("core_submission"),
+                },
+            )
+        return result
 
-    async def _status_telemetry_loop(self) -> None:
-        while True:
-            await asyncio.sleep(STATUS_HEARTBEAT_INTERVAL_SECONDS)
-            if self._capability_runner is None or not hasattr(self._capability_runner, "emit_periodic_status_telemetry"):
-                continue
-            try:
-                result = await self._capability_runner.emit_periodic_status_telemetry()
-                if hasattr(self._logger, "info"):
-                    self._logger.info(
-                        "[status-telemetry-heartbeat-job] %s",
-                        {"published": bool((result or {}).get("published")), "result": result},
-                    )
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                if hasattr(self._logger, "warning"):
-                    self._logger.warning("[status-telemetry-heartbeat-job-error] %s", {"error": str(exc)})
+    async def _status_telemetry_job_once(self) -> dict | None:
+        if self._capability_runner is None or not hasattr(self._capability_runner, "emit_periodic_status_telemetry"):
+            return {"status": "skipped", "reason": "capability_runner_not_configured"}
+        result = await self._capability_runner.emit_periodic_status_telemetry()
+        if hasattr(self._logger, "info"):
+            self._logger.info(
+                "[status-telemetry-heartbeat-job] %s",
+                {"published": bool((result or {}).get("published")), "result": result},
+            )
+        return result
+
+    async def _operational_mqtt_health_job_once(self) -> dict | None:
+        result = await self.check_operational_mqtt_health_once()
+        if hasattr(self._logger, "info") and result is not None:
+            self._logger.info("[operational-mqtt-health-job] %s", result)
+        return result
+
+    async def check_operational_mqtt_health_once(self) -> dict | None:
+        lifecycle_state = self._lifecycle.get_state()
+        monitorable_states = {
+            NodeLifecycleState.TRUSTED,
+            NodeLifecycleState.CAPABILITY_SETUP_PENDING,
+            NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED,
+            NodeLifecycleState.OPERATIONAL,
+            NodeLifecycleState.DEGRADED,
+        }
+        recovery_snapshot = self.operational_mqtt_recovery_payload()
+        if lifecycle_state not in monitorable_states:
+            if recovery_snapshot.get("configured") and recovery_snapshot.get("active"):
+                self._mqtt_recovery_store.clear()
+            return {
+                "status": "skipped",
+                "reason": "lifecycle_not_monitorable",
+                "lifecycle_state": lifecycle_state.value,
+            }
+        if self._capability_runner is None or not hasattr(self._capability_runner, "check_operational_mqtt_health_once"):
+            return {
+                "status": "skipped",
+                "reason": "capability_runner_not_configured",
+                "lifecycle_state": lifecycle_state.value,
+            }
+
+        health = await self._capability_runner.check_operational_mqtt_health_once()
+        if not isinstance(health, dict):
+            return {
+                "status": "skipped",
+                "reason": "trust_state_unavailable",
+                "lifecycle_state": lifecycle_state.value,
+            }
+        if health.get("healthy"):
+            if recovery_snapshot.get("active") or recovery_snapshot.get("exhausted"):
+                if self._mqtt_recovery_store is not None and hasattr(self._mqtt_recovery_store, "clear"):
+                    self._mqtt_recovery_store.clear()
+                if (
+                    lifecycle_state == NodeLifecycleState.DEGRADED
+                    and self._capability_runner is not None
+                    and hasattr(self._capability_runner, "recover_from_degraded")
+                ):
+                    try:
+                        recovery = self._capability_runner.recover_from_degraded()
+                    except ValueError:
+                        recovery = {"status": "skipped", "reason": "degraded_recovery_unavailable"}
+                    return {
+                        "status": "healthy",
+                        "lifecycle_state": self._lifecycle.get_state().value,
+                        "health": health,
+                        "recovery": recovery,
+                    }
+            return {"status": "healthy", "lifecycle_state": lifecycle_state.value, "health": health}
+
+        error = str(health.get("last_error") or "operational_mqtt_not_ready")
+        if (
+            lifecycle_state != NodeLifecycleState.DEGRADED
+            and self._lifecycle.can_transition_to(NodeLifecycleState.DEGRADED)
+        ):
+            self._lifecycle.transition_to(
+                NodeLifecycleState.DEGRADED,
+                {"source": "operational_mqtt_health_monitor", "reason": error},
+            )
+        if self._capability_runner is not None and hasattr(self._capability_runner, "mark_operational_mqtt_unhealthy"):
+            self._capability_runner.mark_operational_mqtt_unhealthy(error=error)
+
+        if self._mqtt_recovery_store is None or not hasattr(self._mqtt_recovery_store, "record_restart_requested"):
+            return {
+                "status": "unhealthy",
+                "lifecycle_state": self._lifecycle.get_state().value,
+                "health": health,
+                "restart_scheduled": False,
+                "reason": "mqtt_recovery_store_not_configured",
+            }
+
+        active_snapshot = self._mqtt_recovery_store.note_unhealthy(
+            error=error,
+            max_attempts=self._operational_mqtt_restart_max_attempts,
+        )
+        if int(active_snapshot.get("attempt_count") or 0) >= int(active_snapshot.get("max_attempts") or 0):
+            exhausted = self._mqtt_recovery_store.mark_exhausted(
+                error=error,
+                max_attempts=self._operational_mqtt_restart_max_attempts,
+            )
+            return {
+                "status": "unhealthy",
+                "lifecycle_state": self._lifecycle.get_state().value,
+                "health": health,
+                "restart_scheduled": False,
+                "recovery": exhausted,
+                "reason": "restart_attempts_exhausted",
+            }
+
+        if self._service_manager is None or not hasattr(self._service_manager, "schedule_restart"):
+            exhausted = self._mqtt_recovery_store.mark_exhausted(
+                error=error,
+                max_attempts=self._operational_mqtt_restart_max_attempts,
+            )
+            return {
+                "status": "unhealthy",
+                "lifecycle_state": self._lifecycle.get_state().value,
+                "health": health,
+                "restart_scheduled": False,
+                "recovery": exhausted,
+                "reason": "service_manager_cannot_schedule_restart",
+            }
+        try:
+            scheduled_restart = self._service_manager.schedule_restart(
+                target="backend",
+                delay_seconds=self._operational_mqtt_restart_delay_seconds,
+            )
+        except Exception as exc:
+            exhausted = self._mqtt_recovery_store.mark_exhausted(
+                error=f"{error}; restart_schedule_failed: {exc}",
+                max_attempts=self._operational_mqtt_restart_max_attempts,
+            )
+            return {
+                "status": "unhealthy",
+                "lifecycle_state": self._lifecycle.get_state().value,
+                "health": health,
+                "restart_scheduled": False,
+                "recovery": exhausted,
+                "reason": "restart_schedule_failed",
+            }
+
+        recovery = self._mqtt_recovery_store.record_restart_requested(
+            error=error,
+            delay_seconds=self._operational_mqtt_restart_delay_seconds,
+            max_attempts=self._operational_mqtt_restart_max_attempts,
+        )
+        await asyncio.sleep(self._operational_mqtt_restart_delay_seconds + 1)
+        return {
+            "status": "unhealthy",
+            "lifecycle_state": self._lifecycle.get_state().value,
+            "health": health,
+            "restart_scheduled": True,
+            "scheduled_restart": scheduled_restart,
+            "recovery": recovery,
+        }
 
     def debug_providers_payload(self) -> dict:
         if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "providers_snapshot"):
@@ -1963,6 +2166,92 @@ class NodeControlState:
         self._lifecycle.reset_to_unconfigured({"source": "setup_ui_restart"})
         return self.status_payload()
 
+    def handle_node_identity_change(self, node_id: str) -> None:
+        normalized = str(node_id or "").strip()
+        if not normalized:
+            raise ValueError("node_id is required")
+        self._node_id = normalized
+        self._identity_state = "valid"
+        if self._capability_runner is not None and hasattr(self._capability_runner, "update_node_id"):
+            self._capability_runner.update_node_id(normalized)
+
+    def rerequest_trust(self) -> dict:
+        current_state = self._lifecycle.get_state()
+        if current_state in {
+            NodeLifecycleState.BOOTSTRAP_CONNECTING,
+            NodeLifecycleState.BOOTSTRAP_CONNECTED,
+            NodeLifecycleState.CORE_DISCOVERED,
+            NodeLifecycleState.REGISTRATION_PENDING,
+            NodeLifecycleState.PENDING_APPROVAL,
+        }:
+            raise ValueError("trust re-request is unavailable while onboarding is already in progress")
+
+        trust_state = (
+            self._trust_state_store.load()
+            if self._trust_state_store is not None and hasattr(self._trust_state_store, "load")
+            else None
+        )
+        bootstrap_host = ""
+        node_name = ""
+        if isinstance(trust_state, dict):
+            bootstrap_host = str(
+                trust_state.get("bootstrap_mqtt_host") or trust_state.get("operational_mqtt_host") or ""
+            ).strip()
+            node_name = str(trust_state.get("node_name") or "").strip()
+        if not bootstrap_host and self._bootstrap_config is not None:
+            bootstrap_host = str(self._bootstrap_config.bootstrap_host or "").strip()
+        if not node_name and self._bootstrap_config is not None:
+            node_name = str(self._bootstrap_config.node_name or "").strip()
+        if not bootstrap_host:
+            raise ValueError("bootstrap host is unavailable for trust re-request")
+        if not node_name:
+            raise ValueError("node name is unavailable for trust re-request")
+
+        if self._bootstrap_runner is not None and hasattr(self._bootstrap_runner, "stop"):
+            self._bootstrap_runner.stop()
+        if self._onboarding_runtime is not None and hasattr(self._onboarding_runtime, "cancel"):
+            self._onboarding_runtime.cancel()
+        if self._onboarding_runtime is not None and hasattr(self._onboarding_runtime, "prepare_retrust"):
+            self._onboarding_runtime.prepare_retrust(allow_identity_reset_on_duplicate=True)
+
+        self._bootstrap_config = create_bootstrap_config(
+            {
+                "bootstrap_host": bootstrap_host,
+                "node_name": node_name,
+            }
+        )
+        self._config_path.parent.mkdir(parents=True, exist_ok=True)
+        self._config_path.write_text(
+            json.dumps(
+                {
+                    "bootstrap_host": self._bootstrap_config.bootstrap_host,
+                    "node_name": self._bootstrap_config.node_name,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        self._clear_persisted_store(self._trust_state_store)
+        self._clear_persisted_store(self._governance_state_store)
+        if self._capability_runner is not None and hasattr(self._capability_runner, "clear_local_state_for_reonboarding"):
+            self._capability_runner.clear_local_state_for_reonboarding()
+        self._trusted_runtime_context = {}
+        self._startup_mode = "bootstrap_onboarding"
+        self._lifecycle.reset_to_unconfigured({"source": "trust_rerequest"})
+        self._lifecycle.transition_to(
+            NodeLifecycleState.BOOTSTRAP_CONNECTING,
+            {"source": "trust_rerequest"},
+        )
+        self._start_bootstrap_runner_if_available()
+        return {
+            "status": "started",
+            "flow": "trust_rerequest",
+            "lifecycle_state": self._lifecycle.get_state().value,
+            "bootstrap_host": self._bootstrap_config.bootstrap_host,
+            "node_name": self._bootstrap_config.node_name,
+            "node_id": self._node_id,
+        }
+
 
 class OnboardingInitiateRequest(BaseModel):
     mqtt_host: str
@@ -2145,6 +2434,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/budgets/declare",
                 "/api/budgets/refresh",
                 "/api/capabilities/providers/refresh",
+                "/api/node/retrust",
                 "/api/node/recover",
                 "/api/prompts/services",
                 "/api/prompts/services/{prompt_id}",
@@ -2449,6 +2739,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def post_node_recover():
         try:
             return state.recover_from_degraded()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/node/retrust")
+    def post_node_retrust():
+        try:
+            return state.rerequest_trust()
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

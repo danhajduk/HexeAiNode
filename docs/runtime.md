@@ -51,16 +51,19 @@
 ## Health And Telemetry
 
 - `GET /api/health` returns a simple backend health response
-- `GET /api/node/status` exposes lifecycle, trusted runtime context, capability setup state, capability runtime state, and service status
+- `GET /api/node/status` exposes lifecycle, trusted runtime context, capability setup state, capability runtime state, service status, and internal scheduler state
 - trusted status telemetry publishes over operational MQTT only
 
 ## Runtime Health
 
 - operational MQTT readiness is tracked as runtime health and telemetry context; it is not the lifecycle criterion for entering `operational`
+- when operational MQTT health fails after trust is established, the backend now schedules up to 3 automatic backend restarts with a 10 second delay between attempts
+- the retry cycle is persisted in `.run/operational_mqtt_recovery.json` so attempt counts survive backend restarts
 
 ## Degraded Behavior
 
 - temporary capability submission, governance sync, or telemetry failures can transition the node to `degraded`
+- operational MQTT outage also uses `degraded` as the operator-visible lifecycle state while automatic restart recovery is in progress or exhausted
 - recovery is explicit through the control API and startup resume logic
 
 ## Sensitive Runtime Artifacts
@@ -72,6 +75,17 @@
 
 - bootstrap runner and timeout monitor are stopped when the backend exits
 - provider background tasks are managed through the control app lifecycle
+- recurring node-local background work is owned by an internal scheduler that starts and stops through the control app lifecycle and persists task snapshots in `.run/internal_scheduler_state.json`
+
+## Internal Scheduler
+
+- node-local recurring work is modeled explicitly as internal scheduler tasks instead of anonymous background loops
+- the current recurring tasks are:
+  - provider capability refresh
+  - status telemetry heartbeat
+  - operational MQTT health check
+- scheduler task snapshots persist enabled state, schedule details, last success/failure timestamps, current status, and last error for operator visibility
+- `GET /api/capabilities/diagnostics` includes the structured internal scheduler payload for admin inspection
 
 ## Runtime Path Ownership
 

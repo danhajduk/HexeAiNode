@@ -448,3 +448,8 @@ Task 448: Apply the migration so all current prompt records become review_due wi
 Task 449: Add prompt list filtering and operator visibility for review_due access scope and review metadata in the frontend - Completed on 04/04/2026 16:59
 Task 450: Add tests for prompt lifecycle transitions review_due authorization access-scope enforcement and migration behavior - Completed on 04/04/2026 16:59
 Task 451: Update prompt contract API docs and JSON schemas to match the implemented lifecycle freshness and access policy - Completed on 04/04/2026 16:59
+Task 201: Add internal scheduler owner for recurring node-local background jobs - Completed on 04/05/2026 14:37
+Task 202: Persist operator-visible scheduler task state for background loops - Completed on 04/05/2026 14:37
+Task 203: Expose structured scheduler status in node status and diagnostics APIs - Completed on 04/05/2026 14:37
+Task 204: Update dashboard diagnostics to show internal scheduler task health and schedule details - Completed on 04/05/2026 14:37
+Task 205: Validate scheduler-standard compliance for provider refresh, telemetry heartbeat, and operational MQTT health jobs - Completed on 04/05/2026 14:37

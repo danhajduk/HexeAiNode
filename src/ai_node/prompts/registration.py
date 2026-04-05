@@ -4,7 +4,7 @@ from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES, canonica
 from ai_node.time_utils import local_now_iso
 
 
-VALID_PROMPT_LIFECYCLE_STATES = {"probation", "active", "review_due", "restricted", "suspended", "retired", "expired"}
+VALID_PROMPT_LIFECYCLE_STATES = {"draft", "probation", "active", "review_due", "restricted", "suspended", "retired", "expired"}
 LEGACY_PROMPT_STATES = {"registered": "active", "probation": "probation"}
 VALID_PROMPT_PRIVACY_CLASSES = {"public", "internal", "restricted", "sensitive"}
 VALID_PROMPT_ACCESS_SCOPES = {"private", "service", "shared", "public"}

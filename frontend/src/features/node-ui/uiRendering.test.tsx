@@ -81,11 +81,31 @@ function buildOperationalProps(overrides = {}) {
     activityItems: [{ label: "Last declaration", value: "accepted" }],
     clientCostItems: [],
     clientUsageMonth: "2026-04",
+    governanceStatus: {
+      configured: true,
+      status: {
+        state: "fresh",
+        active_governance_version: "1",
+        next_refresh_due_at: "2026-04-05T19:53:49.164289+00:00",
+      },
+    },
     onboardingSteps: [{ key: "registration", label: "Registration" }],
     onboardingProgress: { registration: "completed" },
     pendingApprovalNodeId: "",
     diagnosticsProps: {
-      capabilityDiagnostics: { resolved_tasks: ["task.classification"] },
+      capabilityDiagnostics: {
+        resolved_tasks: ["task.classification"],
+        internal_scheduler: {
+          scheduler_status: "running",
+          tasks: {
+            provider_capability_refresh: {
+              display_name: "Provider Capability Refresh",
+              schedule_detail: "Every 900 seconds after startup refresh",
+              status: "healthy",
+            },
+          },
+        },
+      },
       adminActionState: "idle",
       runningAdminAction: "",
       runAdminAction: () => {},
@@ -158,6 +178,8 @@ describe("OperationalDashboard", () => {
     );
 
     expect(markup).toContain("Diagnostics");
+    expect(markup).toContain("Internal Scheduler");
+    expect(markup).toContain("provider_capability_refresh");
     expect(markup).not.toContain("Node Overview");
   });
 
@@ -220,6 +242,10 @@ describe("OperationalDashboard", () => {
                   promptLabel: "prompt.email.classify",
                   currentVersion: "v3",
                   registeredAt: "2026-03-22T00:00:00Z",
+                  status: "active",
+                  accessScope: "service",
+                  ownerService: "node-email",
+                  defaultModel: "gpt-5.4-nano",
                   lifetime: { calls: 502, total_tokens: 229217, cost_usd: 0.0672463 },
                   current_month: { calls: 502, total_tokens: 229217, cost_usd: 0.0672463 },
                   models: [
@@ -238,6 +264,22 @@ describe("OperationalDashboard", () => {
                   ],
                 },
               ],
+              unusedPrompts: [
+                {
+                  promptId: "prompt.email.summarize",
+                  promptLabel: "prompt.email.summarize",
+                  currentVersion: "v1",
+                  registeredAt: "2026-04-04T00:00:00Z",
+                  status: "active",
+                  accessScope: "service",
+                  ownerService: "node-email",
+                  defaultModel: "gpt-5.4-mini",
+                  lifetime: { calls: 0, total_tokens: 0, cost_usd: 0 },
+                  current_month: { calls: 0, total_tokens: 0, cost_usd: 0 },
+                  models: [],
+                },
+              ],
+              totalPromptCount: 2,
             },
           ],
         })}
@@ -248,13 +290,24 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("node-email");
     expect(markup).toContain("local-user");
     expect(markup).toContain("node 4000");
-    expect(markup).toContain("$5.00");
     expect(markup).toContain("Apr 1, 2026 - May 1, 2026");
     expect(markup).toContain("Model");
     expect(markup).toContain("April 2026");
     expect(markup).toContain("prompt.email.classify");
     expect(markup).toContain("v3");
     expect(markup).toContain("registered Mar 22, 2026");
+    expect(markup).toContain("Client Registration");
+    expect(markup).toContain("Total Prompts");
+    expect(markup).toContain(">2<");
+    expect(markup).toContain("Grant State");
+    expect(markup).toContain("active");
+    expect(markup).toContain("Default gpt-5.4-nano | State active | Access service | Owner node-email");
+    expect(markup).toContain("Un-Used Prompts");
+    expect(markup).toContain("prompt.email.summarize");
+    expect(markup).toContain("Created");
+    expect(markup).toContain("Default Model");
+    expect(markup).toContain("Apr 4, 2026");
+    expect(markup).toContain("gpt-5.4-mini");
     expect(markup).toContain("Lifetime $0.067246");
     expect(markup).toContain("April 2026 $0.067246");
     expect(markup).toContain("gpt-5.4-nano");

@@ -6,7 +6,7 @@ from ai_node.time_utils import local_now_iso
 
 
 BUDGET_STATE_SCHEMA_VERSION = "1.0"
-VALID_SCOPE_KINDS = {"node", "customer", "provider"}
+VALID_SCOPE_KINDS = {"node", "customer", "service", "provider"}
 VALID_GRANT_STATUS = {"active", "expired"}
 
 
@@ -39,16 +39,20 @@ def _validate_budget_policy(policy: object) -> Tuple[bool, Optional[str]]:
         return True, None
     if not isinstance(policy, dict):
         return False, "invalid_budget_policy"
+    status = str(policy.get("status") or "").strip()
     required_string_fields = (
         "node_id",
         "service",
         "status",
-        "budget_policy_version",
         "governance_version",
-        "period_start",
-        "period_end",
-        "issued_at",
     )
+    if status != "not_configured":
+        required_string_fields += (
+            "budget_policy_version",
+            "period_start",
+            "period_end",
+            "issued_at",
+        )
     for field_name in required_string_fields:
         if not _is_non_empty_string(policy.get(field_name)):
             return False, f"invalid_budget_policy_{field_name}"

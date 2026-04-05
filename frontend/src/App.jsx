@@ -111,11 +111,14 @@ export default function App() {
   const [savingProvider, setSavingProvider] = useState(false);
   const [declaringCapabilities, setDeclaringCapabilities] = useState(false);
   const [redeclaringCapabilities, setRedeclaringCapabilities] = useState(false);
+  const [rerequestingTrust, setRerequestingTrust] = useState(false);
   const [restartingServiceTarget, setRestartingServiceTarget] = useState("");
   const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
   const [retryingBackend, setRetryingBackend] = useState(false);
   const [providerCredentials, setProviderCredentials] = useState(null);
   const [providerBudgetSummaries, setProviderBudgetSummaries] = useState([]);
+  const [governanceStatusPayload, setGovernanceStatusPayload] = useState(null);
+  const [budgetStatePayload, setBudgetStatePayload] = useState(null);
   const [openaiCatalogModels, setOpenaiCatalogModels] = useState([]);
   const [openaiModelCapabilities, setOpenaiModelCapabilities] = useState([]);
   const [enabledOpenaiModelIds, setEnabledOpenaiModelIds] = useState([]);
@@ -303,6 +306,8 @@ export default function App() {
     setResolvedNodeCapabilities(nodeCapabilitiesPayload);
     setCapabilityDiagnostics(capabilityDiagnosticsPayload);
     setClientUsageSummary(normalizeClientUsagePayload(clientUsagePayload, promptServicesPayload));
+    setGovernanceStatusPayload(governancePayload);
+    setBudgetStatePayload(budgetPayload);
     setProviderBudgetSummaries(summarizeProviderBudgets({ providerConfig: providerPayload, budgetState: budgetPayload }));
     setError("");
     if (!providerSetupDirty && providerCredentialsPayload?.credentials?.project_name) {
@@ -792,6 +797,24 @@ export default function App() {
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
       setError(message);
+    }
+  }
+
+  async function onRerequestTrust() {
+    if (rerequestingTrust) {
+      return;
+    }
+    setRerequestingTrust(true);
+    setError("");
+    try {
+      await apiPost("/api/node/retrust", {});
+      navigateToSetup();
+      await loadStatus();
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+    } finally {
+      setRerequestingTrust(false);
     }
   }
 
@@ -1544,6 +1567,7 @@ export default function App() {
     setupActions: [
       { label: "Configure OpenAI Provider", onClick: navigateToOpenAiProviderSetup, disabled: !canManageOpenAiCredentials },
       { label: "Refresh Governance", onClick: onRefreshGovernance },
+      { label: rerequestingTrust ? "Re-requesting Trust..." : "Re-request Trust", onClick: onRerequestTrust, disabled: rerequestingTrust },
       { label: refreshingLatestModels ? "Refreshing Models..." : "Refresh Provider Models", onClick: refreshOpenAiModels, disabled: refreshingLatestModels },
       { label: redeclaringCapabilities ? "Redeclaring..." : "Redeclare Capabilities", onClick: onRedeclareCapabilities, disabled: redeclaringCapabilities || !hasAdminToken },
     ],
@@ -1573,6 +1597,7 @@ export default function App() {
             reason: degradedReason,
             actions: [
               { label: "Open Setup", onClick: navigateToSetup },
+              { label: rerequestingTrust ? "Re-requesting Trust..." : "Re-request Trust", onClick: onRerequestTrust, disabled: rerequestingTrust },
               { label: "Open Diagnostics", onClick: navigateToDiagnostics, primary: true },
             ],
           }
@@ -1629,6 +1654,7 @@ export default function App() {
     activityItems: recentActivityItems,
     clientCostItems,
     clientUsageMonth,
+    governanceStatus: governanceStatusPayload,
     onboardingSteps,
     onboardingProgress: uiState.onboarding.progress,
     pendingApprovalNodeId: isPendingApproval && nodeId ? nodeId : "",

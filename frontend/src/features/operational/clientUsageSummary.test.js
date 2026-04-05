@@ -38,8 +38,18 @@ describe("client usage summary", () => {
             access_scope: "shared",
             owner_service: "service.alpha",
             owner_client_id: "client-1",
+            provider_preferences: { default_model: "gpt-5.4-mini" },
             last_reviewed_at: "2026-04-02T00:00:00Z",
             review_reason: "provider_policy_refresh",
+          },
+          {
+            prompt_id: "prompt-2",
+            current_version: "v1",
+            registered_at: "2026-04-03T00:00:00Z",
+            status: "active",
+            access_scope: "service",
+            owner_service: "client-1",
+            provider_preferences: { default_model: "gpt-5.4-nano" },
           },
         ],
       }
@@ -55,10 +65,16 @@ describe("client usage summary", () => {
       accessScope: "shared",
       ownerService: "service.alpha",
       ownerClientId: "client-1",
+      defaultModel: "gpt-5.4-mini",
       lastReviewedAt: "2026-04-02T00:00:00Z",
       reviewReason: "provider_policy_refresh",
     });
     expect(result.clients[0].prompts[0].models[0].modelId).toBe("gpt-4.1-mini");
+    expect(result.clients[0].unusedPrompts[0]).toMatchObject({
+      promptId: "prompt-2",
+      defaultModel: "gpt-5.4-nano",
+    });
+    expect(result.clients[0].totalPromptCount).toBe(2);
   });
 
   it("falls back safely for missing arrays and identifiers", () => {
