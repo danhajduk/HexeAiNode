@@ -281,7 +281,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--operational-mqtt-health-check-interval-seconds",
         type=int,
         default=int(os.environ.get("SYNTHIA_OPERATIONAL_MQTT_HEALTH_CHECK_INTERVAL_SECONDS", "10")),
-        help="Interval between operational MQTT health checks",
+        help="Fast interval between operational MQTT health checks while degraded, trusted, or in recovery",
+    )
+    parser.add_argument(
+        "--operational-mqtt-health-normal-interval-seconds",
+        type=int,
+        default=int(os.environ.get("SYNTHIA_OPERATIONAL_MQTT_HEALTH_NORMAL_INTERVAL_SECONDS", "300")),
+        help="Normal interval between operational MQTT health checks while stably operational",
+    )
+    parser.add_argument(
+        "--operational-mqtt-health-fast-window-seconds",
+        type=int,
+        default=int(os.environ.get("SYNTHIA_OPERATIONAL_MQTT_HEALTH_FAST_WINDOW_SECONDS", "300")),
+        help="How long operational MQTT health stays on the fast interval after startup or return to operational",
     )
     parser.add_argument(
         "--operational-mqtt-restart-delay-seconds",
@@ -350,6 +362,8 @@ def run(
     finalize_poll_interval_seconds: float = 2.0,
     operational_mqtt_recovery_state_path: str = ".run/operational_mqtt_recovery.json",
     operational_mqtt_health_check_interval_seconds: int = 10,
+    operational_mqtt_health_normal_interval_seconds: int = 300,
+    operational_mqtt_health_fast_window_seconds: int = 300,
     operational_mqtt_restart_delay_seconds: int = 10,
     operational_mqtt_restart_max_attempts: int = 3,
 ) -> int:
@@ -688,6 +702,8 @@ def run(
         provider_refresh_interval_seconds=provider_capability_refresh_interval_seconds,
         mqtt_recovery_store=operational_mqtt_recovery_store,
         operational_mqtt_health_check_interval_seconds=operational_mqtt_health_check_interval_seconds,
+        operational_mqtt_health_normal_interval_seconds=operational_mqtt_health_normal_interval_seconds,
+        operational_mqtt_health_fast_window_seconds=operational_mqtt_health_fast_window_seconds,
         operational_mqtt_restart_delay_seconds=operational_mqtt_restart_delay_seconds,
         operational_mqtt_restart_max_attempts=operational_mqtt_restart_max_attempts,
         startup_mode=startup_mode,
@@ -749,6 +765,12 @@ def main() -> int:
         openai_pricing_refresh_interval_seconds=args.openai_pricing_refresh_interval_seconds,
         openai_pricing_stale_tolerance_seconds=args.openai_pricing_stale_tolerance_seconds,
         finalize_poll_interval_seconds=args.finalize_poll_interval_seconds,
+        operational_mqtt_recovery_state_path=args.operational_mqtt_recovery_state_path,
+        operational_mqtt_health_check_interval_seconds=args.operational_mqtt_health_check_interval_seconds,
+        operational_mqtt_health_normal_interval_seconds=args.operational_mqtt_health_normal_interval_seconds,
+        operational_mqtt_health_fast_window_seconds=args.operational_mqtt_health_fast_window_seconds,
+        operational_mqtt_restart_delay_seconds=args.operational_mqtt_restart_delay_seconds,
+        operational_mqtt_restart_max_attempts=args.operational_mqtt_restart_max_attempts,
     )
 
 

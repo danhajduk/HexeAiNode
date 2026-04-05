@@ -10,7 +10,7 @@
 
 - bootstrap connection is monitored by a timeout guard
 - capability and governance flows use explicit result classification for retryable versus rejected failures
-- provider capability refresh runs on a background interval when enabled
+- provider capability refresh runs on the `4_times_a_day` internal schedule when enabled
 
 ## OpenAI Provider Runtime Behavior
 
@@ -58,6 +58,11 @@
 
 - operational MQTT readiness is tracked as runtime health and telemetry context; it is not the lifecycle criterion for entering `operational`
 - when operational MQTT health fails after trust is established, the backend now schedules up to 3 automatic backend restarts with a 10 second delay between attempts
+- operational MQTT health uses a dynamic scheduler cadence:
+  - `every_10_seconds` while the node is trusted, in capability activation, degraded, or in an active recovery window
+  - `every_10_seconds` for 5 minutes after backend startup
+  - `every_10_seconds` for 5 minutes after the node returns to fully `operational`
+  - `every_5_minutes` while the node is stably operational with no active recovery cycle
 - the retry cycle is persisted in `.run/operational_mqtt_recovery.json` so attempt counts survive backend restarts
 
 ## Degraded Behavior
@@ -86,9 +91,11 @@
   - telemetry
   - operational MQTT health check
 - default named schedules are:
+  - `interval_seconds`
   - `heartbeat_5_seconds`
-  - `telemetry_50_seconds`
+  - `telemetry_60_seconds`
   - `every_10_seconds`
+  - `every_5_minutes`
 - scheduler task snapshots persist enabled state, schedule details, last success/failure timestamps, current status, and last error for operator visibility
 - `GET /api/capabilities/diagnostics` includes the structured internal scheduler payload for admin inspection
 

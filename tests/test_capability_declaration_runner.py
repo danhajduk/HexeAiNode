@@ -1012,7 +1012,7 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(telemetry.last["payload"]["health_status"], "unknown")
         self.assertEqual(telemetry.last["payload"]["ttl_s"], 300)
         self.assertEqual(telemetry.last["payload"]["details"]["event_type"], "telemetry")
-        self.assertEqual(telemetry.last["payload"]["details"]["telemetry_interval_seconds"], 50)
+        self.assertEqual(telemetry.last["payload"]["details"]["telemetry_interval_seconds"], 60)
         self.assertEqual(telemetry.last["payload"]["details"]["message_expiry_interval_seconds"], 1800)
         self.assertEqual(
             telemetry.last["payload"]["details"]["overall_status"],

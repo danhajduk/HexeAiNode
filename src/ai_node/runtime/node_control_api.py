@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
@@ -29,7 +29,7 @@ from ai_node.runtime.capability_declaration_runner import (
     STATUS_HEARTBEAT_INTERVAL_SECONDS,
     STATUS_TELEMETRY_INTERVAL_SECONDS,
 )
-from ai_node.time_utils import local_now_iso
+from ai_node.time_utils import local_now, local_now_iso
 
 
 class CapabilityDeclarationPrerequisiteError(ValueError):
@@ -92,6 +92,8 @@ class NodeControlState:
         provider_refresh_interval_seconds: int = 900,
         mqtt_recovery_store=None,
         operational_mqtt_health_check_interval_seconds: int = 10,
+        operational_mqtt_health_normal_interval_seconds: int = 300,
+        operational_mqtt_health_fast_window_seconds: int = 300,
         operational_mqtt_restart_delay_seconds: int = 10,
         operational_mqtt_restart_max_attempts: int = 3,
         startup_mode: str = "bootstrap_onboarding",
@@ -125,10 +127,19 @@ class NodeControlState:
         self._provider_refresh_interval_seconds = max(int(provider_refresh_interval_seconds), 60)
         self._mqtt_recovery_store = mqtt_recovery_store
         self._operational_mqtt_health_check_interval_seconds = max(int(operational_mqtt_health_check_interval_seconds), 5)
+        self._operational_mqtt_health_normal_interval_seconds = max(
+            int(operational_mqtt_health_normal_interval_seconds), 60
+        )
+        self._operational_mqtt_health_fast_window_seconds = max(
+            int(operational_mqtt_health_fast_window_seconds), 0
+        )
         self._operational_mqtt_restart_delay_seconds = max(int(operational_mqtt_restart_delay_seconds), 1)
         self._operational_mqtt_restart_max_attempts = max(int(operational_mqtt_restart_max_attempts), 1)
         self._startup_mode = startup_mode
         self._trusted_runtime_context = trusted_runtime_context or {}
+        self._operational_mqtt_fast_until = local_now() + timedelta(
+            seconds=self._operational_mqtt_health_fast_window_seconds
+        )
         self._phase2_diag = Phase2DiagnosticsLogger(logger)
         self._bootstrap_config = None
         self._provider_selection_config = None
@@ -1691,8 +1702,7 @@ class NodeControlState:
             task_id="provider_capability_refresh",
             display_name="Provider Capability Refresh",
             interval_seconds=self._provider_refresh_interval_seconds,
-            schedule_name="interval",
-            schedule_detail=f"Every {self._provider_refresh_interval_seconds} seconds after startup refresh",
+            schedule_name="4_times_a_day",
             task_kind="provider_specific_recurring",
             readiness_critical=False,
         )
@@ -1708,18 +1718,73 @@ class NodeControlState:
             task_id="telemetry",
             display_name="Telemetry",
             interval_seconds=STATUS_TELEMETRY_INTERVAL_SECONDS,
-            schedule_name="telemetry_50_seconds",
+            schedule_name="telemetry_60_seconds",
             task_kind="local_recurring",
             readiness_critical=False,
         )
+        self._sync_operational_mqtt_health_schedule()
+
+    def _operational_mqtt_health_schedule_definition(self) -> dict:
+        lifecycle_state = self._lifecycle.get_state()
+        recovery_snapshot = self.operational_mqtt_recovery_payload()
+        within_fast_window = local_now() < self._operational_mqtt_fast_until
+        fast_states = {
+            NodeLifecycleState.TRUSTED,
+            NodeLifecycleState.CAPABILITY_SETUP_PENDING,
+            NodeLifecycleState.CAPABILITY_DECLARATION_FAILED_RETRY_PENDING,
+            NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS,
+            NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED,
+            NodeLifecycleState.DEGRADED,
+        }
+        fast_mode = (
+            lifecycle_state in fast_states
+            or bool(recovery_snapshot.get("active"))
+            or bool(recovery_snapshot.get("exhausted"))
+            or (lifecycle_state == NodeLifecycleState.OPERATIONAL and within_fast_window)
+        )
+        if fast_mode:
+            interval_seconds = self._operational_mqtt_health_check_interval_seconds
+            if interval_seconds == 10:
+                return {
+                    "interval_seconds": interval_seconds,
+                    "schedule_name": "every_10_seconds",
+                    "schedule_detail": "Every 10 seconds",
+                }
+            return {
+                "interval_seconds": interval_seconds,
+                "schedule_name": "interval_seconds",
+                "schedule_detail": f"Every {interval_seconds} seconds",
+            }
+        interval_seconds = self._operational_mqtt_health_normal_interval_seconds
+        if interval_seconds == 300:
+            return {
+                "interval_seconds": interval_seconds,
+                "schedule_name": "every_5_minutes",
+                "schedule_detail": "00:05, 00:10, 00:15, ...",
+            }
+        return {
+            "interval_seconds": interval_seconds,
+            "schedule_name": "interval_seconds",
+            "schedule_detail": f"Every {interval_seconds} seconds",
+        }
+
+    def _sync_operational_mqtt_health_schedule(self) -> None:
+        if self._internal_scheduler is None or not hasattr(self._internal_scheduler, "register_interval_task"):
+            return
+        schedule = self._operational_mqtt_health_schedule_definition()
         self._internal_scheduler.register_interval_task(
             task_id="operational_mqtt_health",
             display_name="Operational MQTT Health",
-            interval_seconds=self._operational_mqtt_health_check_interval_seconds,
-            schedule_name="every_10_seconds",
-            schedule_detail=f"Every {self._operational_mqtt_health_check_interval_seconds} seconds with immediate first run",
+            interval_seconds=int(schedule["interval_seconds"]),
+            schedule_name=str(schedule["schedule_name"]),
+            schedule_detail=schedule.get("schedule_detail"),
             task_kind="local_recurring",
             readiness_critical=False,
+        )
+
+    def _extend_operational_mqtt_fast_window(self) -> None:
+        self._operational_mqtt_fast_until = local_now() + timedelta(
+            seconds=self._operational_mqtt_health_fast_window_seconds
         )
 
     async def refresh_governance(self) -> dict:
@@ -1863,6 +1928,7 @@ class NodeControlState:
 
     async def check_operational_mqtt_health_once(self) -> dict | None:
         lifecycle_state = self._lifecycle.get_state()
+        self._sync_operational_mqtt_health_schedule()
         monitorable_states = {
             NodeLifecycleState.TRUSTED,
             NodeLifecycleState.CAPABILITY_SETUP_PENDING,
@@ -1906,12 +1972,16 @@ class NodeControlState:
                         recovery = self._capability_runner.recover_from_degraded()
                     except ValueError:
                         recovery = {"status": "skipped", "reason": "degraded_recovery_unavailable"}
+                    if self._lifecycle.get_state() == NodeLifecycleState.OPERATIONAL:
+                        self._extend_operational_mqtt_fast_window()
+                    self._sync_operational_mqtt_health_schedule()
                     return {
                         "status": "healthy",
                         "lifecycle_state": self._lifecycle.get_state().value,
                         "health": health,
                         "recovery": recovery,
                     }
+            self._sync_operational_mqtt_health_schedule()
             return {"status": "healthy", "lifecycle_state": lifecycle_state.value, "health": health}
 
         error = str(health.get("last_error") or "operational_mqtt_not_ready")
@@ -1925,6 +1995,7 @@ class NodeControlState:
             )
         if self._capability_runner is not None and hasattr(self._capability_runner, "mark_operational_mqtt_unhealthy"):
             self._capability_runner.mark_operational_mqtt_unhealthy(error=error)
+        self._sync_operational_mqtt_health_schedule()
 
         if self._mqtt_recovery_store is None or not hasattr(self._mqtt_recovery_store, "record_restart_requested"):
             return {

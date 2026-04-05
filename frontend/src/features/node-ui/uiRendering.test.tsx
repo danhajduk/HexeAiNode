@@ -110,8 +110,8 @@ function buildOperationalProps(overrides = {}) {
             task_id: "telemetry",
             display_name: "Telemetry",
             task_kind: "local_recurring",
-            schedule_name: "telemetry_50_seconds",
-            schedule_detail: "Telemetry every 50 seconds",
+            schedule_name: "telemetry_60_seconds",
+            schedule_detail: "Telemetry every 60 seconds",
             status: "scheduled",
             last_success_at: "2026-04-05T19:53:50Z",
             last_failure_at: null,
@@ -120,8 +120,9 @@ function buildOperationalProps(overrides = {}) {
           },
         },
         schedule_catalog: [
+          { name: "interval_seconds", detail: "Every N seconds (requires integer seconds)" },
           { name: "heartbeat_5_seconds", detail: "Heartbeat every 5 seconds" },
-          { name: "telemetry_50_seconds", detail: "Telemetry every 50 seconds" },
+          { name: "telemetry_60_seconds", detail: "Telemetry every 60 seconds" },
           { name: "every_10_seconds", detail: "Every 10 seconds" },
         ],
       },
@@ -137,7 +138,8 @@ function buildOperationalProps(overrides = {}) {
           tasks: {
             provider_capability_refresh: {
               display_name: "Provider Capability Refresh",
-              schedule_detail: "Every 900 seconds after startup refresh",
+              schedule_name: "4_times_a_day",
+              schedule_detail: "00:00, 06:00, 12:00, 18:00",
               status: "healthy",
             },
           },
@@ -227,10 +229,98 @@ describe("OperationalDashboard", () => {
 
     expect(markup).toContain("Scheduled Tasks");
     expect(markup).toContain("HB");
-    expect(markup).toContain("heartbeat_5_seconds");
-    expect(markup).toContain("telemetry_50_seconds");
+    expect(markup).toContain("Heartbeat 5 Seconds");
+    expect(markup).toContain("Runtime");
+    expect(markup).toContain("Type");
     expect(markup).toContain("Every 10 seconds");
     expect(markup).not.toContain("Node Overview");
+  });
+
+  it("shows friendly task kind and schedule names and sorts the legend by duration", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "scheduled",
+          scheduledTasksProps: {
+            scheduler: {
+              scheduler_status: "running",
+              tasks: {},
+              schedule_catalog: [
+                { name: "interval_seconds", detail: "Every N seconds (requires integer seconds)" },
+                { name: "telemetry_60_seconds", detail: "Telemetry every 60 seconds" },
+                { name: "every_10_seconds", detail: "Every 10 seconds" },
+                { name: "heartbeat_5_seconds", detail: "Heartbeat every 5 seconds" },
+              ],
+            },
+          },
+        })}
+      />
+    );
+
+    expect(markup).toContain("Heartbeat 5 Seconds");
+    expect(markup).toContain("Telemetry 60 Seconds");
+    expect(markup.indexOf("Heartbeat 5 Seconds")).toBeLessThan(markup.indexOf("Every 10 Seconds"));
+    expect(markup.indexOf("Every 10 Seconds")).toBeLessThan(markup.indexOf("Telemetry 60 Seconds"));
+    expect(markup.indexOf("General Interval")).toBeGreaterThan(markup.indexOf("Telemetry 60 Seconds"));
+  });
+
+  it("uses scheduler-specific status tones for scheduled task badges", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "scheduled",
+          scheduledTasksProps: {
+            scheduler: {
+              scheduler_status: "running",
+              tasks: {
+                heartbeat: {
+                  task_id: "heartbeat",
+                  display_name: "HB",
+                  task_kind: "local_recurring",
+                  schedule_name: "heartbeat_5_seconds",
+                  schedule_detail: "Heartbeat every 5 seconds",
+                  status: "running",
+                },
+                telemetry: {
+                  task_id: "telemetry",
+                  display_name: "Telemetry",
+                  task_kind: "local_recurring",
+                  schedule_name: "telemetry_60_seconds",
+                  schedule_detail: "Telemetry every 60 seconds",
+                  status: "scheduled",
+                },
+                provider_capability_refresh: {
+                  task_id: "provider_capability_refresh",
+                  display_name: "Provider Capability Refresh",
+                  task_kind: "provider_specific_recurring",
+                  schedule_name: "4_times_a_day",
+                  schedule_detail: "00:00, 06:00, 12:00, 18:00",
+                  status: "idle",
+                },
+                operational_mqtt_health: {
+                  task_id: "operational_mqtt_health",
+                  display_name: "Operational MQTT Health",
+                  task_kind: "local_recurring",
+                  schedule_name: "every_10_seconds",
+                  schedule_detail: "Every 10 seconds",
+                  status: "failing",
+                },
+              },
+              schedule_catalog: [],
+            },
+          },
+        })}
+      />
+    );
+
+    expect(markup).toContain("severity-success-strong");
+    expect(markup).toContain("status-running");
+    expect(markup).toContain("severity-success");
+    expect(markup).toContain("status-scheduled");
+    expect(markup).toContain("severity-warning");
+    expect(markup).toContain("status-idle");
+    expect(markup).toContain("severity-danger");
+    expect(markup).toContain("status-failing");
   });
 
   it("keeps degraded nodes in dashboard mode with a warning banner", () => {

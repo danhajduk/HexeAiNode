@@ -622,8 +622,13 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertIn("provider_capability_refresh", payload["internal_scheduler"]["tasks"])
             self.assertIn("heartbeat", payload["internal_scheduler"]["tasks"])
             self.assertIn("telemetry", payload["internal_scheduler"]["tasks"])
+            self.assertIn("operational_mqtt_health", payload["internal_scheduler"]["tasks"])
             self.assertEqual(payload["internal_scheduler"]["tasks"]["heartbeat"]["schedule_name"], "heartbeat_5_seconds")
-            self.assertEqual(payload["internal_scheduler"]["tasks"]["telemetry"]["schedule_name"], "telemetry_50_seconds")
+            self.assertEqual(payload["internal_scheduler"]["tasks"]["telemetry"]["schedule_name"], "telemetry_60_seconds")
+            self.assertEqual(
+                payload["internal_scheduler"]["tasks"]["operational_mqtt_health"]["schedule_name"],
+                "every_10_seconds",
+            )
 
     def test_start_background_jobs_starts_bootstrap_listener_from_trust_state(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1239,7 +1244,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     path=str(Path(tmp) / "operational_mqtt_recovery.json"),
                     logger=logging.getLogger("node-control-test"),
                 ),
-                operational_mqtt_health_check_interval_seconds=5,
+                operational_mqtt_health_check_interval_seconds=10,
                 operational_mqtt_restart_delay_seconds=1,
                 operational_mqtt_restart_max_attempts=3,
             )
@@ -1251,6 +1256,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(service_manager.calls), 1)
             self.assertEqual(capability_runner.unhealthy_calls[-1], "connection_refused")
             self.assertEqual(state.operational_mqtt_recovery_payload()["attempt_count"], 1)
+            self.assertEqual(
+                state.internal_scheduler_payload()["tasks"]["operational_mqtt_health"]["schedule_name"],
+                "every_10_seconds",
+            )
 
     async def test_unhealthy_operational_mqtt_stops_after_third_attempt(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1274,7 +1283,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 capability_runner=capability_runner,
                 service_manager=service_manager,
                 mqtt_recovery_store=recovery_store,
-                operational_mqtt_health_check_interval_seconds=5,
+                operational_mqtt_health_check_interval_seconds=10,
                 operational_mqtt_restart_delay_seconds=1,
                 operational_mqtt_restart_max_attempts=3,
             )
@@ -1308,7 +1317,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 capability_runner=capability_runner,
                 service_manager=self._FakeServiceManager(),
                 mqtt_recovery_store=recovery_store,
-                operational_mqtt_health_check_interval_seconds=5,
+                operational_mqtt_health_check_interval_seconds=10,
                 operational_mqtt_restart_delay_seconds=1,
                 operational_mqtt_restart_max_attempts=3,
             )
@@ -1318,6 +1327,131 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["status"], "healthy")
             self.assertEqual(capability_runner.recover_calls, 1)
             self.assertFalse(state.operational_mqtt_recovery_payload()["active"])
+
+    async def test_operational_mqtt_health_uses_every_5_minutes_when_stably_operational(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED)
+            lifecycle.transition_to(NodeLifecycleState.OPERATIONAL)
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=self._FakeServiceManager(),
+                mqtt_recovery_store=OperationalMqttRecoveryStore(
+                    path=str(Path(tmp) / "operational_mqtt_recovery.json"),
+                    logger=logging.getLogger("node-control-test"),
+                ),
+                operational_mqtt_health_check_interval_seconds=10,
+                operational_mqtt_health_normal_interval_seconds=300,
+                operational_mqtt_health_fast_window_seconds=0,
+            )
+
+            payload = state.internal_scheduler_payload()
+
+            self.assertEqual(payload["tasks"]["operational_mqtt_health"]["schedule_name"], "every_5_minutes")
+            self.assertEqual(payload["tasks"]["operational_mqtt_health"]["interval_seconds"], 300)
+
+    async def test_operational_mqtt_health_uses_fast_interval_for_five_minutes_after_startup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED)
+            lifecycle.transition_to(NodeLifecycleState.OPERATIONAL)
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=self._FakeServiceManager(),
+                mqtt_recovery_store=OperationalMqttRecoveryStore(
+                    path=str(Path(tmp) / "operational_mqtt_recovery.json"),
+                    logger=logging.getLogger("node-control-test"),
+                ),
+                operational_mqtt_health_check_interval_seconds=10,
+                operational_mqtt_health_normal_interval_seconds=300,
+                operational_mqtt_health_fast_window_seconds=300,
+            )
+
+            payload = state.internal_scheduler_payload()
+
+            self.assertEqual(payload["tasks"]["operational_mqtt_health"]["schedule_name"], "every_10_seconds")
+            self.assertEqual(payload["tasks"]["operational_mqtt_health"]["interval_seconds"], 10)
+
+    async def test_operational_mqtt_health_switches_back_to_fast_interval_during_recovery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED)
+            lifecycle.transition_to(NodeLifecycleState.OPERATIONAL)
+            recovery_store = OperationalMqttRecoveryStore(
+                path=str(Path(tmp) / "operational_mqtt_recovery.json"),
+                logger=logging.getLogger("node-control-test"),
+            )
+            recovery_store.record_restart_requested(error="connection_refused", delay_seconds=1, max_attempts=3)
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=self._FakeServiceManager(),
+                mqtt_recovery_store=recovery_store,
+                operational_mqtt_health_check_interval_seconds=10,
+                operational_mqtt_health_normal_interval_seconds=300,
+            )
+
+            payload = state.internal_scheduler_payload()
+
+            self.assertEqual(payload["tasks"]["operational_mqtt_health"]["schedule_name"], "every_10_seconds")
+            self.assertEqual(payload["tasks"]["operational_mqtt_health"]["interval_seconds"], 10)
+
+    async def test_operational_mqtt_health_keeps_fast_interval_after_recovery_to_operational(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_IN_PROGRESS)
+            lifecycle.transition_to(NodeLifecycleState.CAPABILITY_DECLARATION_ACCEPTED)
+            lifecycle.transition_to(NodeLifecycleState.OPERATIONAL)
+            lifecycle.transition_to(NodeLifecycleState.DEGRADED)
+            class _RecoveryCapabilityRunner(self._FakeCapabilityRunner):
+                def recover_from_degraded(self_inner):
+                    self_inner.recover_calls += 1
+                    lifecycle.transition_to(NodeLifecycleState.OPERATIONAL)
+                    return {"target_state": NodeLifecycleState.OPERATIONAL.value}
+
+            recovery_store = OperationalMqttRecoveryStore(
+                path=str(Path(tmp) / "operational_mqtt_recovery.json"),
+                logger=logging.getLogger("node-control-test"),
+            )
+            recovery_store.record_restart_requested(error="connection_refused", delay_seconds=1, max_attempts=3)
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=_RecoveryCapabilityRunner(healthy=True),
+                service_manager=self._FakeServiceManager(),
+                mqtt_recovery_store=recovery_store,
+                operational_mqtt_health_check_interval_seconds=10,
+                operational_mqtt_health_normal_interval_seconds=300,
+                operational_mqtt_health_fast_window_seconds=300,
+            )
+
+            result = await state.check_operational_mqtt_health_once()
+            payload = state.internal_scheduler_payload()
+
+            self.assertEqual(result["status"], "healthy")
+            self.assertEqual(lifecycle.get_state(), NodeLifecycleState.OPERATIONAL)
+            self.assertEqual(payload["tasks"]["operational_mqtt_health"]["schedule_name"], "every_10_seconds")
+            self.assertEqual(payload["tasks"]["operational_mqtt_health"]["interval_seconds"], 10)
 
 
 if __name__ == "__main__":

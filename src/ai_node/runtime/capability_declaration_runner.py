@@ -27,7 +27,7 @@ from ai_node.time_utils import local_now, local_now_iso
 
 
 STATUS_HEARTBEAT_INTERVAL_SECONDS = 5
-STATUS_TELEMETRY_INTERVAL_SECONDS = 50
+STATUS_TELEMETRY_INTERVAL_SECONDS = 60
 
 
 class CapabilityDeclarationRunner:

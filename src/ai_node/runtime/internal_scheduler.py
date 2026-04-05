@@ -23,7 +23,7 @@ class InternalScheduler:
         task_id: str,
         display_name: str,
         interval_seconds: int,
-        schedule_name: str = "interval",
+        schedule_name: str = "interval_seconds",
         schedule_detail: str | None = None,
         task_kind: str = "local_recurring",
         readiness_critical: bool = False,
@@ -88,8 +88,6 @@ class InternalScheduler:
         self._set_scheduler_status("stopped")
 
     async def _run_interval_task(self, *, task_id: str, coroutine_factory, initial_delay_seconds: int) -> None:
-        entry = self._ensure_task(task_id)
-        interval_seconds = max(int(entry.get("interval_seconds") or 1), 1)
         next_delay = initial_delay_seconds
         while True:
             self._mark_task_sleeping(task_id=task_id, delay_seconds=next_delay)
@@ -106,7 +104,8 @@ class InternalScheduler:
                     self._logger.warning("[internal-scheduler-task-error] %s", {"task_id": task_id, "error": str(exc)})
             else:
                 self._mark_task_success(task_id=task_id, result=result if isinstance(result, dict) else None)
-            next_delay = interval_seconds
+            entry = self._ensure_task(task_id)
+            next_delay = max(int(entry.get("interval_seconds") or 1), 1)
 
     def _ensure_task(self, task_id: str) -> dict:
         tasks = self._state.setdefault("tasks", {})

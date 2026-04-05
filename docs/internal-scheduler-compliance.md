@@ -19,8 +19,12 @@ This note records how the node-local recurring work now aligns with the Hexe sta
 - explicit schedule model:
   - each task is registered with interval metadata and operator-readable schedule names and details
   - heartbeat uses `heartbeat_5_seconds`
-  - telemetry uses `telemetry_50_seconds`
-  - operational MQTT health uses `every_10_seconds`
+  - telemetry uses `telemetry_60_seconds`
+  - operational MQTT health uses a dynamic schedule:
+    - `every_10_seconds` in trusted, degraded, capability-activation, and active-recovery states
+    - `every_10_seconds` for a 5 minute warm-up window after backend startup
+    - `every_10_seconds` for a 5 minute warm-up window after recovery back to `operational`
+    - `every_5_minutes` in stable operational state
 - persisted task state:
   - scheduler snapshots persist in `.run/internal_scheduler_state.json`
   - persistence is handled by [internal_scheduler_state_store.py](/home/dan/Projects/HexeAiNode/src/ai_node/persistence/internal_scheduler_state_store.py)
@@ -38,6 +42,7 @@ This note records how the node-local recurring work now aligns with the Hexe sta
 ## Standard Notes
 
 - this implementation standardizes node-local recurring work; it does not replace Core-owned lease scheduling
-- the current scheduler uses interval tasks only
+- the current scheduler uses interval-backed tasks with operator-visible named schedules, including `4_times_a_day` for provider capability refresh
+- the shared schedule catalog now includes `interval_seconds` for tasks that require an explicit integer-second cadence
 - the current implementation follows the mandatory node baseline for heartbeat, telemetry, and operational MQTT health
 - readiness-critical versus non-blocking behavior remains encoded per task registration and runtime handling

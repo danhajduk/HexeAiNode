@@ -1185,6 +1185,11 @@ h2 {
   border-color: hsl(var(--sx-success) / 0.45);
 }
 
+.tone-success-strong {
+  background: hsl(var(--sx-success) / 0.24);
+  border-color: hsl(var(--sx-success) / 0.7);
+}
+
 .tone-warning {
   background: hsl(var(--sx-warning) / 0.16);
   border-color: hsl(var(--sx-warning) / 0.45);
