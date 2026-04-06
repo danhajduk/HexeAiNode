@@ -1,3 +1,4 @@
+import json
 import time
 
 from ai_node.execution.gateway import ExecutionGateway
@@ -11,16 +12,25 @@ from ai_node.providers.task_execution import RuntimeManagerProviderTaskExecutor
 from ai_node.runtime.provider_resolver import ProviderResolutionRequest
 from ai_node.runtime.task_handlers import (
     CLASSIFICATION_TASK_FAMILIES,
+    STRUCTURED_EXTRACTION_SYSTEM_PROMPT_SUFFIX,
     SUMMARIZATION_TASK_FAMILIES,
     ClassificationTaskHandler,
     SummarizationTaskHandler,
 )
+from ai_node.runtime.prompt_construction import render_prompt_template
 from ai_node.runtime.task_router import TaskRouter
 from ai_node.time_utils import local_now_iso
 
 
 def _iso_now() -> str:
     return local_now_iso()
+
+
+def _safe_error_message(value: object, *, max_length: int = 4000) -> str:
+    text = str(value or "").strip() or "internal_execution_error"
+    if len(text) <= max_length:
+        return text
+    return f"{text[: max_length - 3].rstrip()}..."
 
 
 class TaskExecutionService:
@@ -75,6 +85,18 @@ class TaskExecutionService:
     @property
     def lifecycle_tracker(self) -> ExecutionLifecycleTracker:
         return self._lifecycle_tracker
+
+    @staticmethod
+    def _completed_output(*, request: TaskExecutionRequest, response) -> dict:
+        output_text = str(getattr(response, "output_text", "") or "")
+        if str(request.task_family or "").strip().lower() == "task.structured_extraction":
+            try:
+                parsed = json.loads(output_text)
+            except Exception:
+                return {"text": output_text}
+            if isinstance(parsed, dict):
+                return parsed
+        return {"text": output_text}
 
     @staticmethod
     def _lifecycle_context_details(*, request: TaskExecutionRequest, extras: dict | None = None) -> dict:
@@ -289,7 +311,7 @@ class TaskExecutionService:
                 resolution={"plan": resolution, "authorization": authorization},
             )
         except ValueError as exc:
-            failure_reason = str(exc)
+            failure_reason = _safe_error_message(exc)
             failure_category = classify_failure_code(failure_reason)
             if budget_reservation is not None and self._budget_manager is not None:
                 self._budget_manager.release_execution(task_id=request.task_id, reason=failure_reason)
@@ -305,7 +327,7 @@ class TaskExecutionService:
                 fallback_used=bool(resolution.fallback_provider_ids),
             )
         except Exception as exc:
-            failure_reason = str(exc).strip() or "internal_execution_error"
+            failure_reason = _safe_error_message(exc)
             failure_category = classify_failure_code(failure_reason)
             if budget_reservation is not None and self._budget_manager is not None:
                 self._budget_manager.release_execution(task_id=request.task_id, reason=failure_reason)
@@ -352,7 +374,7 @@ class TaskExecutionService:
             {
                 "task_id": request.task_id,
                 "status": "completed",
-                "output": {"text": response.output_text},
+                "output": self._completed_output(request=request, response=response),
                 "metrics": {
                     "execution_duration_ms": round((time.perf_counter() - started) * 1000.0, 3),
                     "provider_latency_ms": response.latency_ms,
@@ -505,13 +527,18 @@ class TaskExecutionService:
         resolution_plan = resolution.get("plan") if isinstance(resolution, dict) else resolution
         inputs = request.inputs if isinstance(request.inputs, dict) else {}
         messages = inputs.get("messages") if isinstance(inputs.get("messages"), list) else []
-        prompt = inputs.get("prompt")
+        prompt_definition = authorization.prompt_definition if authorization is not None and isinstance(authorization.prompt_definition, dict) else {}
+        prompt = render_prompt_template(prompt_definition=prompt_definition, request_inputs=inputs)
+        if prompt is None:
+            prompt = inputs.get("prompt")
         if prompt is None:
             prompt = inputs.get("text")
         system_prompt = inputs.get("system_prompt")
-        prompt_definition = authorization.prompt_definition if authorization is not None and isinstance(authorization.prompt_definition, dict) else {}
         if system_prompt is None:
             system_prompt = prompt_definition.get("system_prompt")
+        if str(request.task_family or "").strip().lower() == "task.structured_extraction":
+            base_prompt = str(system_prompt or "").strip()
+            system_prompt = f"{base_prompt}{STRUCTURED_EXTRACTION_SYSTEM_PROMPT_SUFFIX}" if base_prompt else STRUCTURED_EXTRACTION_SYSTEM_PROMPT_SUFFIX.strip()
         max_tokens = inputs.get("max_tokens")
         temperature = inputs.get("temperature")
         structured_output_schema = inputs.get("structured_output_schema")
@@ -605,7 +632,7 @@ class TaskExecutionService:
             {
                 "task_id": request.task_id,
                 "status": state,
-                "output": {"error": error_message} if state == "degraded" else None,
+                "output": {"error": _safe_error_message(error_message)} if state == "degraded" else None,
                 "metrics": TaskExecutionMetrics(
                     execution_duration_ms=round((time.perf_counter() - started) * 1000.0, 3),
                     retries=max(int(retries), 0),
@@ -613,7 +640,7 @@ class TaskExecutionService:
                     **metric_context,
                 ).model_dump(),
                 "error_code": error_code,
-                "error_message": error_message,
+                "error_message": _safe_error_message(error_message),
                 "provider_used": provider_id,
                 "model_used": model_id,
                 "completed_at": _iso_now(),

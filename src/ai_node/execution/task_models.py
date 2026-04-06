@@ -197,7 +197,8 @@ class TaskExecutionResult(BaseModel):
     def _validate_optional_string(cls, value: str | None, info) -> str | None:
         if value is None:
             return None
-        return _normalized_non_empty_string(value, field_name=str(info.field_name))
+        max_length = 4096 if str(info.field_name) == "error_message" else 128
+        return _normalized_non_empty_string(value, field_name=str(info.field_name), max_length=max_length)
 
     @model_validator(mode="after")
     def _validate_status_consistency(self) -> "TaskExecutionResult":

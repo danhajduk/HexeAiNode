@@ -95,9 +95,75 @@ class OpenAIProviderAdapter(ProviderAdapter):
         return schema if isinstance(schema, dict) else None
 
     @classmethod
+    def _make_schema_nullable(cls, schema: dict[str, Any]) -> dict[str, Any]:
+        nullable = dict(schema)
+        schema_type = nullable.get("type")
+        if isinstance(schema_type, str) and schema_type != "null":
+            nullable["type"] = [schema_type, "null"]
+            return nullable
+        if isinstance(schema_type, list):
+            values = [item for item in schema_type if item != "null"]
+            nullable["type"] = values + ["null"]
+            return nullable
+        enum_values = nullable.get("enum")
+        if isinstance(enum_values, list) and None not in enum_values:
+            nullable["enum"] = list(enum_values) + [None]
+            return nullable
+        any_of = nullable.get("anyOf")
+        if isinstance(any_of, list) and not any(isinstance(item, dict) and item.get("type") == "null" for item in any_of):
+            nullable["anyOf"] = list(any_of) + [{"type": "null"}]
+            return nullable
+        nullable["anyOf"] = [schema, {"type": "null"}]
+        return nullable
+
+    @classmethod
+    def _normalize_strict_json_schema(cls, schema: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(schema)
+        schema_type = normalized.get("type")
+
+        if schema_type == "object" and "additionalProperties" not in normalized:
+            normalized["additionalProperties"] = False
+
+        properties = normalized.get("properties")
+        if isinstance(properties, dict):
+            existing_required = normalized.get("required") if isinstance(normalized.get("required"), list) else []
+            required_set = {str(item) for item in existing_required}
+            normalized_properties: dict[str, Any] = {}
+            for property_name, property_schema in properties.items():
+                child_schema = cls._normalize_strict_json_schema(property_schema) if isinstance(property_schema, dict) else property_schema
+                if isinstance(child_schema, dict) and property_name not in required_set:
+                    child_schema = cls._make_schema_nullable(child_schema)
+                normalized_properties[property_name] = child_schema
+            normalized["properties"] = normalized_properties
+            normalized["required"] = list(properties.keys())
+
+        additional_properties = normalized.get("additionalProperties")
+        if isinstance(additional_properties, dict):
+            normalized["additionalProperties"] = cls._normalize_strict_json_schema(additional_properties)
+
+        items = normalized.get("items")
+        if isinstance(items, dict):
+            normalized["items"] = cls._normalize_strict_json_schema(items)
+
+        if isinstance(normalized.get("oneOf"), list):
+            normalized.pop("oneOf", None)
+        for key in ("anyOf", "allOf"):
+            variants = normalized.get(key)
+            if isinstance(variants, list):
+                normalized[key] = [
+                    cls._normalize_strict_json_schema(item) if isinstance(item, dict) else item
+                    for item in variants
+                ]
+
+        return normalized
+
+    @classmethod
     def _response_format_payload(cls, request: UnifiedExecutionRequest) -> dict[str, Any] | None:
         schema = cls._structured_output_schema(request)
         if isinstance(schema, dict):
+            if str(request.task_family or "").strip().lower() == "task.structured_extraction":
+                return None
+            schema = cls._normalize_strict_json_schema(schema)
             prompt_id = str((request.metadata or {}).get("prompt_id") or "structured_output").strip().replace(".", "_")
             version = str((request.metadata or {}).get("prompt_version") or "").strip().replace(".", "_")
             schema_name = f"{prompt_id}_{version}" if version else prompt_id
@@ -112,6 +178,25 @@ class OpenAIProviderAdapter(ProviderAdapter):
         if request.task_family in {TASK_CLASSIFICATION, TASK_CLASSIFICATION_TEXT}:
             return {"type": "json_object"}
         return None
+
+    @staticmethod
+    def _error_message_from_payload(*, data: Any, status_code: int) -> str:
+        if not isinstance(data, dict):
+            return f"http_{status_code}"
+        error_detail = data.get("error")
+        if isinstance(error_detail, dict):
+            message = str(error_detail.get("message") or "").strip()
+            error_type = str(error_detail.get("type") or "").strip()
+            param = str(error_detail.get("param") or "").strip()
+            code = str(error_detail.get("code") or "").strip()
+            extras = [item for item in (error_type, param, code) if item]
+            if message and extras:
+                return f"{message} [{' | '.join(extras)}]"
+            if message:
+                return message
+        elif error_detail is not None:
+            return str(error_detail).strip() or f"http_{status_code}"
+        return f"http_{status_code}"
 
     async def health_check(self) -> dict[str, Any]:
         if not self._api_key:
@@ -215,6 +300,8 @@ class OpenAIProviderAdapter(ProviderAdapter):
         model = str(request.requested_model or "").strip() or self._default_model_id
         # Classification calls are batch-oriented and often exceed the regular request timeout.
         request_timeout = max(self._timeout_seconds, 90.0) if request.task_family in {TASK_CLASSIFICATION, TASK_CLASSIFICATION_TEXT} else self._timeout_seconds
+        request_recorded = False
+        failure_recorded = False
         messages = list(request.messages or [])
         if not messages:
             if request.system_prompt:
@@ -240,6 +327,7 @@ class OpenAIProviderAdapter(ProviderAdapter):
                 url = f"{self._base_url}/chat/completions"
                 response = await client.post(url, headers=request_headers, json=payload)
             self._metrics["calls"] += 1
+            request_recorded = True
             data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
             self._write_debug_aopenai_log(
                 request=request,
@@ -251,8 +339,8 @@ class OpenAIProviderAdapter(ProviderAdapter):
             )
             if response.status_code >= 400:
                 self._metrics["failures"] += 1
-                error_detail = data.get("error") if isinstance(data, dict) else None
-                message = str(error_detail or f"http_{response.status_code}")
+                failure_recorded = True
+                message = self._error_message_from_payload(data=data, status_code=response.status_code)
                 raise RuntimeError(message)
 
             choices = data.get("choices") if isinstance(data, dict) else []
@@ -284,8 +372,10 @@ class OpenAIProviderAdapter(ProviderAdapter):
                 raw_provider_response_ref=f"openai:{data.get('id') or _iso_now()}",
             )
         except Exception as exc:
-            self._metrics["calls"] += 1
-            self._metrics["failures"] += 1
+            if not request_recorded:
+                self._metrics["calls"] += 1
+            if not failure_recorded:
+                self._metrics["failures"] += 1
             self._write_debug_aopenai_log(
                 request=request,
                 url=f"{self._base_url}/chat/completions",

@@ -97,8 +97,8 @@ class OpenAIAdapterCostTests(unittest.TestCase):
 
 
 class _FakeResponse:
-    def __init__(self, payload: dict):
-        self.status_code = 200
+    def __init__(self, payload: dict, *, status_code: int = 200):
+        self.status_code = status_code
         self.headers = {"content-type": "application/json"}
         self._payload = payload
 
@@ -107,9 +107,10 @@ class _FakeResponse:
 
 
 class _FakeAsyncClient:
-    def __init__(self, *, capture: dict, payload: dict, **_kwargs):
+    def __init__(self, *, capture: dict, payload: dict, status_code: int = 200, **_kwargs):
         self._capture = capture
         self._payload = payload
+        self._status_code = status_code
 
     async def __aenter__(self):
         return self
@@ -121,7 +122,7 @@ class _FakeAsyncClient:
         self._capture["url"] = url
         self._capture["headers"] = headers
         self._capture["json"] = json
-        return _FakeResponse(self._payload)
+        return _FakeResponse(self._payload, status_code=self._status_code)
 
 
 class OpenAIAdapterExecutionTests(unittest.IsolatedAsyncioTestCase):
@@ -191,6 +192,130 @@ class OpenAIAdapterExecutionTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertAlmostEqual(response.estimated_cost or 0.0, 0.00003, places=12)
 
+    async def test_structured_output_schema_normalizes_optional_object_properties_for_openai(self):
+        capture: dict = {}
+        response_payload = {
+            "id": "resp-790",
+            "choices": [{"message": {"content": "{\"match\":{\"vendor_identity\":null}}"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+
+        def _client_factory(*args, **kwargs):
+            return _FakeAsyncClient(capture=capture, payload=response_payload, **kwargs)
+
+        adapter = OpenAIProviderAdapter(api_key=TEST_OPENAI_CREDENTIAL)
+        request = UnifiedExecutionRequest(
+            task_family="task.summarization.text",
+            prompt="Build template",
+            requested_model="gpt-5.4-mini",
+            metadata={
+                "structured_output_schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "match": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "vendor_identity": {"type": "string"},
+                            },
+                        }
+                    },
+                    "required": ["match"],
+                },
+            },
+        )
+
+        with patch("ai_node.providers.adapters.openai_adapter.httpx.AsyncClient", side_effect=_client_factory):
+            await adapter.execute_prompt(request)
+
+        normalized_schema = capture["json"]["response_format"]["json_schema"]["schema"]
+        self.assertEqual(normalized_schema["properties"]["match"]["required"], ["vendor_identity"])
+        self.assertEqual(
+            normalized_schema["properties"]["match"]["properties"]["vendor_identity"]["type"],
+            ["string", "null"],
+        )
+
+    async def test_structured_output_schema_drops_one_of_for_openai_compatibility(self):
+        capture: dict = {}
+        response_payload = {
+            "id": "resp-791",
+            "choices": [{"message": {"content": "{\"extract\":{}}"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+
+        def _client_factory(*args, **kwargs):
+            return _FakeAsyncClient(capture=capture, payload=response_payload, **kwargs)
+
+        adapter = OpenAIProviderAdapter(api_key=TEST_OPENAI_CREDENTIAL)
+        request = UnifiedExecutionRequest(
+            task_family="task.summarization.text",
+            prompt="Build template",
+            requested_model="gpt-5.4-mini",
+            metadata={
+                "structured_output_schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "extract": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                    "method": {"type": "string"},
+                                    "pattern": {"type": "string"},
+                                },
+                                "required": ["method"],
+                                "oneOf": [
+                                    {"required": ["method", "pattern"]},
+                                ],
+                            },
+                        }
+                    },
+                    "required": ["extract"],
+                },
+            },
+        )
+
+        with patch("ai_node.providers.adapters.openai_adapter.httpx.AsyncClient", side_effect=_client_factory):
+            await adapter.execute_prompt(request)
+
+        additional_properties = capture["json"]["response_format"]["json_schema"]["schema"]["properties"]["extract"]["additionalProperties"]
+        self.assertNotIn("oneOf", additional_properties)
+
+    async def test_structured_output_schema_adds_additional_properties_false_to_bare_objects(self):
+        capture: dict = {}
+        response_payload = {
+            "id": "resp-792",
+            "choices": [{"message": {"content": "{\"post_process\":{}}"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+
+        def _client_factory(*args, **kwargs):
+            return _FakeAsyncClient(capture=capture, payload=response_payload, **kwargs)
+
+        adapter = OpenAIProviderAdapter(api_key=TEST_OPENAI_CREDENTIAL)
+        request = UnifiedExecutionRequest(
+            task_family="task.summarization.text",
+            prompt="Build template",
+            requested_model="gpt-5.4-mini",
+            metadata={
+                "structured_output_schema": {
+                    "type": "object",
+                    "properties": {
+                        "post_process": {"type": "object"},
+                    },
+                    "required": ["post_process"],
+                }
+            },
+        )
+
+        with patch("ai_node.providers.adapters.openai_adapter.httpx.AsyncClient", side_effect=_client_factory):
+            await adapter.execute_prompt(request)
+
+        post_process = capture["json"]["response_format"]["json_schema"]["schema"]["properties"]["post_process"]
+        self.assertFalse(post_process["additionalProperties"])
+
     async def test_non_classification_requests_do_not_force_json_response_format(self):
         capture: dict = {}
         response_payload = {
@@ -214,6 +339,68 @@ class OpenAIAdapterExecutionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.output_text, "summary text")
         self.assertNotIn("response_format", capture["json"])
+
+    async def test_structured_extraction_does_not_send_json_schema_response_format(self):
+        capture: dict = {}
+        response_payload = {
+            "id": "resp-793",
+            "choices": [{"message": {"content": "{\"template_id\":\"demo\"}"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+
+        def _client_factory(*args, **kwargs):
+            return _FakeAsyncClient(capture=capture, payload=response_payload, **kwargs)
+
+        adapter = OpenAIProviderAdapter(api_key=TEST_OPENAI_CREDENTIAL)
+        request = UnifiedExecutionRequest(
+            task_family="task.structured_extraction",
+            prompt="Build template",
+            requested_model="gpt-5.4-mini",
+            metadata={
+                "structured_output_schema": {
+                    "type": "object",
+                    "properties": {"template_id": {"type": "string"}},
+                    "required": ["template_id"],
+                }
+            },
+        )
+
+        with patch("ai_node.providers.adapters.openai_adapter.httpx.AsyncClient", side_effect=_client_factory):
+            await adapter.execute_prompt(request)
+
+        self.assertNotIn("response_format", capture["json"])
+
+    async def test_http_error_uses_provider_message_field(self):
+        capture: dict = {}
+        response_payload = {
+            "error": {
+                "message": "Invalid schema for response_format 'order_template': schema must include additionalProperties: false",
+                "type": "invalid_request_error",
+                "param": "response_format",
+                "code": None,
+            }
+        }
+
+        def _client_factory(*args, **kwargs):
+            return _FakeAsyncClient(capture=capture, payload=response_payload, status_code=400, **kwargs)
+
+        adapter = OpenAIProviderAdapter(api_key=TEST_OPENAI_CREDENTIAL)
+        request = UnifiedExecutionRequest(
+            task_family="task.structured_extraction",
+            prompt="Build template",
+            requested_model="gpt-5.4-mini",
+            metadata={
+                "structured_output_schema": {
+                    "type": "object",
+                    "properties": {"template_id": {"type": "string"}},
+                    "required": ["template_id"],
+                }
+            },
+        )
+
+        with patch("ai_node.providers.adapters.openai_adapter.httpx.AsyncClient", side_effect=_client_factory):
+            with self.assertRaisesRegex(RuntimeError, "Invalid schema for response_format"):
+                await adapter.execute_prompt(request)
 
     async def test_debug_aopenai_writes_full_request_and_response_to_separate_log(self):
         capture: dict = {}

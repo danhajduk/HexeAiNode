@@ -240,6 +240,7 @@ function UnusedPromptTable({ prompts = [] }) {
             <tr>
               <th>Prompt</th>
               <th>Created</th>
+              <th>Review Due</th>
               <th>Default Model</th>
             </tr>
           </thead>
@@ -248,6 +249,7 @@ function UnusedPromptTable({ prompts = [] }) {
               <tr key={`unused:${prompt.promptId}`}>
                 <td><strong>{formatPromptLabel(prompt.promptLabel)}</strong></td>
                 <td><code>{formatShortDate(prompt.registeredAt) || "n/a"}</code></td>
+                <td><code>{formatShortDate(prompt.reviewDueAt) || "n/a"}</code></td>
                 <td><code>{prompt.defaultModel || "n/a"}</code></td>
               </tr>
             ))}

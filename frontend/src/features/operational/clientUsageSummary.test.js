@@ -68,11 +68,13 @@ describe("client usage summary", () => {
       defaultModel: "gpt-5.4-mini",
       lastReviewedAt: "2026-04-02T00:00:00Z",
       reviewReason: "provider_policy_refresh",
+      reviewDueAt: "2026-05-02T00:00:00.000Z",
     });
     expect(result.clients[0].prompts[0].models[0].modelId).toBe("gpt-4.1-mini");
     expect(result.clients[0].unusedPrompts[0]).toMatchObject({
       promptId: "prompt-2",
       defaultModel: "gpt-5.4-nano",
+      reviewDueAt: "2026-05-03T00:00:00.000Z",
     });
     expect(result.clients[0].totalPromptCount).toBe(2);
   });

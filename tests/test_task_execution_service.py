@@ -452,6 +452,183 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resolver.last_request.timeout_s, 30)
         self.assertEqual(runtime_manager.last_request.system_prompt, "new prompt")
 
+    async def test_execute_renders_prompt_template_for_structured_extraction(self):
+        runtime_manager = _FakeProviderRuntimeManager()
+        resolver = _FakeProviderResolver(
+            ProviderResolutionResult(
+                allowed=True,
+                provider_id="openai",
+                model_id="gpt-5.4-mini",
+                provider_order=["openai"],
+                fallback_provider_ids=[],
+                model_allowlist_by_provider={"openai": ["gpt-5.4-mini"]},
+                timeout_s=45,
+                retry_count=0,
+                rejection_reason=None,
+            )
+        )
+        service = TaskExecutionService(
+            provider_runtime_manager=runtime_manager,
+            provider_resolver=resolver,
+            logger=logging.getLogger("task-execution-service-test"),
+            prompt_services_state_provider=lambda: {
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.extract",
+                        "task_family": "task.structured_extraction",
+                        "status": "active",
+                        "current_version": "v1.0",
+                        "versions": [
+                            {
+                                "version": "v1.0",
+                                "definition": {
+                                    "system_prompt": "extract deterministically",
+                                    "prompt_template": "Template: {{template_id}}\nBody: {{body_text}}\nLinks: {{links_json}}\nEnabled: {{enabled}}",
+                                    "template_variables": ["template_id", "body_text", "links_json", "enabled"],
+                                    "default_inputs": {"enabled": True, "links_json": "[]"},
+                                },
+                            }
+                        ],
+                    }
+                ]
+            },
+            declared_task_families_provider=lambda: ["task.structured_extraction"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.structured_extraction"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-structured",
+                    "prompt_id": "prompt.extract",
+                    "task_family": "task.structured_extraction",
+                    "requested_by": "node-email",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5.4-mini",
+                    "inputs": {
+                        "template_id": "recreation_gov.v1",
+                        "body_text": "Order Receipt",
+                        "links_json": [{"label": "My Reservations", "url": "https://example.com"}],
+                        "json_schema": {
+                            "type": "object",
+                            "properties": {"template_id": {"type": "string"}},
+                            "required": ["template_id"],
+                        },
+                    },
+                    "trace_id": "trace-structured",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertTrue(runtime_manager.last_request.system_prompt.startswith("extract deterministically"))
+        self.assertIn("Template: recreation_gov.v1", runtime_manager.last_request.prompt)
+        self.assertIn("Body: Order Receipt", runtime_manager.last_request.prompt)
+        self.assertIn("\"label\": \"My Reservations\"", runtime_manager.last_request.prompt)
+        self.assertIn("Enabled: true", runtime_manager.last_request.prompt)
+        self.assertIn("Return exactly one JSON object.", runtime_manager.last_request.system_prompt)
+        self.assertIn("Do not wrap the JSON object in a field named text.", runtime_manager.last_request.system_prompt)
+
+    async def test_execute_returns_parsed_output_for_structured_extraction(self):
+        class _StructuredProviderRuntimeManager:
+            def __init__(self):
+                self.last_request = None
+
+            async def execute(self, request):
+                self.last_request = request
+                return UnifiedExecutionResponse(
+                    provider_id=str(request.requested_provider or "openai"),
+                    model_id=str(request.requested_model or "gpt-5.4-mini"),
+                    output_text='{"schema_version":"order-phase4-template.v1","template_id":"demo","profile_id":"reservation_confirmation","template_version":"v1","enabled":true,"match":{},"extract":{},"required_fields":[],"confidence_rules":{"high_requires":[]},"post_process":{}}',
+                    usage=UnifiedExecutionUsage(prompt_tokens=2, completion_tokens=4, total_tokens=6),
+                    latency_ms=12.5,
+                    estimated_cost=0.001,
+                )
+
+            def metrics_snapshot(self):
+                return {}
+
+        service = TaskExecutionService(
+            provider_runtime_manager=_StructuredProviderRuntimeManager(),
+            provider_resolver=_FakeProviderResolver(
+                ProviderResolutionResult(
+                    allowed=True,
+                    provider_id="openai",
+                    model_id="gpt-5.4-mini",
+                    provider_order=["openai"],
+                    fallback_provider_ids=[],
+                    model_allowlist_by_provider={"openai": ["gpt-5.4-mini"]},
+                    timeout_s=45,
+                    retry_count=0,
+                    rejection_reason=None,
+                )
+            ),
+            logger=logging.getLogger("task-execution-service-test"),
+            declared_task_families_provider=lambda: ["task.structured_extraction"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.structured_extraction"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-structured-output",
+                    "task_family": "task.structured_extraction",
+                    "requested_by": "node-email",
+                    "inputs": {"text": "fallback input"},
+                    "trace_id": "trace-structured-output",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.output["schema_version"], "order-phase4-template.v1")
+        self.assertNotIn("text", result.output)
+
+    async def test_execute_returns_failed_result_for_long_provider_errors(self):
+        class _FailingProviderRuntimeManager:
+            async def execute(self, _request):
+                raise RuntimeError("x" * 6000)
+
+            def metrics_snapshot(self):
+                return {}
+
+        service = TaskExecutionService(
+            provider_runtime_manager=_FailingProviderRuntimeManager(),
+            provider_resolver=_FakeProviderResolver(
+                ProviderResolutionResult(
+                    allowed=True,
+                    provider_id="openai",
+                    model_id="gpt-5.4-mini",
+                    provider_order=["openai"],
+                    fallback_provider_ids=[],
+                    model_allowlist_by_provider={"openai": ["gpt-5.4-mini"]},
+                    timeout_s=45,
+                    retry_count=0,
+                    rejection_reason=None,
+                )
+            ),
+            logger=logging.getLogger("task-execution-service-test"),
+            declared_task_families_provider=lambda: ["task.structured_extraction"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.structured_extraction"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-long-provider-error",
+                    "task_family": "task.structured_extraction",
+                    "requested_by": "node-email",
+                    "inputs": {"text": "fallback input"},
+                    "trace_id": "trace-long-provider-error",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.error_code, "internal_execution_error")
+        self.assertLessEqual(len(result.error_message or ""), 4000)
+        self.assertTrue((result.error_message or "").endswith("..."))
+
     async def test_execute_degrades_when_provider_resolution_fails_due_to_provider_unavailability(self):
         service = TaskExecutionService(
             provider_runtime_manager=_FakeProviderRuntimeManager(),

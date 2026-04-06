@@ -410,6 +410,7 @@ describe("OperationalDashboard", () => {
                   promptLabel: "prompt.email.summarize",
                   currentVersion: "v1",
                   registeredAt: "2026-04-04T00:00:00Z",
+                  reviewDueAt: "2026-05-04T00:00:00Z",
                   status: "active",
                   accessScope: "service",
                   ownerService: "node-email",
@@ -445,8 +446,10 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Un-Used Prompts");
     expect(markup).toContain("prompt.email.summarize");
     expect(markup).toContain("Created");
+    expect(markup).toContain("Review Due");
     expect(markup).toContain("Default Model");
     expect(markup).toContain("Apr 4, 2026");
+    expect(markup).toContain("May 4, 2026");
     expect(markup).toContain("gpt-5.4-mini");
     expect(markup).toContain("Lifetime $0.067246");
     expect(markup).toContain("April 2026 $0.067246");

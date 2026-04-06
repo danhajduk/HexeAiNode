@@ -1,3 +1,22 @@
+const REVIEW_DUE_WINDOW_DAYS = 30;
+const REVIEW_DUE_WINDOW_MS = REVIEW_DUE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+function computeReviewDueAt(promptDetails = {}) {
+  const freshnessBase =
+    String(promptDetails.lastReviewedAt || "").trim()
+    || String(promptDetails.lastUsedAt || "").trim()
+    || String(promptDetails.updatedAt || "").trim()
+    || String(promptDetails.registeredAt || "").trim();
+  if (!freshnessBase) {
+    return "";
+  }
+  const parsed = Date.parse(freshnessBase);
+  if (Number.isNaN(parsed)) {
+    return "";
+  }
+  return new Date(parsed + REVIEW_DUE_WINDOW_MS).toISOString();
+}
+
 function buildPromptServiceMap(payload) {
   const promptServices = Array.isArray(payload?.prompt_services)
     ? payload.prompt_services
@@ -21,8 +40,10 @@ function buildPromptServiceMap(payload) {
             ownerService: String(prompt?.owner_service || "").trim(),
             ownerClientId: String(prompt?.owner_client_id || "").trim(),
             defaultModel: String(prompt?.provider_preferences?.default_model || "").trim(),
+            updatedAt: String(prompt?.updated_at || "").trim(),
             lastReviewedAt: String(prompt?.last_reviewed_at || "").trim(),
             reviewReason: String(prompt?.review_reason || "").trim(),
+            lastUsedAt: String(prompt?.usage?.last_used_at || "").trim(),
           },
         ];
       })
@@ -46,8 +67,11 @@ function buildPromptEntry(promptId, promptServiceMap) {
     ownerService: promptDetails.ownerService || "",
     ownerClientId: promptDetails.ownerClientId || "",
     defaultModel: promptDetails.defaultModel || "",
+    updatedAt: promptDetails.updatedAt || "",
     lastReviewedAt: promptDetails.lastReviewedAt || "",
     reviewReason: promptDetails.reviewReason || "",
+    lastUsedAt: promptDetails.lastUsedAt || "",
+    reviewDueAt: computeReviewDueAt(promptDetails),
     lifetime: createEmptyUsage(),
     current_month: createEmptyUsage(),
     models: [],
@@ -83,8 +107,11 @@ function normalizeClient(client, promptServiceMap) {
           ownerService: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.ownerService || "",
           ownerClientId: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.ownerClientId || "",
           defaultModel: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.defaultModel || "",
+          updatedAt: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.updatedAt || "",
           lastReviewedAt: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.lastReviewedAt || "",
           reviewReason: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.reviewReason || "",
+          lastUsedAt: promptServiceMap.get(String(prompt?.prompt_id || "").trim())?.lastUsedAt || "",
+          reviewDueAt: computeReviewDueAt(promptServiceMap.get(String(prompt?.prompt_id || "").trim()) || {}),
           lifetime: prompt?.lifetime || {},
           current_month: prompt?.current_month || {},
           models: Array.isArray(prompt?.models)
