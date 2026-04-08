@@ -623,6 +623,7 @@ class NodeControlState:
             "identity_state": self._identity_state,
             "startup_mode": self._startup_mode,
             "trusted_runtime_context": self._trusted_runtime_context,
+            "api_metrics": self._resource_usage_payload(),
             "provider_selection_configured": self._provider_selection_config is not None,
             "provider_credentials": self.provider_credentials_payload(provider_id="openai"),
             "task_capability_selection_configured": self._task_capability_selection_config is not None,

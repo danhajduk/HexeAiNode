@@ -54,6 +54,7 @@
 - `GET /api/node/status` exposes lifecycle, trusted runtime context, capability setup state, capability runtime state, service status, and internal scheduler state
 - trusted status telemetry publishes over operational MQTT only
 - supervisor runtime heartbeats include rolling API metrics (RPS, p95 latency, error rate) plus host CPU and memory usage when available
+- `GET /api/node/status` includes `api_metrics` with rolling RPS, p95 latency, error rate, and host CPU/memory usage when available
 
 ## Runtime Health
 
