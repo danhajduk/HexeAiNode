@@ -43,6 +43,7 @@ from ai_node.persistence.client_usage_store import (
 )
 from ai_node.persistence.provider_capability_report_store import ProviderCapabilityReportStore
 from ai_node.providers.runtime_manager import ProviderRuntimeManager
+from ai_node.supervisor import SupervisorApiClient
 from ai_node.trust.trust_store import TrustStateStore
 
 
@@ -556,6 +557,7 @@ def run(
         )
     trust_status_client = TrustStatusClient(logger=LOGGER)
     budget_policy_client = BudgetPolicyClient(logger=LOGGER)
+    supervisor_client = SupervisorApiClient()
     notification_service = UserNotificationService(
         logger=LOGGER,
         trust_state_provider=lambda: trust_state_store.load() if hasattr(trust_state_store, "load") else {},
@@ -699,6 +701,12 @@ def run(
         notification_service=notification_service,
         service_manager=service_manager,
         internal_scheduler=internal_scheduler,
+        supervisor_client=supervisor_client,
+        node_hostname=resolved_node_hostname,
+        node_api_base_url=resolved_node_api_base_url,
+        node_ui_endpoint=resolved_node_ui_endpoint,
+        node_software_version=node_software_version,
+        protocol_version=protocol_version,
         provider_refresh_interval_seconds=provider_capability_refresh_interval_seconds,
         mqtt_recovery_store=operational_mqtt_recovery_store,
         operational_mqtt_health_check_interval_seconds=operational_mqtt_health_check_interval_seconds,

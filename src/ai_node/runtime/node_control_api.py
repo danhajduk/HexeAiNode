@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import socket
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from ai_node.runtime.capability_declaration_runner import (
     STATUS_HEARTBEAT_INTERVAL_SECONDS,
     STATUS_TELEMETRY_INTERVAL_SECONDS,
 )
+from ai_node.supervisor import SupervisorApiClient
 from ai_node.time_utils import local_now, local_now_iso
 
 
@@ -89,6 +91,12 @@ class NodeControlState:
         service_manager=None,
         task_execution_service=None,
         internal_scheduler=None,
+        supervisor_client=None,
+        node_hostname: str | None = None,
+        node_api_base_url: str | None = None,
+        node_ui_endpoint: str | None = None,
+        node_software_version: str | None = None,
+        protocol_version: str | None = None,
         provider_refresh_interval_seconds: int = 900,
         mqtt_recovery_store=None,
         operational_mqtt_health_check_interval_seconds: int = 10,
@@ -124,6 +132,12 @@ class NodeControlState:
         self._service_manager = service_manager or NullServiceManager()
         self._task_execution_service = task_execution_service
         self._internal_scheduler = internal_scheduler or InternalScheduler(logger=logger)
+        self._supervisor_client = supervisor_client or SupervisorApiClient()
+        self._node_hostname = node_hostname
+        self._node_api_base_url = node_api_base_url
+        self._node_ui_endpoint = node_ui_endpoint
+        self._node_software_version = node_software_version
+        self._protocol_version = protocol_version
         self._provider_refresh_interval_seconds = max(int(provider_refresh_interval_seconds), 60)
         self._mqtt_recovery_store = mqtt_recovery_store
         self._operational_mqtt_health_check_interval_seconds = max(int(operational_mqtt_health_check_interval_seconds), 5)
@@ -148,6 +162,9 @@ class NodeControlState:
         self._prompt_service_state = None
         self._node_id = None
         self._identity_state = "unknown"
+        self._supervisor_registered = False
+        self._supervisor_last_error = None
+        self._supervisor_last_seen = None
         self._load_identity()
         self._rehydrate_trusted_state()
         self._load_provider_selection_config()
@@ -966,6 +983,59 @@ class NodeControlState:
         payload = self._trust_state_store.load()
         return payload if isinstance(payload, dict) else {}
 
+    def _supervisor_runtime_state_payload(self) -> dict:
+        state = self._lifecycle.get_state()
+        runtime_state = "starting"
+        lifecycle_state = state.value
+        health_status = "unknown"
+        running = True
+        if state == NodeLifecycleState.OPERATIONAL:
+            runtime_state = "running"
+            lifecycle_state = "running"
+            health_status = "healthy"
+        elif state == NodeLifecycleState.DEGRADED:
+            runtime_state = "running"
+            lifecycle_state = "degraded"
+            health_status = "unhealthy"
+        elif state == NodeLifecycleState.UNCONFIGURED:
+            runtime_state = "stopped"
+            lifecycle_state = "stopped"
+            health_status = "unknown"
+            running = False
+        return {
+            "runtime_state": runtime_state,
+            "lifecycle_state": lifecycle_state,
+            "health_status": health_status,
+            "running": running,
+            "desired_state": "running",
+        }
+
+    def _supervisor_runtime_payload(self) -> dict:
+        trust_state = self._trust_state_payload()
+        node_id = str(trust_state.get("node_id") or self._node_id or "").strip()
+        node_name = str(trust_state.get("node_name") or node_id or "Hexe AI Node").strip()
+        node_type = str(trust_state.get("node_type") or "ai-node").strip() or "ai-node"
+        host_id = socket.gethostname()
+        state_payload = self._supervisor_runtime_state_payload()
+        runtime_metadata = {
+            "node_software_version": self._node_software_version,
+            "protocol_version": self._protocol_version,
+            "startup_mode": self._startup_mode,
+            "paired_core_id": str(trust_state.get("paired_core_id") or "").strip() or None,
+            "core_api_endpoint": str(trust_state.get("core_api_endpoint") or "").strip() or None,
+        }
+        return {
+            "node_id": node_id,
+            "node_name": node_name,
+            "node_type": node_type,
+            "host_id": host_id,
+            "hostname": self._node_hostname or host_id,
+            "api_base_url": self._node_api_base_url,
+            "ui_base_url": self._node_ui_endpoint,
+            **state_payload,
+            "runtime_metadata": runtime_metadata,
+        }
+
     def _declared_task_families_payload(self) -> list[str]:
         accepted_profile = self._accepted_capability_profile_payload()
         accepted_families = accepted_profile.get("declared_task_families") if isinstance(accepted_profile, dict) else []
@@ -1715,6 +1785,14 @@ class NodeControlState:
             readiness_critical=False,
         )
         self._internal_scheduler.register_interval_task(
+            task_id="supervisor_heartbeat",
+            display_name="Supervisor HB",
+            interval_seconds=STATUS_HEARTBEAT_INTERVAL_SECONDS,
+            schedule_name="heartbeat_5_seconds",
+            task_kind="local_recurring",
+            readiness_critical=False,
+        )
+        self._internal_scheduler.register_interval_task(
             task_id="telemetry",
             display_name="Telemetry",
             interval_seconds=STATUS_TELEMETRY_INTERVAL_SECONDS,
@@ -1848,6 +1926,11 @@ class NodeControlState:
                 initial_delay_seconds=STATUS_HEARTBEAT_INTERVAL_SECONDS,
             )
             self._internal_scheduler.start_interval_task(
+                task_id="supervisor_heartbeat",
+                coroutine_factory=self._supervisor_heartbeat_job_once,
+                initial_delay_seconds=STATUS_HEARTBEAT_INTERVAL_SECONDS,
+            )
+            self._internal_scheduler.start_interval_task(
                 task_id="telemetry",
                 coroutine_factory=self._status_telemetry_job_once,
                 initial_delay_seconds=STATUS_TELEMETRY_INTERVAL_SECONDS,
@@ -1919,6 +2002,51 @@ class NodeControlState:
                 {"published": bool((result or {}).get("published")), "result": result},
             )
         return result
+
+    async def _supervisor_heartbeat_job_once(self) -> dict | None:
+        if self._supervisor_client is None:
+            return {"status": "skipped", "reason": "supervisor_client_not_configured"}
+        payload = self._supervisor_runtime_payload()
+        node_id = str(payload.get("node_id") or "").strip()
+        if not node_id:
+            return {"status": "skipped", "reason": "missing_node_id"}
+        health = await asyncio.to_thread(self._supervisor_client.health)
+        if not isinstance(health, dict):
+            self._supervisor_registered = False
+            self._supervisor_last_error = "supervisor_unreachable"
+            return {"status": "skipped", "reason": "supervisor_unreachable"}
+        status = str(health.get("status") or "").strip().lower()
+        ready = health.get("ready")
+        if status not in {"ok", "healthy"} or (ready is not None and not bool(ready)):
+            self._supervisor_registered = False
+            self._supervisor_last_error = "supervisor_not_ready"
+            return {"status": "skipped", "reason": "supervisor_not_ready"}
+        if not self._supervisor_registered:
+            registered = await asyncio.to_thread(self._supervisor_client.register_runtime, payload)
+            if not isinstance(registered, dict):
+                self._supervisor_last_error = "supervisor_register_failed"
+                return {"status": "error", "reason": "supervisor_register_failed"}
+            self._supervisor_registered = True
+        heartbeat_payload = {
+            "node_id": payload.get("node_id"),
+            "host_id": payload.get("host_id"),
+            "hostname": payload.get("hostname"),
+            "api_base_url": payload.get("api_base_url"),
+            "ui_base_url": payload.get("ui_base_url"),
+            "runtime_state": payload.get("runtime_state"),
+            "lifecycle_state": payload.get("lifecycle_state"),
+            "health_status": payload.get("health_status"),
+            "running": payload.get("running"),
+            "runtime_metadata": payload.get("runtime_metadata", {}),
+        }
+        heartbeat = await asyncio.to_thread(self._supervisor_client.heartbeat_runtime, heartbeat_payload)
+        if not isinstance(heartbeat, dict):
+            self._supervisor_registered = False
+            self._supervisor_last_error = "supervisor_heartbeat_failed"
+            return {"status": "error", "reason": "supervisor_heartbeat_failed"}
+        self._supervisor_last_error = None
+        self._supervisor_last_seen = local_now_iso()
+        return {"status": "ok", "supervisor": {"last_seen_at": self._supervisor_last_seen}}
 
     async def _operational_mqtt_health_job_once(self) -> dict | None:
         result = await self.check_operational_mqtt_health_once()
