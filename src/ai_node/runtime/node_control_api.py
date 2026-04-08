@@ -94,8 +94,8 @@ class NodeRuntimeMetrics:
             rps = (count / self._window_s) if self._window_s > 0 else 0.0
             p95 = self._p95_ms(durations)
             error_rate = (errors / count) if count else 0.0
-            cpu_percent = self._cpu_percent_locked()
-        mem_percent = self._mem_percent()
+            cpu_percent = self._process_cpu_percent_locked()
+        mem_percent = self._process_mem_percent()
         payload: dict[str, float] = {
             "rps": round(rps, 2),
             "error_rate": round(error_rate, 3),
@@ -120,7 +120,7 @@ class NodeRuntimeMetrics:
         idx = min(idx, len(sorted_vals) - 1)
         return float(sorted_vals[idx])
 
-    def _cpu_percent_locked(self) -> float | None:
+    def _process_cpu_percent_locked(self) -> float | None:
         sample = self._read_cpu_times()
         if sample is None:
             return None
@@ -133,8 +133,10 @@ class NodeRuntimeMetrics:
         delta_total = total - last_total
         if delta_total <= 0:
             return None
-        delta_idle = idle - last_idle
-        usage = (delta_total - delta_idle) / delta_total
+        process_delta = self._read_process_cpu_delta(delta_total, last_total=last_total, total=total)
+        if process_delta is None:
+            return None
+        usage = process_delta / delta_total
         return max(0.0, min(100.0, usage * 100.0))
 
     @staticmethod
@@ -157,8 +159,45 @@ class NodeRuntimeMetrics:
         idle = values[3] + (values[4] if len(values) > 4 else 0.0)
         return total, idle
 
+    def _read_process_cpu_delta(
+        self, delta_total: float, *, last_total: float, total: float
+    ) -> float | None:
+        if delta_total <= 0:
+            return None
+        current = self._read_process_cpu_time()
+        if current is None:
+            return None
+        if not hasattr(self, "_last_process_cpu"):
+            self._last_process_cpu = current
+            return None
+        last_proc = getattr(self, "_last_process_cpu")
+        self._last_process_cpu = current
+        delta_proc = current - last_proc
+        if delta_proc < 0:
+            return None
+        return delta_proc
+
     @staticmethod
-    def _mem_percent() -> float | None:
+    def _read_process_cpu_time() -> float | None:
+        try:
+            with open("/proc/self/stat", "r", encoding="utf-8") as handle:
+                raw = handle.readline()
+        except OSError:
+            return None
+        if not raw:
+            return None
+        parts = raw.strip().split()
+        if len(parts) < 17:
+            return None
+        try:
+            utime = float(parts[13])
+            stime = float(parts[14])
+        except ValueError:
+            return None
+        return utime + stime
+
+    @staticmethod
+    def _process_mem_percent() -> float | None:
         try:
             with open("/proc/meminfo", "r", encoding="utf-8") as handle:
                 raw = handle.readlines()
@@ -173,10 +212,34 @@ class NodeRuntimeMetrics:
                 available = float(line.split()[1]) * 1024.0
             if total is not None and available is not None:
                 break
-        if total is None or available is None or total <= 0:
+        if total is None or total <= 0:
             return None
-        used = max(total - available, 0.0)
-        return max(0.0, min(100.0, (used / total) * 100.0))
+        rss = NodeRuntimeMetrics._read_process_rss_bytes()
+        if rss is None:
+            return None
+        return max(0.0, min(100.0, (rss / total) * 100.0))
+
+    @staticmethod
+    def _read_process_rss_bytes() -> float | None:
+        try:
+            with open("/proc/self/statm", "r", encoding="utf-8") as handle:
+                raw = handle.readline()
+        except OSError:
+            return None
+        if not raw:
+            return None
+        parts = raw.strip().split()
+        if len(parts) < 2:
+            return None
+        try:
+            rss_pages = float(parts[1])
+        except ValueError:
+            return None
+        try:
+            page_size = os.sysconf("SC_PAGE_SIZE")
+        except (ValueError, OSError):
+            page_size = 4096
+        return rss_pages * float(page_size)
 
 
 class NodeControlState:
