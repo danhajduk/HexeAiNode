@@ -38,6 +38,34 @@ class UserSystemdServiceManager:
             return {"target": "node", "result": "restarted"}
         raise ValueError("unsupported restart target")
 
+    def start(self, *, target: str) -> dict:
+        value = str(target or "").strip().lower()
+        if value == "backend":
+            self._start_unit(self._backend_unit)
+            return {"target": "backend", "result": "started"}
+        if value == "frontend":
+            self._start_unit(self._frontend_unit)
+            return {"target": "frontend", "result": "started"}
+        if value == "node":
+            self._start_unit(self._backend_unit)
+            self._start_unit(self._frontend_unit)
+            return {"target": "node", "result": "started"}
+        raise ValueError("unsupported start target")
+
+    def stop(self, *, target: str) -> dict:
+        value = str(target or "").strip().lower()
+        if value == "backend":
+            self._stop_unit(self._backend_unit)
+            return {"target": "backend", "result": "stopped"}
+        if value == "frontend":
+            self._stop_unit(self._frontend_unit)
+            return {"target": "frontend", "result": "stopped"}
+        if value == "node":
+            self._stop_unit(self._backend_unit)
+            self._stop_unit(self._frontend_unit)
+            return {"target": "node", "result": "stopped"}
+        raise ValueError("unsupported stop target")
+
     def schedule_restart(self, *, target: str, delay_seconds: int) -> dict:
         value = str(target or "").strip().lower()
         delay = max(int(delay_seconds), 0)
@@ -96,6 +124,24 @@ class UserSystemdServiceManager:
             env=self._systemd_env(),
         )
 
+    def _start_unit(self, unit: str) -> None:
+        subprocess.run(
+            ["systemctl", "--user", "start", unit],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=self._systemd_env(),
+        )
+
+    def _stop_unit(self, unit: str) -> None:
+        subprocess.run(
+            ["systemctl", "--user", "stop", unit],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=self._systemd_env(),
+        )
+
     def _systemd_env(self) -> dict:
         env = dict(os.environ)
         env.setdefault("XDG_RUNTIME_DIR", self._runtime_dir)
@@ -108,6 +154,12 @@ class NullServiceManager:
         return {"backend": "unknown", "frontend": "unknown", "node": "unknown"}
 
     def restart(self, *, target: str) -> dict:
+        raise ValueError("service manager is not configured")
+
+    def start(self, *, target: str) -> dict:
+        raise ValueError("service manager is not configured")
+
+    def stop(self, *, target: str) -> dict:
         raise ValueError("service manager is not configured")
 
     def schedule_restart(self, *, target: str, delay_seconds: int) -> dict:

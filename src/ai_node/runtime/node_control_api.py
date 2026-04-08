@@ -1214,6 +1214,7 @@ class NodeControlState:
             "startup_mode": self._startup_mode,
             "paired_core_id": str(trust_state.get("paired_core_id") or "").strip() or None,
             "core_api_endpoint": str(trust_state.get("core_api_endpoint") or "").strip() or None,
+            "services": self.service_status_payload().get("services"),
         }
         return {
             "node_id": node_id,
@@ -1400,6 +1401,18 @@ class NodeControlState:
         if self._service_manager is None or not hasattr(self._service_manager, "restart"):
             raise ValueError("service manager is not configured")
         result = self._service_manager.restart(target=target)
+        return {"status": "ok", **result, "services": self._service_manager.get_status()}
+
+    def start_service(self, *, target: str) -> dict:
+        if self._service_manager is None or not hasattr(self._service_manager, "start"):
+            raise ValueError("service manager is not configured")
+        result = self._service_manager.start(target=target)
+        return {"status": "ok", **result, "services": self._service_manager.get_status()}
+
+    def stop_service(self, *, target: str) -> dict:
+        if self._service_manager is None or not hasattr(self._service_manager, "stop"):
+            raise ValueError("service manager is not configured")
+        result = self._service_manager.stop(target=target)
         return {"status": "ok", **result, "services": self._service_manager.get_status()}
 
     def update_provider_selection(self, *, openai_enabled: bool, provider_budget_limits: dict | None = None) -> dict:
@@ -3305,6 +3318,20 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/services/status")
     def get_services_status():
         return state.service_status_payload()
+
+    @app.post("/api/services/start")
+    def post_services_start(payload: ServiceRestartRequest):
+        try:
+            return state.start_service(target=payload.target)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/services/stop")
+    def post_services_stop(payload: ServiceRestartRequest):
+        try:
+            return state.stop_service(target=payload.target)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/services/restart")
     def post_services_restart(payload: ServiceRestartRequest):
