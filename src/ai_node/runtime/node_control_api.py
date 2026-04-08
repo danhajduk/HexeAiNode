@@ -2,8 +2,11 @@ import asyncio
 import json
 import os
 import socket
+import time
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,6 +64,119 @@ def _short_grant_name(value: object, *, scope_kind: object = None) -> str | None
     if suffix:
         return f"{scope} {suffix}".strip()
     return scope
+
+
+class NodeRuntimeMetrics:
+    def __init__(self, *, window_s: float = 60.0, max_samples: int = 4000) -> None:
+        self._window_s = float(window_s)
+        self._max_samples = max(100, int(max_samples))
+        self._samples: deque[tuple[float, float, bool]] = deque()
+        self._lock = Lock()
+        self._last_cpu_sample: tuple[float, float] | None = None
+
+    def record_request(self, *, duration_ms: float, status_code: int) -> None:
+        now = time.monotonic()
+        is_error = int(status_code) >= 400
+        with self._lock:
+            self._samples.append((now, float(duration_ms), is_error))
+            self._prune_locked(now)
+            if len(self._samples) > self._max_samples:
+                while len(self._samples) > self._max_samples:
+                    self._samples.popleft()
+
+    def snapshot(self) -> dict[str, float]:
+        now = time.monotonic()
+        with self._lock:
+            self._prune_locked(now)
+            durations = [item[1] for item in self._samples]
+            count = len(durations)
+            errors = sum(1 for item in self._samples if item[2])
+            rps = (count / self._window_s) if self._window_s > 0 else 0.0
+            p95 = self._p95_ms(durations)
+            error_rate = (errors / count) if count else 0.0
+            cpu_percent = self._cpu_percent_locked()
+        mem_percent = self._mem_percent()
+        payload: dict[str, float] = {
+            "rps": round(rps, 2),
+            "error_rate": round(error_rate, 3),
+        }
+        if p95 is not None:
+            payload["latency_ms_p95"] = round(p95, 2)
+        if cpu_percent is not None:
+            payload["cpu_percent"] = round(cpu_percent, 2)
+        if mem_percent is not None:
+            payload["mem_percent"] = round(mem_percent, 2)
+        return payload
+
+    def _prune_locked(self, now: float) -> None:
+        while self._samples and (now - self._samples[0][0]) > self._window_s:
+            self._samples.popleft()
+
+    def _p95_ms(self, durations: list[float]) -> float | None:
+        if not durations:
+            return None
+        sorted_vals = sorted(durations)
+        idx = max(0, int(round(0.95 * len(sorted_vals) + 0.5)) - 1)
+        idx = min(idx, len(sorted_vals) - 1)
+        return float(sorted_vals[idx])
+
+    def _cpu_percent_locked(self) -> float | None:
+        sample = self._read_cpu_times()
+        if sample is None:
+            return None
+        total, idle = sample
+        if self._last_cpu_sample is None:
+            self._last_cpu_sample = (total, idle)
+            return None
+        last_total, last_idle = self._last_cpu_sample
+        self._last_cpu_sample = (total, idle)
+        delta_total = total - last_total
+        if delta_total <= 0:
+            return None
+        delta_idle = idle - last_idle
+        usage = (delta_total - delta_idle) / delta_total
+        return max(0.0, min(100.0, usage * 100.0))
+
+    @staticmethod
+    def _read_cpu_times() -> tuple[float, float] | None:
+        try:
+            with open("/proc/stat", "r", encoding="utf-8") as handle:
+                first = handle.readline()
+        except OSError:
+            return None
+        if not first.startswith("cpu "):
+            return None
+        parts = first.strip().split()
+        if len(parts) < 5:
+            return None
+        try:
+            values = [float(item) for item in parts[1:]]
+        except ValueError:
+            return None
+        total = sum(values)
+        idle = values[3] + (values[4] if len(values) > 4 else 0.0)
+        return total, idle
+
+    @staticmethod
+    def _mem_percent() -> float | None:
+        try:
+            with open("/proc/meminfo", "r", encoding="utf-8") as handle:
+                raw = handle.readlines()
+        except OSError:
+            return None
+        total = None
+        available = None
+        for line in raw:
+            if line.startswith("MemTotal:"):
+                total = float(line.split()[1]) * 1024.0
+            elif line.startswith("MemAvailable:"):
+                available = float(line.split()[1]) * 1024.0
+            if total is not None and available is not None:
+                break
+        if total is None or available is None or total <= 0:
+            return None
+        used = max(total - available, 0.0)
+        return max(0.0, min(100.0, (used / total) * 100.0))
 
 
 class NodeControlState:
@@ -151,6 +267,7 @@ class NodeControlState:
         self._operational_mqtt_restart_max_attempts = max(int(operational_mqtt_restart_max_attempts), 1)
         self._startup_mode = startup_mode
         self._trusted_runtime_context = trusted_runtime_context or {}
+        self._runtime_metrics = NodeRuntimeMetrics()
         self._operational_mqtt_fast_until = local_now() + timedelta(
             seconds=self._operational_mqtt_health_fast_window_seconds
         )
@@ -983,6 +1100,16 @@ class NodeControlState:
         payload = self._trust_state_store.load()
         return payload if isinstance(payload, dict) else {}
 
+    def record_request_metrics(self, *, duration_ms: float, status_code: int) -> None:
+        if self._runtime_metrics is None:
+            return
+        self._runtime_metrics.record_request(duration_ms=duration_ms, status_code=status_code)
+
+    def _resource_usage_payload(self) -> dict:
+        if self._runtime_metrics is None:
+            return {}
+        return dict(self._runtime_metrics.snapshot())
+
     def _supervisor_runtime_state_payload(self) -> dict:
         state = self._lifecycle.get_state()
         runtime_state = "starting"
@@ -1033,6 +1160,7 @@ class NodeControlState:
             "api_base_url": self._node_api_base_url,
             "ui_base_url": self._node_ui_endpoint,
             **state_payload,
+            "resource_usage": self._resource_usage_payload(),
             "runtime_metadata": runtime_metadata,
         }
 
@@ -2037,6 +2165,7 @@ class NodeControlState:
             "lifecycle_state": payload.get("lifecycle_state"),
             "health_status": payload.get("health_status"),
             "running": payload.get("running"),
+            "resource_usage": payload.get("resource_usage", {}),
             "runtime_metadata": payload.get("runtime_metadata", {}),
         }
         heartbeat = await asyncio.to_thread(self._supervisor_client.heartbeat_runtime, heartbeat_payload)
@@ -2626,6 +2755,19 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def _metrics_middleware(request, call_next):
+        start = time.perf_counter()
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            return response
+        finally:
+            duration_ms = (time.perf_counter() - start) * 1000
+            if hasattr(state, "record_request_metrics"):
+                state.record_request_metrics(duration_ms=duration_ms, status_code=status_code)
 
     @app.on_event("startup")
     async def _startup_jobs():
