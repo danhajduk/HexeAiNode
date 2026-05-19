@@ -21,6 +21,13 @@ def parse_structured_output_summary(output_text: str | None) -> dict[str, Any]:
     normalized = str(output_text or "").strip()
     if not normalized:
         return {"label": None, "confidence": None}
+    if normalized.startswith("```"):
+        lines = normalized.splitlines()
+        if lines and lines[0].strip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        normalized = "\n".join(lines).strip()
     try:
         payload = json.loads(normalized)
     except json.JSONDecodeError:

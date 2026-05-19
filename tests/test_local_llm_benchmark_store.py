@@ -105,4 +105,8 @@ class LocalLLMBenchmarkStoreTests(unittest.TestCase):
             parse_structured_output_summary('{"label":"shipment","confidence":"0.95"}'),
             {"label": "shipment", "confidence": 0.95},
         )
+        self.assertEqual(
+            parse_structured_output_summary('```json\n{"label":"unknown","confidence":0.7}\n```'),
+            {"label": "unknown", "confidence": 0.7},
+        )
         self.assertEqual(parse_structured_output_summary("plain text"), {"label": None, "confidence": None})
