@@ -185,7 +185,7 @@ class LocalLLMBenchmarkRotationRunner:
     def _next_model(self) -> dict:
         models = self._load_models()
         state = self._load_state()
-        previous_id = str(state.get("current_model_id") or "").strip()
+        previous_id = self._live_model_id() or str(state.get("current_model_id") or "").strip()
         previous_index = next((idx for idx, item in enumerate(models) if str(item.get("id")) == previous_id), -1)
         return models[(previous_index + 1) % len(models)]
 

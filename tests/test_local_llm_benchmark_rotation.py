@@ -63,8 +63,9 @@ class LocalLLMBenchmarkRotationRunnerTests(unittest.IsolatedAsyncioTestCase):
                 command_runner=fake_runner,
             )
 
-            first = await runner.run_once()
-            second = await runner.run_once()
+            with patch.object(LocalLLMBenchmarkRotationRunner, "_live_model_id", return_value=None):
+                first = await runner.run_once()
+                second = await runner.run_once()
             with patch.object(LocalLLMBenchmarkRotationRunner, "_live_model_id", return_value="gemma-3-12b-it-q4_k_m"):
                 loaded = await runner.run_loaded_model()
             with patch.object(LocalLLMBenchmarkRotationRunner, "_live_model_id", return_value="live-model"):
@@ -94,3 +95,41 @@ class LocalLLMBenchmarkRotationRunnerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(commands[0]["env"]["LLAMACPP_MODEL_HF"], "Qwen/Qwen3-8B-GGUF:Q4_K_M")
             self.assertEqual(commands[0]["env"]["LLAMACPP_READY_TIMEOUT_S"], "420")
             self.assertEqual(commands[1]["env"]["LLAMACPP_MODEL_ALIAS"], "gemma-3-12b-it-q4_k_m")
+
+    async def test_rotation_prefers_live_model_when_selecting_next_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "models.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "models": [
+                            {"id": "qwen3-8b-q4_k_m"},
+                            {"id": "gemma-3-12b-it-q4_k_m"},
+                            {"id": "mistral-nemo-instruct-2407-q4_k_m"},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            state_path = Path(tmp) / "rotation.json"
+            state_path.write_text(json.dumps({"current_model_id": "qwen3-8b-q4_k_m"}), encoding="utf-8")
+            commands = []
+
+            async def fake_runner(command, env):
+                commands.append({"command": command, "env": env})
+                return {"returncode": 0, "stdout": "ready", "stderr": ""}
+
+            runner = LocalLLMBenchmarkRotationRunner(
+                worker=_FakeWorker(),
+                logger=logging.getLogger("local-llm-rotation-test"),
+                model_config_path=str(config_path),
+                state_path=str(state_path),
+                model_ids=["qwen3-8b-q4_k_m", "gemma-3-12b-it-q4_k_m", "mistral-nemo-instruct-2407-q4_k_m"],
+                command_runner=fake_runner,
+            )
+
+            with patch.object(LocalLLMBenchmarkRotationRunner, "_live_model_id", return_value="gemma-3-12b-it-q4_k_m"):
+                result = await runner.run_once()
+
+            self.assertEqual(result["model_id"], "mistral-nemo-instruct-2407-q4_k_m")
+            self.assertEqual(commands[0]["env"]["LLAMACPP_MODEL_ALIAS"], "mistral-nemo-instruct-2407-q4_k_m")
