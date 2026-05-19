@@ -939,11 +939,7 @@ class NodeControlState:
         running_rows = list(payload.get("running") or []) if isinstance(payload, dict) else []
         rotation = payload.get("rotation") if isinstance(payload.get("rotation"), dict) else {}
         rotation_activity_status = str(rotation.get("activity_status") or "").strip().lower()
-        active = bool(
-            running_rows
-            or (isinstance(benchmark_task, dict) and (benchmark_task.get("running") or benchmark_task.get("status") == "running"))
-            or rotation_activity_status in {"running", "swapping"}
-        )
+        active = bool(running_rows or rotation_activity_status in {"running", "swapping"})
         if rotation_activity_status == "swapping":
             status = "swapping"
         elif active:
