@@ -347,40 +347,51 @@ function BenchmarkDetailModal({ comparison, modelIds, onClose, onSetCorrectLabel
   return (
     <section className="modal-overlay pricing-modal-overlay" role="dialog" aria-modal="true" aria-label="Benchmark detail">
       <article className="card modal-card benchmark-detail-modal">
-        <CardHeader title="Benchmark Detail" subtitle={comparison.prompt_id || comparison.task_family || comparison.record_id} />
-        <div className="state-grid">
-          <span>Record</span>
-          <code>{comparison.record_id}</code>
-          <span>Prompt</span>
-          <code>{comparison.prompt_id || "unattributed"}</code>
-          <span>Created</span>
-          <code>{comparison.created_at || "unknown"}</code>
-          <span>Reference Label</span>
-          <code>{referenceLabel(comparison) || "none"}</code>
+        <div className="benchmark-detail-header">
+          <CardHeader title="Benchmark Detail" subtitle={comparison.prompt_id || comparison.task_family || comparison.record_id} />
+          <button className="btn btn-primary" type="button" onClick={onClose}>
+            Close
+          </button>
         </div>
-        <div className="modal-capability-data">
-          <h3>Scoring Override</h3>
-          <div className="state-grid">
-            <span>Correct Label</span>
-            <select
-              value={selectedCorrectLabel}
-              onChange={(event) => onSetCorrectLabel?.(comparison.record_id, event.target.value || null)}
-              disabled={!onSetCorrectLabel || correctionChanging}
-            >
-              <option value="">{openAiLabel ? `Use OpenAI label (${openAiLabel})` : "Use OpenAI label"}</option>
-              {BENCHMARK_LABEL_OPTIONS.map((label) => (
-                <option key={label} value={label}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <span>Applied To</span>
-            <code>OpenAI and local match scoring</code>
+        <div className="benchmark-detail-topline">
+          <div className="benchmark-detail-panel">
+            <h3>Record</h3>
+            <div className="state-grid benchmark-detail-grid">
+              <span>Record</span>
+              <code>{comparison.record_id}</code>
+              <span>Prompt</span>
+              <code>{comparison.prompt_id || "unattributed"}</code>
+              <span>Created</span>
+              <code>{comparison.created_at || "unknown"}</code>
+              <span>Reference Label</span>
+              <code>{referenceLabel(comparison) || "none"}</code>
+            </div>
+          </div>
+          <div className="benchmark-detail-panel">
+            <h3>Scoring Override</h3>
+            <div className="state-grid benchmark-detail-grid">
+              <span>Correct Label</span>
+              <select
+                value={selectedCorrectLabel}
+                onChange={(event) => onSetCorrectLabel?.(comparison.record_id, event.target.value || null)}
+                disabled={!onSetCorrectLabel || correctionChanging}
+              >
+                <option value="">{openAiLabel ? `Use OpenAI label (${openAiLabel})` : "Use OpenAI label"}</option>
+                {BENCHMARK_LABEL_OPTIONS.map((label) => (
+                  <option key={label} value={label}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <span>Applied To</span>
+              <code>OpenAI and local match scoring</code>
+            </div>
           </div>
         </div>
-        <div className="modal-capability-data">
-          <h3>OpenAI</h3>
-          <div className="state-grid">
+        <div className="benchmark-detail-comparison">
+          <div className="benchmark-detail-panel benchmark-detail-openai">
+            <h3>OpenAI</h3>
+            <div className="state-grid benchmark-detail-grid">
             <span>Model</span>
             <code>{comparison.openai?.model_id || "openai"}</code>
             <span>Label</span>
@@ -391,48 +402,45 @@ function BenchmarkDetailModal({ comparison, modelIds, onClose, onSetCorrectLabel
             <code>{formatMetricValue(comparison.openai?.latency_ms, " ms")}</code>
             <span>Reasoning</span>
             <code>{reasoningText(comparison.openai)}</code>
+            </div>
+          </div>
+          <div className="benchmark-detail-local-grid">
+            {modelIds.map((modelId) => {
+              const result = resultsByModel[modelId];
+              return (
+                <div className="benchmark-detail-block" key={modelId}>
+                  <div className="benchmark-detail-model-heading">
+                    <strong>{localLlmDisplayName(modelId)}</strong>
+                    <span className="muted tiny">{modelId}</span>
+                  </div>
+                  {result ? (
+                    <div className="state-grid compact-grid benchmark-detail-grid">
+                      <span>Status</span>
+                      <StageBadge value={result.status || "unknown"} />
+                      <span>Label</span>
+                      <code>{labelSummary({ label: result.label, confidence: result.confidence, outputText: result.output_text })}</code>
+                      <span>Tokens</span>
+                      <code>{formatMetricValue(result.total_tokens)}</code>
+                      <span>Latency</span>
+                      <code>{formatMetricValue(result.latency_ms, " ms")}</code>
+                      <span>VRAM</span>
+                      <code>{formatMetricValue(result.vram_used_mib ?? result.vram_delta_mib, " MiB")}</code>
+                      <span>GPU Util</span>
+                      <code>{formatMetricValue(result.gpu_util_percent, "%")}</code>
+                      <span>Reasoning</span>
+                      <code>{reasoningText(result)}</code>
+                    </div>
+                  ) : (
+                    <p className="muted tiny">Pending replay.</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
-        <div className="modal-capability-data">
-          <h3>Local LLMs</h3>
-          {modelIds.map((modelId) => {
-            const result = resultsByModel[modelId];
-            return (
-              <div className="benchmark-detail-block" key={modelId}>
-                <strong>{localLlmDisplayName(modelId)}</strong>
-                <span className="muted tiny">{modelId}</span>
-                {result ? (
-                  <div className="state-grid compact-grid">
-                    <span>Status</span>
-                    <StageBadge value={result.status || "unknown"} />
-                    <span>Label</span>
-                    <code>{labelSummary({ label: result.label, confidence: result.confidence, outputText: result.output_text })}</code>
-                    <span>Tokens</span>
-                    <code>{formatMetricValue(result.total_tokens)}</code>
-                    <span>Latency</span>
-                    <code>{formatMetricValue(result.latency_ms, " ms")}</code>
-                    <span>VRAM</span>
-                    <code>{formatMetricValue(result.vram_used_mib ?? result.vram_delta_mib, " MiB")}</code>
-                    <span>GPU Util</span>
-                    <code>{formatMetricValue(result.gpu_util_percent, "%")}</code>
-                    <span>Reasoning</span>
-                    <code>{reasoningText(result)}</code>
-                  </div>
-                ) : (
-                  <p className="muted tiny">Pending replay.</p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <div className="modal-capability-data">
+        <div className="benchmark-detail-panel">
           <h3>Prompt Input</h3>
           <pre className="benchmark-raw-block">{comparison.input_snippet || "none"}</pre>
-        </div>
-        <div className="row">
-          <button className="btn btn-primary" type="button" onClick={onClose}>
-            Close
-          </button>
         </div>
       </article>
     </section>
