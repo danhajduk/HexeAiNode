@@ -91,6 +91,27 @@ class LocalLLMBenchmarkStoreTests(unittest.TestCase):
             self.assertIsNone(record_id)
             self.assertEqual(store.summary_payload()["comparisons"], [])
 
+    def test_ignores_non_classifier_prompt_for_local_llm_benchmark(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LocalLLMBenchmarkStore(
+                path=str(Path(tmp) / "local_llm_benchmarks.db"),
+                logger=logging.getLogger("local-llm-benchmark-test"),
+            )
+
+            record_id = store.record_openai_execution(
+                request=UnifiedExecutionRequest(
+                    task_family="task.classification",
+                    prompt="Decide whether to act",
+                    metadata={"prompt_id": "prompt.email.action_decision"},
+                ),
+                response=UnifiedExecutionResponse(provider_id="openai", model_id="gpt-5.4-nano", output_text="{}"),
+                model_ids=["qwen3-8b-q4_k_m"],
+            )
+
+            self.assertIsNone(record_id)
+            self.assertEqual(store.pending_count_for_models(model_ids=["qwen3-8b-q4_k_m"]), 0)
+            self.assertIsNone(store.claim_next_pending(model_id="qwen3-8b-q4_k_m"))
+
     def test_capture_toggle_stops_new_openai_records(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = LocalLLMBenchmarkStore(

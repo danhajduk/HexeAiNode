@@ -15,6 +15,7 @@ DEFAULT_LOCAL_LLM_BENCHMARK_MODELS = [
     "gemma-3-12b-it-q4_k_m",
     "mistral-nemo-instruct-2407-q4_k_m",
 ]
+DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS = ["prompt.email.classifier"]
 
 
 def parse_structured_output_summary(output_text: str | None) -> dict[str, Any]:
@@ -65,6 +66,11 @@ def _json_loads(value: str | None, fallback: Any) -> Any:
         return json.loads(value)
     except json.JSONDecodeError:
         return fallback
+
+
+def local_llm_benchmark_prompt_allowed(prompt_id: str | None) -> bool:
+    normalized = str(prompt_id or "").strip()
+    return normalized in set(DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS)
 
 
 class LocalLLMBenchmarkStore:
@@ -214,6 +220,10 @@ class LocalLLMBenchmarkStore:
             return None
         if not self.capture_enabled():
             return None
+        metadata = request.metadata if isinstance(request.metadata, dict) else {}
+        prompt_id = str(metadata.get("prompt_id") or "").strip()
+        if not local_llm_benchmark_prompt_allowed(prompt_id):
+            return None
         now = local_now_iso()
         request_payload = request.model_dump(mode="json")
         response_payload = response.model_dump(mode="json")
@@ -229,7 +239,6 @@ class LocalLLMBenchmarkStore:
         record_id = f"openai-{digest}"
         output_summary = parse_structured_output_summary(response.output_text)
         usage_payload = response.usage.model_dump(mode="json")
-        metadata = request.metadata if isinstance(request.metadata, dict) else {}
         target_model_ids = model_ids or list(DEFAULT_LOCAL_LLM_BENCHMARK_MODELS)
         with self._connect() as connection:
             connection.execute(
@@ -284,14 +293,16 @@ class LocalLLMBenchmarkStore:
         return record_id
 
     def summary_payload(self, *, limit: int = 25) -> dict:
+        prompt_placeholders = ",".join("?" for _ in DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS)
         with self._connect() as connection:
             record_rows = connection.execute(
-                """
+                f"""
                 SELECT * FROM benchmark_records
+                WHERE prompt_id IN ({prompt_placeholders})
                 ORDER BY created_at DESC
                 LIMIT ?
                 """,
-                (max(int(limit), 0),),
+                (*DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS, max(int(limit), 0)),
             ).fetchall()
             result_rows = connection.execute(
                 """
@@ -302,20 +313,25 @@ class LocalLLMBenchmarkStore:
                 tuple(row["record_id"] for row in record_rows),
             ).fetchall() if record_rows else []
             status_rows = connection.execute(
-                """
+                f"""
                 SELECT status, COUNT(*) AS count
-                FROM benchmark_model_results
+                FROM benchmark_model_results m
+                JOIN benchmark_records r ON r.record_id = m.record_id
+                WHERE r.prompt_id IN ({prompt_placeholders})
                 GROUP BY status
-                """
+                """,
+                tuple(DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
             ).fetchall()
             running_rows = connection.execute(
-                """
+                f"""
                 SELECT m.record_id, m.model_id, m.started_at, r.prompt_id, r.task_family
                 FROM benchmark_model_results m
                 JOIN benchmark_records r ON r.record_id = m.record_id
                 WHERE m.status = 'running'
+                  AND r.prompt_id IN ({prompt_placeholders})
                 ORDER BY m.started_at ASC
-                """
+                """,
+                tuple(DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
             ).fetchall()
 
         results_by_record: dict[str, list[dict]] = {}
@@ -369,14 +385,18 @@ class LocalLLMBenchmarkStore:
         if not normalized:
             return 0
         placeholders = ",".join("?" for _ in normalized)
+        prompt_placeholders = ",".join("?" for _ in DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS)
         with self._connect() as connection:
             row = connection.execute(
                 f"""
                 SELECT COUNT(*) AS count
-                FROM benchmark_model_results
-                WHERE status = 'pending' AND model_id IN ({placeholders})
+                FROM benchmark_model_results m
+                JOIN benchmark_records r ON r.record_id = m.record_id
+                WHERE m.status = 'pending'
+                  AND m.model_id IN ({placeholders})
+                  AND r.prompt_id IN ({prompt_placeholders})
                 """,
-                tuple(normalized),
+                tuple(normalized + DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
             ).fetchone()
         return int(row["count"] or 0) if row is not None else 0
 
@@ -405,17 +425,19 @@ class LocalLLMBenchmarkStore:
         if not normalized_model_id:
             return None
         now = local_now_iso()
+        prompt_placeholders = ",".join("?" for _ in DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS)
         with self._connect() as connection:
             row = connection.execute(
-                """
+                f"""
                 SELECT r.*
                 FROM benchmark_records r
                 JOIN benchmark_model_results m ON m.record_id = r.record_id
                 WHERE m.model_id = ? AND m.status = 'pending'
+                  AND r.prompt_id IN ({prompt_placeholders})
                 ORDER BY r.created_at ASC
                 LIMIT 1
                 """,
-                (normalized_model_id,),
+                (normalized_model_id, *DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
             ).fetchone()
             if row is None:
                 return None

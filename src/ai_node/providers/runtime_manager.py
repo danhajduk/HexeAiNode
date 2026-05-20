@@ -35,6 +35,7 @@ from ai_node.providers.openai_model_catalog import (
     OpenAIProviderModelCatalogStore,
     select_representative_openai_model_ids,
 )
+from ai_node.persistence.local_llm_benchmark_store import local_llm_benchmark_prompt_allowed
 from ai_node.config.provider_enabled_models_config import (
     DEFAULT_PROVIDER_ENABLED_MODELS_PATH,
     ProviderEnabledModelsStore,
@@ -372,6 +373,9 @@ class ProviderRuntimeManager:
         if self._local_llm_benchmark_store is None:
             return
         if str(response.provider_id or "").strip().lower() != "openai":
+            return
+        metadata = request.metadata if isinstance(request.metadata, dict) else {}
+        if not local_llm_benchmark_prompt_allowed(metadata.get("prompt_id")):
             return
         try:
             self._local_llm_benchmark_store.record_openai_execution(

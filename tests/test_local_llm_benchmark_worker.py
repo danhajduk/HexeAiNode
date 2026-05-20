@@ -76,7 +76,11 @@ class LocalLLMBenchmarkWorkerTests(unittest.IsolatedAsyncioTestCase):
                 logger=logging.getLogger("local-llm-benchmark-worker-test"),
             )
             store.record_openai_execution(
-                request=UnifiedExecutionRequest(task_family="task.classification", prompt="hello"),
+                request=UnifiedExecutionRequest(
+                    task_family="task.classification",
+                    prompt="hello",
+                    metadata={"prompt_id": "prompt.email.classifier"},
+                ),
                 response=UnifiedExecutionResponse(provider_id="openai", model_id="gpt-5.4-nano", output_text="{}"),
                 model_ids=["qwen3-8b-q4_k_m"],
             )
