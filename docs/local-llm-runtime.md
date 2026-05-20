@@ -10,10 +10,10 @@ This is intended for reasoning and classification on hosts with roughly 9.5-10 G
 
 Configured benchmark candidates live in `config/local-llm-models.json`:
 
-- `qwen3-8b-q4_k_m`: primary reasoning/classification candidate.
-- `qwen3-4b-q5_k_m`: safer VRAM fallback.
-- `qwen2.5-coder-7b-q4_k_m`: coding comparator.
-- `gemma-3-1b-it`: smoke/load-control slot; skipped by default until a specific GGUF filename is set.
+- `qwen3-8b-q4_k_m`: Qwen 8B baseline.
+- `qwen3-14b-q4_k_m`: Qwen 14B higher-capacity comparator.
+- `gemma-3-12b-it-q4_k_m`: Gemma 12B instruction comparator.
+- `mistral-nemo-instruct-2407-q4_k_m`: Mistral Nemo comparator.
 
 ## Runtime Commands
 
@@ -54,3 +54,9 @@ Example provider list:
   {"provider": "local", "model": "qwen3-8b-q4_k_m"}
 ]
 ```
+
+## OpenAI Replay Benchmarks
+
+When benchmark capture is enabled, OpenAI executions are stored for replay across the local model rotation. The automatic rotation runs every 60 seconds, skips swaps when no configured model has pending prompts, and reports `idle`, `running`, or `swapping` based on active benchmark work.
+
+The benchmark view defaults to showing prompts where at least one completed local model label differs from the reference label. Operators can override the correct label from the detail view; that correction becomes the scoring reference for OpenAI and all local model match summaries. Structured output parsing accepts plain JSON and markdown-fenced JSON, including `reasoning`, `rationale`, `reason`, or `explanation` fields.

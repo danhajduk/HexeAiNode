@@ -30,7 +30,7 @@ class LocalLLMBenchmarkStoreTests(unittest.TestCase):
                 response=UnifiedExecutionResponse(
                     provider_id="openai",
                     model_id="gpt-5.4-nano",
-                    output_text='{"label":"action_required","confidence":0.62}',
+                    output_text='{"label":"action_required","confidence":0.62,"reasoning":"needs a reply"}',
                     usage=UnifiedExecutionUsage(prompt_tokens=10, completion_tokens=4, total_tokens=14),
                     latency_ms=123.4,
                     estimated_cost=0.00001,
@@ -57,7 +57,9 @@ class LocalLLMBenchmarkStoreTests(unittest.TestCase):
             comparison = payload["comparisons"][0]
             self.assertEqual(comparison["prompt_id"], "prompt.email.classifier")
             self.assertEqual(comparison["openai"]["label"], "action_required")
+            self.assertEqual(comparison["openai"]["reasoning"], "needs a reply")
             self.assertEqual(comparison["openai"]["usage"]["total_tokens"], 14)
+            self.assertIsNone(comparison["correct_label"])
             self.assertEqual(
                 [item["model_id"] for item in comparison["local_results"]],
                 ["gemma-3-12b-it-q4_k_m", "qwen3-8b-q4_k_m"],
@@ -66,6 +68,13 @@ class LocalLLMBenchmarkStoreTests(unittest.TestCase):
             self.assertEqual(completed["vram_used_mib"], 5456)
             self.assertEqual(completed["gpu_util_percent"], 42)
             self.assertEqual(payload["running"], [])
+            self.assertEqual(store.pending_count_for_models(model_ids=["gemma-3-12b-it-q4_k_m"]), 1)
+
+            correction = store.set_correct_label(record_id=record_id, correct_label="unknown", note="manual review")
+            self.assertEqual(correction["correct_label"], "unknown")
+            corrected_payload = store.summary_payload()
+            self.assertEqual(corrected_payload["comparisons"][0]["correct_label"], "unknown")
+            self.assertEqual(corrected_payload["comparisons"][0]["correction_note"], "manual review")
 
     def test_ignores_non_openai_execution(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -103,10 +112,10 @@ class LocalLLMBenchmarkStoreTests(unittest.TestCase):
     def test_parse_structured_output_summary_is_best_effort(self):
         self.assertEqual(
             parse_structured_output_summary('{"label":"shipment","confidence":"0.95"}'),
-            {"label": "shipment", "confidence": 0.95},
+            {"label": "shipment", "confidence": 0.95, "reasoning": None},
         )
         self.assertEqual(
-            parse_structured_output_summary('```json\n{"label":"unknown","confidence":0.7}\n```'),
-            {"label": "unknown", "confidence": 0.7},
+            parse_structured_output_summary('```json\n{"label":"unknown","confidence":0.7,"rationale":"not enough signal"}\n```'),
+            {"label": "unknown", "confidence": 0.7, "reasoning": "not enough signal"},
         )
-        self.assertEqual(parse_structured_output_summary("plain text"), {"label": None, "confidence": None})
+        self.assertEqual(parse_structured_output_summary("plain text"), {"label": None, "confidence": None, "reasoning": None})

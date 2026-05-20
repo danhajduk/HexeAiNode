@@ -46,6 +46,9 @@ class LocalLLMBenchmarkRotationRunner:
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
 
     async def run_once(self) -> dict:
+        models = self._load_models()
+        if self._pending_count_for_models(models) <= 0:
+            return {"status": "skipped", "reason": "no_pending_prompts", "processed": 0}
         model = self._next_model()
         model_id = str(model["id"])
         try:
@@ -212,6 +215,12 @@ class LocalLLMBenchmarkRotationRunner:
         if not fallback:
             raise ValueError("local_llm_benchmark_rotation_models_required")
         return fallback
+
+    def _pending_count_for_models(self, models: list[dict]) -> int:
+        model_ids = [str(model.get("id") or "").strip() for model in models if isinstance(model, dict)]
+        if hasattr(self._worker, "pending_count_for_models"):
+            return int(self._worker.pending_count_for_models(model_ids=model_ids) or 0)
+        return 0
 
     def _load_state(self) -> dict:
         if not self._state_path.exists():

@@ -322,7 +322,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--local-llm-benchmark-interval-seconds",
         type=int,
-        default=int(os.environ.get("SYNTHIA_LOCAL_LLM_BENCHMARK_INTERVAL_SECONDS", "900")),
+        default=int(os.environ.get("SYNTHIA_LOCAL_LLM_BENCHMARK_INTERVAL_SECONDS", "60")),
         help="Interval for rotating the loaded local LLM and replaying pending OpenAI benchmark prompts",
     )
     return parser

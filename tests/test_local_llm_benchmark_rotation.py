@@ -17,6 +17,9 @@ class _FakeWorker:
         self.calls.append({"model_id": model_id, "limit": limit})
         return {"model_id": model_id, "processed": 2, "completed": 2, "failed": 0, "errors": []}
 
+    def pending_count_for_models(self, *, model_ids: list[str]):
+        return len(model_ids)
+
 
 class LocalLLMBenchmarkRotationRunnerTests(unittest.IsolatedAsyncioTestCase):
     async def test_rotation_loads_next_model_and_runs_worker(self):

@@ -663,7 +663,7 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(payload["internal_scheduler"]["tasks"]["telemetry"]["schedule_name"], "telemetry_60_seconds")
             self.assertEqual(
                 payload["internal_scheduler"]["tasks"]["local_llm_benchmark_replay"]["interval_seconds"],
-                900,
+                60,
             )
             self.assertEqual(
                 payload["internal_scheduler"]["tasks"]["operational_mqtt_health"]["schedule_name"],

@@ -152,6 +152,7 @@ export default function App() {
   const [cyclingLocalLlmModel, setCyclingLocalLlmModel] = useState(false);
   const [runningLoadedLocalLlm, setRunningLoadedLocalLlm] = useState(false);
   const [localLlmBenchmarkCaptureChanging, setLocalLlmBenchmarkCaptureChanging] = useState(false);
+  const [localLlmBenchmarkCorrectionChanging, setLocalLlmBenchmarkCorrectionChanging] = useState(false);
   const [runningAdminAction, setRunningAdminAction] = useState("");
   const [adminActionState, setAdminActionState] = useState("");
   const [uiState, setUiState] = useState(() =>
@@ -1165,6 +1166,30 @@ export default function App() {
     }
   }
 
+  async function onSetLocalLlmBenchmarkCorrectLabel(recordId, correctLabel, note = null) {
+    if (localLlmBenchmarkCorrectionChanging || !recordId) {
+      return;
+    }
+    setLocalLlmBenchmarkCorrectionChanging(true);
+    setError("");
+    try {
+      const result = await apiPost(`/api/benchmarks/local-llm/records/${encodeURIComponent(recordId)}/correction`, {
+        correct_label: correctLabel || null,
+        note: note || null,
+      });
+      if (result?.benchmark) {
+        setLocalLlmBenchmarkSummary(result.benchmark);
+      } else {
+        await loadStatus();
+      }
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+    } finally {
+      setLocalLlmBenchmarkCorrectionChanging(false);
+    }
+  }
+
   const setupSummaryItems = [
     { label: "Lifecycle", value: <StatusBadge value={uiState.lifecycle.current} /> },
     { label: "Trust", value: <StatusBadge value={uiState.lifecycle.trustStatus} /> },
@@ -1737,6 +1762,8 @@ export default function App() {
     runningLoadedLocalLlm,
     onSetLocalLlmBenchmarkCapture,
     localLlmBenchmarkCaptureChanging,
+    onSetLocalLlmBenchmarkCorrectLabel,
+    localLlmBenchmarkCorrectionChanging,
     governanceStatus: governanceStatusPayload,
     scheduledTasksProps: {
       scheduler: capabilityDiagnostics?.internal_scheduler || null,

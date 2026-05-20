@@ -18,9 +18,10 @@ DEFAULT_LOCAL_LLM_BENCHMARK_MODELS = [
 
 
 def parse_structured_output_summary(output_text: str | None) -> dict[str, Any]:
+    empty = {"label": None, "confidence": None, "reasoning": None}
     normalized = str(output_text or "").strip()
     if not normalized:
-        return {"label": None, "confidence": None}
+        return empty
     if normalized.startswith("```"):
         lines = normalized.splitlines()
         if lines and lines[0].strip().startswith("```"):
@@ -31,9 +32,9 @@ def parse_structured_output_summary(output_text: str | None) -> dict[str, Any]:
     try:
         payload = json.loads(normalized)
     except json.JSONDecodeError:
-        return {"label": None, "confidence": None}
+        return empty
     if not isinstance(payload, dict):
-        return {"label": None, "confidence": None}
+        return empty
     confidence = payload.get("confidence")
     try:
         confidence = float(confidence) if confidence is not None else None
@@ -42,6 +43,14 @@ def parse_structured_output_summary(output_text: str | None) -> dict[str, Any]:
     return {
         "label": str(payload.get("label") or "").strip() or None,
         "confidence": confidence,
+        "reasoning": str(
+            payload.get("rationale")
+            or payload.get("reasoning")
+            or payload.get("reason")
+            or payload.get("explanation")
+            or ""
+        ).strip()
+        or None,
     }
 
 
@@ -89,6 +98,9 @@ class LocalLLMBenchmarkStore:
                     source_output_text TEXT,
                     source_label TEXT,
                     source_confidence REAL,
+                    source_reasoning TEXT,
+                    correct_label TEXT,
+                    correction_note TEXT,
                     source_usage_json TEXT NOT NULL,
                     source_latency_ms REAL,
                     source_cost_usd REAL,
@@ -114,6 +126,7 @@ class LocalLLMBenchmarkStore:
                     output_text TEXT,
                     label TEXT,
                     confidence REAL,
+                    reasoning TEXT,
                     error TEXT,
                     vram_used_mib REAL,
                     vram_delta_mib REAL,
@@ -141,6 +154,10 @@ class LocalLLMBenchmarkStore:
                 column="gpu_util_percent",
                 definition="REAL",
             )
+            self._ensure_column(connection=connection, table="benchmark_model_results", column="reasoning", definition="TEXT")
+            self._ensure_column(connection=connection, table="benchmark_records", column="source_reasoning", definition="TEXT")
+            self._ensure_column(connection=connection, table="benchmark_records", column="correct_label", definition="TEXT")
+            self._ensure_column(connection=connection, table="benchmark_records", column="correction_note", definition="TEXT")
 
     @staticmethod
     def _ensure_column(*, connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -221,9 +238,10 @@ class LocalLLMBenchmarkStore:
                     record_id, created_at, updated_at, source_provider, source_model,
                     task_family, prompt_id, prompt_version, trace_id, request_payload_json,
                     source_response_json, source_output_text, source_label, source_confidence,
+                    source_reasoning, correct_label, correction_note,
                     source_usage_json, source_latency_ms, source_cost_usd, source_raw_provider_response_ref,
                     input_snippet
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(record_id) DO NOTHING
                 """,
                 (
@@ -241,6 +259,9 @@ class LocalLLMBenchmarkStore:
                     response.output_text,
                     output_summary["label"],
                     output_summary["confidence"],
+                    output_summary["reasoning"],
+                    None,
+                    None,
                     _json_dumps(usage_payload),
                     float(response.latency_ms or 0.0),
                     float(response.estimated_cost or 0.0) if response.estimated_cost is not None else None,
@@ -333,12 +354,51 @@ class LocalLLMBenchmarkStore:
                         "output_text": row["source_output_text"],
                         "label": row["source_label"],
                         "confidence": row["source_confidence"],
+                        "reasoning": row["source_reasoning"],
                     },
+                    "correct_label": row["correct_label"],
+                    "correction_note": row["correction_note"],
                     "local_results": results_by_record.get(str(row["record_id"]), []),
                 }
                 for row in record_rows
             ],
         }
+
+    def pending_count_for_models(self, *, model_ids: list[str]) -> int:
+        normalized = [str(model_id or "").strip() for model_id in model_ids if str(model_id or "").strip()]
+        if not normalized:
+            return 0
+        placeholders = ",".join("?" for _ in normalized)
+        with self._connect() as connection:
+            row = connection.execute(
+                f"""
+                SELECT COUNT(*) AS count
+                FROM benchmark_model_results
+                WHERE status = 'pending' AND model_id IN ({placeholders})
+                """,
+                tuple(normalized),
+            ).fetchone()
+        return int(row["count"] or 0) if row is not None else 0
+
+    def set_correct_label(self, *, record_id: str, correct_label: str | None, note: str | None = None) -> dict:
+        normalized_record_id = str(record_id or "").strip()
+        normalized_label = str(correct_label or "").strip() or None
+        normalized_note = str(note or "").strip() or None
+        if not normalized_record_id:
+            raise ValueError("record_id_required")
+        now = local_now_iso()
+        with self._connect() as connection:
+            updated = connection.execute(
+                """
+                UPDATE benchmark_records
+                SET correct_label = ?, correction_note = ?, updated_at = ?
+                WHERE record_id = ?
+                """,
+                (normalized_label, normalized_note, now, normalized_record_id),
+            ).rowcount
+        if updated != 1:
+            raise ValueError("benchmark_record_not_found")
+        return {"record_id": normalized_record_id, "correct_label": normalized_label, "correction_note": normalized_note}
 
     def claim_next_pending(self, *, model_id: str) -> dict | None:
         normalized_model_id = str(model_id or "").strip()
@@ -398,6 +458,7 @@ class LocalLLMBenchmarkStore:
                     output_text = ?,
                     label = ?,
                     confidence = ?,
+                    reasoning = ?,
                     error = NULL,
                     vram_used_mib = COALESCE(?, vram_used_mib),
                     vram_delta_mib = COALESCE(?, vram_delta_mib),
@@ -415,6 +476,7 @@ class LocalLLMBenchmarkStore:
                     response.output_text,
                     output_summary["label"],
                     output_summary["confidence"],
+                    output_summary["reasoning"],
                     vram_used_mib,
                     vram_delta_mib,
                     gpu_util_percent,
@@ -471,6 +533,7 @@ class LocalLLMBenchmarkStore:
             "output_text": row["output_text"],
             "label": row["label"],
             "confidence": row["confidence"],
+            "reasoning": row["reasoning"],
             "error": row["error"],
             "vram_used_mib": row["vram_used_mib"],
             "vram_delta_mib": row["vram_delta_mib"],

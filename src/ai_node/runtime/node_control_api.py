@@ -275,7 +275,7 @@ class NodeControlState:
         internal_scheduler=None,
         supervisor_client=None,
         local_llm_benchmark_runner=None,
-        local_llm_benchmark_interval_seconds: int = 900,
+        local_llm_benchmark_interval_seconds: int = 60,
         node_hostname: str | None = None,
         node_api_base_url: str | None = None,
         node_ui_endpoint: str | None = None,
@@ -1044,6 +1044,16 @@ class NodeControlState:
         return {
             "status": "ok",
             "capture_enabled": bool(enabled),
+            "benchmark": self.local_llm_benchmark_comparison_payload(),
+        }
+
+    def set_local_llm_benchmark_correct_label(self, *, record_id: str, correct_label: str | None, note: str | None = None) -> dict:
+        if self._local_llm_benchmark_store is None or not hasattr(self._local_llm_benchmark_store, "set_correct_label"):
+            raise ValueError("local_llm_benchmark_store_not_configured")
+        correction = self._local_llm_benchmark_store.set_correct_label(record_id=record_id, correct_label=correct_label, note=note)
+        return {
+            "status": "ok",
+            "correction": correction,
             "benchmark": self.local_llm_benchmark_comparison_payload(),
         }
 
@@ -3041,6 +3051,11 @@ class LocalLLMBenchmarkCaptureRequest(BaseModel):
     enabled: bool = True
 
 
+class LocalLLMBenchmarkCorrectionRequest(BaseModel):
+    correct_label: str | None = None
+    note: str | None = None
+
+
 class PromptServiceRegisterRequest(BaseModel):
     prompt_id: str
     service_id: str
@@ -3477,6 +3492,17 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def post_local_llm_benchmark_capture(payload: LocalLLMBenchmarkCaptureRequest):
         try:
             return state.set_local_llm_benchmark_capture_enabled(enabled=payload.enabled)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/benchmarks/local-llm/records/{record_id}/correction")
+    def post_local_llm_benchmark_correction(record_id: str, payload: LocalLLMBenchmarkCorrectionRequest):
+        try:
+            return state.set_local_llm_benchmark_correct_label(
+                record_id=record_id,
+                correct_label=payload.correct_label,
+                note=payload.note,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

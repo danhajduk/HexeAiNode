@@ -131,7 +131,7 @@ function buildOperationalProps(overrides = {}) {
             {
               model_id: "qwen3-8b-q4_k_m",
               status: "completed",
-              label: "action_required",
+              label: "marketing",
               confidence: 0.7,
               total_tokens: 132,
               latency_ms: 3200,
@@ -316,6 +316,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("5,456 MiB");
     expect(markup).toContain("42%");
     expect(markup).toContain("Clear Prompt List");
+    expect(markup).toContain("Show All Labels");
     expect(markup).toContain("Stop Fetching Prompts");
     expect(markup).toContain("Cycle Model");
     expect(markup).toContain("Run Loaded Model");

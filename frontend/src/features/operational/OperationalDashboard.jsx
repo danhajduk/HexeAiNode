@@ -112,6 +112,18 @@ const LOCAL_LLM_DISPLAY_NAMES = {
   "gemma-3-12b-it-q4_k_m": "Gemma 12B",
   "mistral-nemo-instruct-2407-q4_k_m": "Mistral",
 };
+const BENCHMARK_LABEL_OPTIONS = [
+  "action_required",
+  "customer_support",
+  "invoice",
+  "marketing",
+  "meeting",
+  "notification",
+  "personal",
+  "shipment",
+  "spam",
+  "unknown",
+];
 
 function localLlmDisplayName(modelId) {
   return LOCAL_LLM_DISPLAY_NAMES[String(modelId || "").trim()] || String(modelId || "local").trim() || "local";
@@ -122,8 +134,19 @@ function localLlmColumnTitle(modelId) {
 }
 
 function parseOutputPayload(outputText) {
+  let normalized = String(outputText || "").trim();
+  if (normalized.startsWith("```")) {
+    let lines = normalized.split(/\r?\n/);
+    if (lines[0]?.trim().startsWith("```")) {
+      lines = lines.slice(1);
+    }
+    if (lines[lines.length - 1]?.trim() === "```") {
+      lines = lines.slice(0, -1);
+    }
+    normalized = lines.join("\n").trim();
+  }
   try {
-    const payload = JSON.parse(String(outputText || ""));
+    const payload = JSON.parse(normalized);
     return payload && typeof payload === "object" ? payload : {};
   } catch {
     return {};
@@ -149,6 +172,28 @@ function outputLabel({ label, outputText }) {
   return String(label || payload.label || "").trim().toLowerCase();
 }
 
+function referenceLabel(comparison) {
+  return String(comparison?.correct_label || comparison?.openai?.label || parseOutputPayload(comparison?.openai?.output_text).label || "")
+    .trim()
+    .toLowerCase();
+}
+
+function hasDifferentLabel(comparison, modelIds) {
+  const reference = referenceLabel(comparison);
+  if (!reference) {
+    return false;
+  }
+  const localResults = Array.isArray(comparison?.local_results) ? comparison.local_results : [];
+  return modelIds.some((modelId) => {
+    const result = localResults.find((item) => item?.model_id === modelId);
+    if (!result || result.status !== "completed") {
+      return false;
+    }
+    const localLabel = outputLabel({ label: result.label, outputText: result.output_text });
+    return localLabel && localLabel !== reference;
+  });
+}
+
 function average(values) {
   const numbers = values.map(Number).filter(Number.isFinite);
   if (!numbers.length) {
@@ -159,7 +204,7 @@ function average(values) {
 
 function reasoningText(result) {
   const payload = parseOutputPayload(result?.output_text);
-  return payload.rationale || payload.reasoning || payload.reason || payload.explanation || result?.output_text || "none";
+  return result?.reasoning || payload.rationale || payload.reasoning || payload.reason || payload.explanation || result?.output_text || "none";
 }
 
 function LocalModelCell({ result, modelId }) {
@@ -192,30 +237,24 @@ function promptName(comparison) {
 function buildLocalModelSummaries({ comparisons, modelIds }) {
   const promptNames = Array.from(new Set(comparisons.map(promptName)));
   return promptNames.flatMap((name) =>
-    modelIds.map((modelId) => {
+    ["__openai__", ...modelIds].map((modelId) => {
       const completedResults = [];
       let matchedLabels = 0;
       const promptComparisons = comparisons.filter((comparison) => promptName(comparison) === name);
       for (const comparison of promptComparisons) {
-        const localResults = Array.isArray(comparison?.local_results) ? comparison.local_results : [];
-        const result = localResults.find((item) => item?.model_id === modelId);
-        if (!result || result.status !== "completed") {
-          continue;
-        }
-        const openAiLabel = outputLabel({
-          label: comparison?.openai?.label,
-          outputText: comparison?.openai?.output_text,
-        });
-        const localLabel = outputLabel({ label: result.label, outputText: result.output_text });
-        if (openAiLabel && localLabel && openAiLabel === localLabel) {
+        const targetLabel = referenceLabel(comparison);
+        const result =
+          modelId === "__openai__"
+            ? { ...comparison?.openai, status: "completed", total_tokens: comparison?.openai?.usage?.total_tokens }
+            : (Array.isArray(comparison?.local_results) ? comparison.local_results : []).find((item) => item?.model_id === modelId);
+        if (!result || result.status !== "completed") continue;
+        const resultLabel = outputLabel({ label: result.label, outputText: result.output_text });
+        if (targetLabel && resultLabel && targetLabel === resultLabel) {
           matchedLabels += 1;
         }
         completedResults.push({
           localScore: outputScore({ confidence: result.confidence, outputText: result.output_text }),
-          openAiScore: outputScore({
-            confidence: comparison?.openai?.confidence,
-            outputText: comparison?.openai?.output_text,
-          }),
+          openAiScore: modelId === "__openai__" ? null : outputScore({ confidence: comparison?.openai?.confidence, outputText: comparison?.openai?.output_text }),
           latency: result.latency_ms,
           vram: result.vram_used_mib ?? result.vram_delta_mib,
           gpu: result.gpu_util_percent,
@@ -246,7 +285,7 @@ function LocalLLMSummaryTable({ summaries }) {
           <thead>
             <tr>
               <th>Prompt</th>
-              <th>Local LLM</th>
+              <th>Model</th>
               <th>Completed</th>
               <th>Label Match</th>
               <th>Avg Score Delta</th>
@@ -263,8 +302,8 @@ function LocalLLMSummaryTable({ summaries }) {
                     <code>{summary.promptName}</code>
                   </td>
                   <td>
-                    <code>{localLlmDisplayName(summary.modelId)}</code>
-                    <span className="muted tiny benchmark-snippet">{summary.modelId}</span>
+                    <code>{summary.modelId === "__openai__" ? "OpenAI" : localLlmDisplayName(summary.modelId)}</code>
+                    <span className="muted tiny benchmark-snippet">{summary.modelId === "__openai__" ? "baseline" : summary.modelId}</span>
                   </td>
                   <td>{formatMetricValue(summary.completed)}</td>
                   <td>
@@ -294,12 +333,17 @@ function LocalLLMSummaryTable({ summaries }) {
   );
 }
 
-function BenchmarkDetailModal({ comparison, modelIds, onClose }) {
+function BenchmarkDetailModal({ comparison, modelIds, onClose, onSetCorrectLabel, correctionChanging = false }) {
   if (!comparison) {
     return null;
   }
   const localResults = Array.isArray(comparison.local_results) ? comparison.local_results : [];
   const resultsByModel = Object.fromEntries(localResults.map((result) => [result.model_id, result]));
+  const selectedCorrectLabel = comparison.correct_label || "";
+  const openAiLabel = outputLabel({
+    label: comparison.openai?.label,
+    outputText: comparison.openai?.output_text,
+  });
   return (
     <section className="modal-overlay pricing-modal-overlay" role="dialog" aria-modal="true" aria-label="Benchmark detail">
       <article className="card modal-card benchmark-detail-modal">
@@ -311,6 +355,28 @@ function BenchmarkDetailModal({ comparison, modelIds, onClose }) {
           <code>{comparison.prompt_id || "unattributed"}</code>
           <span>Created</span>
           <code>{comparison.created_at || "unknown"}</code>
+          <span>Reference Label</span>
+          <code>{referenceLabel(comparison) || "none"}</code>
+        </div>
+        <div className="modal-capability-data">
+          <h3>Scoring Override</h3>
+          <div className="state-grid">
+            <span>Correct Label</span>
+            <select
+              value={selectedCorrectLabel}
+              onChange={(event) => onSetCorrectLabel?.(comparison.record_id, event.target.value || null)}
+              disabled={!onSetCorrectLabel || correctionChanging}
+            >
+              <option value="">{openAiLabel ? `Use OpenAI label (${openAiLabel})` : "Use OpenAI label"}</option>
+              {BENCHMARK_LABEL_OPTIONS.map((label) => (
+                <option key={label} value={label}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <span>Applied To</span>
+            <code>OpenAI and local match scoring</code>
+          </div>
         </div>
         <div className="modal-capability-data">
           <h3>OpenAI</h3>
@@ -381,11 +447,13 @@ function LocalLLMBenchmarkTable({
   runningLoadedModel = false,
   onSetCaptureEnabled,
   captureChanging = false,
+  onSetCorrectLabel,
+  correctionChanging = false,
 }) {
   const [selectedComparison, setSelectedComparison] = useState(null);
   const [promptListCleared, setPromptListCleared] = useState(false);
+  const [showOnlyDifferences, setShowOnlyDifferences] = useState(true);
   const comparisons = Array.isArray(summary?.comparisons) ? summary.comparisons : [];
-  const visibleComparisons = promptListCleared ? [] : comparisons;
   const configuredModels = Array.isArray(summary?.rotation?.models)
     ? summary.rotation.models.map((model) => model?.id).filter(Boolean)
     : [];
@@ -402,6 +470,16 @@ function LocalLLMBenchmarkTable({
       : lastSwap?.duration_seconds;
   const swapError = lastSwap?.error;
   const modelSummaries = buildLocalModelSummaries({ comparisons, modelIds });
+  const filteredComparisons = showOnlyDifferences
+    ? comparisons.filter((comparison) => hasDifferentLabel(comparison, modelIds))
+    : comparisons;
+  const visibleComparisons = promptListCleared ? [] : filteredComparisons;
+  const handleSetCorrectLabel = async (recordId, correctLabel, note) => {
+    await onSetCorrectLabel?.(recordId, correctLabel, note);
+    setSelectedComparison((current) =>
+      current && current.record_id === recordId ? { ...current, correct_label: correctLabel || null, correction_note: note || null } : current
+    );
+  };
 
   return (
     <>
@@ -417,6 +495,9 @@ function LocalLLMBenchmarkTable({
         <div className="row">
           <button className="btn" type="button" onClick={() => setPromptListCleared(true)} disabled={promptListCleared || !comparisons.length}>
             Clear Prompt List
+          </button>
+          <button className="btn" type="button" onClick={() => setShowOnlyDifferences((value) => !value)} disabled={promptListCleared}>
+            {showOnlyDifferences ? "Show All Labels" : "Show Differences Only"}
           </button>
           {promptListCleared ? (
             <button className="btn" type="button" onClick={() => setPromptListCleared(false)}>
@@ -533,7 +614,11 @@ function LocalLLMBenchmarkTable({
               ) : (
                 <tr>
                   <td colSpan={2 + Math.max(modelIds.length, 1)} className="muted">
-                    {promptListCleared ? "Prompt list cleared in this view. Score summary is still using the captured benchmark data." : "No OpenAI benchmark records have been captured yet."}
+                    {promptListCleared
+                      ? "Prompt list cleared in this view. Score summary is still using the captured benchmark data."
+                      : showOnlyDifferences && comparisons.length
+                        ? "No label differences in the current benchmark view."
+                        : "No OpenAI benchmark records have been captured yet."}
                   </td>
                 </tr>
               )}
@@ -545,6 +630,8 @@ function LocalLLMBenchmarkTable({
       <BenchmarkDetailModal
         comparison={selectedComparison}
         modelIds={modelIds}
+        onSetCorrectLabel={onSetCorrectLabel ? handleSetCorrectLabel : null}
+        correctionChanging={correctionChanging}
         onClose={() => setSelectedComparison(null)}
       />
     </>
@@ -574,6 +661,8 @@ export function OperationalDashboard({
   runningLoadedLocalLlm = false,
   onSetLocalLlmBenchmarkCapture,
   localLlmBenchmarkCaptureChanging = false,
+  onSetLocalLlmBenchmarkCorrectLabel,
+  localLlmBenchmarkCorrectionChanging = false,
   governanceStatus = null,
   scheduledTasksProps = null,
   onboardingSteps = [],
@@ -696,6 +785,8 @@ export function OperationalDashboard({
             runningLoadedModel={runningLoadedLocalLlm}
             onSetCaptureEnabled={onSetLocalLlmBenchmarkCapture}
             captureChanging={localLlmBenchmarkCaptureChanging}
+            onSetCorrectLabel={onSetLocalLlmBenchmarkCorrectLabel}
+            correctionChanging={localLlmBenchmarkCorrectionChanging}
           />
         ) : null}
 

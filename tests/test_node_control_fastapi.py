@@ -121,12 +121,17 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "capture_enabled": self.capture_enabled,
                 "status_counts": {"pending": 1},
                 "running": [{"record_id": "openai-test", "model_id": "qwen3-8b-q4_k_m"}],
-                "comparisons": [{"record_id": "openai-test", "local_results": []}],
+                "comparisons": [{"record_id": "openai-test", "correct_label": getattr(self, "correct_label", None), "local_results": []}],
             }
 
         def set_capture_enabled(self, *, enabled: bool):
             self.capture_enabled = bool(enabled)
             return {"capture_enabled": bool(enabled)}
+
+        def set_correct_label(self, *, record_id: str, correct_label: str | None, note: str | None = None):
+            self.correct_label = correct_label
+            self.correction_note = note
+            return {"record_id": record_id, "correct_label": correct_label, "correction_note": note}
 
     class _FakeLocalLLMBenchmarkRunner:
         def status_payload(self):
@@ -555,6 +560,15 @@ class NodeControlFastApiTests(unittest.TestCase):
 
             self.assertEqual(run_loaded_response.status_code, 200)
             self.assertEqual(run_loaded_response.json()["result"]["mode"], "loaded_model")
+
+            correction_response = client.post(
+                "/api/benchmarks/local-llm/records/openai-test/correction",
+                json={"correct_label": "unknown", "note": "manual"},
+            )
+
+            self.assertEqual(correction_response.status_code, 200)
+            self.assertEqual(correction_response.json()["correction"]["correct_label"], "unknown")
+            self.assertEqual(correction_response.json()["benchmark"]["comparisons"][0]["correct_label"], "unknown")
 
     def test_status_and_onboarding_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
