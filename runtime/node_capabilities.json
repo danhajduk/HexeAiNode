@@ -94,7 +94,7 @@
     "vision_input": true,
     "voice_conversation": false
   },
-  "generated_at": "2026-05-19T23:44:08.642558+00:00",
+  "generated_at": "2026-05-20T00:00:43.191182+00:00",
   "resolved_tasks": [
     "task.chat",
     "task.classification",
