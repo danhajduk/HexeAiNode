@@ -711,8 +711,8 @@
 }
 
 .modal-card.benchmark-detail-modal {
-  width: 95%;
-  max-width: 95vw;
+  width: 95vw;
+  max-width: calc(100vw - 32px);
   padding: 18px;
 }
 
@@ -1465,8 +1465,8 @@ h2 {
   }
 
   .modal-card.benchmark-detail-modal {
-    width: 95%;
-    max-width: 95vw;
+    width: 95vw;
+    max-width: calc(100vw - 24px);
     padding: 12px;
   }
 

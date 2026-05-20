@@ -346,7 +346,7 @@ function BenchmarkDetailModal({ comparison, modelIds, onClose, onSetCorrectLabel
   });
   return (
     <section className="modal-overlay pricing-modal-overlay" role="dialog" aria-modal="true" aria-label="Benchmark detail">
-      <article className="card modal-card benchmark-detail-modal">
+      <article className="card modal-card benchmark-detail-modal" style={{ width: "95vw", maxWidth: "calc(100vw - 32px)" }}>
         <div className="benchmark-detail-header">
           <CardHeader title="Benchmark Detail" subtitle={comparison.prompt_id || comparison.task_family || comparison.record_id} />
           <button className="btn btn-primary" type="button" onClick={onClose}>
