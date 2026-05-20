@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { CardHeader, HealthIndicator, StageBadge } from "../../components/uiPrimitives";
 import { OperationalShell } from "./OperationalShell";
@@ -179,6 +179,9 @@ function referenceLabel(comparison) {
 }
 
 function hasDifferentLabel(comparison, modelIds) {
+  if (comparison?.correct_label) {
+    return false;
+  }
   const reference = referenceLabel(comparison);
   if (!reference) {
     return false;
@@ -334,16 +337,34 @@ function LocalLLMSummaryTable({ summaries }) {
 }
 
 function BenchmarkDetailModal({ comparison, modelIds, onClose, onSetCorrectLabel, correctionChanging = false }) {
+  const comparisonKey = comparison?.record_id || "";
+  const openAiLabel = outputLabel({
+    label: comparison?.openai?.label,
+    outputText: comparison?.openai?.output_text,
+  });
+  const [draftCorrectLabel, setDraftCorrectLabel] = useState("");
+  useEffect(() => {
+    setDraftCorrectLabel(comparison?.correct_label || openAiLabel || "");
+  }, [comparisonKey, comparison?.correct_label, openAiLabel]);
+  const labelOptions = useMemo(() => {
+    const localLabels = (Array.isArray(comparison?.local_results) ? comparison.local_results : [])
+      .map((result) => outputLabel({ label: result?.label, outputText: result?.output_text }))
+      .filter(Boolean);
+    return Array.from(new Set([openAiLabel, ...localLabels, ...BENCHMARK_LABEL_OPTIONS].filter(Boolean)));
+  }, [comparison?.local_results, openAiLabel]);
   if (!comparison) {
     return null;
   }
   const localResults = Array.isArray(comparison.local_results) ? comparison.local_results : [];
   const resultsByModel = Object.fromEntries(localResults.map((result) => [result.model_id, result]));
-  const selectedCorrectLabel = comparison.correct_label || "";
-  const openAiLabel = outputLabel({
-    label: comparison.openai?.label,
-    outputText: comparison.openai?.output_text,
-  });
+  const reviewStatus = comparison.correct_label ? "approved" : "pending";
+  const handleApproveLabel = async () => {
+    const approvedLabel = String(draftCorrectLabel || "").trim();
+    if (!approvedLabel) {
+      return;
+    }
+    await onSetCorrectLabel?.(comparison.record_id, approvedLabel, "approved in benchmark detail");
+  };
   return (
     <section className="modal-overlay pricing-modal-overlay" role="dialog" aria-modal="true" aria-label="Benchmark detail">
       <article className="card modal-card benchmark-detail-modal" style={{ width: "95vw", maxWidth: "calc(100vw - 32px)" }}>
@@ -365,6 +386,8 @@ function BenchmarkDetailModal({ comparison, modelIds, onClose, onSetCorrectLabel
               <code>{comparison.created_at || "unknown"}</code>
               <span>Reference Label</span>
               <code>{referenceLabel(comparison) || "none"}</code>
+              <span>Review Status</span>
+              <code>{reviewStatus}</code>
             </div>
           </div>
           <div className="benchmark-detail-panel">
@@ -372,12 +395,12 @@ function BenchmarkDetailModal({ comparison, modelIds, onClose, onSetCorrectLabel
             <div className="state-grid benchmark-detail-grid">
               <span>Correct Label</span>
               <select
-                value={selectedCorrectLabel}
-                onChange={(event) => onSetCorrectLabel?.(comparison.record_id, event.target.value || null)}
+                value={draftCorrectLabel}
+                onChange={(event) => setDraftCorrectLabel(event.target.value)}
                 disabled={!onSetCorrectLabel || correctionChanging}
               >
-                <option value="">{openAiLabel ? `Use OpenAI label (${openAiLabel})` : "Use OpenAI label"}</option>
-                {BENCHMARK_LABEL_OPTIONS.map((label) => (
+                <option value="">Choose label</option>
+                {labelOptions.map((label) => (
                   <option key={label} value={label}>
                     {label}
                   </option>
@@ -385,6 +408,15 @@ function BenchmarkDetailModal({ comparison, modelIds, onClose, onSetCorrectLabel
               </select>
               <span>Applied To</span>
               <code>OpenAI and local match scoring</code>
+              <span>Action</span>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={handleApproveLabel}
+                disabled={!onSetCorrectLabel || correctionChanging || !draftCorrectLabel}
+              >
+                {correctionChanging ? "Saving..." : "Approve Label"}
+              </button>
             </div>
           </div>
         </div>
