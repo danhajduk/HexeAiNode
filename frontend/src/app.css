@@ -710,8 +710,8 @@
   white-space: normal;
 }
 
-.benchmark-detail-modal {
-  width: 95vw;
+.modal-card.benchmark-detail-modal {
+  width: 95%;
   max-width: 95vw;
   padding: 18px;
 }
@@ -1464,8 +1464,8 @@ h2 {
     grid-template-columns: 1fr;
   }
 
-  .benchmark-detail-modal {
-    width: 95vw;
+  .modal-card.benchmark-detail-modal {
+    width: 95%;
     max-width: 95vw;
     padding: 12px;
   }
