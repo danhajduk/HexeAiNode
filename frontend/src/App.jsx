@@ -76,6 +76,19 @@ const PROVIDER_BUDGET_PERIOD_OPTIONS = [
   ["monthly", "Monthly"],
   ["weekly", "Weekly (Mon-Sun)"],
 ];
+
+function serviceState(value) {
+  if (value && typeof value === "object") {
+    return value.state || "unknown";
+  }
+  return value || "unknown";
+}
+
+function formatPercent(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? `${parsed.toFixed(1)}%` : "unknown";
+}
+
 function ThemeToggle() {
   const [theme, setLocalTheme] = useState(getTheme());
 
@@ -105,6 +118,7 @@ export default function App() {
   const [restarting, setRestarting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [openaiEnabled, setOpenaiEnabled] = useState(false);
+  const [localLlmEnabled, setLocalLlmEnabled] = useState(false);
   const [openaiBudgetCents, setOpenaiBudgetCents] = useState("");
   const [openaiBudgetPeriod, setOpenaiBudgetPeriod] = useState("monthly");
   const [selectedTaskFamilies, setSelectedTaskFamilies] = useState(TASK_CAPABILITY_OPTIONS);
@@ -325,6 +339,7 @@ export default function App() {
       const openaiBudgetLimit = providerPayload?.config?.providers?.budget_limits?.openai?.max_cost_cents;
       const openaiBudgetWindow = providerPayload?.config?.providers?.budget_limits?.openai?.period;
       setOpenaiEnabled(enabledProviders.includes("openai"));
+      setLocalLlmEnabled(enabledProviders.includes("local"));
       setOpenaiBudgetCents(Number.isFinite(openaiBudgetLimit) ? String(openaiBudgetLimit) : "");
       setOpenaiBudgetPeriod(
         openaiBudgetWindow === "weekly" || openaiBudgetWindow === "monthly" ? openaiBudgetWindow : "monthly"
@@ -490,6 +505,8 @@ export default function App() {
   const isPendingApproval = backendStatus === "pending_approval";
   const isCapabilitySetupPending = backendStatus === "capability_setup_pending";
   const isProviderSetupRoute = modeResolution.providerSetupOpen;
+  const isLocalProviderSetupRoute = modeResolution.routeIntent === "provider_local";
+  const isOpenAiProviderSetupRoute = modeResolution.routeIntent === "provider_openai";
   const openaiCredentialSummary = providerCredentials?.credentials || {};
   const hasCapabilityRegistration = Boolean(uiState.capabilitySummary.capabilityDeclarationTimestamp);
   const canManageOpenAiCredentials =
@@ -569,6 +586,10 @@ export default function App() {
 
   function navigateToOpenAiProviderSetup() {
     window.location.hash = buildSetupRoute("openai");
+  }
+
+  function navigateToLocalLlmSetup() {
+    window.location.hash = buildSetupRoute("local");
   }
 
   function navigateToSetup() {
@@ -745,6 +766,7 @@ export default function App() {
     const normalizedBudgetPeriod = openaiBudgetPeriod === "weekly" ? "weekly" : "monthly";
     await apiPost("/api/providers/config", {
       openai_enabled: openaiEnabled,
+      local_enabled: localLlmEnabled,
       provider_budget_limits: {
         openai: {
           max_cost_cents: parsedBudget,
@@ -818,14 +840,14 @@ export default function App() {
     }
   }
 
-  async function onRestartService(target) {
+  async function onControlService(action, target) {
     if (restartingServiceTarget) {
       return;
     }
     setRestartingServiceTarget(target);
     setError("");
     try {
-      await apiPost("/api/services/restart", { target });
+      await apiPost(`/api/services/${action}`, { target });
       await loadStatus();
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
@@ -833,6 +855,10 @@ export default function App() {
     } finally {
       setRestartingServiceTarget("");
     }
+  }
+
+  async function onRestartService(target) {
+    await onControlService("restart", target);
   }
 
   async function onDeclareCapabilities() {
@@ -1349,6 +1375,67 @@ export default function App() {
     );
   }
 
+  function renderLocalLlmSetupContent() {
+    const localService = uiState.serviceStatus?.local_llm || {};
+    const localServiceStatus = serviceState(localService);
+    const localBusy = restartingServiceTarget === "local_llm";
+    const controlScript = localService && typeof localService === "object" ? localService.control_script : "";
+    const socketPath = localService && typeof localService === "object" ? localService.socket_path : "";
+    const healthSocketPath = localService && typeof localService === "object" ? localService.health_socket_path : "";
+    const containerName = localService && typeof localService === "object" ? localService.container_name : "";
+
+    return (
+      <div className="provider-page-shell">
+        <article className="card provider-page-card">
+          <form className="setup-form" onSubmit={onSaveProviderSelection}>
+            <label>
+              <input
+                type="checkbox"
+                checked={localLlmEnabled}
+                onChange={(event) => setLocalLlmEnabled(event.target.checked)}
+              />{" "}
+              Enable local LLM provider on this node
+            </label>
+            <div className="state-grid">
+              <span>Provider</span>
+              <code>local</code>
+              <span>Provider State</span>
+              <StatusBadge value={localLlmEnabled ? "enabled" : "disabled"} />
+              <span>Runtime State</span>
+              <StatusBadge value={localServiceStatus} />
+              <span>Container</span>
+              <code>{containerName || "not_configured"}</code>
+              <span>Socket</span>
+              <code>{socketPath || "not_configured"}</code>
+              <span>Health Socket</span>
+              <code>{healthSocketPath || "not_configured"}</code>
+              <span>CPU</span>
+              <code>{formatPercent(localService?.cpu_percent)}</code>
+              <span>Memory</span>
+              <code>{formatPercent(localService?.mem_percent)}</code>
+              <span>Control Script</span>
+              <code>{controlScript || "not_configured"}</code>
+            </div>
+            <div className="row">
+              <button className="btn btn-primary" type="submit" disabled={savingProvider}>
+                {savingProvider ? "Saving..." : "Save Local LLM Setup"}
+              </button>
+              <button className="btn" type="button" onClick={() => onControlService("start", "local_llm")} disabled={localBusy}>
+                {localBusy ? "Working..." : "Start Runtime"}
+              </button>
+              <button className="btn" type="button" onClick={() => onRestartService("local_llm")} disabled={localBusy}>
+                {localBusy ? "Working..." : "Restart Runtime"}
+              </button>
+              <button className="btn" type="button" onClick={() => onControlService("stop", "local_llm")} disabled={localBusy}>
+                {localBusy ? "Working..." : "Stop Runtime"}
+              </button>
+            </div>
+          </form>
+        </article>
+      </div>
+    );
+  }
+
   function renderSetupActivePanel() {
     switch (setupFlow.activeStage) {
       case "core_connection":
@@ -1375,8 +1462,10 @@ export default function App() {
             selectedTaskFamilies={selectedTaskFamilies}
             setupReadinessFlags={setupReadinessFlags}
           >
-            {isProviderSetupRoute ? (
+            {isOpenAiProviderSetupRoute ? (
               renderProviderSetupContent()
+            ) : isLocalProviderSetupRoute ? (
+              renderLocalLlmSetupContent()
             ) : (
               <form className="setup-form" onSubmit={onSaveProviderSelection}>
                 <label>
@@ -1387,9 +1476,17 @@ export default function App() {
                   />{" "}
                   Enable OpenAI on this node
                 </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={localLlmEnabled}
+                    onChange={(event) => setLocalLlmEnabled(event.target.checked)}
+                  />{" "}
+                  Enable local LLM on this node
+                </label>
                 <p className="muted tiny">
                   Provider budgets are configured per provider route. Open <code>#/setup/provider/openai</code> to set the OpenAI
-                  monthly or weekly cap.
+                  monthly or weekly cap. Local LLM runtime controls live at <code>#/setup/provider/local</code>.
                 </p>
                 <div className="state-grid">
                   <span>OpenAI Budget</span>
@@ -1398,6 +1495,8 @@ export default function App() {
                       ? `${Number.parseInt(openaiBudgetCents || "", 10)} cents / ${formatBudgetPeriod(openaiBudgetPeriod)}`
                       : "not_set"}
                   </code>
+                  <span>Local LLM</span>
+                  <StatusBadge value={localLlmEnabled ? "enabled" : "disabled"} />
                   <span>Task Capabilities</span>
                   <code>{selectedTaskFamilies.join(", ") || "none_selected"}</code>
                 </div>
@@ -1453,6 +1552,7 @@ export default function App() {
         primary: true,
       });
       secondaryActions.push({ label: "Configure OpenAI Provider", onClick: navigateToOpenAiProviderSetup });
+      secondaryActions.push({ label: "Configure Local LLM", onClick: navigateToLocalLlmSetup });
       secondaryActions.push({
         label: redeclaringCapabilities ? "Redeclaring..." : "Redeclare Capabilities",
         onClick: onRedeclareCapabilities,
@@ -1461,6 +1561,10 @@ export default function App() {
     }
     if (setupFlow.activeStage === "provider_setup" && isProviderSetupRoute) {
       secondaryActions.push({ label: "Back To Setup Flow", onClick: navigateToSetup });
+      secondaryActions.push({
+        label: isLocalProviderSetupRoute ? "Configure OpenAI Provider" : "Configure Local LLM",
+        onClick: isLocalProviderSetupRoute ? navigateToOpenAiProviderSetup : navigateToLocalLlmSetup,
+      });
       secondaryActions.push({
         label: redeclaringCapabilities ? "Redeclaring..." : "Redeclare Capabilities",
         onClick: onRedeclareCapabilities,
@@ -1474,7 +1578,8 @@ export default function App() {
         disabled: declaringCapabilities || !capabilityDeclareAllowed,
         primary: true,
       });
-      secondaryActions.push({ label: "Configure Provider", onClick: navigateToOpenAiProviderSetup });
+      secondaryActions.push({ label: "Configure OpenAI Provider", onClick: navigateToOpenAiProviderSetup });
+      secondaryActions.push({ label: "Configure Local LLM", onClick: navigateToLocalLlmSetup });
       secondaryActions.push({
         label: redeclaringCapabilities ? "Redeclaring..." : "Redeclare Capabilities",
         onClick: onRedeclareCapabilities,
@@ -1487,6 +1592,7 @@ export default function App() {
     if (setupFlow.activeStage === "ready") {
       primaryActions.push({ label: "Open Dashboard", onClick: navigateToDashboard, primary: true });
       secondaryActions.push({ label: "Reopen Provider Setup", onClick: navigateToOpenAiProviderSetup });
+      secondaryActions.push({ label: "Reopen Local LLM Setup", onClick: navigateToLocalLlmSetup });
     }
 
     return { primaryActions, secondaryActions, dangerActions };
@@ -1502,6 +1608,7 @@ export default function App() {
     ["activity", "Activity"],
     ["clients", "Clients"],
     ["scheduled", "Scheduled Tasks"],
+    ["local_llm", "Local LLM"],
     ["diagnostics", "Diagnostics"],
   ].map(([id, label]) => ({
     id,
@@ -1567,6 +1674,7 @@ export default function App() {
   const operationalActions = {
     setupActions: [
       { label: "Configure OpenAI Provider", onClick: navigateToOpenAiProviderSetup, disabled: !canManageOpenAiCredentials },
+      { label: "Configure Local LLM", onClick: navigateToLocalLlmSetup },
       { label: "Refresh Governance", onClick: onRefreshGovernance },
       { label: rerequestingTrust ? "Re-requesting Trust..." : "Re-request Trust", onClick: onRerequestTrust, disabled: rerequestingTrust },
       { label: refreshingLatestModels ? "Refreshing Models..." : "Refresh Provider Models", onClick: refreshOpenAiModels, disabled: refreshingLatestModels },
@@ -1580,6 +1688,10 @@ export default function App() {
     adminHint: "Advanced rebuild and inspection actions stay on the diagnostics page.",
     onOpenDiagnostics: navigateToDiagnostics,
   };
+  const localLlmService = uiState.serviceStatus?.local_llm || {};
+  const localLlmServiceObject = localLlmService && typeof localLlmService === "object" ? localLlmService : {};
+  const localLlmRuntimeState = serviceState(localLlmService);
+  const localLlmBusy = restartingServiceTarget === "local_llm";
   const operationalDashboardProps = {
     currentSection: currentOperationalSection,
     sections: operationalSections,
@@ -1658,6 +1770,18 @@ export default function App() {
     governanceStatus: governanceStatusPayload,
     scheduledTasksProps: {
       scheduler: capabilityDiagnostics?.internal_scheduler || null,
+    },
+    localLlmSetupProps: {
+      enabled: localLlmEnabled,
+      runtimeState: localLlmRuntimeState,
+      containerName: localLlmServiceObject.container_name,
+      socketPath: localLlmServiceObject.socket_path,
+      healthSocketPath: localLlmServiceObject.health_socket_path,
+      busy: localLlmBusy,
+      onOpenSetup: navigateToLocalLlmSetup,
+      onStart: () => onControlService("start", "local_llm"),
+      onRestart: () => onRestartService("local_llm"),
+      onStop: () => onControlService("stop", "local_llm"),
     },
     onboardingSteps,
     onboardingProgress: uiState.onboarding.progress,
@@ -1808,7 +1932,7 @@ export default function App() {
         />
       ) : isSetupMode ? (
         <SetupModeView
-          title={isProviderSetupRoute ? "AI Provider Setup" : "Node Setup"}
+          title={isLocalProviderSetupRoute ? "Local LLM Setup" : isProviderSetupRoute ? "AI Provider Setup" : "Node Setup"}
           subtitle={setupSubtitle}
           summaryItems={setupSummaryItems}
           stages={setupFlow.stages}

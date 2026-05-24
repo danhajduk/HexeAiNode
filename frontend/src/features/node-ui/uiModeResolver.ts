@@ -1,5 +1,5 @@
 export type UiMode = "identity" | "setup" | "operational";
-export type UiRouteIntent = "auto" | "setup" | "provider_openai" | "dashboard" | "diagnostics";
+export type UiRouteIntent = "auto" | "setup" | "provider_openai" | "provider_local" | "dashboard" | "diagnostics";
 
 export type UiModeInput = {
   lifecycleState?: string | null;
@@ -36,11 +36,16 @@ export function resolveUiRouteIntent(routeHash?: string | null): UiRouteIntent {
   if (
     normalized === "#/setup" ||
     normalized.startsWith("#/setup/") ||
-    normalized === "#/providers/openai"
+    normalized === "#/providers/openai" ||
+    normalized === "#/providers/local"
   ) {
-    return normalized.includes("provider/openai") || normalized === "#/providers/openai"
-      ? "provider_openai"
-      : "setup";
+    if (normalized.includes("provider/openai") || normalized === "#/providers/openai") {
+      return "provider_openai";
+    }
+    if (normalized.includes("provider/local") || normalized === "#/providers/local") {
+      return "provider_local";
+    }
+    return "setup";
   }
   if (normalized === "#/dashboard/diagnostics" || normalized === "#/diagnostics") {
     return "diagnostics";
@@ -66,7 +71,7 @@ export function resolveUiMode({ lifecycleState, routeHash }: UiModeInput): UiMod
   }
 
   if (OPERATIONAL_STATES.has(currentState)) {
-    if (routeIntent === "provider_openai") {
+    if (routeIntent === "provider_openai" || routeIntent === "provider_local") {
       return {
         mode: "setup",
         routeIntent,
@@ -93,7 +98,7 @@ export function resolveUiMode({ lifecycleState, routeHash }: UiModeInput): UiMod
     };
   }
 
-  if (routeIntent === "provider_openai") {
+  if (routeIntent === "provider_openai" || routeIntent === "provider_local") {
     return {
       mode: "setup",
       routeIntent,

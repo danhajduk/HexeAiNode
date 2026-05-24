@@ -89,6 +89,7 @@ export function OperationalDashboard({
   clientUsageMonth = "",
   governanceStatus = null,
   scheduledTasksProps = null,
+  localLlmSetupProps = null,
   onboardingSteps = [],
   onboardingProgress = {},
   pendingApprovalNodeId,
@@ -202,6 +203,40 @@ export function OperationalDashboard({
 
         {currentSection === "scheduled" ? (
           <ScheduledTasksSection {...(scheduledTasksProps || {})} />
+        ) : null}
+
+        {currentSection === "local_llm" ? (
+          <article className="card operational-card-full-span">
+            <CardHeader title="Local LLM Setup" subtitle="Local provider enablement and llama.cpp runtime controls." />
+            <div className="state-grid">
+              <span>Provider</span>
+              <code>local</code>
+              <span>Provider State</span>
+              <StageBadge value={localLlmSetupProps?.enabled ? "completed" : "pending"} />
+              <span>Runtime State</span>
+              <HealthIndicator value={localLlmSetupProps?.runtimeState || "unknown"} />
+              <span>Container</span>
+              <code>{localLlmSetupProps?.containerName || "not_configured"}</code>
+              <span>Socket</span>
+              <code>{localLlmSetupProps?.socketPath || "not_configured"}</code>
+              <span>Health Socket</span>
+              <code>{localLlmSetupProps?.healthSocketPath || "not_configured"}</code>
+            </div>
+            <div className="row">
+              <button className="btn btn-primary" type="button" onClick={localLlmSetupProps?.onOpenSetup}>
+                Open Local LLM Setup
+              </button>
+              <button className="btn" type="button" onClick={localLlmSetupProps?.onStart} disabled={localLlmSetupProps?.busy}>
+                {localLlmSetupProps?.busy ? "Working..." : "Start Runtime"}
+              </button>
+              <button className="btn" type="button" onClick={localLlmSetupProps?.onRestart} disabled={localLlmSetupProps?.busy}>
+                {localLlmSetupProps?.busy ? "Working..." : "Restart Runtime"}
+              </button>
+              <button className="btn" type="button" onClick={localLlmSetupProps?.onStop} disabled={localLlmSetupProps?.busy}>
+                {localLlmSetupProps?.busy ? "Working..." : "Stop Runtime"}
+              </button>
+            </div>
+          </article>
         ) : null}
 
         {currentSection === "diagnostics" ? (

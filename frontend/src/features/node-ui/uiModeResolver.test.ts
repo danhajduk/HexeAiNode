@@ -16,6 +16,8 @@ describe("resolveUiRouteIntent", () => {
   it("detects setup provider route", () => {
     expect(resolveUiRouteIntent("#/providers/openai")).toBe("provider_openai");
     expect(resolveUiRouteIntent("#/setup/provider/openai")).toBe("provider_openai");
+    expect(resolveUiRouteIntent("#/providers/local")).toBe("provider_local");
+    expect(resolveUiRouteIntent("#/setup/provider/local")).toBe("provider_local");
   });
 
   it("detects diagnostics route", () => {
@@ -83,6 +85,7 @@ describe("uiRoutes", () => {
   it("builds canonical setup and dashboard routes", () => {
     expect(buildSetupRoute()).toBe("#/setup");
     expect(buildSetupRoute("openai")).toBe("#/setup/provider/openai");
+    expect(buildSetupRoute("local")).toBe("#/setup/provider/local");
     expect(buildOperationalRoute()).toBe("#/dashboard");
     expect(buildOperationalRoute("diagnostics")).toBe("#/dashboard/diagnostics");
   });
@@ -93,7 +96,9 @@ describe("uiRoutes", () => {
     expect(resolveOperationalSection("#/dashboard/scheduled")).toBe("scheduled");
     expect(resolveOperationalSection("#/dashboard")).toBe("overview");
     expect(isSetupRoute("#/setup/provider/openai")).toBe(true);
+    expect(isSetupRoute("#/setup/provider/local")).toBe(true);
     expect(isProviderSetupRoute("#/setup/provider/openai")).toBe(true);
+    expect(isProviderSetupRoute("#/setup/provider/local")).toBe(true);
   });
 
   it("defaults operational lifecycle roots to dashboard", () => {

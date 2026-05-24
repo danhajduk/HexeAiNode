@@ -1,6 +1,6 @@
-export type OperationalSection = "overview" | "capabilities" | "runtime" | "activity" | "clients" | "scheduled" | "diagnostics";
+export type OperationalSection = "overview" | "capabilities" | "runtime" | "activity" | "clients" | "scheduled" | "local_llm" | "diagnostics";
 export type UiModeRoute = "identity" | "setup" | "operational";
-export type UiRouteIntent = "auto" | "setup" | "provider_openai" | "dashboard" | "diagnostics";
+export type UiRouteIntent = "auto" | "setup" | "provider_openai" | "provider_local" | "dashboard" | "diagnostics";
 
 const OPERATIONAL_SECTIONS: OperationalSection[] = [
   "overview",
@@ -9,12 +9,16 @@ const OPERATIONAL_SECTIONS: OperationalSection[] = [
   "activity",
   "clients",
   "scheduled",
+  "local_llm",
   "diagnostics",
 ];
 
-export function buildSetupRoute(provider?: "openai" | null): string {
+export function buildSetupRoute(provider?: "openai" | "local" | null): string {
   if (provider === "openai") {
     return "#/setup/provider/openai";
+  }
+  if (provider === "local") {
+    return "#/setup/provider/local";
   }
   return "#/setup";
 }
@@ -40,7 +44,12 @@ export function isSetupRoute(routeHash?: string | null): boolean {
 
 export function isProviderSetupRoute(routeHash?: string | null): boolean {
   const normalized = String(routeHash || "").trim().toLowerCase();
-  return normalized === "#/providers/openai" || normalized.includes("provider/openai");
+  return (
+    normalized === "#/providers/openai" ||
+    normalized === "#/providers/local" ||
+    normalized.includes("provider/openai") ||
+    normalized.includes("provider/local")
+  );
 }
 
 export function resolveDefaultRouteHashForMode(mode: UiModeRoute, routeHash?: string | null): string | null {
@@ -63,7 +72,7 @@ function isReadyLifecycleState(lifecycleState?: string | null): boolean {
 }
 
 function isSetupIntent(routeIntent?: UiRouteIntent | null): boolean {
-  return routeIntent === "setup" || routeIntent === "provider_openai";
+  return routeIntent === "setup" || routeIntent === "provider_openai" || routeIntent === "provider_local";
 }
 
 export function shouldArmSetupCompletionRedirect(

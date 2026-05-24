@@ -125,6 +125,7 @@ export function buildDashboardUiState({
     serviceStatus: resolvedServiceStatus || {
       backend: "unknown",
       frontend: "unknown",
+      local_llm: "unknown",
       node: "unknown",
     },
     meta: {
