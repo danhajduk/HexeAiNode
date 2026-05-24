@@ -133,6 +133,29 @@ function localLlmColumnTitle(modelId) {
   return localLlmDisplayName(modelId);
 }
 
+function localLlmModelLabel(modelId) {
+  const displayName = localLlmDisplayName(modelId);
+  const normalized = String(modelId || "").trim();
+  return normalized && displayName !== normalized ? `${displayName} · ${normalized}` : displayName;
+}
+
+function benchmarkReplayDetail(activeBenchmark) {
+  const status = formatBenchmarkStatus(activeBenchmark?.status, activeBenchmark?.active);
+  const modelId = activeBenchmark?.current_model_id || "";
+  const runningCount = Number(activeBenchmark?.running_count || 0);
+  const prefix =
+    status === "Running"
+      ? "Running on"
+      : status === "Swapping"
+        ? "Swapping to"
+        : status === "Idle"
+          ? "Idle"
+          : status;
+  const modelText = modelId && prefix !== "Idle" ? ` ${localLlmModelLabel(modelId)}` : "";
+  const countText = runningCount > 0 ? ` · ${runningCount} prompt${runningCount === 1 ? "" : "s"} active` : "";
+  return `${prefix}${modelText}${countText}`;
+}
+
 function parseOutputPayload(outputText) {
   let normalized = String(outputText || "").trim();
   if (normalized.startsWith("```")) {
@@ -280,7 +303,7 @@ function buildLocalModelSummaries({ comparisons, modelIds }) {
   );
 }
 
-function LocalLLMSummaryTable({ summaries }) {
+function LocalLLMSummaryTable({ summaries, currentModelId }) {
   return (
     <div className="client-usage-table-card">
       <div className="client-usage-table-wrap">
@@ -289,6 +312,7 @@ function LocalLLMSummaryTable({ summaries }) {
             <tr>
               <th>Prompt</th>
               <th>Model</th>
+              <th>State</th>
               <th>Completed</th>
               <th>Label Match</th>
               <th>Avg Score Delta</th>
@@ -299,14 +323,25 @@ function LocalLLMSummaryTable({ summaries }) {
           </thead>
           <tbody>
             {summaries.length ? (
-              summaries.map((summary) => (
-                <tr key={`${summary.promptName}-${summary.modelId}`}>
+              summaries.map((summary) => {
+                const isLoadedModel = summary.modelId !== "__openai__" && summary.modelId === currentModelId;
+                return (
+                <tr className={isLoadedModel ? "local-llm-summary-row-loaded" : ""} key={`${summary.promptName}-${summary.modelId}`}>
                   <td>
                     <code>{summary.promptName}</code>
                   </td>
                   <td>
                     <code>{summary.modelId === "__openai__" ? "OpenAI" : localLlmDisplayName(summary.modelId)}</code>
                     <span className="muted tiny benchmark-snippet">{summary.modelId === "__openai__" ? "baseline" : summary.modelId}</span>
+                  </td>
+                  <td>
+                    {summary.modelId === "__openai__" ? (
+                      <span className="benchmark-state-badge benchmark-state-badge-muted">Baseline</span>
+                    ) : isLoadedModel ? (
+                      <span className="benchmark-state-badge benchmark-state-badge-loaded">Loaded Now</span>
+                    ) : (
+                      <span className="benchmark-state-badge">Available</span>
+                    )}
                   </td>
                   <td>{formatMetricValue(summary.completed)}</td>
                   <td>
@@ -321,10 +356,11 @@ function LocalLLMSummaryTable({ summaries }) {
                   <td>{formatMetricValue(summary.avgVram, " MiB")}</td>
                   <td>{formatMetricValue(summary.avgGpu, "%")}</td>
                 </tr>
-              ))
+                );
+              })
             ) : (
               <tr>
-                <td colSpan="8" className="muted">
+                <td colSpan="9" className="muted">
                   No local LLM models are configured for this benchmark rotation.
                 </td>
               </tr>
@@ -503,6 +539,7 @@ function LocalLLMBenchmarkTable({
   const modelIds = Array.from(new Set([...configuredModels, ...discoveredModels])).slice(0, 4);
   const currentModelId = summary?.rotation?.current_model_id || "unknown";
   const activeBenchmarkStatus = formatBenchmarkStatus(summary?.active_benchmark?.status, summary?.active_benchmark?.active);
+  const activeBenchmarkDetail = benchmarkReplayDetail(summary?.active_benchmark);
   const lastSwap = summary?.rotation?.last_swap || summary?.active_benchmark?.last_swap || null;
   const swapDuration =
     summary?.active_benchmark?.status === "swapping"
@@ -527,8 +564,8 @@ function LocalLLMBenchmarkTable({
       <CardHeader title="Local LLM Benchmarks" subtitle="OpenAI calls replayed against the local model rotation." />
       <div className="benchmark-toolbar">
         <div className="state-grid compact-grid">
-          <span>Current Model</span>
-          <code>{currentModelId}</code>
+          <span>Loaded Local Model</span>
+          <code>{localLlmModelLabel(currentModelId)}</code>
           <span>Last Switch</span>
           <code>{summary?.rotation?.updated_at || "none"}</code>
         </div>
@@ -553,18 +590,30 @@ function LocalLLMBenchmarkTable({
             {captureChanging
               ? "Updating..."
               : summary?.capture_enabled
-                ? "Stop Fetching Prompts"
-                : "Start Fetching Prompts"}
+                ? "Pause Prompt Capture"
+                : "Capture OpenAI Prompts"}
           </button>
           <button className="btn btn-primary" type="button" onClick={onCycleModel} disabled={!onCycleModel || cyclingModel}>
-            {cyclingModel ? "Cycling..." : "Cycle Model"}
+            {cyclingModel ? "Loading..." : "Load Next Model"}
           </button>
           <button className="btn btn-primary" type="button" onClick={onRunLoadedModel} disabled={!onRunLoadedModel || runningLoadedModel}>
-            {runningLoadedModel ? "Running..." : "Run Loaded Model"}
+            {runningLoadedModel ? "Running..." : "Run Classification on Loaded Model"}
           </button>
         </div>
       </div>
       <div className="benchmark-status-pills">
+        <div className="benchmark-status-pill benchmark-status-pill-emphasis">
+          <strong>{localLlmDisplayName(currentModelId)}</strong>
+          <span>{currentModelId}</span>
+        </div>
+        <div className={`benchmark-status-pill${activeBenchmarkStatus === "Running" ? " benchmark-status-pill-running" : ""}`}>
+          <strong>Classification Replay</strong>
+          <span>{activeBenchmarkDetail}</span>
+        </div>
+        <div className={`benchmark-status-pill${summary?.capture_enabled ? " benchmark-status-pill-running" : ""}`}>
+          <strong>Prompt Capture</strong>
+          <span>{summary?.capture_enabled ? "On" : "Off"}</span>
+        </div>
         <div className="benchmark-status-pill">
           <strong>
             {summary?.gpu_vram?.available
@@ -576,13 +625,6 @@ function LocalLLMBenchmarkTable({
         <div className="benchmark-status-pill">
           <strong>{formatMetricValue(summary?.gpu_vram?.llama_vram_mib, " MiB")}</strong>
           <span>llama.cpp VRAM</span>
-        </div>
-        <div className="benchmark-status-pill">
-          <strong>{activeBenchmarkStatus}</strong>
-          <span>
-            Benchmark
-            {summary?.active_benchmark?.current_model_id ? `: ${summary.active_benchmark.current_model_id}` : ""}
-          </span>
         </div>
         <div className={`benchmark-status-pill${swapError ? " benchmark-status-pill-warning" : ""}`}>
           <strong>{formatSeconds(swapDuration)}</strong>
@@ -601,7 +643,7 @@ function LocalLLMBenchmarkTable({
           <span>Failed</span>
         </div>
       </div>
-      <LocalLLMSummaryTable summaries={modelSummaries} />
+      <LocalLLMSummaryTable summaries={modelSummaries} currentModelId={currentModelId} />
       <div className="client-usage-table-card">
         <div className="client-usage-table-wrap">
           <table className="client-usage-table local-llm-benchmark-table">
@@ -610,7 +652,10 @@ function LocalLLMBenchmarkTable({
                 <th>Prompt</th>
                 <th>OpenAI Model</th>
                 {modelIds.map((modelId, index) => (
-                  <th key={modelId}>{localLlmColumnTitle(modelId, index)}</th>
+                  <th className={modelId === currentModelId ? "local-llm-loaded-column-header" : ""} key={modelId}>
+                    {localLlmColumnTitle(modelId, index)}
+                    {modelId === currentModelId ? <span className="benchmark-state-badge benchmark-state-badge-loaded">Loaded</span> : null}
+                  </th>
                 ))}
               </tr>
             </thead>
