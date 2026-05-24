@@ -496,6 +496,131 @@
   background: hsl(var(--sx-panel));
 }
 
+.client-usage-metric-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.client-cost-prompt-row {
+  padding-top: 10px;
+  border-top: 1px solid hsl(var(--sx-border) / 0.7);
+  display: grid;
+  gap: 10px;
+}
+
+.client-cost-prompt-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.client-cost-prompt-title-block {
+  display: grid;
+  gap: 4px;
+}
+
+.client-cost-prompt-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.client-cost-prompt-meta {
+  margin: 0;
+}
+
+.client-cost-prompt-meta-compact {
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+.client-cost-prompt-state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  border: 1px solid currentColor;
+  border-radius: var(--sx-radius-pill);
+  background: hsl(var(--sx-panel));
+  text-transform: capitalize;
+  line-height: 1;
+}
+
+.client-cost-prompt-costs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.client-cost-model-section {
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid hsl(var(--sx-border) / 0.7);
+  border-radius: var(--sx-radius-md);
+  background: hsl(var(--sx-panel) / 0.75);
+}
+
+.client-usage-table-card {
+  display: grid;
+  gap: 6px;
+}
+
+.client-usage-table-wrap {
+  overflow-x: auto;
+  border: 1px solid hsl(var(--sx-border) / 0.75);
+  border-radius: var(--sx-radius-md);
+  background: hsl(var(--sx-panel));
+}
+
+.client-usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+}
+
+.client-usage-table th,
+.client-usage-table td {
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid hsl(var(--sx-border) / 0.6);
+}
+
+.client-usage-table th {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--sx-text-muted));
+  background: hsl(var(--sx-text) / 0.04);
+}
+
+.client-usage-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.client-usage-table td code {
+  white-space: nowrap;
+  display: inline-block;
+  min-width: 100%;
+}
+
+.client-model-usage-table td,
+.client-model-usage-table th {
+  text-align: left;
+}
+
+.client-model-usage-table td:first-child {
+  white-space: nowrap;
+}
+
 
 .client-grant-summary-item strong,
 .client-grant-summary-item code {
