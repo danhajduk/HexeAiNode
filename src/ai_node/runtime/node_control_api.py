@@ -19,6 +19,7 @@ from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.config.provider_credentials_config import summarize_provider_credentials
 from ai_node.core_api.budget_declaration_client import BudgetDeclarationClient
 from ai_node.core_api.trust_status_client import TrustStatusClient
+from ai_node.persistence.local_llm_benchmark_store import DEFAULT_LOCAL_LLM_BENCHMARK_MODELS
 from ai_node.providers.models import UnifiedExecutionRequest
 from ai_node.providers.openai_model_catalog import select_representative_openai_model_ids
 from ai_node.prompts import PromptRegistry
@@ -1054,6 +1055,28 @@ class NodeControlState:
         return {
             "status": "ok",
             "correction": correction,
+            "benchmark": self.local_llm_benchmark_comparison_payload(),
+        }
+
+    def requeue_all_local_llm_benchmarks(self) -> dict:
+        if self._local_llm_benchmark_store is None or not hasattr(self._local_llm_benchmark_store, "requeue_for_models"):
+            raise ValueError("local_llm_benchmark_store_not_configured")
+        model_ids = list(DEFAULT_LOCAL_LLM_BENCHMARK_MODELS)
+        if self._local_llm_benchmark_runner is not None and hasattr(self._local_llm_benchmark_runner, "status_payload"):
+            rotation = self._local_llm_benchmark_runner.status_payload()
+            rotation_models = rotation.get("models") if isinstance(rotation, dict) else []
+            configured_model_ids = [
+                str(model.get("id") or "").strip()
+                for model in rotation_models
+                if isinstance(model, dict) and str(model.get("id") or "").strip()
+            ]
+            if configured_model_ids:
+                model_ids = configured_model_ids
+        requeued = self._local_llm_benchmark_store.requeue_for_models(model_ids=model_ids)
+        return {
+            "status": "ok",
+            "model_ids": model_ids,
+            "requeued": requeued,
             "benchmark": self.local_llm_benchmark_comparison_payload(),
         }
 
@@ -3485,6 +3508,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     async def post_local_llm_benchmark_run_loaded():
         try:
             return await state.run_local_llm_benchmark_loaded_model()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/benchmarks/local-llm/rerun-all")
+    def post_local_llm_benchmark_rerun_all():
+        try:
+            return state.requeue_all_local_llm_benchmarks()
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

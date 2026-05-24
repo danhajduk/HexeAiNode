@@ -114,6 +114,7 @@ class NodeControlFastApiTests(unittest.TestCase):
     class _FakeLocalLLMBenchmarkStore:
         def __init__(self):
             self.capture_enabled = True
+            self.requeued_model_ids = []
 
         def summary_payload(self):
             return {
@@ -132,6 +133,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.correct_label = correct_label
             self.correction_note = note
             return {"record_id": record_id, "correct_label": correct_label, "correction_note": note}
+
+        def requeue_for_models(self, *, model_ids: list[str]):
+            self.requeued_model_ids = list(model_ids)
+            return 12
 
     class _FakeLocalLLMBenchmarkRunner:
         def status_payload(self):
@@ -560,6 +565,12 @@ class NodeControlFastApiTests(unittest.TestCase):
 
             self.assertEqual(run_loaded_response.status_code, 200)
             self.assertEqual(run_loaded_response.json()["result"]["mode"], "loaded_model")
+
+            rerun_response = client.post("/api/benchmarks/local-llm/rerun-all")
+
+            self.assertEqual(rerun_response.status_code, 200)
+            self.assertEqual(rerun_response.json()["requeued"], 12)
+            self.assertEqual(rerun_response.json()["model_ids"], ["qwen3-8b-q4_k_m", "qwen3-14b-q4_k_m"])
 
             correction_response = client.post(
                 "/api/benchmarks/local-llm/records/openai-test/correction",

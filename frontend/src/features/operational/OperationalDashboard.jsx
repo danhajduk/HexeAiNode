@@ -626,6 +626,8 @@ function LocalLLMBenchmarkTable({
   cyclingModel = false,
   onRunLoadedModel,
   runningLoadedModel = false,
+  onRerunAllModels,
+  rerunningAllModels = false,
   onSetCaptureEnabled,
   captureChanging = false,
   onSetCorrectLabel,
@@ -712,6 +714,9 @@ function LocalLLMBenchmarkTable({
           </button>
           <button className="btn btn-primary" type="button" onClick={onRunLoadedModel} disabled={!onRunLoadedModel || runningLoadedModel}>
             {runningLoadedModel ? "Classifying..." : "Classify"}
+          </button>
+          <button className="btn" type="button" onClick={onRerunAllModels} disabled={!onRerunAllModels || rerunningAllModels}>
+            {rerunningAllModels ? "Re-queueing..." : "Re-run All Local LLMs"}
           </button>
         </div>
       </div>
@@ -866,6 +871,8 @@ export function OperationalDashboard({
   cyclingLocalLlmModel = false,
   onRunLoadedLocalLlmModel,
   runningLoadedLocalLlm = false,
+  onRerunAllLocalLlms,
+  rerunningAllLocalLlms = false,
   onSetLocalLlmBenchmarkCapture,
   localLlmBenchmarkCaptureChanging = false,
   onSetLocalLlmBenchmarkCorrectLabel,
@@ -990,6 +997,8 @@ export function OperationalDashboard({
             cyclingModel={cyclingLocalLlmModel}
             onRunLoadedModel={onRunLoadedLocalLlmModel}
             runningLoadedModel={runningLoadedLocalLlm}
+            onRerunAllModels={onRerunAllLocalLlms}
+            rerunningAllModels={rerunningAllLocalLlms}
             onSetCaptureEnabled={onSetLocalLlmBenchmarkCapture}
             captureChanging={localLlmBenchmarkCaptureChanging}
             onSetCorrectLabel={onSetLocalLlmBenchmarkCorrectLabel}
