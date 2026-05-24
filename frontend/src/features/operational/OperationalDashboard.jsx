@@ -119,6 +119,7 @@ const BENCHMARK_LABEL_OPTIONS = [
   "marketing",
   "meeting",
   "notification",
+  "order",
   "personal",
   "shipment",
   "spam",
@@ -350,7 +351,7 @@ function LabelModelMetricCell({ entry }) {
 }
 
 function LocalLLMSummaryTable({ summaries, currentModelId, modelStatusCounts = {} }) {
-  const priorityLabels = new Set(["action_required", "customer_support", "invoice", "shipment", "security"]);
+  const priorityLabels = new Set(["action_required", "customer_support", "invoice", "order", "shipment", "security"]);
   const labelModelSummaries = sortLocalLabelSummaries(summaries);
   const labelBreakdownRows = summaries.flatMap((summary) =>
     Array.isArray(summary.labelBreakdown)
