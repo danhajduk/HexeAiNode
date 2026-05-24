@@ -1,5 +1,179 @@
 {
   "$defs": {
+    "BenchmarkExecutionTargetRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "role": {
+          "default": "candidate",
+          "title": "Role",
+          "type": "string"
+        },
+        "target_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Id"
+        },
+        "timeout_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeout S"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "BenchmarkExecutionTargetRequest",
+      "type": "object"
+    },
+    "BenchmarkExecutionV2Request": {
+      "additionalProperties": false,
+      "properties": {
+        "benchmark_id": {
+          "title": "Benchmark Id",
+          "type": "string"
+        },
+        "customer_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customer Id"
+        },
+        "inputs": {
+          "title": "Inputs",
+          "type": "object"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metadata"
+        },
+        "output_contract": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Contract"
+        },
+        "prompt_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Id"
+        },
+        "prompt_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Version"
+        },
+        "requested_by": {
+          "title": "Requested By",
+          "type": "string"
+        },
+        "service_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Service Id"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/BenchmarkExecutionTargetRequest"
+          },
+          "title": "Targets",
+          "type": "array"
+        },
+        "task_family": {
+          "title": "Task Family",
+          "type": "string"
+        },
+        "timeout_s": {
+          "default": 120,
+          "title": "Timeout S",
+          "type": "integer"
+        },
+        "trace_id": {
+          "title": "Trace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "benchmark_id",
+        "task_family",
+        "requested_by",
+        "inputs",
+        "targets",
+        "trace_id"
+      ],
+      "title": "BenchmarkExecutionV2Request",
+      "type": "object"
+    },
     "BudgetDeclarationRequest": {
       "properties": {
         "provider_id": {
@@ -111,6 +285,132 @@
         "task_family"
       ],
       "title": "ExecutionAuthorizeRequest",
+      "type": "object"
+    },
+    "ExecutionCompareRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "max_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        },
+        "messages": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Messages"
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt"
+        },
+        "providers": {
+          "items": {
+            "type": "object"
+          },
+          "title": "Providers",
+          "type": "array"
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Prompt"
+        },
+        "task_family": {
+          "title": "Task Family",
+          "type": "string"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        }
+      },
+      "required": [
+        "task_family",
+        "providers"
+      ],
+      "title": "ExecutionCompareRequest",
+      "type": "object"
+    },
+    "LocalLLMBenchmarkCaptureRequest": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "title": "LocalLLMBenchmarkCaptureRequest",
+      "type": "object"
+    },
+    "LocalLLMBenchmarkCorrectionRequest": {
+      "properties": {
+        "correct_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correct Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "title": "LocalLLMBenchmarkCorrectionRequest",
       "type": "object"
     },
     "OnboardingInitiateRequest": {
@@ -288,6 +588,31 @@
       "title": "PromptLifecycleRequest",
       "type": "object"
     },
+    "PromptProbationRequest": {
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "title": "PromptProbationRequest",
+      "type": "object"
+    },
     "PromptReviewDueMigrationRequest": {
       "properties": {
         "reason": {
@@ -348,81 +673,8 @@
       "title": "PromptReviewRequest",
       "type": "object"
     },
-    "PromptProbationRequest": {
-      "properties": {
-        "action": {
-          "title": "Action",
-          "type": "string"
-        },
-        "reason": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Reason"
-        }
-      },
-      "required": [
-        "action"
-      ],
-      "title": "PromptProbationRequest",
-      "type": "object"
-    },
     "PromptServiceRegisterRequest": {
       "properties": {
-        "constraints": {
-          "anyOf": [
-            {
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Constraints"
-        },
-        "definition": {
-          "anyOf": [
-            {
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Definition"
-        },
-        "execution_policy": {
-          "anyOf": [
-            {
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Execution Policy"
-        },
-        "metadata": {
-          "anyOf": [
-            {
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Metadata"
-        },
         "access_scope": {
           "default": "service",
           "title": "Access Scope",
@@ -473,17 +725,77 @@
           "default": null,
           "title": "Allowed Services"
         },
-        "owner_service": {
+        "benchmark": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "object"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Owner Service"
+          "title": "Benchmark"
+        },
+        "constraints": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Constraints"
+        },
+        "definition": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition"
+        },
+        "execution_policy": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Policy"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metadata"
+        },
+        "output_contract": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Contract"
         },
         "owner_client_id": {
           "anyOf": [
@@ -496,6 +808,18 @@
           ],
           "default": null,
           "title": "Owner Client Id"
+        },
+        "owner_service": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner Service"
         },
         "privacy_class": {
           "default": "internal",
@@ -566,54 +890,6 @@
     },
     "PromptServiceUpdateRequest": {
       "properties": {
-        "constraints": {
-          "anyOf": [
-            {
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Constraints"
-        },
-        "definition": {
-          "anyOf": [
-            {
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Definition"
-        },
-        "execution_policy": {
-          "anyOf": [
-            {
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Execution Policy"
-        },
-        "metadata": {
-          "anyOf": [
-            {
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Metadata"
-        },
         "access_scope": {
           "anyOf": [
             {
@@ -671,17 +947,77 @@
           "default": null,
           "title": "Allowed Services"
         },
-        "owner_service": {
+        "benchmark": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "object"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Owner Service"
+          "title": "Benchmark"
+        },
+        "constraints": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Constraints"
+        },
+        "definition": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition"
+        },
+        "execution_policy": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Policy"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metadata"
+        },
+        "output_contract": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Contract"
         },
         "owner_client_id": {
           "anyOf": [
@@ -694,6 +1030,18 @@
           ],
           "default": null,
           "title": "Owner Client Id"
+        },
+        "owner_service": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner Service"
         },
         "privacy_class": {
           "anyOf": [
@@ -773,6 +1121,18 @@
     "ProviderSelectionRequest": {
       "additionalProperties": false,
       "properties": {
+        "local_enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Local Enabled"
+        },
         "openai_enabled": {
           "title": "Openai Enabled",
           "type": "boolean"

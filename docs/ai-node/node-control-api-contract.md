@@ -556,6 +556,8 @@ For OpenAI, this response only includes regular base-model families used for nor
   - `provider_preferences?: object`
   - `constraints?: object`
   - `definition?: object`
+  - `output_contract?: object` (V2-compatible metadata extension)
+  - `benchmark?: object` (V2-compatible metadata extension)
   - `version?: string`
   - `status?: probation | active | review_due | restricted | suspended | retired | expired`
   - `metadata: object` (optional)
@@ -577,6 +579,8 @@ For OpenAI, this response only includes regular base-model families used for nor
 - Request:
   - any mutable prompt metadata fields
   - `definition?: object`
+  - `output_contract?: object` (V2-compatible metadata extension)
+  - `benchmark?: object` (V2-compatible metadata extension)
   - `version?: string`
 - Behavior:
   - this is the canonical prompt update path
@@ -692,6 +696,42 @@ Execution behavior:
 - validates against the existing broader declared/accepted task families
 - resolves provider/model from current local usable provider state
 - applies governance before and after provider resolution
+
+### V2 execution-only benchmark request
+
+- `POST /api/benchmarks/execution/v2`
+- Request:
+  - `benchmark_id: string`
+  - `prompt_id?: string`
+  - `prompt_version?: string`
+  - `task_family: string`
+  - `requested_by: string`
+  - `service_id?: string`
+  - `customer_id?: string`
+  - `inputs: object`
+  - `output_contract?: object`
+  - `targets: { provider: string, model?: string, role?: baseline | candidate, target_id?: string }[]`
+  - `timeout_s?: number`
+  - `trace_id: string`
+- Response:
+  - `benchmark_id`
+  - `prompt_id`
+  - `prompt_version`
+  - `task_family`
+  - `trace_id`
+  - `generated_at`
+  - `results[]` with provider/model/status/output/parsed output/usage/latency/cost/error fields
+- Behavior:
+  - executes each requested target explicitly
+  - authorizes prompt access when `prompt_id` is supplied
+  - returns evidence only; it does not return winners, scores, or correctness judgments
+
+### Client AI V2 schema discovery
+
+- `GET /api/schemas/client-ai/v2`
+  - returns the V2 schema catalog
+- `GET /api/schemas/client-ai/v2/{schema_name}`
+  - returns an individual V2 schema document
 
 ## Provider Debug Endpoints
 

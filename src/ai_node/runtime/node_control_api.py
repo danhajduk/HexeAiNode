@@ -31,6 +31,7 @@ from ai_node.runtime.internal_scheduler import InternalScheduler
 from ai_node.runtime.service_manager import NullServiceManager
 from ai_node.runtime.capability_resolver import load_task_graph
 from ai_node.runtime.execution_telemetry import ExecutionTelemetryPublisher
+from ai_node.runtime.prompt_construction import render_prompt_template
 from ai_node.runtime.task_execution_service import TaskExecutionService
 from ai_node.runtime.capability_declaration_runner import (
     STATUS_HEARTBEAT_INTERVAL_SECONDS,
@@ -1186,16 +1187,23 @@ class NodeControlState:
         provider_preferences: dict | None = None,
         constraints: dict | None = None,
         definition: dict | None = None,
+        output_contract: dict | None = None,
+        benchmark: dict | None = None,
         version: str | None = None,
         status: str = "active",
     ) -> dict:
         if self._prompt_registry is None:
             raise ValueError("prompt service state store is not configured")
+        prompt_metadata = _metadata_with_v2_contracts(
+            metadata=metadata,
+            output_contract=output_contract,
+            benchmark=benchmark,
+        )
         self._prompt_service_state = self._prompt_registry.create_prompt(
             prompt_id=prompt_id,
             service_id=service_id,
             task_family=task_family,
-            metadata=metadata,
+            metadata=prompt_metadata,
             prompt_name=prompt_name,
             owner_service=owner_service,
             owner_client_id=owner_client_id,
@@ -1231,10 +1239,17 @@ class NodeControlState:
         constraints: dict | None = None,
         metadata: dict | None = None,
         definition: dict | None = None,
+        output_contract: dict | None = None,
+        benchmark: dict | None = None,
         version: str | None = None,
     ) -> dict:
         if self._prompt_registry is None:
             raise ValueError("prompt service state store is not configured")
+        prompt_metadata = _metadata_with_v2_contracts(
+            metadata=metadata,
+            output_contract=output_contract,
+            benchmark=benchmark,
+        )
         self._prompt_service_state = self._prompt_registry.update_prompt(
             prompt_id=prompt_id,
             prompt_name=prompt_name,
@@ -1249,7 +1264,7 @@ class NodeControlState:
             execution_policy=execution_policy,
             provider_preferences=provider_preferences,
             constraints=constraints,
-            metadata=metadata,
+            metadata=prompt_metadata,
             definition=definition,
             version=version,
         )
@@ -1508,6 +1523,249 @@ class NodeControlState:
         service = self._get_task_execution_service()
         result = await service.execute(request)
         return result.model_dump(mode="json")
+
+    @staticmethod
+    def _client_ai_v2_schema_dir() -> Path:
+        return Path("docs/json-schemas/client-ai-v2")
+
+    def client_ai_v2_schema_catalog(self) -> dict:
+        schema_dir = self._client_ai_v2_schema_dir()
+        schemas = []
+        if schema_dir.exists():
+            for path in sorted(schema_dir.glob("*.json")):
+                schemas.append(
+                    {
+                        "name": path.name,
+                        "schema_id": f"https://hexe.local/schemas/client-ai-v2/{path.name}",
+                        "status": "Partially implemented",
+                        "path": str(path),
+                        "api_path": f"/api/schemas/client-ai/v2/{path.name}",
+                    }
+                )
+        return {
+            "schema_family": "client-ai",
+            "version": "v2",
+            "generated_at": local_now_iso(),
+            "schemas": schemas,
+        }
+
+    def client_ai_v2_schema_document(self, *, schema_name: str) -> dict:
+        normalized = str(schema_name or "").strip()
+        if not normalized or "/" in normalized or "\\" in normalized or not normalized.endswith(".json"):
+            raise ValueError("schema_not_found")
+        path = self._client_ai_v2_schema_dir() / normalized
+        if not path.exists() or not path.is_file():
+            raise ValueError("schema_not_found")
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError("schema_invalid") from exc
+        return payload if isinstance(payload, dict) else {}
+
+    @staticmethod
+    def _parse_output_payload(output_text: object):
+        text = str(output_text or "").strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if lines and lines[0].strip().startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+        if not text:
+            return None
+        try:
+            return json.loads(text)
+        except Exception:
+            return None
+
+    async def execute_benchmark_v2(
+        self,
+        *,
+        benchmark_id: str,
+        prompt_id: str | None,
+        prompt_version: str | None,
+        task_family: str,
+        requested_by: str,
+        service_id: str | None,
+        customer_id: str | None,
+        inputs: dict,
+        output_contract: dict | None,
+        targets: list[dict],
+        timeout_s: int,
+        trace_id: str,
+        metadata: dict | None = None,
+    ) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "execute_explicit"):
+            raise ValueError("provider runtime manager is not configured")
+        target_specs = [item for item in list(targets or []) if isinstance(item, dict)]
+        if not target_specs:
+            raise ValueError("targets_required")
+        inputs_payload = inputs if isinstance(inputs, dict) else {}
+        output_payload = output_contract if isinstance(output_contract, dict) else {}
+        schema = output_payload.get("json_schema") if isinstance(output_payload.get("json_schema"), dict) else None
+        execution_inputs = dict(inputs_payload)
+        if schema is not None and "json_schema" not in execution_inputs and "structured_output_schema" not in execution_inputs:
+            execution_inputs["json_schema"] = schema
+
+        prompt_definition = {}
+        authorized_version = prompt_version
+        if prompt_id:
+            if self._prompt_registry is not None:
+                self._prompt_service_state = self._prompt_registry.snapshot()
+            state = self._prompt_service_state if isinstance(self._prompt_service_state, dict) else None
+            authorization = self._execution_gateway.authorize(
+                prompt_id=prompt_id,
+                task_family=task_family,
+                prompt_services_state=state,
+                prompt_version=prompt_version,
+                requested_by=requested_by,
+                service_id=service_id,
+                customer_id=customer_id,
+                inputs=execution_inputs,
+            )
+            if not authorization.allowed:
+                raise ValueError(authorization.reason)
+            prompt_definition = authorization.prompt_definition if isinstance(authorization.prompt_definition, dict) else {}
+            authorized_version = authorization.prompt_version
+
+        prompt = render_prompt_template(prompt_definition=prompt_definition, request_inputs=execution_inputs)
+        if prompt is None:
+            prompt = execution_inputs.get("prompt")
+        if prompt is None:
+            prompt = execution_inputs.get("text")
+        system_prompt = execution_inputs.get("system_prompt")
+        if system_prompt is None:
+            system_prompt = prompt_definition.get("system_prompt")
+        messages = execution_inputs.get("messages") if isinstance(execution_inputs.get("messages"), list) else []
+        temperature = execution_inputs.get("temperature")
+        max_tokens = execution_inputs.get("max_tokens")
+
+        results = []
+        for target in target_specs:
+            provider_id = str(target.get("provider") or target.get("provider_id") or "").strip().lower()
+            model_id = str(target.get("model") or target.get("model_id") or "").strip() or None
+            target_id = str(target.get("target_id") or f"{provider_id}:{model_id or 'default'}").strip()
+            role = str(target.get("role") or "candidate").strip() or "candidate"
+            if not provider_id:
+                results.append(
+                    {
+                        "target_id": target_id or None,
+                        "provider": provider_id,
+                        "model": model_id,
+                        "role": role,
+                        "status": "failed",
+                        "output_text": None,
+                        "parsed_output": None,
+                        "usage": None,
+                        "latency_ms": None,
+                        "cost_usd": None,
+                        "runtime_metrics": None,
+                        "error": {"code": "provider_required", "message": "provider_required"},
+                    }
+                )
+                continue
+            if prompt_id:
+                state = self._prompt_service_state if isinstance(self._prompt_service_state, dict) else None
+                target_authorization = self._execution_gateway.authorize(
+                    prompt_id=prompt_id,
+                    task_family=task_family,
+                    prompt_services_state=state,
+                    prompt_version=authorized_version,
+                    requested_by=requested_by,
+                    service_id=service_id,
+                    customer_id=customer_id,
+                    requested_provider=provider_id,
+                    requested_model=model_id,
+                    inputs=execution_inputs,
+                )
+                if not target_authorization.allowed:
+                    results.append(
+                        {
+                            "target_id": target_id,
+                            "provider": provider_id,
+                            "model": model_id,
+                            "role": role,
+                            "status": "failed",
+                            "output_text": None,
+                            "parsed_output": None,
+                            "usage": None,
+                            "latency_ms": None,
+                            "cost_usd": None,
+                            "runtime_metrics": None,
+                            "error": {"code": target_authorization.reason, "message": target_authorization.reason},
+                        }
+                    )
+                    continue
+            started = time.perf_counter()
+            try:
+                response = await self._provider_runtime_manager.execute_explicit(
+                    UnifiedExecutionRequest(
+                        task_family=task_family,
+                        prompt=str(prompt or "") if prompt is not None else None,
+                        system_prompt=str(system_prompt or "") if system_prompt is not None else None,
+                        messages=list(messages or []),
+                        requested_provider=provider_id,
+                        requested_model=model_id,
+                        temperature=float(temperature) if isinstance(temperature, (int, float)) else None,
+                        max_tokens=int(max_tokens) if isinstance(max_tokens, int) else None,
+                        metadata={
+                            "benchmark": True,
+                            "benchmark_id": benchmark_id,
+                            "trace_id": trace_id,
+                            "prompt_id": prompt_id,
+                            "prompt_version": authorized_version,
+                            "structured_output_schema": schema,
+                            **(metadata if isinstance(metadata, dict) else {}),
+                        },
+                    )
+                )
+                parsed_output = self._parse_output_payload(response.output_text) if output_payload.get("parse_json_output", True) else None
+                results.append(
+                    {
+                        "target_id": target_id,
+                        "provider": response.provider_id,
+                        "model": response.model_id,
+                        "role": role,
+                        "status": "completed",
+                        "output_text": response.output_text,
+                        "parsed_output": parsed_output,
+                        "usage": response.usage.model_dump(mode="json"),
+                        "latency_ms": response.latency_ms,
+                        "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
+                        "cost_usd": response.estimated_cost,
+                        "runtime_metrics": None,
+                        "error": None,
+                    }
+                )
+            except Exception as exc:
+                message = str(exc).strip() or type(exc).__name__
+                results.append(
+                    {
+                        "target_id": target_id,
+                        "provider": provider_id,
+                        "model": model_id,
+                        "role": role,
+                        "status": "failed",
+                        "output_text": None,
+                        "parsed_output": None,
+                        "usage": None,
+                        "latency_ms": None,
+                        "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
+                        "cost_usd": None,
+                        "runtime_metrics": None,
+                        "error": {"code": "execution_failed", "message": message},
+                    }
+                )
+        return {
+            "benchmark_id": str(benchmark_id or "").strip(),
+            "prompt_id": str(prompt_id or "").strip() or None,
+            "prompt_version": authorized_version,
+            "task_family": task_family,
+            "trace_id": trace_id,
+            "generated_at": local_now_iso(),
+            "results": results,
+        }
 
     async def compare_provider_execution(
         self,
@@ -3100,6 +3358,8 @@ class PromptServiceRegisterRequest(BaseModel):
     provider_preferences: dict | None = None
     constraints: dict | None = None
     definition: dict | None = None
+    output_contract: dict | None = None
+    benchmark: dict | None = None
     version: str | None = None
     status: str = "active"
     metadata: dict | None = None
@@ -3119,6 +3379,8 @@ class PromptServiceUpdateRequest(BaseModel):
     provider_preferences: dict | None = None
     constraints: dict | None = None
     definition: dict | None = None
+    output_contract: dict | None = None
+    benchmark: dict | None = None
     version: str | None = None
     metadata: dict | None = None
 
@@ -3165,6 +3427,48 @@ class ExecutionCompareRequest(BaseModel):
     providers: list[dict]
     temperature: float | None = None
     max_tokens: int | None = None
+
+
+class BenchmarkExecutionTargetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_id: str | None = None
+    provider: str
+    model: str | None = None
+    role: str = "candidate"
+    timeout_s: int | None = None
+
+
+class BenchmarkExecutionV2Request(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    benchmark_id: str
+    prompt_id: str | None = None
+    prompt_version: str | None = None
+    task_family: str
+    requested_by: str
+    service_id: str | None = None
+    customer_id: str | None = None
+    inputs: dict
+    output_contract: dict | None = None
+    targets: list[BenchmarkExecutionTargetRequest]
+    timeout_s: int = 120
+    trace_id: str
+    metadata: dict | None = None
+
+
+def _metadata_with_v2_contracts(
+    *,
+    metadata: dict | None,
+    output_contract: dict | None = None,
+    benchmark: dict | None = None,
+) -> dict | None:
+    merged = dict(metadata or {}) if isinstance(metadata, dict) else {}
+    if isinstance(output_contract, dict):
+        merged["output_contract"] = output_contract
+    if isinstance(benchmark, dict):
+        merged["benchmark"] = benchmark
+    return merged or None
 
 
 def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
@@ -3238,8 +3542,11 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/prompts/services/{prompt_id}",
                 "/api/prompts/services/{prompt_id}/lifecycle",
                 "/api/prompts/services/{prompt_id}/probation",
+                "/api/schemas/client-ai/v2",
+                "/api/schemas/client-ai/v2/{schema_name}",
                 "/api/execution/authorize",
                 "/api/execution/compare",
+                "/api/benchmarks/execution/v2",
                 "/api/services/status",
                 "/api/services/restart",
                 "/debug/providers",
@@ -3253,6 +3560,17 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/health")
     def health():
         return {"status": "ok"}
+
+    @app.get("/api/schemas/client-ai/v2")
+    def get_client_ai_v2_schema_catalog():
+        return state.client_ai_v2_schema_catalog()
+
+    @app.get("/api/schemas/client-ai/v2/{schema_name}")
+    def get_client_ai_v2_schema(schema_name: str):
+        try:
+            return state.client_ai_v2_schema_document(schema_name=schema_name)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/node/status")
     def get_node_status():
@@ -3616,6 +3934,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 provider_preferences=payload.provider_preferences,
                 constraints=payload.constraints,
                 definition=payload.definition,
+                output_contract=payload.output_contract,
+                benchmark=payload.benchmark,
                 version=payload.version,
                 status=payload.status,
             )
@@ -3648,6 +3968,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 constraints=payload.constraints,
                 metadata=payload.metadata,
                 definition=payload.definition,
+                output_contract=payload.output_contract,
+                benchmark=payload.benchmark,
                 version=payload.version,
             )
         except ValueError as exc:
@@ -3722,6 +4044,27 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 providers=payload.providers,
                 temperature=payload.temperature,
                 max_tokens=payload.max_tokens,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/benchmarks/execution/v2")
+    async def post_benchmark_execution_v2(payload: BenchmarkExecutionV2Request):
+        try:
+            return await state.execute_benchmark_v2(
+                benchmark_id=payload.benchmark_id,
+                prompt_id=payload.prompt_id,
+                prompt_version=payload.prompt_version,
+                task_family=payload.task_family,
+                requested_by=payload.requested_by,
+                service_id=payload.service_id,
+                customer_id=payload.customer_id,
+                inputs=payload.inputs,
+                output_contract=payload.output_contract,
+                targets=[target.model_dump(mode="json") for target in payload.targets],
+                timeout_s=payload.timeout_s,
+                trace_id=payload.trace_id,
+                metadata=payload.metadata,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

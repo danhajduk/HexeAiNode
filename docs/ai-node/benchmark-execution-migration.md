@@ -12,12 +12,14 @@ Implemented today:
 - local LLM shadow benchmarking for captured OpenAI calls
 - local benchmark replay against configured llama.cpp rotation models
 - local benchmark comparison API and dashboard view
+- client AI V2 schema discovery through `GET /api/schemas/client-ai/v2`
+- V2 prompt registration/update metadata passthrough for `output_contract` and `benchmark`
+- execution-only V2 benchmark requests through `POST /api/benchmarks/execution/v2`
 
 Not developed:
 
-- a client-owned benchmark execution API where external prompt-owning nodes request multi-model execution and receive unified raw/parsed results without AI Node scoring
-- prompt contract support for benchmark-capable prompt versions `v2.0+`
 - migration tooling for prompt-tuning workflows outside this node
+- dedicated UI for external V2 benchmark execution
 
 ## Boundary
 
@@ -59,7 +61,7 @@ This path is compatibility-only for the migration. It should not become the long
 
 ## New Execution-Only Benchmark Model
 
-The future benchmark API should execute one prompt request against one or more explicit targets and return one response containing all target results.
+The V2 benchmark API executes one prompt request against one or more explicit targets and returns one response containing all target results.
 
 The response should include, per target:
 
@@ -111,7 +113,7 @@ This split keeps benchmark enablement with the prompt owner while keeping runtim
 
 Prompt versions `v2.0+` should be the benchmark-capable prompt line.
 
-The exact schema is not developed yet, but the intended direction is:
+The current implementation stores V2 prompt `output_contract` and `benchmark` payloads in prompt metadata and version metadata. The remaining migration work is broader adoption by prompt-owning client nodes.
 
 - `v1` prompts remain compatible with existing execution behavior.
 - `v2.0+` prompts may include benchmark metadata and stricter output schema declarations.
@@ -152,6 +154,6 @@ The client decides whether a cloud baseline is needed for the benchmark case.
 
 ## Migration Tasks
 
-Tracked task range: Task 916 through Task 924.
+Tracked task range: Task 916 through Task 925.
 
 Implementation must preserve the existing local LLM benchmark path until client-owned benchmark execution is available and callers have migrated.

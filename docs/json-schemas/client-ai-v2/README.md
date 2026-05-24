@@ -1,10 +1,10 @@
 # Client AI V2 Schemas
 
-Status: Not developed
+Status: Partially implemented
 
-This folder defines the proposed V2+ client-facing AI contracts for benchmark-capable prompts and execution-only benchmark requests.
+This folder defines the V2+ client-facing AI contracts for benchmark-capable prompts and execution-only benchmark requests.
 
-These schemas are planning contracts for the migration tracked by Tasks 916-924. They do not describe implemented API behavior yet.
+These schemas track the migration covered by Tasks 916-925. Schema discovery, V2 prompt metadata passthrough, and execution-only benchmark requests are implemented. Broader client migration and prompt-tuning consumers remain pending.
 
 ## Contract Direction
 
@@ -28,11 +28,5 @@ V2+ keeps the AI Node as an execution proxy:
 Current implemented behavior:
 
 - schemas are available from this repository under `docs/json-schemas/`
-- there is no implemented runtime API route that serves schema documents
-
-Proposed V2+ discovery behavior:
-
 - `GET /api/schemas/client-ai/v2` returns the schema catalog
 - `GET /api/schemas/client-ai/v2/{schema_name}` returns an individual schema document
-
-Until those routes are implemented, client developers should vendor or reference these repository files directly.

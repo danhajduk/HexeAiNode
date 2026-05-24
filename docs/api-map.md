@@ -160,6 +160,7 @@ Notes:
 
 - Prompt service registration, update, lifecycle, review, and probation stay under one dedicated route family.
 - `PUT /api/prompts/services/{prompt_id}` is the canonical prompt update path for metadata, access, and versioned definition changes.
+- V2 prompt `output_contract` and `benchmark` fields are accepted by the same registration and update routes as compatible metadata extensions.
 - `review_due` is an executable prompt lifecycle state used to flag prompts that require revalidation.
 - `/debug/prompts` is a convenience mirror of prompt state, not the canonical route family.
 
@@ -169,6 +170,9 @@ Canonical routes:
 
 - `POST /api/execution/authorize`
 - `POST /api/execution/direct`
+- `POST /api/benchmarks/execution/v2`
+- `GET /api/schemas/client-ai/v2`
+- `GET /api/schemas/client-ai/v2/{schema_name}`
 
 Compatibility or convenience:
 
@@ -178,6 +182,8 @@ Notes:
 
 - Authorization and direct execution are explicitly separated from setup and provider configuration routes.
 - Execution authorization now includes caller-aware prompt access checks through `requested_by`, `service_id`, and `customer_id`.
+- V2 benchmark execution is execution-only: it returns target outputs and metadata without correctness scoring.
+- Client AI V2 schema discovery is exposed for prompt and execution contract consumers.
 - Execution observability currently appears under the debug convenience family.
 
 ### Services And Runtime Control

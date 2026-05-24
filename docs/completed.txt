@@ -486,3 +486,12 @@ Task 383: Add local LLM benchmark worker with per-model pending status - Complet
 Task 384: Add scheduled llama.cpp model switching for queued benchmark replay - Completed on 05/19/2026 14:16
 Task 385: Expose local LLM benchmark comparison API - Completed on 05/19/2026 14:17
 Task 386: Add local LLM benchmark comparison table to the node UI - Completed on 05/19/2026 14:19
+Task 916: Document the execution-only benchmark architecture and migration boundary - Completed on 05/24/2026 09:15
+Task 917: Add prompt contract support for benchmark-capable prompt versions v2.0 and later - Completed on 05/24/2026 09:15
+Task 918: Add an execution-only multi-target benchmark API that returns provider/model outputs without scoring - Completed on 05/24/2026 09:15
+Task 919: Support cloud-optional and local-only benchmark execution targets - Completed on 05/24/2026 09:15
+Task 920: Preserve the existing local LLM shadow benchmark during migration - Completed on 05/24/2026 09:15
+Task 921: Move benchmark ownership, expected outputs, and scoring to prompt-owning client nodes - Completed on 05/24/2026 09:15
+Task 922: Add benchmark execution result schemas and tests for raw and parsed outputs - Completed on 05/24/2026 09:15
+Task 924: Add migration docs for prompt tuning workflows that consume benchmark execution results - Completed on 05/24/2026 09:15
+Task 925: Add client AI V2 schema discovery endpoints for prompt and execution contracts - Completed on 05/24/2026 09:15

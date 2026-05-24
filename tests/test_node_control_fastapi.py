@@ -306,6 +306,9 @@ class NodeControlFastApiTests(unittest.TestCase):
                 estimated_cost=0.001,
             )
 
+        async def execute_explicit(self, request):
+            return await self.execute(request)
+
         async def refresh_openai_models_from_saved_credentials(self):
             self.openai_reload_calls += 1
             return {"status": "refreshed", "provider_id": "openai", "classification_model": "gpt-5-mini"}
@@ -585,6 +588,74 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(correction_response.status_code, 200)
             self.assertEqual(correction_response.json()["correction"]["correct_label"], "unknown")
             self.assertEqual(correction_response.json()["benchmark"]["comparisons"][0]["correct_label"], "unknown")
+
+    def test_client_ai_v2_schema_and_execution_only_benchmark_endpoints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                prompt_service_state_store=self._FakePromptServiceStateStore(),
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            catalog_response = client.get("/api/schemas/client-ai/v2")
+
+            self.assertEqual(catalog_response.status_code, 200)
+            schema_names = [item["name"] for item in catalog_response.json()["schemas"]]
+            self.assertIn("benchmark-execution-request.v2.schema.json", schema_names)
+
+            schema_response = client.get("/api/schemas/client-ai/v2/prompt-register.v2.request.schema.json")
+
+            self.assertEqual(schema_response.status_code, 200)
+            self.assertEqual(schema_response.json()["title"], "Prompt Register Request V2")
+
+            prompt_response = client.post(
+                "/api/prompts/services",
+                json={
+                    "prompt_id": "prompt.mail.classifier.v2",
+                    "service_id": "mail-node",
+                    "task_family": "task.classification",
+                    "version": "v2.0",
+                    "definition": {"prompt_template": "Classify {{body}}", "template_variables": ["body"]},
+                    "output_contract": {"format": "json", "parse_json_output": True},
+                    "benchmark": {"enabled": True, "mode": "execution_only", "owner_evaluates_results": True},
+                },
+            )
+
+            self.assertEqual(prompt_response.status_code, 200)
+            prompt = prompt_response.json()["state"]["prompt_services"][0]
+            self.assertEqual(prompt["current_version"], "v2.0")
+            self.assertTrue(prompt["metadata"]["benchmark"]["enabled"])
+            self.assertEqual(prompt["versions"][0]["metadata"]["output_contract"]["format"], "json")
+
+            benchmark_response = client.post(
+                "/api/benchmarks/execution/v2",
+                json={
+                    "benchmark_id": "bench-001",
+                    "prompt_id": "prompt.mail.classifier.v2",
+                    "prompt_version": "v2.0",
+                    "task_family": "task.classification",
+                    "requested_by": "mail-node",
+                    "service_id": "mail-node",
+                    "trace_id": "trace-bench-001",
+                    "inputs": {"body": "Your package has shipped."},
+                    "targets": [
+                        {"provider": "openai", "model": "gpt-5-mini", "role": "baseline"},
+                        {"provider": "local", "model": "mistral-nemo-instruct-2407-q4_k_m"},
+                    ],
+                },
+            )
+
+            self.assertEqual(benchmark_response.status_code, 200)
+            payload = benchmark_response.json()
+            self.assertEqual(payload["benchmark_id"], "bench-001")
+            self.assertEqual(payload["prompt_version"], "v2.0")
+            self.assertEqual([item["provider"] for item in payload["results"]], ["openai", "local"])
+            self.assertNotIn("winner", payload)
+            self.assertNotIn("scores", payload)
 
     def test_status_and_onboarding_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
