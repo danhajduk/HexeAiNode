@@ -357,9 +357,9 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Loaded Local Model");
     expect(markup).toContain("Loaded Now");
     expect(markup).toContain("Classification Replay");
-    expect(markup).toContain("Running on Qwen 8B");
-    expect(markup).toContain("1 prompt active");
     expect(markup).toContain("Prompt Capture");
+    expect(markup).toContain("Current GPU Load");
+    expect(markup).toContain("18%");
     expect(markup).toContain("1 / 2");
     expect(markup).toContain("Unprocessed Prompts");
     expect(markup).toContain("Queue");

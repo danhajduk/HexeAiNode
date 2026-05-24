@@ -139,23 +139,6 @@ function localLlmModelLabel(modelId) {
   return normalized && displayName !== normalized ? `${displayName} · ${normalized}` : displayName;
 }
 
-function benchmarkReplayDetail(activeBenchmark) {
-  const status = formatBenchmarkStatus(activeBenchmark?.status, activeBenchmark?.active);
-  const modelId = activeBenchmark?.current_model_id || "";
-  const runningCount = Number(activeBenchmark?.running_count || 0);
-  const prefix =
-    status === "Running"
-      ? "Running on"
-      : status === "Swapping"
-        ? "Swapping to"
-        : status === "Idle"
-          ? "Idle"
-          : status;
-  const modelText = modelId && prefix !== "Idle" ? ` ${localLlmModelLabel(modelId)}` : "";
-  const countText = runningCount > 0 ? ` · ${runningCount} prompt${runningCount === 1 ? "" : "s"} active` : "";
-  return `${prefix}${modelText}${countText}`;
-}
-
 function parseOutputPayload(outputText) {
   let normalized = String(outputText || "").trim();
   if (normalized.startsWith("```")) {
@@ -608,7 +591,6 @@ function LocalLLMBenchmarkTable({
   const modelIds = Array.from(new Set([...configuredModels, ...discoveredModels])).slice(0, 4);
   const currentModelId = summary?.rotation?.current_model_id || "unknown";
   const activeBenchmarkStatus = formatBenchmarkStatus(summary?.active_benchmark?.status, summary?.active_benchmark?.active);
-  const activeBenchmarkDetail = benchmarkReplayDetail(summary?.active_benchmark);
   const pendingPromptCount = Number(summary?.status_counts?.pending || 0);
   const runningPromptCount = Number(summary?.status_counts?.running || 0);
   const completedPromptCount = Number(summary?.status_counts?.completed || 0);
@@ -687,7 +669,7 @@ function LocalLLMBenchmarkTable({
         </div>
         <div className={`benchmark-status-pill${activeBenchmarkStatus === "Running" ? " benchmark-status-pill-running" : ""}`}>
           <strong>Classification Replay</strong>
-          <span>{activeBenchmarkDetail}</span>
+          <span>{activeBenchmarkStatus}</span>
         </div>
         <div className={`benchmark-status-pill${summary?.capture_enabled ? " benchmark-status-pill-running" : ""}`}>
           <strong>Prompt Capture</strong>
@@ -708,6 +690,10 @@ function LocalLLMBenchmarkTable({
         <div className="benchmark-status-pill">
           <strong>{formatMetricValue(summary?.gpu_vram?.llama_vram_mib, " MiB")}</strong>
           <span>llama.cpp VRAM</span>
+        </div>
+        <div className="benchmark-status-pill">
+          <strong>{formatMetricValue(summary?.gpu_vram?.gpu_util_percent, "%")}</strong>
+          <span>Current GPU Load</span>
         </div>
         <div className={`benchmark-status-pill${swapError ? " benchmark-status-pill-warning" : ""}`}>
           <strong>{formatSeconds(swapDuration)}</strong>
