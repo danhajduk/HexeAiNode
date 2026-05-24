@@ -50,6 +50,7 @@ systemctl --user status synthia-ai-node-frontend.service
 - the rendered unit files are installed into `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user`
 - the bootstrap flow requires `scripts/stack.env` and fails clearly when it is missing
 - bootstrap reloads user systemd, enables both services, and restarts them immediately
+- the backend user service uses `Restart=on-failure` with a short delay so crashes are recovered by systemd
 
 Current user service template names:
 

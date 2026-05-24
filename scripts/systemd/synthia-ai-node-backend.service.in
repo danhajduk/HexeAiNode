@@ -7,6 +7,8 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=__APP_DIR__
 ExecStart=/usr/bin/env bash __APP_DIR__/scripts/run-from-env.sh backend
+Restart=on-failure
+RestartSec=5s
 
 [Install]
 WantedBy=default.target
