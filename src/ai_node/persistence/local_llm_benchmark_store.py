@@ -75,6 +75,12 @@ def _average(values: list[float | None]) -> float | None:
     return sum(normalized) / len(normalized)
 
 
+def _safe_ratio(numerator: int, denominator: int) -> float | None:
+    if denominator <= 0:
+        return None
+    return numerator / denominator
+
+
 def local_llm_benchmark_prompt_allowed(prompt_id: str | None) -> bool:
     normalized = str(prompt_id or "").strip()
     return normalized in set(DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS)
@@ -451,13 +457,26 @@ class LocalLLMBenchmarkStore:
             openai_matches = 0
             openai_scores: list[float | None] = []
             openai_latencies: list[float | None] = []
+            openai_label_counts: dict[str, int] = {}
             for row in prompt_records:
                 target_label = str(row["correct_label"] or row["source_label"] or "").strip().lower()
                 source_label = str(row["source_label"] or "").strip().lower()
+                if target_label:
+                    openai_label_counts[target_label] = openai_label_counts.get(target_label, 0) + 1
                 if target_label and source_label and target_label == source_label:
                     openai_matches += 1
                 openai_scores.append(float(row["source_confidence"]) if row["source_confidence"] is not None else None)
                 openai_latencies.append(float(row["source_latency_ms"]) if row["source_latency_ms"] is not None else None)
+            openai_label_breakdown = [
+                {
+                    "label": label,
+                    "total": total,
+                    "completed": total,
+                    "matched": total,
+                    "matchRate": 1.0,
+                }
+                for label, total in sorted(openai_label_counts.items())
+            ]
             summaries.append(
                 {
                     "promptName": prompt_name,
@@ -468,9 +487,15 @@ class LocalLLMBenchmarkStore:
                     "avgLatency": _average(openai_latencies),
                     "avgVram": None,
                     "avgGpu": None,
+                    "labelBreakdown": openai_label_breakdown,
                 }
             )
             for model_id in model_ids:
+                prompt_total_by_label: dict[str, int] = {}
+                for row in prompt_records:
+                    target_label = str(row["correct_label"] or row["source_label"] or "").strip().lower()
+                    if target_label:
+                        prompt_total_by_label[target_label] = prompt_total_by_label.get(target_label, 0) + 1
                 completed_rows = [
                     row
                     for row in result_rows
@@ -483,11 +508,16 @@ class LocalLLMBenchmarkStore:
                 latencies: list[float | None] = []
                 vram_values: list[float | None] = []
                 gpu_values: list[float | None] = []
+                completed_by_label: dict[str, int] = {}
+                matched_by_label: dict[str, int] = {}
                 for row in completed_rows:
                     target_label = str(row["correct_label"] or row["source_label"] or "").strip().lower()
                     local_label = str(row["label"] or "").strip().lower()
+                    if target_label:
+                        completed_by_label[target_label] = completed_by_label.get(target_label, 0) + 1
                     if target_label and local_label and target_label == local_label:
                         matched += 1
+                        matched_by_label[target_label] = matched_by_label.get(target_label, 0) + 1
                     local_confidence = float(row["confidence"]) if row["confidence"] is not None else None
                     source_confidence = float(row["source_confidence"]) if row["source_confidence"] is not None else None
                     score_deltas.append(
@@ -499,6 +529,16 @@ class LocalLLMBenchmarkStore:
                     vram = row["vram_used_mib"] if row["vram_used_mib"] is not None else row["vram_delta_mib"]
                     vram_values.append(float(vram) if vram is not None else None)
                     gpu_values.append(float(row["gpu_util_percent"]) if row["gpu_util_percent"] is not None else None)
+                label_breakdown = [
+                    {
+                        "label": label,
+                        "total": total,
+                        "completed": completed_by_label.get(label, 0),
+                        "matched": matched_by_label.get(label, 0),
+                        "matchRate": _safe_ratio(matched_by_label.get(label, 0), completed_by_label.get(label, 0)),
+                    }
+                    for label, total in sorted(prompt_total_by_label.items())
+                ]
                 summaries.append(
                     {
                         "promptName": prompt_name,
@@ -509,6 +549,7 @@ class LocalLLMBenchmarkStore:
                         "avgLatency": _average(latencies),
                         "avgVram": _average(vram_values),
                         "avgGpu": _average(gpu_values),
+                        "labelBreakdown": label_breakdown,
                     }
                 )
         return summaries

@@ -201,6 +201,10 @@ function referenceLabel(comparison) {
     .toLowerCase();
 }
 
+function formatLabelName(value) {
+  return String(value || "unknown").replace(/_/g, " ");
+}
+
 function hasDifferentLabel(comparison, modelIds) {
   if (comparison?.correct_label) {
     return false;
@@ -304,6 +308,17 @@ function buildLocalModelSummaries({ comparisons, modelIds }) {
 }
 
 function LocalLLMSummaryTable({ summaries, currentModelId, modelStatusCounts = {} }) {
+  const priorityLabels = new Set(["action_required", "customer_support", "invoice", "shipment", "security"]);
+  const labelBreakdownRows = summaries.flatMap((summary) =>
+    Array.isArray(summary.labelBreakdown)
+      ? summary.labelBreakdown.map((entry) => ({ ...entry, summary }))
+      : []
+  );
+  const allLabels = Array.from(new Set(labelBreakdownRows.map((entry) => String(entry.label || "").trim()).filter(Boolean)));
+  const orderedLabels = [
+    ...allLabels.filter((label) => priorityLabels.has(label)).sort(),
+    ...allLabels.filter((label) => !priorityLabels.has(label)).sort(),
+  ];
   return (
     <div className="client-usage-table-card">
       <div className="client-usage-table-wrap">
@@ -378,6 +393,50 @@ function LocalLLMSummaryTable({ summaries, currentModelId, modelStatusCounts = {
           </tbody>
         </table>
       </div>
+      {orderedLabels.length ? (
+        <div className="client-usage-table-wrap local-llm-label-table-wrap">
+          <table className="client-usage-table local-llm-label-table">
+            <thead>
+              <tr>
+                <th>Label</th>
+                <th>Model</th>
+                <th>Match</th>
+                <th>Matched</th>
+                <th>Classified</th>
+                <th>Total Records</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orderedLabels.flatMap((label) =>
+                summaries.map((summary) => {
+                  const entry = Array.isArray(summary.labelBreakdown)
+                    ? summary.labelBreakdown.find((item) => item?.label === label)
+                    : null;
+                  if (!entry) {
+                    return null;
+                  }
+                  return (
+                    <tr key={`${label}-${summary.modelId}`}>
+                      <td>
+                        <code>{formatLabelName(label)}</code>
+                        {priorityLabels.has(label) ? <span className="benchmark-state-badge benchmark-state-badge-loaded">Priority</span> : null}
+                      </td>
+                      <td>
+                        <code>{summary.modelId === "__openai__" ? "OpenAI" : localLlmDisplayName(summary.modelId)}</code>
+                        <span className="muted tiny benchmark-snippet">{summary.modelId === "__openai__" ? "baseline" : summary.modelId}</span>
+                      </td>
+                      <td>{entry.matchRate === null || entry.matchRate === undefined ? "pending" : `${formatMetricValue(entry.matchRate * 100)}%`}</td>
+                      <td>{formatMetricValue(entry.matched)}</td>
+                      <td>{formatMetricValue(entry.completed)}</td>
+                      <td>{formatMetricValue(entry.total)}</td>
+                    </tr>
+                  );
+                }).filter(Boolean)
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }

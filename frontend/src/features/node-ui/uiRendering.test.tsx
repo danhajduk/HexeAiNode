@@ -118,6 +118,36 @@ function buildOperationalProps(overrides = {}) {
         "qwen3-8b-q4_k_m": { pending: 1, completed: 1, failed: 0 },
         "qwen3-14b-q4_k_m": { pending: 2, completed: 0, failed: 0 },
       },
+      model_summaries: [
+        {
+          promptName: "prompt.email.classifier",
+          modelId: "__openai__",
+          completed: 2,
+          matchRate: 1,
+          avgScoreDelta: null,
+          avgLatency: 1200,
+          avgVram: null,
+          avgGpu: null,
+          labelBreakdown: [
+            { label: "action_required", total: 1, completed: 1, matched: 1, matchRate: 1 },
+            { label: "marketing", total: 1, completed: 1, matched: 1, matchRate: 1 },
+          ],
+        },
+        {
+          promptName: "prompt.email.classifier",
+          modelId: "qwen3-8b-q4_k_m",
+          completed: 1,
+          matchRate: 0,
+          avgScoreDelta: -0.1,
+          avgLatency: 3200,
+          avgVram: 5456,
+          avgGpu: 42,
+          labelBreakdown: [
+            { label: "action_required", total: 1, completed: 1, matched: 0, matchRate: 0 },
+            { label: "marketing", total: 1, completed: 0, matched: 0, matchRate: null },
+          ],
+        },
+      ],
       comparisons: [
         {
           record_id: "openai-test",
@@ -333,6 +363,10 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("1 / 2");
     expect(markup).toContain("Unprocessed Prompts");
     expect(markup).toContain("Queue");
+    expect(markup).toContain("action required");
+    expect(markup).toContain("Priority");
+    expect(markup).toContain("Matched");
+    expect(markup).toContain("Classified");
     expect(markup).toContain("Last Swap");
     expect(markup).toContain("12.5s");
     expect(markup).toContain("Current VRAM Load");
