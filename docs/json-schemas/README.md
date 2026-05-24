@@ -47,6 +47,7 @@ Implemented today:
 - developers can read schemas directly from this repository under `docs/json-schemas/`
 - `GET /api/schemas/client-ai/v2` returns a schema catalog
 - `GET /api/schemas/client-ai/v2/{schema_name}` returns an individual schema document
+- `GET /api/schemas/client-ai/v2/communication.md` returns the V2 communication guide as Markdown
 
 ## Notes
 

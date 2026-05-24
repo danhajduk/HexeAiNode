@@ -22,6 +22,7 @@ V2+ keeps the AI Node as an execution proxy:
 - [benchmark-execution-request.v2.schema.json](./benchmark-execution-request.v2.schema.json): multi-target execution-only benchmark request
 - [benchmark-execution-response.v2.schema.json](./benchmark-execution-response.v2.schema.json): unified response containing target outputs and metadata
 - [schema-catalog.v2.response.schema.json](./schema-catalog.v2.response.schema.json): proposed schema discovery response for client developers
+- [communication.md](./communication.md): V2 client communication guide for developers
 
 ## Schema Discovery
 
@@ -30,3 +31,4 @@ Current implemented behavior:
 - schemas are available from this repository under `docs/json-schemas/`
 - `GET /api/schemas/client-ai/v2` returns the schema catalog
 - `GET /api/schemas/client-ai/v2/{schema_name}` returns an individual schema document
+- `GET /api/schemas/client-ai/v2/communication.md` returns the V2 communication guide as Markdown

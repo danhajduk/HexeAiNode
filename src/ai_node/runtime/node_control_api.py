@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 
@@ -1561,6 +1561,12 @@ class NodeControlState:
         except json.JSONDecodeError as exc:
             raise ValueError("schema_invalid") from exc
         return payload if isinstance(payload, dict) else {}
+
+    def client_ai_v2_communication_markdown(self) -> str:
+        path = self._client_ai_v2_schema_dir() / "communication.md"
+        if not path.exists() or not path.is_file():
+            raise ValueError("schema_guide_not_found")
+        return path.read_text(encoding="utf-8")
 
     @staticmethod
     def _parse_output_payload(output_text: object):
@@ -3543,6 +3549,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/prompts/services/{prompt_id}/lifecycle",
                 "/api/prompts/services/{prompt_id}/probation",
                 "/api/schemas/client-ai/v2",
+                "/api/schemas/client-ai/v2/communication.md",
                 "/api/schemas/client-ai/v2/{schema_name}",
                 "/api/execution/authorize",
                 "/api/execution/compare",
@@ -3564,6 +3571,16 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/schemas/client-ai/v2")
     def get_client_ai_v2_schema_catalog():
         return state.client_ai_v2_schema_catalog()
+
+    @app.get("/api/schemas/client-ai/v2/communication.md")
+    def get_client_ai_v2_communication_markdown():
+        try:
+            return Response(
+                content=state.client_ai_v2_communication_markdown(),
+                media_type="text/markdown; charset=utf-8",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/schemas/client-ai/v2/{schema_name}")
     def get_client_ai_v2_schema(schema_name: str):

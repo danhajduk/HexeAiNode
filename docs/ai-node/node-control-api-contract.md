@@ -730,6 +730,8 @@ Execution behavior:
 
 - `GET /api/schemas/client-ai/v2`
   - returns the V2 schema catalog
+- `GET /api/schemas/client-ai/v2/communication.md`
+  - returns a Markdown developer guide for V2 client AI communication
 - `GET /api/schemas/client-ai/v2/{schema_name}`
   - returns an individual V2 schema document
 

@@ -172,6 +172,7 @@ Canonical routes:
 - `POST /api/execution/direct`
 - `POST /api/benchmarks/execution/v2`
 - `GET /api/schemas/client-ai/v2`
+- `GET /api/schemas/client-ai/v2/communication.md`
 - `GET /api/schemas/client-ai/v2/{schema_name}`
 
 Compatibility or convenience:
@@ -184,6 +185,7 @@ Notes:
 - Execution authorization now includes caller-aware prompt access checks through `requested_by`, `service_id`, and `customer_id`.
 - V2 benchmark execution is execution-only: it returns target outputs and metadata without correctness scoring.
 - Client AI V2 schema discovery is exposed for prompt and execution contract consumers.
+- `communication.md` is a Markdown developer guide served through the same V2 schema/discovery route family.
 - Execution observability currently appears under the debug convenience family.
 
 ### Services And Runtime Control

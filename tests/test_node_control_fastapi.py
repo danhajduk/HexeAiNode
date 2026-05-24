@@ -612,6 +612,13 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(schema_response.status_code, 200)
             self.assertEqual(schema_response.json()["title"], "Prompt Register Request V2")
 
+            guide_response = client.get("/api/schemas/client-ai/v2/communication.md")
+
+            self.assertEqual(guide_response.status_code, 200)
+            self.assertIn("text/markdown", guide_response.headers["content-type"])
+            self.assertIn("Client AI V2 Communication Guide", guide_response.text)
+            self.assertIn("/api/benchmarks/local-llm/...", guide_response.text)
+
             prompt_response = client.post(
                 "/api/prompts/services",
                 json={
