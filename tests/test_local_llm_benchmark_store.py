@@ -53,6 +53,13 @@ class LocalLLMBenchmarkStoreTests(unittest.TestCase):
 
             self.assertTrue(record_id.startswith("openai-"))
             self.assertEqual(payload["status_counts"], {"completed": 1, "pending": 1})
+            self.assertEqual(
+                payload["model_status_counts"],
+                {
+                    "gemma-3-12b-it-q4_k_m": {"pending": 1},
+                    "qwen3-8b-q4_k_m": {"completed": 1},
+                },
+            )
             self.assertEqual(len(payload["comparisons"]), 1)
             comparison = payload["comparisons"][0]
             self.assertEqual(comparison["prompt_id"], "prompt.email.classifier")
@@ -69,6 +76,8 @@ class LocalLLMBenchmarkStoreTests(unittest.TestCase):
             self.assertEqual(completed["gpu_util_percent"], 42)
             self.assertEqual(payload["running"], [])
             self.assertEqual(store.pending_count_for_models(model_ids=["gemma-3-12b-it-q4_k_m"]), 1)
+            self.assertEqual(store.pending_count_for_model(model_id="gemma-3-12b-it-q4_k_m"), 1)
+            self.assertEqual(store.running_count_for_model(model_id="gemma-3-12b-it-q4_k_m"), 0)
 
             correction = store.set_correct_label(record_id=record_id, correct_label="unknown", note="manual review")
             self.assertEqual(correction["correct_label"], "unknown")

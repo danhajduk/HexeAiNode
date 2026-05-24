@@ -303,7 +303,7 @@ function buildLocalModelSummaries({ comparisons, modelIds }) {
   );
 }
 
-function LocalLLMSummaryTable({ summaries, currentModelId }) {
+function LocalLLMSummaryTable({ summaries, currentModelId, modelStatusCounts = {} }) {
   return (
     <div className="client-usage-table-card">
       <div className="client-usage-table-wrap">
@@ -313,6 +313,7 @@ function LocalLLMSummaryTable({ summaries, currentModelId }) {
               <th>Prompt</th>
               <th>Model</th>
               <th>State</th>
+              <th>Queue</th>
               <th>Completed</th>
               <th>Label Match</th>
               <th>Avg Score Delta</th>
@@ -325,6 +326,14 @@ function LocalLLMSummaryTable({ summaries, currentModelId }) {
             {summaries.length ? (
               summaries.map((summary) => {
                 const isLoadedModel = summary.modelId !== "__openai__" && summary.modelId === currentModelId;
+                const queueCounts = modelStatusCounts[summary.modelId] || {};
+                const pendingCount = Number(queueCounts.pending || 0);
+                const runningCount = Number(queueCounts.running || 0);
+                const unprocessedCount = pendingCount + runningCount;
+                const totalCount =
+                  unprocessedCount +
+                  Number(queueCounts.completed || 0) +
+                  Number(queueCounts.failed || 0);
                 return (
                 <tr className={isLoadedModel ? "local-llm-summary-row-loaded" : ""} key={`${summary.promptName}-${summary.modelId}`}>
                   <td>
@@ -343,6 +352,7 @@ function LocalLLMSummaryTable({ summaries, currentModelId }) {
                       <span className="benchmark-state-badge">Available</span>
                     )}
                   </td>
+                  <td>{summary.modelId === "__openai__" ? "baseline" : `${formatMetricValue(unprocessedCount)} / ${formatMetricValue(totalCount)}`}</td>
                   <td>{formatMetricValue(summary.completed)}</td>
                   <td>
                     {summary.matchRate === null ? "pending" : `${formatMetricValue(summary.matchRate * 100)}%`}
@@ -360,7 +370,7 @@ function LocalLLMSummaryTable({ summaries, currentModelId }) {
               })
             ) : (
               <tr>
-                <td colSpan="9" className="muted">
+                <td colSpan="10" className="muted">
                   No local LLM models are configured for this benchmark rotation.
                 </td>
               </tr>
@@ -541,10 +551,12 @@ function LocalLLMBenchmarkTable({
   const activeBenchmarkStatus = formatBenchmarkStatus(summary?.active_benchmark?.status, summary?.active_benchmark?.active);
   const activeBenchmarkDetail = benchmarkReplayDetail(summary?.active_benchmark);
   const pendingPromptCount = Number(summary?.status_counts?.pending || 0);
+  const runningPromptCount = Number(summary?.status_counts?.running || 0);
   const completedPromptCount = Number(summary?.status_counts?.completed || 0);
   const failedPromptCount = Number(summary?.status_counts?.failed || 0);
-  const totalPromptCount = pendingPromptCount + completedPromptCount + failedPromptCount;
-  const unprocessedPromptText = `${formatMetricValue(pendingPromptCount)} / ${formatMetricValue(totalPromptCount)}`;
+  const unprocessedPromptCount = pendingPromptCount + runningPromptCount;
+  const totalPromptCount = unprocessedPromptCount + completedPromptCount + failedPromptCount;
+  const unprocessedPromptText = `${formatMetricValue(unprocessedPromptCount)} / ${formatMetricValue(totalPromptCount)}`;
   const lastSwap = summary?.rotation?.last_swap || summary?.active_benchmark?.last_swap || null;
   const swapDuration =
     summary?.active_benchmark?.status === "swapping"
@@ -552,6 +564,7 @@ function LocalLLMBenchmarkTable({
       : lastSwap?.duration_seconds;
   const swapError = lastSwap?.error;
   const modelSummaries = buildLocalModelSummaries({ comparisons, modelIds });
+  const modelStatusCounts = summary?.model_status_counts || {};
   const filteredComparisons = showOnlyDifferences
     ? comparisons.filter((comparison) => hasDifferentLabel(comparison, modelIds))
     : comparisons;
@@ -602,7 +615,7 @@ function LocalLLMBenchmarkTable({
             {cyclingModel ? "Loading..." : "Load Next Model"}
           </button>
           <button className="btn btn-primary" type="button" onClick={onRunLoadedModel} disabled={!onRunLoadedModel || runningLoadedModel}>
-            {runningLoadedModel ? "Running..." : "Run Classification on Loaded Model"}
+            {runningLoadedModel ? "Classifying..." : "Classify"}
           </button>
         </div>
       </div>
@@ -652,7 +665,7 @@ function LocalLLMBenchmarkTable({
           <span>Failed</span>
         </div>
       </div>
-      <LocalLLMSummaryTable summaries={modelSummaries} currentModelId={currentModelId} />
+      <LocalLLMSummaryTable summaries={modelSummaries} currentModelId={currentModelId} modelStatusCounts={modelStatusCounts} />
       <div className="client-usage-table-card">
         <div className="client-usage-table-wrap">
           <table className="client-usage-table local-llm-benchmark-table">

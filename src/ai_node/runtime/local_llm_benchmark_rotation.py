@@ -49,6 +49,25 @@ class LocalLLMBenchmarkRotationRunner:
         models = self._load_models()
         if self._pending_count_for_models(models) <= 0:
             return {"status": "skipped", "reason": "no_pending_prompts", "processed": 0}
+        current_model_id = self._live_model_id() or str(self._load_state().get("current_model_id") or "").strip()
+        configured_model_ids = {str(model.get("id") or "").strip() for model in models if isinstance(model, dict)}
+        if current_model_id and current_model_id in configured_model_ids:
+            if self._running_count_for_model(current_model_id) > 0:
+                return {
+                    "status": "skipped",
+                    "reason": "current_model_running",
+                    "model_id": current_model_id,
+                    "processed": 0,
+                }
+            current_pending = self._pending_count_for_model(current_model_id)
+            if current_pending > 0:
+                result = await self.run_loaded_model()
+                return {
+                    **result,
+                    "status": "ok",
+                    "reason": "drained_loaded_model",
+                    "pending_before_run": current_pending,
+                }
         model = self._next_model()
         model_id = str(model["id"])
         try:
@@ -220,6 +239,16 @@ class LocalLLMBenchmarkRotationRunner:
         model_ids = [str(model.get("id") or "").strip() for model in models if isinstance(model, dict)]
         if hasattr(self._worker, "pending_count_for_models"):
             return int(self._worker.pending_count_for_models(model_ids=model_ids) or 0)
+        return 0
+
+    def _pending_count_for_model(self, model_id: str) -> int:
+        if hasattr(self._worker, "pending_count_for_model"):
+            return int(self._worker.pending_count_for_model(model_id=model_id) or 0)
+        return 0
+
+    def _running_count_for_model(self, model_id: str) -> int:
+        if hasattr(self._worker, "running_count_for_model"):
+            return int(self._worker.running_count_for_model(model_id=model_id) or 0)
         return 0
 
     def _load_state(self) -> dict:

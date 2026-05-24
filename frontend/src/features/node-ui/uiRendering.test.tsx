@@ -114,6 +114,10 @@ function buildOperationalProps(overrides = {}) {
         gpu_util_percent: 18,
       },
       status_counts: { pending: 1, completed: 1, failed: 0 },
+      model_status_counts: {
+        "qwen3-8b-q4_k_m": { pending: 1, completed: 1, failed: 0 },
+        "qwen3-14b-q4_k_m": { pending: 2, completed: 0, failed: 0 },
+      },
       comparisons: [
         {
           record_id: "openai-test",
@@ -319,7 +323,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Show All Labels");
     expect(markup).toContain("Pause Prompt Capture");
     expect(markup).toContain("Load Next Model");
-    expect(markup).toContain("Run Classification on Loaded Model");
+    expect(markup).toContain("Classify");
     expect(markup).toContain("Loaded Local Model");
     expect(markup).toContain("Loaded Now");
     expect(markup).toContain("Classification Replay");
@@ -328,6 +332,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Prompt Capture");
     expect(markup).toContain("1 / 2");
     expect(markup).toContain("Unprocessed Prompts");
+    expect(markup).toContain("Queue");
     expect(markup).toContain("Last Swap");
     expect(markup).toContain("12.5s");
     expect(markup).toContain("Current VRAM Load");

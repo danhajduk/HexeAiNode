@@ -71,6 +71,21 @@ class LocalLLMBenchmarkWorker:
             return self._store.pending_count_for_models(model_ids=model_ids)
         return 0
 
+    def pending_count_for_model(self, *, model_id: str) -> int:
+        if hasattr(self._store, "pending_count_for_model"):
+            return self._store.pending_count_for_model(model_id=model_id)
+        return self.pending_count_for_models(model_ids=[model_id])
+
+    def running_count_for_models(self, *, model_ids: list[str]) -> int:
+        if hasattr(self._store, "running_count_for_models"):
+            return self._store.running_count_for_models(model_ids=model_ids)
+        return 0
+
+    def running_count_for_model(self, *, model_id: str) -> int:
+        if hasattr(self._store, "running_count_for_model"):
+            return self._store.running_count_for_model(model_id=model_id)
+        return self.running_count_for_models(model_ids=[model_id])
+
     async def _execute_record(self, *, record: dict, model_id: str):
         request_payload = record.get("request_payload") if isinstance(record.get("request_payload"), dict) else {}
         metadata = dict(request_payload.get("metadata") or {}) if isinstance(request_payload.get("metadata"), dict) else {}

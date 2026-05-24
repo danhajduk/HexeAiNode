@@ -322,6 +322,16 @@ class LocalLLMBenchmarkStore:
                 """,
                 tuple(DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
             ).fetchall()
+            model_status_rows = connection.execute(
+                f"""
+                SELECT m.model_id, m.status, COUNT(*) AS count
+                FROM benchmark_model_results m
+                JOIN benchmark_records r ON r.record_id = m.record_id
+                WHERE r.prompt_id IN ({prompt_placeholders})
+                GROUP BY m.model_id, m.status
+                """,
+                tuple(DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
+            ).fetchall()
             running_rows = connection.execute(
                 f"""
                 SELECT m.record_id, m.model_id, m.started_at, r.prompt_id, r.task_family
@@ -337,12 +347,17 @@ class LocalLLMBenchmarkStore:
         results_by_record: dict[str, list[dict]] = {}
         for row in result_rows:
             results_by_record.setdefault(str(row["record_id"]), []).append(self._result_row_payload(row))
+        model_status_counts: dict[str, dict[str, int]] = {}
+        for row in model_status_rows:
+            model_counts = model_status_counts.setdefault(str(row["model_id"]), {})
+            model_counts[str(row["status"])] = int(row["count"] or 0)
         return {
             "configured": True,
             "path": str(self._path),
             "generated_at": local_now_iso(),
             "capture_enabled": self.capture_enabled(),
             "status_counts": {str(row["status"]): int(row["count"] or 0) for row in status_rows},
+            "model_status_counts": model_status_counts,
             "running": [
                 {
                     "record_id": str(row["record_id"]),
@@ -399,6 +414,32 @@ class LocalLLMBenchmarkStore:
                 tuple(normalized + DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
             ).fetchone()
         return int(row["count"] or 0) if row is not None else 0
+
+    def pending_count_for_model(self, *, model_id: str) -> int:
+        return self.pending_count_for_models(model_ids=[model_id])
+
+    def running_count_for_models(self, *, model_ids: list[str]) -> int:
+        normalized = [str(model_id or "").strip() for model_id in model_ids if str(model_id or "").strip()]
+        if not normalized:
+            return 0
+        placeholders = ",".join("?" for _ in normalized)
+        prompt_placeholders = ",".join("?" for _ in DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS)
+        with self._connect() as connection:
+            row = connection.execute(
+                f"""
+                SELECT COUNT(*) AS count
+                FROM benchmark_model_results m
+                JOIN benchmark_records r ON r.record_id = m.record_id
+                WHERE m.status = 'running'
+                  AND m.model_id IN ({placeholders})
+                  AND r.prompt_id IN ({prompt_placeholders})
+                """,
+                tuple(normalized + DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
+            ).fetchone()
+        return int(row["count"] or 0) if row is not None else 0
+
+    def running_count_for_model(self, *, model_id: str) -> int:
+        return self.running_count_for_models(model_ids=[model_id])
 
     def set_correct_label(self, *, record_id: str, correct_label: str | None, note: str | None = None) -> dict:
         normalized_record_id = str(record_id or "").strip()
