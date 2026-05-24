@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai-v2/execution-request.v2.schema.json",
+  "title": "Execution Request V2",
+  "description": "Proposed V2+ normal AI execution request. Not implemented yet.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_id",
+    "task_family",
+    "requested_by",
+    "trace_id",
+    "inputs"
+  ],
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "prompt_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "prompt_version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^v[0-9]+\\.[0-9]+$"
+    },
+    "task_family": {
+      "$ref": "#/$defs/taskFamily"
+    },
+    "requested_by": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "service_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "customer_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "requested_provider": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "requested_model": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "output_contract": {
+      "$ref": "#/$defs/outputContract"
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": true,
+      "default": {}
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "background",
+        "low",
+        "normal",
+        "high"
+      ],
+      "default": "normal"
+    },
+    "timeout_s": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600,
+      "default": 60
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  },
+  "$defs": {
+    "taskFamily": {
+      "type": "string",
+      "enum": [
+        "task.classification",
+        "task.summarization",
+        "task.information_extraction",
+        "task.structured_extraction",
+        "task.translation",
+        "task.sentiment_analysis",
+        "task.reasoning",
+        "task.chat"
+      ]
+    },
+    "outputContract": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "default": "json"
+        },
+        "json_schema": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "parse_json_output": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    }
+  }
+}

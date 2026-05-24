@@ -545,6 +545,9 @@ Preserved scope:
   - legacy node-local shadow benchmarking: Implemented
   - new client-owned execution-only benchmark API: Not developed until implemented
   - prompt tuning consumers: client-owned, not AI Node judgment
+- Add V2+ JSON schemas under `docs/json-schemas` for prompt registration, execution, benchmark execution requests/responses, and schema discovery.
+- Add a future schema discovery route so client developers and client nodes can request the prompt registration and execution schemas from the AI Node instead of reading repository files directly.
+- Until schema discovery routes are implemented, developers must use repository-local schema files directly.
 
 Task mapping:
 - Task 916: Document the execution-only benchmark architecture and migration boundary
@@ -556,3 +559,4 @@ Task mapping:
 - Task 922: Add benchmark execution result schemas and tests for raw and parsed outputs
 - Task 923: Update the node UI to separate legacy local benchmark views from external benchmark execution
 - Task 924: Add migration docs for prompt tuning workflows that consume benchmark execution results
+- Task 925: Add client AI V2 schema discovery endpoints for prompt and execution contracts

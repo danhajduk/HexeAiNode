@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai-v2/schema-catalog.v2.response.schema.json",
+  "title": "Schema Catalog V2 Response",
+  "description": "Proposed response for schema discovery. Not implemented yet.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_family",
+    "version",
+    "schemas"
+  ],
+  "properties": {
+    "schema_family": {
+      "type": "string",
+      "const": "client-ai"
+    },
+    "version": {
+      "type": "string",
+      "const": "v2"
+    },
+    "generated_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "schemas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "schema_id",
+          "status"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "schema_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "Implemented",
+              "Partially implemented",
+              "Not developed",
+              "Not verifiable from current repository state",
+              "Documented but not implemented",
+              "Implemented but undocumented"
+            ]
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "api_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

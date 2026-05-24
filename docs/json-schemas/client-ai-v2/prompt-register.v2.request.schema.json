@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai-v2/prompt-register.v2.request.schema.json",
+  "title": "Prompt Register Request V2",
+  "description": "Proposed V2+ request payload for registering benchmark-capable prompt contracts. Not implemented yet.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "prompt_id",
+    "service_id",
+    "task_family",
+    "version"
+  ],
+  "properties": {
+    "prompt_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "service_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "task_family": {
+      "$ref": "#/$defs/taskFamily"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^v([2-9]|[1-9][0-9]+)\\.[0-9]+$",
+      "description": "V2+ benchmark-capable prompt version, for example v2.0."
+    },
+    "prompt_name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "owner_service": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "access_scope": {
+      "type": "string",
+      "enum": [
+        "private",
+        "service",
+        "shared",
+        "public"
+      ],
+      "default": "service"
+    },
+    "provider_preferences": {
+      "$ref": "#/$defs/providerPreferences"
+    },
+    "constraints": {
+      "$ref": "#/$defs/promptConstraints"
+    },
+    "definition": {
+      "$ref": "#/$defs/promptDefinition"
+    },
+    "output_contract": {
+      "$ref": "#/$defs/outputContract"
+    },
+    "benchmark": {
+      "$ref": "#/$defs/benchmarkMetadata"
+    },
+    "metadata": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "taskFamily": {
+      "type": "string",
+      "enum": [
+        "task.classification",
+        "task.summarization",
+        "task.information_extraction",
+        "task.structured_extraction",
+        "task.translation",
+        "task.sentiment_analysis",
+        "task.reasoning",
+        "task.chat"
+      ]
+    },
+    "providerPreferences": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "preferred_providers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "preferred_models": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "default_provider": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "default_model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "promptConstraints": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "max_timeout_s": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "structured_output_required": {
+          "type": "boolean"
+        },
+        "allowed_model_overrides": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "promptDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prompt_template"
+      ],
+      "properties": {
+        "system_prompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt_template": {
+          "type": "string",
+          "minLength": 1
+        },
+        "template_variables": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "default_inputs": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "outputContract": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "default": "json"
+        },
+        "json_schema": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "parse_json_output": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "benchmarkMetadata": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "execution_only"
+          ],
+          "default": "execution_only"
+        },
+        "owner_evaluates_results": {
+          "type": "boolean",
+          "const": true
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

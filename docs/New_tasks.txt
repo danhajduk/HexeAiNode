@@ -56,3 +56,4 @@ Do not edit above this line:
 [TODO] Task 922: Add benchmark execution result schemas and tests for raw and parsed outputs
 [TODO] Task 923: Update the node UI to separate legacy local benchmark views from external benchmark execution
 [TODO] Task 924: Add migration docs for prompt tuning workflows that consume benchmark execution results
+[TODO] Task 925: Add client AI V2 schema discovery endpoints for prompt and execution contracts
