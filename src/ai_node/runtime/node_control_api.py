@@ -1081,9 +1081,14 @@ class NodeControlState:
         }
 
     async def cycle_local_llm_benchmark_model(self) -> dict:
-        if self._local_llm_benchmark_runner is None or not hasattr(self._local_llm_benchmark_runner, "run_once"):
+        if self._local_llm_benchmark_runner is None:
             raise ValueError("local_llm_benchmark_runner_not_configured")
-        result = await self._local_llm_benchmark_runner.run_once()
+        if hasattr(self._local_llm_benchmark_runner, "cycle_model"):
+            result = await self._local_llm_benchmark_runner.cycle_model()
+        elif hasattr(self._local_llm_benchmark_runner, "run_once"):
+            result = await self._local_llm_benchmark_runner.run_once()
+        else:
+            raise ValueError("local_llm_benchmark_runner_not_configured")
         return {
             "status": "ok",
             "result": result,

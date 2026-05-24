@@ -218,6 +218,67 @@ class LocalLLMBenchmarkRotationRunnerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(commands, [])
             self.assertEqual(worker.calls, [{"model_id": "qwen3-8b-q4_k_m", "limit": 25}])
 
+    async def test_manual_cycle_switches_without_draining_loaded_model_queue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "models.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "models": [
+                            {"id": "qwen3-8b-q4_k_m"},
+                            {"id": "gemma-3-12b-it-q4_k_m"},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            commands = []
+
+            async def fake_runner(command, env):
+                commands.append({"command": command, "env": env})
+                return {"returncode": 0, "stdout": "ready", "stderr": ""}
+
+            worker = _FakeWorker()
+            worker.pending_by_model = {"qwen3-8b-q4_k_m": 3, "gemma-3-12b-it-q4_k_m": 3}
+            runner = LocalLLMBenchmarkRotationRunner(
+                worker=worker,
+                logger=logging.getLogger("local-llm-rotation-test"),
+                model_config_path=str(config_path),
+                state_path=str(Path(tmp) / "rotation.json"),
+                model_ids=["qwen3-8b-q4_k_m", "gemma-3-12b-it-q4_k_m"],
+                command_runner=fake_runner,
+            )
+
+            with patch.object(LocalLLMBenchmarkRotationRunner, "_live_model_id", return_value="qwen3-8b-q4_k_m"):
+                result = await runner.cycle_model()
+
+            self.assertEqual(result["model_id"], "gemma-3-12b-it-q4_k_m")
+            self.assertEqual(result["reason"], "manual_cycle")
+            self.assertEqual(result["worker_result"]["processed"], 0)
+            self.assertEqual(worker.calls, [])
+            self.assertEqual(commands[0]["env"]["LLAMACPP_MODEL_ALIAS"], "gemma-3-12b-it-q4_k_m")
+
+    async def test_manual_cycle_skips_when_loaded_model_is_running(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "models.json"
+            config_path.write_text(json.dumps({"models": [{"id": "qwen3-8b-q4_k_m"}, {"id": "gemma-3-12b-it-q4_k_m"}]}), encoding="utf-8")
+            worker = _FakeWorker()
+            worker.running_by_model = {"qwen3-8b-q4_k_m": 1}
+            runner = LocalLLMBenchmarkRotationRunner(
+                worker=worker,
+                logger=logging.getLogger("local-llm-rotation-test"),
+                model_config_path=str(config_path),
+                state_path=str(Path(tmp) / "rotation.json"),
+                model_ids=["qwen3-8b-q4_k_m", "gemma-3-12b-it-q4_k_m"],
+            )
+
+            with patch.object(LocalLLMBenchmarkRotationRunner, "_live_model_id", return_value="qwen3-8b-q4_k_m"):
+                result = await runner.cycle_model()
+
+            self.assertEqual(result["status"], "skipped")
+            self.assertEqual(result["reason"], "current_model_running")
+            self.assertEqual(worker.calls, [])
+
     async def test_rotation_processes_all_pending_for_selected_model(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "models.json"

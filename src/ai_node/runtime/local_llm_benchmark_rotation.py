@@ -77,6 +77,22 @@ class LocalLLMBenchmarkRotationRunner:
                     "retry_reset_count": retry_reset_count + int(result.get("retry_reset_count") or 0),
                 }
         model = self._next_model()
+        return await self._switch_to_model_and_run(model=model, retry_reset_count=retry_reset_count)
+
+    async def cycle_model(self) -> dict:
+        models = self._load_models()
+        current_model_id = self._live_model_id() or str(self._load_state().get("current_model_id") or "").strip()
+        if current_model_id and self._running_count_for_model(current_model_id) > 0:
+            return {
+                "status": "skipped",
+                "reason": "current_model_running",
+                "model_id": current_model_id,
+                "processed": 0,
+            }
+        model = self._next_model(skip_model_id=current_model_id or None)
+        return await self._switch_to_model(model=model, reason="manual_cycle")
+
+    async def _switch_to_model_and_run(self, *, model: dict, retry_reset_count: int = 0) -> dict:
         model_id = str(model["id"])
         try:
             self._begin_swap(model_id=model_id)
@@ -109,6 +125,40 @@ class LocalLLMBenchmarkRotationRunner:
                 "retry_reset_count": retry_reset_count,
                 "switch_result": switch_result,
                 "worker_result": worker_result,
+            }
+            self._save_state(model_id=model_id, result=result, last_swap=last_swap)
+            return result
+        finally:
+            self._set_activity_status("idle", model_id=None)
+
+    async def _switch_to_model(self, *, model: dict, reason: str) -> dict:
+        model_id = str(model["id"])
+        try:
+            self._begin_swap(model_id=model_id)
+            try:
+                switch_result = await self._load_model(model)
+            except Exception as exc:
+                self._finish_swap(model_id=model_id, error=str(exc).strip() or type(exc).__name__)
+                raise
+            last_swap = self._finish_swap(model_id=model_id, error=None)
+            switch_result = {
+                **switch_result,
+                "swap_started_at": last_swap["started_at"],
+                "swap_completed_at": last_swap["completed_at"],
+                "swap_duration_seconds": last_swap["duration_seconds"],
+                "swap_error": last_swap["error"],
+                "ready_timeout_seconds": last_swap["ready_timeout_seconds"],
+            }
+            result = {
+                "status": "ok",
+                "reason": reason,
+                "model_id": model_id,
+                "model_repo": model.get("repo"),
+                "model_file": model.get("file"),
+                "ctx_size": model.get("ctx_size"),
+                "switched_at": local_now_iso(),
+                "worker_result": {"model_id": model_id, "processed": 0, "completed": 0, "failed": 0, "errors": []},
+                "switch_result": switch_result,
             }
             self._save_state(model_id=model_id, result=result, last_swap=last_swap)
             return result
@@ -218,7 +268,7 @@ class LocalLLMBenchmarkRotationRunner:
         first = models[0] if isinstance(models[0], dict) else {}
         return str(first.get("id") or "").strip() or None
 
-    def _next_model(self) -> dict:
+    def _next_model(self, *, skip_model_id: str | None = None) -> dict:
         models = self._load_models()
         state = self._load_state()
         previous_id = self._live_model_id() or str(state.get("current_model_id") or "").strip()
@@ -226,8 +276,16 @@ class LocalLLMBenchmarkRotationRunner:
         for offset in range(1, len(models) + 1):
             candidate = models[(previous_index + offset) % len(models)]
             candidate_id = str(candidate.get("id") or "").strip()
+            if skip_model_id and candidate_id == skip_model_id:
+                continue
             if self._pending_count_for_model(candidate_id) > 0:
                 return candidate
+        for offset in range(1, len(models) + 1):
+            candidate = models[(previous_index + offset) % len(models)]
+            candidate_id = str(candidate.get("id") or "").strip()
+            if skip_model_id and candidate_id == skip_model_id:
+                continue
+            return candidate
         return models[(previous_index + 1) % len(models)]
 
     def _load_models(self) -> list[dict]:

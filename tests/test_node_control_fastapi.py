@@ -152,6 +152,9 @@ class NodeControlFastApiTests(unittest.TestCase):
         async def run_once(self):
             return {"model_id": "qwen3-14b-q4_k_m", "worker_result": {"processed": 0}}
 
+        async def cycle_model(self):
+            return {"model_id": "qwen3-14b-q4_k_m", "reason": "manual_cycle", "worker_result": {"processed": 0}}
+
         async def run_loaded_model(self):
             return {"model_id": "qwen3-8b-q4_k_m", "mode": "loaded_model", "worker_result": {"processed": 1}}
 
@@ -560,6 +563,8 @@ class NodeControlFastApiTests(unittest.TestCase):
 
             self.assertEqual(cycle_response.status_code, 200)
             self.assertEqual(cycle_response.json()["result"]["model_id"], "qwen3-14b-q4_k_m")
+            self.assertEqual(cycle_response.json()["result"]["reason"], "manual_cycle")
+            self.assertEqual(cycle_response.json()["result"]["worker_result"]["processed"], 0)
 
             run_loaded_response = client.post("/api/benchmarks/local-llm/run-loaded")
 
