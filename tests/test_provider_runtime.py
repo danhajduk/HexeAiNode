@@ -137,15 +137,6 @@ class _RouterReturningOpenAI:
         )
 
 
-class _MemoryBenchmarkStore:
-    def __init__(self):
-        self.calls = []
-
-    def record_openai_execution(self, **kwargs):
-        self.calls.append(kwargs)
-        return "openai-test"
-
-
 class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_runtime_builds_openai_adapter_with_debug_aopenai_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -162,59 +153,6 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertTrue(adapter._debug_aopenai)  # noqa: SLF001
             self.assertEqual(str(adapter._debug_aopenai_log_path), "logs/openai_debug_test.jsonl")  # noqa: SLF001
-
-    async def test_runtime_records_openai_executions_for_local_benchmark(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            benchmark_store = _MemoryBenchmarkStore()
-            runtime = ProviderRuntimeManager(
-                logger=logging.getLogger("provider-runtime-test"),
-                provider_selection_store=_SelectionStore(enabled=["openai"]),
-                provider_credentials_store=_CredentialsStore(),
-                registry_path=str(Path(tmp) / "provider_registry.json"),
-                metrics_path=str(Path(tmp) / "provider_metrics.json"),
-                local_llm_benchmark_store=benchmark_store,
-                local_llm_benchmark_models=["qwen3-8b-q4_k_m"],
-            )
-            runtime._router = _RouterReturningOpenAI()  # noqa: SLF001
-
-            response = await runtime.execute(
-                UnifiedExecutionRequest(
-                    task_family="task.classification",
-                    prompt="hello",
-                    requested_provider="openai",
-                    metadata={"prompt_id": "prompt.email.classifier"},
-                )
-            )
-
-            self.assertEqual(response.provider_id, "openai")
-            self.assertEqual(len(benchmark_store.calls), 1)
-            self.assertEqual(benchmark_store.calls[0]["model_ids"], ["qwen3-8b-q4_k_m"])
-
-    async def test_runtime_does_not_record_non_classifier_prompt_for_local_benchmark(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            benchmark_store = _MemoryBenchmarkStore()
-            runtime = ProviderRuntimeManager(
-                logger=logging.getLogger("provider-runtime-test"),
-                provider_selection_store=_SelectionStore(enabled=["openai"]),
-                provider_credentials_store=_CredentialsStore(),
-                registry_path=str(Path(tmp) / "provider_registry.json"),
-                metrics_path=str(Path(tmp) / "provider_metrics.json"),
-                local_llm_benchmark_store=benchmark_store,
-                local_llm_benchmark_models=["qwen3-8b-q4_k_m"],
-            )
-            runtime._router = _RouterReturningOpenAI()  # noqa: SLF001
-
-            response = await runtime.execute(
-                UnifiedExecutionRequest(
-                    task_family="task.classification",
-                    prompt="hello",
-                    requested_provider="openai",
-                    metadata={"prompt_id": "prompt.email.action_decision"},
-                )
-            )
-
-            self.assertEqual(response.provider_id, "openai")
-            self.assertEqual(benchmark_store.calls, [])
 
     async def test_execution_router_falls_back_when_primary_fails(self):
         registry = ProviderRegistry()

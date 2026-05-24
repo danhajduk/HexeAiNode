@@ -657,14 +657,9 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertIn("provider_capability_refresh", payload["internal_scheduler"]["tasks"])
             self.assertIn("heartbeat", payload["internal_scheduler"]["tasks"])
             self.assertIn("telemetry", payload["internal_scheduler"]["tasks"])
-            self.assertIn("local_llm_benchmark_replay", payload["internal_scheduler"]["tasks"])
             self.assertIn("operational_mqtt_health", payload["internal_scheduler"]["tasks"])
             self.assertEqual(payload["internal_scheduler"]["tasks"]["heartbeat"]["schedule_name"], "heartbeat_5_seconds")
             self.assertEqual(payload["internal_scheduler"]["tasks"]["telemetry"]["schedule_name"], "telemetry_60_seconds")
-            self.assertEqual(
-                payload["internal_scheduler"]["tasks"]["local_llm_benchmark_replay"]["interval_seconds"],
-                60,
-            )
             self.assertEqual(
                 payload["internal_scheduler"]["tasks"]["operational_mqtt_health"]["schedule_name"],
                 "every_10_seconds",

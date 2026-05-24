@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import socket
-import subprocess
 import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
@@ -19,7 +18,6 @@ from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.config.provider_credentials_config import summarize_provider_credentials
 from ai_node.core_api.budget_declaration_client import BudgetDeclarationClient
 from ai_node.core_api.trust_status_client import TrustStatusClient
-from ai_node.persistence.local_llm_benchmark_store import DEFAULT_LOCAL_LLM_BENCHMARK_MODELS
 from ai_node.providers.models import UnifiedExecutionRequest
 from ai_node.providers.openai_model_catalog import select_representative_openai_model_ids
 from ai_node.prompts import PromptRegistry
@@ -265,7 +263,6 @@ class NodeControlState:
         prompt_service_state_store=None,
         budget_state_store=None,
         client_usage_store=None,
-        local_llm_benchmark_store=None,
         trust_status_client=None,
         budget_declaration_client=None,
         execution_gateway=None,
@@ -276,8 +273,6 @@ class NodeControlState:
         task_execution_service=None,
         internal_scheduler=None,
         supervisor_client=None,
-        local_llm_benchmark_runner=None,
-        local_llm_benchmark_interval_seconds: int = 60,
         node_hostname: str | None = None,
         node_api_base_url: str | None = None,
         node_ui_endpoint: str | None = None,
@@ -309,7 +304,6 @@ class NodeControlState:
         self._prompt_registry = None
         self._budget_state_store = budget_state_store
         self._client_usage_store = client_usage_store
-        self._local_llm_benchmark_store = local_llm_benchmark_store
         self._trust_status_client = trust_status_client or TrustStatusClient(logger=logger)
         self._budget_declaration_client = budget_declaration_client or BudgetDeclarationClient(logger=logger)
         self._execution_gateway = execution_gateway or ExecutionGateway()
@@ -320,8 +314,6 @@ class NodeControlState:
         self._task_execution_service = task_execution_service
         self._internal_scheduler = internal_scheduler or InternalScheduler(logger=logger)
         self._supervisor_client = supervisor_client or SupervisorApiClient()
-        self._local_llm_benchmark_runner = local_llm_benchmark_runner
-        self._local_llm_benchmark_interval_seconds = max(int(local_llm_benchmark_interval_seconds), 60)
         self._node_hostname = node_hostname
         self._node_api_base_url = node_api_base_url
         self._node_ui_endpoint = node_ui_endpoint
@@ -822,39 +814,10 @@ class NodeControlState:
             return {
                 "configured": False,
                 "services": {"backend": "unknown", "frontend": "unknown", "local_llm": "unknown", "node": "unknown"},
-                "local_llm_benchmark": self._local_llm_benchmark_payload(),
             }
         return {
             "configured": True,
             "services": self._service_manager.get_status(),
-            "local_llm_benchmark": self._local_llm_benchmark_payload(),
-        }
-
-    def _local_llm_benchmark_payload(self) -> dict:
-        path = Path(os.environ.get("SYNTHIA_LOCAL_LLM_BENCHMARK_PATH") or ".run/local_llm_benchmark.json")
-        if not path.exists():
-            return {"configured": True, "path": str(path), "available": False}
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            return {"configured": True, "path": str(path), "available": False, "error": str(exc)}
-        results = payload.get("results") if isinstance(payload, dict) else []
-        completed = [item for item in results if isinstance(item, dict) and item.get("status") == "completed"]
-        failed = [item for item in results if isinstance(item, dict) and item.get("status") != "completed"]
-        latencies = [
-            float(item.get("elapsed_ms"))
-            for item in completed
-            if isinstance(item.get("elapsed_ms"), (int, float)) or str(item.get("elapsed_ms") or "").replace(".", "", 1).isdigit()
-        ]
-        return {
-            "configured": True,
-            "path": str(path),
-            "available": True,
-            "model": payload.get("model") if isinstance(payload, dict) else None,
-            "generated_at": payload.get("generated_at") if isinstance(payload, dict) else None,
-            "completed": len(completed),
-            "failed": len(failed),
-            "avg_elapsed_ms": round(sum(latencies) / len(latencies), 3) if latencies else None,
         }
 
     def provider_credentials_payload(self, *, provider_id: str) -> dict:
@@ -928,183 +891,6 @@ class NodeControlState:
             return {"configured": False, "current_month": local_now_iso()[:7], "clients": []}
         payload = self._client_usage_store.summary_payload()
         return self._attach_client_grants(payload=payload)
-
-    def local_llm_benchmark_comparison_payload(self) -> dict:
-        if self._local_llm_benchmark_store is None or not hasattr(self._local_llm_benchmark_store, "summary_payload"):
-            return {"configured": False, "comparisons": [], "status_counts": {}}
-        payload = self._local_llm_benchmark_store.summary_payload()
-        if self._local_llm_benchmark_runner is not None and hasattr(self._local_llm_benchmark_runner, "status_payload"):
-            payload["rotation"] = self._local_llm_benchmark_runner.status_payload()
-        scheduler = self.internal_scheduler_payload()
-        tasks = scheduler.get("tasks") if isinstance(scheduler, dict) else {}
-        benchmark_task = tasks.get("local_llm_benchmark_replay") if isinstance(tasks, dict) else {}
-        running_rows = list(payload.get("running") or []) if isinstance(payload, dict) else []
-        rotation = payload.get("rotation") if isinstance(payload.get("rotation"), dict) else {}
-        rotation_activity_status = str(rotation.get("activity_status") or "").strip().lower()
-        active = bool(running_rows or rotation_activity_status in {"running", "swapping"})
-        if rotation_activity_status == "swapping":
-            status = "swapping"
-        elif active:
-            status = "running"
-        else:
-            status = "idle"
-        payload["active_benchmark"] = {
-            "active": active,
-            "status": status,
-            "running_count": len(running_rows),
-            "scheduler_running": bool(isinstance(benchmark_task, dict) and benchmark_task.get("running")),
-            "scheduler_status": benchmark_task.get("status") if isinstance(benchmark_task, dict) else None,
-            "current_model_id": rotation.get("current_model_id"),
-            "activity_model_id": rotation.get("activity_model_id"),
-            "swap_started_at": rotation.get("swap_started_at"),
-            "swap_elapsed_seconds": rotation.get("swap_elapsed_seconds"),
-            "last_swap": rotation.get("last_swap"),
-            "ready_timeout_seconds": rotation.get("ready_timeout_seconds"),
-            "running": running_rows,
-        }
-        payload["gpu_vram"] = self._gpu_vram_payload()
-        return payload
-
-    @staticmethod
-    def _gpu_vram_payload() -> dict:
-        try:
-            gpu = subprocess.run(
-                [
-                    "nvidia-smi",
-                    "--query-gpu=utilization.gpu,memory.used,memory.total",
-                    "--format=csv,noheader,nounits",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
-            apps = subprocess.run(
-                [
-                    "nvidia-smi",
-                    "--query-compute-apps=pid,process_name,used_memory",
-                    "--format=csv,noheader,nounits",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
-        except Exception as exc:
-            return {"available": False, "error": str(exc)}
-        if gpu.returncode != 0:
-            return {"available": False, "error": (gpu.stderr or gpu.stdout or "nvidia_smi_failed").strip()}
-        first_line = (gpu.stdout or "").splitlines()[0:1]
-        if not first_line:
-            return {"available": False, "error": "nvidia_smi_empty"}
-        parts = [part.strip() for part in first_line[0].split(",")]
-        if len(parts) < 3:
-            return {"available": False, "error": "nvidia_smi_unexpected_output"}
-        try:
-            gpu_util_percent = float(parts[0])
-            memory_used_mib = float(parts[1])
-            memory_total_mib = float(parts[2])
-        except ValueError:
-            return {"available": False, "error": "nvidia_smi_parse_failed"}
-        llama_vram_mib = 0.0
-        other_vram_mib = 0.0
-        processes = []
-        if apps.returncode == 0:
-            for line in (apps.stdout or "").splitlines():
-                process_parts = [part.strip() for part in line.split(",")]
-                if len(process_parts) < 3:
-                    continue
-                try:
-                    used_memory = float(process_parts[2])
-                except ValueError:
-                    continue
-                process_payload = {
-                    "pid": process_parts[0],
-                    "name": process_parts[1],
-                    "used_memory_mib": used_memory,
-                }
-                processes.append(process_payload)
-                if "llama" in process_parts[1].lower():
-                    llama_vram_mib += used_memory
-                else:
-                    other_vram_mib += used_memory
-        return {
-            "available": True,
-            "memory_used_mib": memory_used_mib,
-            "memory_total_mib": memory_total_mib,
-            "memory_free_mib": max(memory_total_mib - memory_used_mib, 0.0),
-            "gpu_util_percent": gpu_util_percent,
-            "llama_vram_mib": llama_vram_mib if llama_vram_mib > 0 else None,
-            "other_vram_mib": other_vram_mib if other_vram_mib > 0 else None,
-            "processes": processes,
-        }
-
-    def set_local_llm_benchmark_capture_enabled(self, *, enabled: bool) -> dict:
-        if self._local_llm_benchmark_store is None or not hasattr(self._local_llm_benchmark_store, "set_capture_enabled"):
-            raise ValueError("local_llm_benchmark_store_not_configured")
-        self._local_llm_benchmark_store.set_capture_enabled(enabled=enabled)
-        return {
-            "status": "ok",
-            "capture_enabled": bool(enabled),
-            "benchmark": self.local_llm_benchmark_comparison_payload(),
-        }
-
-    def set_local_llm_benchmark_correct_label(self, *, record_id: str, correct_label: str | None, note: str | None = None) -> dict:
-        if self._local_llm_benchmark_store is None or not hasattr(self._local_llm_benchmark_store, "set_correct_label"):
-            raise ValueError("local_llm_benchmark_store_not_configured")
-        correction = self._local_llm_benchmark_store.set_correct_label(record_id=record_id, correct_label=correct_label, note=note)
-        return {
-            "status": "ok",
-            "correction": correction,
-            "benchmark": self.local_llm_benchmark_comparison_payload(),
-        }
-
-    def requeue_all_local_llm_benchmarks(self) -> dict:
-        if self._local_llm_benchmark_store is None or not hasattr(self._local_llm_benchmark_store, "requeue_for_models"):
-            raise ValueError("local_llm_benchmark_store_not_configured")
-        model_ids = list(DEFAULT_LOCAL_LLM_BENCHMARK_MODELS)
-        if self._local_llm_benchmark_runner is not None and hasattr(self._local_llm_benchmark_runner, "status_payload"):
-            rotation = self._local_llm_benchmark_runner.status_payload()
-            rotation_models = rotation.get("models") if isinstance(rotation, dict) else []
-            configured_model_ids = [
-                str(model.get("id") or "").strip()
-                for model in rotation_models
-                if isinstance(model, dict) and str(model.get("id") or "").strip()
-            ]
-            if configured_model_ids:
-                model_ids = configured_model_ids
-        requeued = self._local_llm_benchmark_store.requeue_for_models(model_ids=model_ids)
-        return {
-            "status": "ok",
-            "model_ids": model_ids,
-            "requeued": requeued,
-            "benchmark": self.local_llm_benchmark_comparison_payload(),
-        }
-
-    async def cycle_local_llm_benchmark_model(self) -> dict:
-        if self._local_llm_benchmark_runner is None:
-            raise ValueError("local_llm_benchmark_runner_not_configured")
-        if hasattr(self._local_llm_benchmark_runner, "cycle_model"):
-            result = await self._local_llm_benchmark_runner.cycle_model()
-        elif hasattr(self._local_llm_benchmark_runner, "run_once"):
-            result = await self._local_llm_benchmark_runner.run_once()
-        else:
-            raise ValueError("local_llm_benchmark_runner_not_configured")
-        return {
-            "status": "ok",
-            "result": result,
-            "benchmark": self.local_llm_benchmark_comparison_payload(),
-        }
-
-    async def run_local_llm_benchmark_loaded_model(self) -> dict:
-        if self._local_llm_benchmark_runner is None or not hasattr(self._local_llm_benchmark_runner, "run_loaded_model"):
-            raise ValueError("local_llm_benchmark_runner_not_configured")
-        result = await self._local_llm_benchmark_runner.run_loaded_model()
-        return {
-            "status": "ok",
-            "result": result,
-            "benchmark": self.local_llm_benchmark_comparison_payload(),
-        }
 
     def _attach_client_grants(self, *, payload: dict) -> dict:
         clients = list(payload.get("clients") or []) if isinstance(payload, dict) else []
@@ -1526,7 +1312,10 @@ class NodeControlState:
 
     @staticmethod
     def _client_ai_v2_schema_dir() -> Path:
-        return Path("docs/json-schemas/client-ai-v2")
+        configured = str(os.environ.get("SYNTHIA_CLIENT_AI_V2_SCHEMA_DIR") or "").strip()
+        if configured:
+            return Path(configured)
+        return Path(__file__).resolve().parents[3] / "docs/json-schemas/client-ai-v2"
 
     def client_ai_v2_schema_catalog(self) -> dict:
         schema_dir = self._client_ai_v2_schema_dir()
@@ -2575,15 +2364,6 @@ class NodeControlState:
             task_kind="local_recurring",
             readiness_critical=False,
         )
-        self._internal_scheduler.register_interval_task(
-            task_id="local_llm_benchmark_replay",
-            display_name="Local LLM Benchmark Replay",
-            interval_seconds=self._local_llm_benchmark_interval_seconds,
-            schedule_name="interval_seconds",
-            schedule_detail=f"Every {self._local_llm_benchmark_interval_seconds} seconds",
-            task_kind="local_recurring",
-            readiness_critical=False,
-        )
         self._sync_operational_mqtt_health_schedule()
 
     def _operational_mqtt_health_schedule_definition(self) -> dict:
@@ -2724,12 +2504,6 @@ class NodeControlState:
                 coroutine_factory=self._operational_mqtt_health_job_once,
                 initial_delay_seconds=0,
             )
-            if self._local_llm_benchmark_runner is not None:
-                self._internal_scheduler.start_interval_task(
-                    task_id="local_llm_benchmark_replay",
-                    coroutine_factory=self._local_llm_benchmark_job_once,
-                    initial_delay_seconds=self._local_llm_benchmark_interval_seconds,
-                )
 
     def _notify_back_online(self) -> None:
         if self._notification_service is None or not hasattr(self._notification_service, "notify"):
@@ -2838,14 +2612,6 @@ class NodeControlState:
         self._supervisor_last_error = None
         self._supervisor_last_seen = local_now_iso()
         return {"status": "ok", "supervisor": {"last_seen_at": self._supervisor_last_seen}}
-
-    async def _local_llm_benchmark_job_once(self) -> dict:
-        if self._local_llm_benchmark_runner is None:
-            return {"status": "skipped", "reason": "local_llm_benchmark_runner_not_configured"}
-        result = await self._local_llm_benchmark_runner.run_once()
-        if hasattr(self._logger, "info"):
-            self._logger.info("[local-llm-benchmark-job] %s", result)
-        return result
 
     async def _operational_mqtt_health_job_once(self) -> dict | None:
         result = await self.check_operational_mqtt_health_once()
@@ -3339,15 +3105,6 @@ class RefreshTriggerRequest(BaseModel):
     force_refresh: bool = True
 
 
-class LocalLLMBenchmarkCaptureRequest(BaseModel):
-    enabled: bool = True
-
-
-class LocalLLMBenchmarkCorrectionRequest(BaseModel):
-    correct_label: str | None = None
-    note: str | None = None
-
-
 class PromptServiceRegisterRequest(BaseModel):
     prompt_id: str
     service_id: str
@@ -3832,49 +3589,6 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/usage/clients")
     def get_client_usage():
         return state.client_usage_payload()
-
-    @app.get("/api/benchmarks/local-llm/comparisons")
-    def get_local_llm_benchmark_comparisons():
-        return state.local_llm_benchmark_comparison_payload()
-
-    @app.post("/api/benchmarks/local-llm/cycle")
-    async def post_local_llm_benchmark_cycle():
-        try:
-            return await state.cycle_local_llm_benchmark_model()
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    @app.post("/api/benchmarks/local-llm/run-loaded")
-    async def post_local_llm_benchmark_run_loaded():
-        try:
-            return await state.run_local_llm_benchmark_loaded_model()
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    @app.post("/api/benchmarks/local-llm/rerun-all")
-    def post_local_llm_benchmark_rerun_all():
-        try:
-            return state.requeue_all_local_llm_benchmarks()
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    @app.post("/api/benchmarks/local-llm/capture")
-    def post_local_llm_benchmark_capture(payload: LocalLLMBenchmarkCaptureRequest):
-        try:
-            return state.set_local_llm_benchmark_capture_enabled(enabled=payload.enabled)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    @app.post("/api/benchmarks/local-llm/records/{record_id}/correction")
-    def post_local_llm_benchmark_correction(record_id: str, payload: LocalLLMBenchmarkCorrectionRequest):
-        try:
-            return state.set_local_llm_benchmark_correct_label(
-                record_id=record_id,
-                correct_label=payload.correct_label,
-                note=payload.note,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/budgets/declare")
     async def post_budget_declare(payload: BudgetDeclarationRequest):

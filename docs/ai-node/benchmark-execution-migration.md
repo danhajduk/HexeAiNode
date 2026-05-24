@@ -5,16 +5,19 @@ Last updated: 2026-05-24
 
 ## Purpose
 
-This document records the migration from node-local benchmark judging toward an execution-only benchmark model.
+This document records the migration from node-local benchmark judging to an execution-only benchmark model.
 
 Implemented today:
+
+- client AI V2 schema discovery through `GET /api/schemas/client-ai/v2`
+- V2 prompt registration/update metadata passthrough for `output_contract` and `benchmark`
+- execution-only V2 benchmark requests through `POST /api/benchmarks/execution/v2`
+
+Removed legacy behavior:
 
 - local LLM shadow benchmarking for captured OpenAI calls
 - local benchmark replay against configured llama.cpp rotation models
 - local benchmark comparison API and dashboard view
-- client AI V2 schema discovery through `GET /api/schemas/client-ai/v2`
-- V2 prompt registration/update metadata passthrough for `output_contract` and `benchmark`
-- execution-only V2 benchmark requests through `POST /api/benchmarks/execution/v2`
 
 Not developed:
 
@@ -46,18 +49,9 @@ The prompt-owning client node owns:
 
 The AI Node must not decide benchmark correctness for external benchmark requests. It should return evidence, not judgment.
 
-## Existing Local Benchmark Compatibility
+## Removed Local Benchmark Compatibility
 
-The current local LLM shadow benchmark remains supported during migration.
-
-Current behavior is implemented as node-local infrastructure:
-
-- OpenAI production calls can be captured as source benchmark records.
-- Captured records can be replayed against configured local models.
-- The dashboard can compare OpenAI and local model outputs.
-- Operators can manually set `correct_label` for local analysis.
-
-This path is compatibility-only for the migration. It should not become the long-term ownership model for benchmark truth.
+The local LLM shadow benchmark path has been removed. The AI Node no longer captures OpenAI production calls as benchmark records, replays them locally, exposes node-owned match rates, or stores manual label corrections.
 
 ## New Execution-Only Benchmark Model
 
@@ -156,4 +150,4 @@ The client decides whether a cloud baseline is needed for the benchmark case.
 
 Tracked task range: Task 916 through Task 925.
 
-Implementation must preserve the existing local LLM benchmark path until client-owned benchmark execution is available and callers have migrated.
+The legacy local LLM benchmark path is no longer preserved. Client-owned benchmark execution is available through the V2 execution-only API.

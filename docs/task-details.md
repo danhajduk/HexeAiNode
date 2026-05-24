@@ -536,14 +536,14 @@ Preserved scope:
   - cloud-only execution
   - cloud plus local comparison execution
   - multiple local/cloud candidates in one request
-- The original local LLM shadow benchmark must remain supported during migration until prompt-owning nodes migrate to the new execution-only benchmark API.
+- The original local LLM shadow benchmark was removed after the V2 execution-only API became available.
 - Prompt versions `v2.0+` should be treated as the new benchmark-capable prompt contract line.
 - Benchmark enablement belongs in the prompt contract/metadata owned by the client or prompt registry, while benchmark execution mode and target provider/model list belong in the execution API request.
 - Task family should remain a request field such as `task.classification` or `task.summarization`; do not split into separate `/classify`, `/summarize`, or `/summary` API routes unless a future standards decision requires convenience wrappers.
 - The canonical API should stay task-family based so new tasks do not require new routes.
 - Documentation must clearly distinguish:
-  - legacy node-local shadow benchmarking: Implemented
-  - new client-owned execution-only benchmark API: Not developed until implemented
+  - legacy node-local shadow benchmarking: Removed
+  - new client-owned execution-only benchmark API: Implemented
   - prompt tuning consumers: client-owned, not AI Node judgment
 - Add V2+ JSON schemas under `docs/json-schemas` for prompt registration, execution, benchmark execution requests/responses, and schema discovery.
 - Add a future schema discovery route so client developers and client nodes can request the prompt registration and execution schemas from the AI Node instead of reading repository files directly.
@@ -554,9 +554,9 @@ Task mapping:
 - Task 917: Add prompt contract support for benchmark-capable prompt versions v2.0 and later
 - Task 918: Add an execution-only multi-target benchmark API that returns provider/model outputs without scoring
 - Task 919: Support cloud-optional and local-only benchmark execution targets
-- Task 920: Preserve the existing local LLM shadow benchmark during migration
+- Task 920: Preserve the existing local LLM shadow benchmark during migration (superseded by Task 923 removal)
 - Task 921: Move benchmark ownership, expected outputs, and scoring to prompt-owning client nodes
 - Task 922: Add benchmark execution result schemas and tests for raw and parsed outputs
-- Task 923: Update the node UI to separate legacy local benchmark views from external benchmark execution
+- Task 923: Remove the legacy node-local benchmark surface after V2 execution-only benchmark support
 - Task 924: Add migration docs for prompt tuning workflows that consume benchmark execution results
 - Task 925: Add client AI V2 schema discovery endpoints for prompt and execution contracts

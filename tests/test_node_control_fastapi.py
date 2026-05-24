@@ -111,53 +111,6 @@ class NodeControlFastApiTests(unittest.TestCase):
         def save(self, payload):
             self.payload = payload
 
-    class _FakeLocalLLMBenchmarkStore:
-        def __init__(self):
-            self.capture_enabled = True
-            self.requeued_model_ids = []
-
-        def summary_payload(self):
-            return {
-                "configured": True,
-                "capture_enabled": self.capture_enabled,
-                "status_counts": {"pending": 1},
-                "running": [{"record_id": "openai-test", "model_id": "qwen3-8b-q4_k_m"}],
-                "comparisons": [{"record_id": "openai-test", "correct_label": getattr(self, "correct_label", None), "local_results": []}],
-            }
-
-        def set_capture_enabled(self, *, enabled: bool):
-            self.capture_enabled = bool(enabled)
-            return {"capture_enabled": bool(enabled)}
-
-        def set_correct_label(self, *, record_id: str, correct_label: str | None, note: str | None = None):
-            self.correct_label = correct_label
-            self.correction_note = note
-            return {"record_id": record_id, "correct_label": correct_label, "correction_note": note}
-
-        def requeue_for_models(self, *, model_ids: list[str]):
-            self.requeued_model_ids = list(model_ids)
-            return 12
-
-    class _FakeLocalLLMBenchmarkRunner:
-        def status_payload(self):
-            return {
-                "configured": True,
-                "current_model_id": "qwen3-8b-q4_k_m",
-                "activity_status": "running",
-                "last_swap": {"model_id": "qwen3-8b-q4_k_m", "duration_seconds": 12.5, "error": None},
-                "ready_timeout_seconds": 420,
-                "models": [{"id": "qwen3-8b-q4_k_m"}, {"id": "qwen3-14b-q4_k_m"}],
-            }
-
-        async def run_once(self):
-            return {"model_id": "qwen3-14b-q4_k_m", "worker_result": {"processed": 0}}
-
-        async def cycle_model(self):
-            return {"model_id": "qwen3-14b-q4_k_m", "reason": "manual_cycle", "worker_result": {"processed": 0}}
-
-        async def run_loaded_model(self):
-            return {"model_id": "qwen3-8b-q4_k_m", "mode": "loaded_model", "worker_result": {"processed": 1}}
-
     class _FakeCapabilityRunner:
         def __init__(self):
             self.workflow_notifications = []
@@ -529,66 +482,6 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "source": "node_capabilities",
             }
 
-    def test_local_llm_benchmark_comparison_endpoint(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            state = NodeControlState(
-                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test")),
-                config_path=str(Path(tmp) / "bootstrap_config.json"),
-                logger=logging.getLogger("node-control-fastapi-test"),
-                local_llm_benchmark_store=self._FakeLocalLLMBenchmarkStore(),
-                local_llm_benchmark_runner=self._FakeLocalLLMBenchmarkRunner(),
-            )
-            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
-            client = TestClient(app)
-
-            with patch.object(NodeControlState, "_gpu_vram_payload", return_value={"available": True, "memory_used_mib": 10, "memory_total_mib": 20}):
-                response = client.get("/api/benchmarks/local-llm/comparisons")
-
-            self.assertEqual(response.status_code, 200)
-            self.assertTrue(response.json()["configured"])
-            self.assertEqual(response.json()["status_counts"]["pending"], 1)
-            self.assertEqual(response.json()["comparisons"][0]["record_id"], "openai-test")
-            self.assertEqual(response.json()["rotation"]["current_model_id"], "qwen3-8b-q4_k_m")
-            self.assertTrue(response.json()["active_benchmark"]["active"])
-            self.assertEqual(response.json()["active_benchmark"]["status"], "running")
-            self.assertEqual(response.json()["active_benchmark"]["running_count"], 1)
-            self.assertEqual(response.json()["active_benchmark"]["last_swap"]["duration_seconds"], 12.5)
-            self.assertEqual(response.json()["active_benchmark"]["ready_timeout_seconds"], 420)
-            self.assertEqual(response.json()["gpu_vram"]["memory_used_mib"], 10)
-
-            capture_response = client.post("/api/benchmarks/local-llm/capture", json={"enabled": False})
-
-            self.assertEqual(capture_response.status_code, 200)
-            self.assertFalse(capture_response.json()["capture_enabled"])
-            self.assertFalse(capture_response.json()["benchmark"]["capture_enabled"])
-
-            cycle_response = client.post("/api/benchmarks/local-llm/cycle")
-
-            self.assertEqual(cycle_response.status_code, 200)
-            self.assertEqual(cycle_response.json()["result"]["model_id"], "qwen3-14b-q4_k_m")
-            self.assertEqual(cycle_response.json()["result"]["reason"], "manual_cycle")
-            self.assertEqual(cycle_response.json()["result"]["worker_result"]["processed"], 0)
-
-            run_loaded_response = client.post("/api/benchmarks/local-llm/run-loaded")
-
-            self.assertEqual(run_loaded_response.status_code, 200)
-            self.assertEqual(run_loaded_response.json()["result"]["mode"], "loaded_model")
-
-            rerun_response = client.post("/api/benchmarks/local-llm/rerun-all")
-
-            self.assertEqual(rerun_response.status_code, 200)
-            self.assertEqual(rerun_response.json()["requeued"], 12)
-            self.assertEqual(rerun_response.json()["model_ids"], ["qwen3-8b-q4_k_m", "qwen3-14b-q4_k_m"])
-
-            correction_response = client.post(
-                "/api/benchmarks/local-llm/records/openai-test/correction",
-                json={"correct_label": "unknown", "note": "manual"},
-            )
-
-            self.assertEqual(correction_response.status_code, 200)
-            self.assertEqual(correction_response.json()["correction"]["correct_label"], "unknown")
-            self.assertEqual(correction_response.json()["benchmark"]["comparisons"][0]["correct_label"], "unknown")
-
     def test_client_ai_v2_schema_and_execution_only_benchmark_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = NodeControlState(
@@ -617,7 +510,7 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(guide_response.status_code, 200)
             self.assertIn("text/markdown", guide_response.headers["content-type"])
             self.assertIn("Client AI V2 Communication Guide", guide_response.text)
-            self.assertIn("/api/benchmarks/local-llm/...", guide_response.text)
+            self.assertNotIn("/api/benchmarks/local-llm", guide_response.text)
 
             prompt_response = client.post(
                 "/api/prompts/services",

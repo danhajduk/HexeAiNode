@@ -372,47 +372,6 @@
       "title": "ExecutionCompareRequest",
       "type": "object"
     },
-    "LocalLLMBenchmarkCaptureRequest": {
-      "properties": {
-        "enabled": {
-          "default": true,
-          "title": "Enabled",
-          "type": "boolean"
-        }
-      },
-      "title": "LocalLLMBenchmarkCaptureRequest",
-      "type": "object"
-    },
-    "LocalLLMBenchmarkCorrectionRequest": {
-      "properties": {
-        "correct_label": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Correct Label"
-        },
-        "note": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Note"
-        }
-      },
-      "title": "LocalLLMBenchmarkCorrectionRequest",
-      "type": "object"
-    },
     "OnboardingInitiateRequest": {
       "properties": {
         "mqtt_host": {

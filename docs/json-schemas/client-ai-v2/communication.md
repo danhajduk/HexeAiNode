@@ -153,10 +153,5 @@ GET /api/schemas/client-ai/v2/communication.md
 
 ## Legacy Benchmark Compatibility
 
-The old local LLM benchmark remains available during migration under:
-
-```text
-/api/benchmarks/local-llm/...
-```
-
-That path is retained for compatibility while client-owned benchmark execution migrates to V2.
+The old node-owned local LLM benchmark API and dashboard view have been removed.
+Client nodes should use the V2 execution-only benchmark request when they need multi-target benchmark evidence.

@@ -47,4 +47,3 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 923: Update the node UI to separate legacy local benchmark views from external benchmark execution

@@ -13,7 +13,6 @@ function buildOperationalProps(overrides = {}) {
       { id: "overview", label: "Overview", onClick: () => {} },
       { id: "scheduled", label: "Scheduled Tasks", onClick: () => {} },
       { id: "clients", label: "Clients", onClick: () => {} },
-      { id: "benchmarks", label: "Benchmarks", onClick: () => {} },
       { id: "diagnostics", label: "Diagnostics", onClick: () => {} },
     ],
     healthStripProps: {
@@ -83,99 +82,6 @@ function buildOperationalProps(overrides = {}) {
     activityItems: [{ label: "Last declaration", value: "accepted" }],
     clientCostItems: [],
     clientUsageMonth: "2026-04",
-    localLlmBenchmarkSummary: {
-      rotation: {
-        current_model_id: "qwen3-8b-q4_k_m",
-        updated_at: "2026-05-19T21:00:00Z",
-        last_swap: {
-          model_id: "qwen3-8b-q4_k_m",
-          duration_seconds: 12.5,
-          error: null,
-        },
-        models: [
-          { id: "qwen3-8b-q4_k_m" },
-          { id: "qwen3-14b-q4_k_m" },
-          { id: "gemma-3-12b-it-q4_k_m" },
-          { id: "mistral-nemo-instruct-2407-q4_k_m" },
-        ],
-      },
-      active_benchmark: {
-        active: true,
-        status: "running",
-        current_model_id: "qwen3-8b-q4_k_m",
-        running_count: 1,
-      },
-      capture_enabled: true,
-      gpu_vram: {
-        available: true,
-        memory_used_mib: 11072,
-        memory_total_mib: 12288,
-        llama_vram_mib: 9226,
-        gpu_util_percent: 18,
-      },
-      status_counts: { pending: 1, completed: 1, failed: 0 },
-      model_status_counts: {
-        "qwen3-8b-q4_k_m": { pending: 1, completed: 1, failed: 0 },
-        "qwen3-14b-q4_k_m": { pending: 2, completed: 0, failed: 0 },
-      },
-      model_summaries: [
-        {
-          promptName: "prompt.email.classifier",
-          modelId: "__openai__",
-          completed: 2,
-          matchRate: 1,
-          avgScoreDelta: null,
-          avgLatency: 1200,
-          avgVram: null,
-          avgGpu: null,
-          labelBreakdown: [
-            { label: "action_required", total: 1, completed: 1, matched: 1, matchRate: 1 },
-            { label: "marketing", total: 1, completed: 1, matched: 1, matchRate: 1 },
-          ],
-        },
-        {
-          promptName: "prompt.email.classifier",
-          modelId: "qwen3-8b-q4_k_m",
-          completed: 1,
-          matchRate: 0,
-          avgScoreDelta: -0.1,
-          avgLatency: 3200,
-          avgVram: 5456,
-          avgGpu: 42,
-          labelBreakdown: [
-            { label: "action_required", total: 1, completed: 1, matched: 0, matchRate: 0 },
-            { label: "marketing", total: 1, completed: 0, matched: 0, matchRate: null },
-          ],
-        },
-      ],
-      comparisons: [
-        {
-          record_id: "openai-test",
-          task_family: "task.classification",
-          prompt_id: "prompt.email.classifier",
-          input_snippet: "Check in reminder",
-          openai: {
-            model_id: "gpt-5.4-nano",
-            label: "action_required",
-            confidence: 0.8,
-            usage: { total_tokens: 140 },
-            latency_ms: 1200,
-          },
-          local_results: [
-            {
-              model_id: "qwen3-8b-q4_k_m",
-              status: "completed",
-              label: "marketing",
-              confidence: 0.7,
-              total_tokens: 132,
-              latency_ms: 3200,
-              vram_used_mib: 5456,
-              gpu_util_percent: 42,
-            },
-          ],
-        },
-      ],
-    },
     governanceStatus: {
       configured: true,
       status: {
@@ -328,51 +234,6 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Type");
     expect(markup).toContain("Every 10 seconds");
     expect(markup).not.toContain("Node Overview");
-  });
-
-  it("shows local LLM benchmark comparisons on the benchmarks section", () => {
-    const markup = renderToStaticMarkup(
-      <OperationalDashboard {...buildOperationalProps({ currentSection: "benchmarks" })} />
-    );
-
-    expect(markup).toContain("Local LLM Benchmarks");
-    expect(markup).toContain("prompt.email.classifier");
-    expect(markup).toContain("gpt-5.4-nano");
-    expect(markup).toContain("Qwen 8B");
-    expect(markup).toContain("Qwen 14B");
-    expect(markup).toContain("Gemma 12B");
-    expect(markup).toContain("Mistral");
-    expect(markup).toContain("qwen3-8b-q4_k_m");
-    expect(markup).toContain("Label Match");
-    expect(markup).toContain("Avg Score Delta");
-    expect(markup).toContain("100%");
-    expect(markup).toContain("-0.1");
-    expect(markup).toContain("5,456 MiB");
-    expect(markup).toContain("42%");
-    expect(markup).toContain("Clear Prompt List");
-    expect(markup).toContain("Show All Labels");
-    expect(markup).toContain("Pause Prompt Capture");
-    expect(markup).toContain("Load Next Model");
-    expect(markup).toContain("Classify");
-    expect(markup).toContain("Loaded Local Model");
-    expect(markup).toContain("Loaded Now");
-    expect(markup).toContain("Classification Replay");
-    expect(markup).toContain("Prompt Capture");
-    expect(markup).toContain("Current GPU Load");
-    expect(markup).toContain("18%");
-    expect(markup).toContain("1 / 2");
-    expect(markup).toContain("Unprocessed Prompts");
-    expect(markup).toContain("Queue");
-    expect(markup).toContain("action required");
-    expect(markup).toContain("Priority");
-    expect(markup).toContain("Matched");
-    expect(markup).toContain("Classified");
-    expect(markup).toContain("Last Swap");
-    expect(markup).toContain("12.5s");
-    expect(markup).toContain("Current VRAM Load");
-    expect(markup).toContain("11,072 / 12,288 MiB");
-    expect(markup).toContain("llama.cpp VRAM");
-    expect(markup).toContain("9,226 MiB");
   });
 
   it("shows friendly task kind and schedule names and sorts the legend by duration", () => {
