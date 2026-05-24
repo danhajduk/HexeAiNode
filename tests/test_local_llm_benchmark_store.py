@@ -143,6 +143,37 @@ class LocalLLMBenchmarkStoreTests(unittest.TestCase):
             self.assertEqual(store.pending_count_for_models(model_ids=["qwen3-8b-q4_k_m"]), 0)
             self.assertIsNone(store.claim_next_pending(model_id="qwen3-8b-q4_k_m"))
 
+    def test_resets_failed_classifier_results_for_retry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LocalLLMBenchmarkStore(
+                path=str(Path(tmp) / "local_llm_benchmarks.db"),
+                logger=logging.getLogger("local-llm-benchmark-test"),
+            )
+            record_id = store.record_openai_execution(
+                request=UnifiedExecutionRequest(
+                    task_family="task.classification",
+                    prompt="Classify this email",
+                    metadata={"prompt_id": "prompt.email.classifier"},
+                ),
+                response=UnifiedExecutionResponse(provider_id="openai", model_id="gpt-5.4-nano", output_text="{}"),
+                model_ids=["qwen3-8b-q4_k_m"],
+            )
+
+            store.record_model_failure(
+                record_id=record_id,
+                model_id="qwen3-8b-q4_k_m",
+                error="socket missing",
+            )
+
+            self.assertEqual(store.failed_count_for_model(model_id="qwen3-8b-q4_k_m"), 1)
+            self.assertEqual(store.pending_count_for_model(model_id="qwen3-8b-q4_k_m"), 0)
+            self.assertEqual(store.reset_failed_for_model(model_id="qwen3-8b-q4_k_m"), 1)
+            self.assertEqual(store.failed_count_for_model(model_id="qwen3-8b-q4_k_m"), 0)
+            self.assertEqual(store.pending_count_for_model(model_id="qwen3-8b-q4_k_m"), 1)
+
+            claimed = store.claim_next_pending(model_id="qwen3-8b-q4_k_m")
+            self.assertEqual(claimed["record_id"], record_id)
+
     def test_capture_toggle_stops_new_openai_records(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = LocalLLMBenchmarkStore(

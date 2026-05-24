@@ -14,6 +14,8 @@ class _FakeWorker:
         self.calls = []
         self.pending_by_model = {}
         self.running_by_model = {}
+        self.failed_by_model = {}
+        self.reset_calls = []
 
     async def run_pending_for_model(self, *, model_id: str, limit: int = 1):
         self.calls.append({"model_id": model_id, "limit": limit})
@@ -33,6 +35,21 @@ class _FakeWorker:
 
     def running_count_for_model(self, *, model_id: str):
         return int(self.running_by_model.get(model_id, 0))
+
+    def reset_failed_for_models(self, *, model_ids: list[str]):
+        self.reset_calls.append({"model_ids": list(model_ids)})
+        reset_count = 0
+        for model_id in model_ids:
+            failed_count = int(self.failed_by_model.get(model_id, 0))
+            if failed_count <= 0:
+                continue
+            reset_count += failed_count
+            self.failed_by_model[model_id] = 0
+            self.pending_by_model[model_id] = int(self.pending_by_model.get(model_id, 0)) + failed_count
+        return reset_count
+
+    def reset_failed_for_model(self, *, model_id: str):
+        return self.reset_failed_for_models(model_ids=[model_id])
 
 
 class LocalLLMBenchmarkRotationRunnerTests(unittest.IsolatedAsyncioTestCase):
@@ -220,6 +237,29 @@ class LocalLLMBenchmarkRotationRunnerTests(unittest.IsolatedAsyncioTestCase):
                 await runner.run_once()
 
             self.assertEqual(worker.calls, [{"model_id": "qwen3-8b-q4_k_m", "limit": 40}])
+
+    async def test_rotation_retries_failed_prompts_before_skip_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "models.json"
+            config_path.write_text(json.dumps({"models": [{"id": "qwen3-8b-q4_k_m"}]}), encoding="utf-8")
+            worker = _FakeWorker()
+            worker.pending_by_model = {"qwen3-8b-q4_k_m": 0}
+            worker.failed_by_model = {"qwen3-8b-q4_k_m": 3}
+            runner = LocalLLMBenchmarkRotationRunner(
+                worker=worker,
+                logger=logging.getLogger("local-llm-rotation-test"),
+                model_config_path=str(config_path),
+                state_path=str(Path(tmp) / "rotation.json"),
+                model_ids=["qwen3-8b-q4_k_m"],
+            )
+
+            with patch.object(LocalLLMBenchmarkRotationRunner, "_live_model_id", return_value="qwen3-8b-q4_k_m"):
+                result = await runner.run_once()
+
+            self.assertEqual(result["model_id"], "qwen3-8b-q4_k_m")
+            self.assertEqual(result["mode"], "loaded_model")
+            self.assertEqual(result["retry_reset_count"], 3)
+            self.assertEqual(worker.calls, [{"model_id": "qwen3-8b-q4_k_m", "limit": 25}])
 
     async def test_rotation_skips_when_loaded_model_is_already_running(self):
         with tempfile.TemporaryDirectory() as tmp:

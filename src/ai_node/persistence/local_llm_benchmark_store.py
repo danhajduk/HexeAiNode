@@ -577,6 +577,72 @@ class LocalLLMBenchmarkStore:
     def pending_count_for_model(self, *, model_id: str) -> int:
         return self.pending_count_for_models(model_ids=[model_id])
 
+    def failed_count_for_models(self, *, model_ids: list[str]) -> int:
+        normalized = [str(model_id or "").strip() for model_id in model_ids if str(model_id or "").strip()]
+        if not normalized:
+            return 0
+        placeholders = ",".join("?" for _ in normalized)
+        prompt_placeholders = ",".join("?" for _ in DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS)
+        with self._connect() as connection:
+            row = connection.execute(
+                f"""
+                SELECT COUNT(*) AS count
+                FROM benchmark_model_results m
+                JOIN benchmark_records r ON r.record_id = m.record_id
+                WHERE m.status = 'failed'
+                  AND m.model_id IN ({placeholders})
+                  AND r.prompt_id IN ({prompt_placeholders})
+                """,
+                tuple(normalized + DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
+            ).fetchone()
+        return int(row["count"] or 0) if row is not None else 0
+
+    def failed_count_for_model(self, *, model_id: str) -> int:
+        return self.failed_count_for_models(model_ids=[model_id])
+
+    def reset_failed_for_models(self, *, model_ids: list[str]) -> int:
+        normalized = [str(model_id or "").strip() for model_id in model_ids if str(model_id or "").strip()]
+        if not normalized:
+            return 0
+        now = local_now_iso()
+        placeholders = ",".join("?" for _ in normalized)
+        prompt_placeholders = ",".join("?" for _ in DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS)
+        with self._connect() as connection:
+            updated = connection.execute(
+                f"""
+                UPDATE benchmark_model_results
+                SET status = 'pending',
+                    started_at = NULL,
+                    completed_at = NULL,
+                    updated_at = ?,
+                    latency_ms = NULL,
+                    prompt_tokens = 0,
+                    completion_tokens = 0,
+                    total_tokens = 0,
+                    output_text = NULL,
+                    label = NULL,
+                    confidence = NULL,
+                    reasoning = NULL,
+                    error = NULL,
+                    vram_used_mib = NULL,
+                    vram_delta_mib = NULL,
+                    gpu_util_percent = NULL,
+                    load_seconds = NULL
+                WHERE status = 'failed'
+                  AND model_id IN ({placeholders})
+                  AND record_id IN (
+                      SELECT record_id
+                      FROM benchmark_records
+                      WHERE prompt_id IN ({prompt_placeholders})
+                  )
+                """,
+                tuple([now] + normalized + DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
+            ).rowcount
+        return int(updated or 0)
+
+    def reset_failed_for_model(self, *, model_id: str) -> int:
+        return self.reset_failed_for_models(model_ids=[model_id])
+
     def running_count_for_models(self, *, model_ids: list[str]) -> int:
         normalized = [str(model_id or "").strip() for model_id in model_ids if str(model_id or "").strip()]
         if not normalized:

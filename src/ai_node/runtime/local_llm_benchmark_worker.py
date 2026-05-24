@@ -76,6 +76,26 @@ class LocalLLMBenchmarkWorker:
             return self._store.pending_count_for_model(model_id=model_id)
         return self.pending_count_for_models(model_ids=[model_id])
 
+    def failed_count_for_models(self, *, model_ids: list[str]) -> int:
+        if hasattr(self._store, "failed_count_for_models"):
+            return self._store.failed_count_for_models(model_ids=model_ids)
+        return 0
+
+    def failed_count_for_model(self, *, model_id: str) -> int:
+        if hasattr(self._store, "failed_count_for_model"):
+            return self._store.failed_count_for_model(model_id=model_id)
+        return self.failed_count_for_models(model_ids=[model_id])
+
+    def reset_failed_for_models(self, *, model_ids: list[str]) -> int:
+        if hasattr(self._store, "reset_failed_for_models"):
+            return self._store.reset_failed_for_models(model_ids=model_ids)
+        return 0
+
+    def reset_failed_for_model(self, *, model_id: str) -> int:
+        if hasattr(self._store, "reset_failed_for_model"):
+            return self._store.reset_failed_for_model(model_id=model_id)
+        return self.reset_failed_for_models(model_ids=[model_id])
+
     def running_count_for_models(self, *, model_ids: list[str]) -> int:
         if hasattr(self._store, "running_count_for_models"):
             return self._store.running_count_for_models(model_ids=model_ids)
