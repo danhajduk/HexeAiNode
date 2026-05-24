@@ -215,6 +215,21 @@ function hasDifferentLabel(comparison, modelIds) {
   });
 }
 
+function comparisonHasLabel(comparison, label) {
+  const normalizedLabel = String(label || "").trim().toLowerCase();
+  if (!normalizedLabel) {
+    return true;
+  }
+  const labels = [
+    referenceLabel(comparison),
+    outputLabel({ label: comparison?.openai?.label, outputText: comparison?.openai?.output_text }),
+    ...(Array.isArray(comparison?.local_results) ? comparison.local_results : []).map((result) =>
+      outputLabel({ label: result?.label, outputText: result?.output_text })
+    ),
+  ];
+  return labels.some((item) => item === normalizedLabel);
+}
+
 function average(values) {
   const numbers = values.map(Number).filter(Number.isFinite);
   if (!numbers.length) {
@@ -343,14 +358,14 @@ function LabelModelMetricCell({ entry }) {
   return (
     <div className="benchmark-label-metric-cell">
       <strong>{entry.matchRate === null || entry.matchRate === undefined ? "pending" : `${formatMetricValue(entry.matchRate * 100)}%`}</strong>
-      <span>{formatMetricValue(matched)} / {formatMetricValue(completed)} records</span>
+      <span>Matched {formatMetricValue(matched)} / {formatMetricValue(completed)} records</span>
       <span className="muted tiny">Avg score {formatMetricValue(entry.avgScore)}</span>
-      {completed < total ? <span className="muted tiny">{formatMetricValue(completed)} / {formatMetricValue(total)} classified</span> : null}
+      {completed < total ? <span className="muted tiny">Classified {formatMetricValue(completed)} / {formatMetricValue(total)}</span> : null}
     </div>
   );
 }
 
-function LocalLLMSummaryTable({ summaries, currentModelId, modelStatusCounts = {} }) {
+function LocalLLMSummaryTable({ summaries, currentModelId, modelStatusCounts = {}, selectedLabel = "", onSelectLabel }) {
   const priorityLabels = new Set(["action_required", "customer_support", "invoice", "order", "shipment", "security"]);
   const labelModelSummaries = sortLocalLabelSummaries(summaries);
   const labelBreakdownRows = summaries.flatMap((summary) =>
@@ -468,7 +483,18 @@ function LocalLLMSummaryTable({ summaries, currentModelId, modelStatusCounts = {
             </thead>
             <tbody>
               {orderedLabels.map((label) => (
-                <tr key={label}>
+                <tr
+                  className={selectedLabel === label ? "local-llm-label-row-selected" : ""}
+                  key={label}
+                  onClick={() => onSelectLabel?.(label)}
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelectLabel?.(label);
+                    }
+                  }}
+                >
                   <td>
                     <code>{formatLabelName(label)}</code>
                     <span className="muted tiny benchmark-snippet">{formatMetricValue(labelTotals[label])} OpenAI records</span>
@@ -653,6 +679,7 @@ function LocalLLMBenchmarkTable({
   const [selectedComparison, setSelectedComparison] = useState(null);
   const [promptListCleared, setPromptListCleared] = useState(false);
   const [showOnlyDifferences, setShowOnlyDifferences] = useState(true);
+  const [selectedLabelFilter, setSelectedLabelFilter] = useState("");
   const comparisons = Array.isArray(summary?.comparisons) ? summary.comparisons : [];
   const configuredModels = Array.isArray(summary?.rotation?.models)
     ? summary.rotation.models.map((model) => model?.id).filter(Boolean)
@@ -680,10 +707,23 @@ function LocalLLMBenchmarkTable({
     ? summary.model_summaries
     : buildLocalModelSummaries({ comparisons, modelIds });
   const modelStatusCounts = summary?.model_status_counts || {};
-  const filteredComparisons = showOnlyDifferences
-    ? comparisons.filter((comparison) => hasDifferentLabel(comparison, modelIds))
-    : comparisons;
+  const filteredComparisons = selectedLabelFilter
+    ? comparisons.filter((comparison) => comparisonHasLabel(comparison, selectedLabelFilter))
+    : showOnlyDifferences
+      ? comparisons.filter((comparison) => hasDifferentLabel(comparison, modelIds))
+      : comparisons;
   const visibleComparisons = promptListCleared ? [] : filteredComparisons;
+  const emptyPromptMessage = promptListCleared
+    ? "Prompt list cleared in this view. Score summary is still using the captured benchmark data."
+    : selectedLabelFilter
+      ? "No benchmark mail found for this label."
+      : showOnlyDifferences && comparisons.length
+        ? "No label differences in the current benchmark view."
+        : "No OpenAI benchmark records have been captured yet.";
+  const handleSelectLabelFilter = (label) => {
+    setSelectedLabelFilter((current) => (current === label ? "" : label));
+    setPromptListCleared(false);
+  };
   const handleSetCorrectLabel = async (recordId, correctLabel, note) => {
     await onSetCorrectLabel?.(recordId, correctLabel, note);
     setSelectedComparison((current) =>
@@ -706,9 +746,14 @@ function LocalLLMBenchmarkTable({
           <button className="btn" type="button" onClick={() => setPromptListCleared(true)} disabled={promptListCleared || !comparisons.length}>
             Clear Prompt List
           </button>
-          <button className="btn" type="button" onClick={() => setShowOnlyDifferences((value) => !value)} disabled={promptListCleared}>
+          <button className="btn" type="button" onClick={() => setShowOnlyDifferences((value) => !value)} disabled={promptListCleared || Boolean(selectedLabelFilter)}>
             {showOnlyDifferences ? "Show All Labels" : "Show Differences Only"}
           </button>
+          {selectedLabelFilter ? (
+            <button className="btn" type="button" onClick={() => setSelectedLabelFilter("")}>
+              Clear Label Filter
+            </button>
+          ) : null}
           {promptListCleared ? (
             <button className="btn" type="button" onClick={() => setPromptListCleared(false)}>
               Show Prompts
@@ -787,7 +832,20 @@ function LocalLLMBenchmarkTable({
           <span>Failed</span>
         </div>
       </div>
-      <LocalLLMSummaryTable summaries={modelSummaries} currentModelId={currentModelId} modelStatusCounts={modelStatusCounts} />
+      <LocalLLMSummaryTable
+        summaries={modelSummaries}
+        currentModelId={currentModelId}
+        modelStatusCounts={modelStatusCounts}
+        selectedLabel={selectedLabelFilter}
+        onSelectLabel={handleSelectLabelFilter}
+      />
+      {selectedLabelFilter ? (
+        <div className="benchmark-filter-strip">
+          <span>Label Filter</span>
+          <code>{formatLabelName(selectedLabelFilter)}</code>
+          <strong>{formatMetricValue(filteredComparisons.length)} mail</strong>
+        </div>
+      ) : null}
       <div className="client-usage-table-card">
         <div className="client-usage-table-wrap">
           <table className="client-usage-table local-llm-benchmark-table">
@@ -843,11 +901,7 @@ function LocalLLMBenchmarkTable({
               ) : (
                 <tr>
                   <td colSpan={2 + Math.max(modelIds.length, 1)} className="muted">
-                    {promptListCleared
-                      ? "Prompt list cleared in this view. Score summary is still using the captured benchmark data."
-                      : showOnlyDifferences && comparisons.length
-                        ? "No label differences in the current benchmark view."
-                        : "No OpenAI benchmark records have been captured yet."}
+                    {emptyPromptMessage}
                   </td>
                 </tr>
               )}
