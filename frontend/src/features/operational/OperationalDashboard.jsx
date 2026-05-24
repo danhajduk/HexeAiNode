@@ -363,6 +363,21 @@ function LocalLLMSummaryTable({ summaries, currentModelId, modelStatusCounts = {
     ...allLabels.filter((label) => priorityLabels.has(label)).sort(),
     ...allLabels.filter((label) => !priorityLabels.has(label)).sort(),
   ];
+  const openAiSummary = summaries.find((summary) => summary?.modelId === "__openai__");
+  const openAiLabelTotals = Object.fromEntries(
+    (Array.isArray(openAiSummary?.labelBreakdown) ? openAiSummary.labelBreakdown : [])
+      .map((entry) => [String(entry?.label || "").trim(), Number(entry?.total || entry?.completed || 0)])
+      .filter(([label, total]) => label && Number.isFinite(total))
+  );
+  const labelTotals = Object.fromEntries(
+    orderedLabels.map((label) => {
+      const localTotals = labelBreakdownRows
+        .filter((entry) => entry.label === label)
+        .map((entry) => Number(entry.total || 0))
+        .filter(Number.isFinite);
+      return [label, openAiLabelTotals[label] ?? Math.max(0, ...localTotals)];
+    })
+  );
   return (
     <div className="client-usage-table-card">
       <div className="client-usage-table-wrap">
@@ -456,6 +471,7 @@ function LocalLLMSummaryTable({ summaries, currentModelId, modelStatusCounts = {
                 <tr key={label}>
                   <td>
                     <code>{formatLabelName(label)}</code>
+                    <span className="muted tiny benchmark-snippet">{formatMetricValue(labelTotals[label])} OpenAI records</span>
                     {priorityLabels.has(label) ? <span className="benchmark-state-badge benchmark-state-badge-loaded">Priority</span> : null}
                   </td>
                   {labelModelSummaries.map((summary) => {
