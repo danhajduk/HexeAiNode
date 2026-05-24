@@ -540,6 +540,11 @@ function LocalLLMBenchmarkTable({
   const currentModelId = summary?.rotation?.current_model_id || "unknown";
   const activeBenchmarkStatus = formatBenchmarkStatus(summary?.active_benchmark?.status, summary?.active_benchmark?.active);
   const activeBenchmarkDetail = benchmarkReplayDetail(summary?.active_benchmark);
+  const pendingPromptCount = Number(summary?.status_counts?.pending || 0);
+  const completedPromptCount = Number(summary?.status_counts?.completed || 0);
+  const failedPromptCount = Number(summary?.status_counts?.failed || 0);
+  const totalPromptCount = pendingPromptCount + completedPromptCount + failedPromptCount;
+  const unprocessedPromptText = `${formatMetricValue(pendingPromptCount)} / ${formatMetricValue(totalPromptCount)}`;
   const lastSwap = summary?.rotation?.last_swap || summary?.active_benchmark?.last_swap || null;
   const swapDuration =
     summary?.active_benchmark?.status === "swapping"
@@ -614,6 +619,10 @@ function LocalLLMBenchmarkTable({
           <strong>Prompt Capture</strong>
           <span>{summary?.capture_enabled ? "On" : "Off"}</span>
         </div>
+        <div className="benchmark-status-pill benchmark-status-pill-emphasis">
+          <strong>{unprocessedPromptText}</strong>
+          <span>Unprocessed Prompts</span>
+        </div>
         <div className="benchmark-status-pill">
           <strong>
             {summary?.gpu_vram?.available
@@ -631,15 +640,15 @@ function LocalLLMBenchmarkTable({
           <span>{summary?.active_benchmark?.status === "swapping" ? "Current Swap" : "Last Swap"}</span>
         </div>
         <div className="benchmark-status-pill">
-          <strong>{formatMetricValue(summary?.status_counts?.pending || 0)}</strong>
+          <strong>{formatMetricValue(pendingPromptCount)}</strong>
           <span>Pending</span>
         </div>
         <div className="benchmark-status-pill">
-          <strong>{formatMetricValue(summary?.status_counts?.completed || 0)}</strong>
+          <strong>{formatMetricValue(completedPromptCount)}</strong>
           <span>Completed</span>
         </div>
         <div className="benchmark-status-pill">
-          <strong>{formatMetricValue(summary?.status_counts?.failed || 0)}</strong>
+          <strong>{formatMetricValue(failedPromptCount)}</strong>
           <span>Failed</span>
         </div>
       </div>

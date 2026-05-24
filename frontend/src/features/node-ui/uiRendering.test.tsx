@@ -326,6 +326,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Running on Qwen 8B");
     expect(markup).toContain("1 prompt active");
     expect(markup).toContain("Prompt Capture");
+    expect(markup).toContain("1 / 2");
+    expect(markup).toContain("Unprocessed Prompts");
     expect(markup).toContain("Last Swap");
     expect(markup).toContain("12.5s");
     expect(markup).toContain("Current VRAM Load");
