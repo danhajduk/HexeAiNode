@@ -220,6 +220,9 @@ function comparisonHasLabel(comparison, label) {
   if (!normalizedLabel) {
     return true;
   }
+  if (comparison?.correct_label) {
+    return false;
+  }
   const labels = [
     referenceLabel(comparison),
     outputLabel({ label: comparison?.openai?.label, outputText: comparison?.openai?.output_text }),
@@ -716,7 +719,7 @@ function LocalLLMBenchmarkTable({
   const emptyPromptMessage = promptListCleared
     ? "Prompt list cleared in this view. Score summary is still using the captured benchmark data."
     : selectedLabelFilter
-      ? "No benchmark mail found for this label."
+      ? "No pending-review benchmark mail found for this label."
       : showOnlyDifferences && comparisons.length
         ? "No label differences in the current benchmark view."
         : "No OpenAI benchmark records have been captured yet.";
@@ -843,7 +846,7 @@ function LocalLLMBenchmarkTable({
         <div className="benchmark-filter-strip">
           <span>Label Filter</span>
           <code>{formatLabelName(selectedLabelFilter)}</code>
-          <strong>{formatMetricValue(filteredComparisons.length)} mail</strong>
+          <strong>{formatMetricValue(filteredComparisons.length)} pending review</strong>
         </div>
       ) : null}
       <div className="client-usage-table-card">
