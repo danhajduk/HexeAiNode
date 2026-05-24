@@ -87,9 +87,10 @@ class LocalLLMBenchmarkRotationRunner:
                 "ready_timeout_seconds": last_swap["ready_timeout_seconds"],
             }
             self._set_activity_status("running", model_id=model_id)
+            pending_for_model = self._pending_count_for_model(model_id)
             worker_result = await self._worker.run_pending_for_model(
                 model_id=model_id,
-                limit=self._batch_limit,
+                limit=max(pending_for_model, self._batch_limit),
             )
             result = {
                 "model_id": model_id,
@@ -111,14 +112,16 @@ class LocalLLMBenchmarkRotationRunner:
             raise ValueError("loaded_local_llm_model_required")
         try:
             self._set_activity_status("running", model_id=model_id)
+            pending_for_model = self._pending_count_for_model(model_id)
             worker_result = await self._worker.run_pending_for_model(
                 model_id=model_id,
-                limit=self._batch_limit,
+                limit=max(pending_for_model, self._batch_limit),
             )
             result = {
                 "model_id": model_id,
                 "mode": "loaded_model",
                 "ran_at": local_now_iso(),
+                "pending_before_run": pending_for_model,
                 "worker_result": worker_result,
             }
             self._save_state(model_id=model_id, result=result)
@@ -209,6 +212,11 @@ class LocalLLMBenchmarkRotationRunner:
         state = self._load_state()
         previous_id = self._live_model_id() or str(state.get("current_model_id") or "").strip()
         previous_index = next((idx for idx, item in enumerate(models) if str(item.get("id")) == previous_id), -1)
+        for offset in range(1, len(models) + 1):
+            candidate = models[(previous_index + offset) % len(models)]
+            candidate_id = str(candidate.get("id") or "").strip()
+            if self._pending_count_for_model(candidate_id) > 0:
+                return candidate
         return models[(previous_index + 1) % len(models)]
 
     def _load_models(self) -> list[dict]:

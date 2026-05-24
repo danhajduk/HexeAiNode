@@ -563,7 +563,9 @@ function LocalLLMBenchmarkTable({
       ? summary?.active_benchmark?.swap_elapsed_seconds
       : lastSwap?.duration_seconds;
   const swapError = lastSwap?.error;
-  const modelSummaries = buildLocalModelSummaries({ comparisons, modelIds });
+  const modelSummaries = Array.isArray(summary?.model_summaries) && summary.model_summaries.length
+    ? summary.model_summaries
+    : buildLocalModelSummaries({ comparisons, modelIds });
   const modelStatusCounts = summary?.model_status_counts || {};
   const filteredComparisons = showOnlyDifferences
     ? comparisons.filter((comparison) => hasDifferentLabel(comparison, modelIds))

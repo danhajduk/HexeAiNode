@@ -68,6 +68,13 @@ def _json_loads(value: str | None, fallback: Any) -> Any:
         return fallback
 
 
+def _average(values: list[float | None]) -> float | None:
+    normalized = [float(value) for value in values if value is not None]
+    if not normalized:
+        return None
+    return sum(normalized) / len(normalized)
+
+
 def local_llm_benchmark_prompt_allowed(prompt_id: str | None) -> bool:
     normalized = str(prompt_id or "").strip()
     return normalized in set(DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS)
@@ -354,6 +361,24 @@ class LocalLLMBenchmarkStore:
                 """,
                 tuple(DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
             ).fetchall()
+            all_record_rows = connection.execute(
+                f"""
+                SELECT * FROM benchmark_records
+                WHERE prompt_id IN ({prompt_placeholders})
+                """,
+                tuple(DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
+            ).fetchall()
+            all_result_rows = connection.execute(
+                f"""
+                SELECT m.*, r.prompt_id, r.task_family, r.source_label, r.source_confidence,
+                       r.source_latency_ms, r.correct_label
+                FROM benchmark_model_results m
+                JOIN benchmark_records r ON r.record_id = m.record_id
+                WHERE r.prompt_id IN ({prompt_placeholders})
+                ORDER BY m.model_id
+                """,
+                tuple(DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS),
+            ).fetchall()
 
         results_by_record: dict[str, list[dict]] = {}
         for row in result_rows:
@@ -369,6 +394,7 @@ class LocalLLMBenchmarkStore:
             "capture_enabled": self.capture_enabled(),
             "status_counts": {str(row["status"]): int(row["count"] or 0) for row in status_rows},
             "model_status_counts": model_status_counts,
+            "model_summaries": self._model_summary_payload(record_rows=all_record_rows, result_rows=all_result_rows),
             "running": [
                 {
                     "record_id": str(row["record_id"]),
@@ -405,6 +431,87 @@ class LocalLLMBenchmarkStore:
                 for row in record_rows
             ],
         }
+
+    @staticmethod
+    def _model_summary_payload(*, record_rows: list[sqlite3.Row], result_rows: list[sqlite3.Row]) -> list[dict]:
+        prompt_names = sorted(
+            {
+                str(row["prompt_id"] or row["task_family"] or "unattributed")
+                for row in record_rows
+            }
+        )
+        model_ids = sorted({str(row["model_id"]) for row in result_rows if str(row["model_id"] or "").strip()})
+        summaries: list[dict] = []
+        for prompt_name in prompt_names:
+            prompt_records = [
+                row
+                for row in record_rows
+                if str(row["prompt_id"] or row["task_family"] or "unattributed") == prompt_name
+            ]
+            openai_matches = 0
+            openai_scores: list[float | None] = []
+            openai_latencies: list[float | None] = []
+            for row in prompt_records:
+                target_label = str(row["correct_label"] or row["source_label"] or "").strip().lower()
+                source_label = str(row["source_label"] or "").strip().lower()
+                if target_label and source_label and target_label == source_label:
+                    openai_matches += 1
+                openai_scores.append(float(row["source_confidence"]) if row["source_confidence"] is not None else None)
+                openai_latencies.append(float(row["source_latency_ms"]) if row["source_latency_ms"] is not None else None)
+            summaries.append(
+                {
+                    "promptName": prompt_name,
+                    "modelId": "__openai__",
+                    "completed": len(prompt_records),
+                    "matchRate": openai_matches / len(prompt_records) if prompt_records else None,
+                    "avgScoreDelta": None,
+                    "avgLatency": _average(openai_latencies),
+                    "avgVram": None,
+                    "avgGpu": None,
+                }
+            )
+            for model_id in model_ids:
+                completed_rows = [
+                    row
+                    for row in result_rows
+                    if str(row["model_id"]) == model_id
+                    and str(row["status"]) == "completed"
+                    and str(row["prompt_id"] or row["task_family"] or "unattributed") == prompt_name
+                ]
+                matched = 0
+                score_deltas: list[float | None] = []
+                latencies: list[float | None] = []
+                vram_values: list[float | None] = []
+                gpu_values: list[float | None] = []
+                for row in completed_rows:
+                    target_label = str(row["correct_label"] or row["source_label"] or "").strip().lower()
+                    local_label = str(row["label"] or "").strip().lower()
+                    if target_label and local_label and target_label == local_label:
+                        matched += 1
+                    local_confidence = float(row["confidence"]) if row["confidence"] is not None else None
+                    source_confidence = float(row["source_confidence"]) if row["source_confidence"] is not None else None
+                    score_deltas.append(
+                        local_confidence - source_confidence
+                        if local_confidence is not None and source_confidence is not None
+                        else None
+                    )
+                    latencies.append(float(row["latency_ms"]) if row["latency_ms"] is not None else None)
+                    vram = row["vram_used_mib"] if row["vram_used_mib"] is not None else row["vram_delta_mib"]
+                    vram_values.append(float(vram) if vram is not None else None)
+                    gpu_values.append(float(row["gpu_util_percent"]) if row["gpu_util_percent"] is not None else None)
+                summaries.append(
+                    {
+                        "promptName": prompt_name,
+                        "modelId": model_id,
+                        "completed": len(completed_rows),
+                        "matchRate": matched / len(completed_rows) if completed_rows else None,
+                        "avgScoreDelta": _average(score_deltas),
+                        "avgLatency": _average(latencies),
+                        "avgVram": _average(vram_values),
+                        "avgGpu": _average(gpu_values),
+                    }
+                )
+        return summaries
 
     def pending_count_for_models(self, *, model_ids: list[str]) -> int:
         normalized = [str(model_id or "").strip() for model_id in model_ids if str(model_id or "").strip()]

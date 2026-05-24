@@ -74,6 +74,16 @@ class LocalLLMBenchmarkStoreTests(unittest.TestCase):
             completed = [item for item in comparison["local_results"] if item["model_id"] == "qwen3-8b-q4_k_m"][0]
             self.assertEqual(completed["vram_used_mib"], 5456)
             self.assertEqual(completed["gpu_util_percent"], 42)
+            qwen_summary = [
+                item
+                for item in payload["model_summaries"]
+                if item["modelId"] == "qwen3-8b-q4_k_m"
+            ][0]
+            self.assertEqual(qwen_summary["completed"], 1)
+            self.assertEqual(qwen_summary["matchRate"], 1.0)
+            self.assertEqual(qwen_summary["avgLatency"], 0.0)
+            self.assertEqual(qwen_summary["avgVram"], 5456)
+            self.assertEqual(qwen_summary["avgGpu"], 42)
             self.assertEqual(payload["running"], [])
             self.assertEqual(store.pending_count_for_models(model_ids=["gemma-3-12b-it-q4_k_m"]), 1)
             self.assertEqual(store.pending_count_for_model(model_id="gemma-3-12b-it-q4_k_m"), 1)
