@@ -137,7 +137,54 @@ class LocalLLMBenchmarkStoreTests(unittest.TestCase):
             payload = store.summary_payload()
             self.assertIsNone(record_id)
             self.assertFalse(payload["capture_enabled"])
-            self.assertEqual(payload["comparisons"], [])
+
+    def test_summary_prioritizes_records_with_local_results(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LocalLLMBenchmarkStore(
+                path=str(Path(tmp) / "local_llm_benchmarks.db"),
+                logger=logging.getLogger("local-llm-benchmark-test"),
+            )
+
+            older_record_id = store.record_openai_execution(
+                request=UnifiedExecutionRequest(
+                    task_family="task.classification",
+                    prompt="older classified prompt",
+                    metadata={"prompt_id": "prompt.email.classifier"},
+                ),
+                response=UnifiedExecutionResponse(
+                    provider_id="openai",
+                    model_id="gpt-5.4-nano",
+                    output_text='{"label":"marketing","confidence":0.8}',
+                ),
+                model_ids=["qwen3-8b-q4_k_m"],
+            )
+            newer_record_id = store.record_openai_execution(
+                request=UnifiedExecutionRequest(
+                    task_family="task.classification",
+                    prompt="newer pending prompt",
+                    metadata={"prompt_id": "prompt.email.classifier"},
+                ),
+                response=UnifiedExecutionResponse(
+                    provider_id="openai",
+                    model_id="gpt-5.4-nano",
+                    output_text='{"label":"shipment","confidence":0.9}',
+                ),
+                model_ids=["qwen3-8b-q4_k_m"],
+            )
+            store.record_model_result(
+                record_id=older_record_id,
+                model_id="qwen3-8b-q4_k_m",
+                response=UnifiedExecutionResponse(
+                    provider_id="local",
+                    model_id="qwen3-8b-q4_k_m",
+                    output_text='{"label":"marketing","confidence":0.7}',
+                ),
+            )
+
+            payload = store.summary_payload(limit=1)
+
+            self.assertEqual(newer_record_id, store.summary_payload(limit=2)["comparisons"][1]["record_id"])
+            self.assertEqual(payload["comparisons"][0]["record_id"], older_record_id)
 
     def test_parse_structured_output_summary_is_best_effort(self):
         self.assertEqual(

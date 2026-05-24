@@ -299,7 +299,18 @@ class LocalLLMBenchmarkStore:
                 f"""
                 SELECT * FROM benchmark_records
                 WHERE prompt_id IN ({prompt_placeholders})
-                ORDER BY created_at DESC
+                ORDER BY
+                    CASE
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM benchmark_model_results m
+                            WHERE m.record_id = benchmark_records.record_id
+                              AND m.status != 'pending'
+                        )
+                        THEN 0
+                        ELSE 1
+                    END,
+                    created_at DESC
                 LIMIT ?
                 """,
                 (*DEFAULT_LOCAL_LLM_BENCHMARK_PROMPT_IDS, max(int(limit), 0)),
