@@ -674,7 +674,7 @@
 }
 
 .local-llm-label-table {
-  min-width: 760px;
+  min-width: 980px;
 }
 
 .local-llm-label-table-wrap {
@@ -697,6 +697,21 @@
 
 .local-llm-label-table .benchmark-state-badge {
   margin-left: 6px;
+}
+
+.benchmark-label-metric-cell {
+  display: grid;
+  gap: 2px;
+  min-width: 128px;
+}
+
+.benchmark-label-metric-cell strong {
+  font-size: 0.96rem;
+  color: hsl(var(--sx-text));
+}
+
+.local-llm-loaded-column {
+  background: hsl(var(--sx-accent) / 0.05);
 }
 
 .local-llm-summary-row-loaded {

@@ -458,11 +458,15 @@ class LocalLLMBenchmarkStore:
             openai_scores: list[float | None] = []
             openai_latencies: list[float | None] = []
             openai_label_counts: dict[str, int] = {}
+            openai_scores_by_label: dict[str, list[float | None]] = {}
             for row in prompt_records:
                 target_label = str(row["correct_label"] or row["source_label"] or "").strip().lower()
                 source_label = str(row["source_label"] or "").strip().lower()
                 if target_label:
                     openai_label_counts[target_label] = openai_label_counts.get(target_label, 0) + 1
+                    openai_scores_by_label.setdefault(target_label, []).append(
+                        float(row["source_confidence"]) if row["source_confidence"] is not None else None
+                    )
                 if target_label and source_label and target_label == source_label:
                     openai_matches += 1
                 openai_scores.append(float(row["source_confidence"]) if row["source_confidence"] is not None else None)
@@ -474,6 +478,7 @@ class LocalLLMBenchmarkStore:
                     "completed": total,
                     "matched": total,
                     "matchRate": 1.0,
+                    "avgScore": _average(openai_scores_by_label.get(label, [])),
                 }
                 for label, total in sorted(openai_label_counts.items())
             ]
@@ -510,15 +515,17 @@ class LocalLLMBenchmarkStore:
                 gpu_values: list[float | None] = []
                 completed_by_label: dict[str, int] = {}
                 matched_by_label: dict[str, int] = {}
+                scores_by_label: dict[str, list[float | None]] = {}
                 for row in completed_rows:
                     target_label = str(row["correct_label"] or row["source_label"] or "").strip().lower()
                     local_label = str(row["label"] or "").strip().lower()
+                    local_confidence = float(row["confidence"]) if row["confidence"] is not None else None
                     if target_label:
                         completed_by_label[target_label] = completed_by_label.get(target_label, 0) + 1
+                        scores_by_label.setdefault(target_label, []).append(local_confidence)
                     if target_label and local_label and target_label == local_label:
                         matched += 1
                         matched_by_label[target_label] = matched_by_label.get(target_label, 0) + 1
-                    local_confidence = float(row["confidence"]) if row["confidence"] is not None else None
                     source_confidence = float(row["source_confidence"]) if row["source_confidence"] is not None else None
                     score_deltas.append(
                         local_confidence - source_confidence
@@ -536,6 +543,7 @@ class LocalLLMBenchmarkStore:
                         "completed": completed_by_label.get(label, 0),
                         "matched": matched_by_label.get(label, 0),
                         "matchRate": _safe_ratio(matched_by_label.get(label, 0), completed_by_label.get(label, 0)),
+                        "avgScore": _average(scores_by_label.get(label, [])),
                     }
                     for label, total in sorted(prompt_total_by_label.items())
                 ]

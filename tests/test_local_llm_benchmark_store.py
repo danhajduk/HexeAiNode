@@ -93,6 +93,7 @@ class LocalLLMBenchmarkStoreTests(unittest.TestCase):
                         "completed": 1,
                         "matched": 1,
                         "matchRate": 1.0,
+                        "avgScore": 0.7,
                     }
                 ],
             )

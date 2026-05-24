@@ -125,6 +125,13 @@ const BENCHMARK_LABEL_OPTIONS = [
   "unknown",
 ];
 
+const LOCAL_LLM_LABEL_TABLE_ORDER = [
+  "gemma-3-12b-it-q4_k_m",
+  "mistral-nemo-instruct-2407-q4_k_m",
+  "qwen3-14b-q4_k_m",
+  "qwen3-8b-q4_k_m",
+];
+
 function localLlmDisplayName(modelId) {
   return LOCAL_LLM_DISPLAY_NAMES[String(modelId || "").trim()] || String(modelId || "local").trim() || "local";
 }
@@ -253,20 +260,33 @@ function buildLocalModelSummaries({ comparisons, modelIds }) {
     ["__openai__", ...modelIds].map((modelId) => {
       const completedResults = [];
       let matchedLabels = 0;
+      const promptTotalByLabel = {};
+      const completedByLabel = {};
+      const matchedByLabel = {};
+      const scoresByLabel = {};
       const promptComparisons = comparisons.filter((comparison) => promptName(comparison) === name);
       for (const comparison of promptComparisons) {
         const targetLabel = referenceLabel(comparison);
+        if (targetLabel) {
+          promptTotalByLabel[targetLabel] = (promptTotalByLabel[targetLabel] || 0) + 1;
+        }
         const result =
           modelId === "__openai__"
             ? { ...comparison?.openai, status: "completed", total_tokens: comparison?.openai?.usage?.total_tokens }
             : (Array.isArray(comparison?.local_results) ? comparison.local_results : []).find((item) => item?.model_id === modelId);
         if (!result || result.status !== "completed") continue;
         const resultLabel = outputLabel({ label: result.label, outputText: result.output_text });
+        const localScore = outputScore({ confidence: result.confidence, outputText: result.output_text });
+        if (targetLabel) {
+          completedByLabel[targetLabel] = (completedByLabel[targetLabel] || 0) + 1;
+          scoresByLabel[targetLabel] = [...(scoresByLabel[targetLabel] || []), localScore];
+        }
         if (targetLabel && resultLabel && targetLabel === resultLabel) {
           matchedLabels += 1;
+          matchedByLabel[targetLabel] = (matchedByLabel[targetLabel] || 0) + 1;
         }
         completedResults.push({
-          localScore: outputScore({ confidence: result.confidence, outputText: result.output_text }),
+          localScore,
           openAiScore: modelId === "__openai__" ? null : outputScore({ confidence: comparison?.openai?.confidence, outputText: comparison?.openai?.output_text }),
           latency: result.latency_ms,
           vram: result.vram_used_mib ?? result.vram_delta_mib,
@@ -285,13 +305,53 @@ function buildLocalModelSummaries({ comparisons, modelIds }) {
         avgLatency: average(completedResults.map((item) => item.latency)),
         avgVram: average(completedResults.map((item) => item.vram)),
         avgGpu: average(completedResults.map((item) => item.gpu)),
+        labelBreakdown: Object.keys(promptTotalByLabel).sort().map((label) => ({
+          label,
+          total: promptTotalByLabel[label] || 0,
+          completed: completedByLabel[label] || 0,
+          matched: matchedByLabel[label] || 0,
+          matchRate: completedByLabel[label] ? (matchedByLabel[label] || 0) / completedByLabel[label] : null,
+          avgScore: average(scoresByLabel[label] || []),
+        })),
       };
     })
   );
 }
 
+function sortLocalLabelSummaries(summaries) {
+  const localSummaries = summaries.filter((summary) => summary?.modelId && summary.modelId !== "__openai__");
+  return [...localSummaries].sort((left, right) => {
+    const leftIndex = LOCAL_LLM_LABEL_TABLE_ORDER.indexOf(left.modelId);
+    const rightIndex = LOCAL_LLM_LABEL_TABLE_ORDER.indexOf(right.modelId);
+    const normalizedLeftIndex = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex;
+    const normalizedRightIndex = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex;
+    if (normalizedLeftIndex !== normalizedRightIndex) {
+      return normalizedLeftIndex - normalizedRightIndex;
+    }
+    return localLlmDisplayName(left.modelId).localeCompare(localLlmDisplayName(right.modelId));
+  });
+}
+
+function LabelModelMetricCell({ entry }) {
+  if (!entry) {
+    return <span className="muted tiny">No records</span>;
+  }
+  const completed = Number(entry.completed || 0);
+  const matched = Number(entry.matched || 0);
+  const total = Number(entry.total || 0);
+  return (
+    <div className="benchmark-label-metric-cell">
+      <strong>{entry.matchRate === null || entry.matchRate === undefined ? "pending" : `${formatMetricValue(entry.matchRate * 100)}%`}</strong>
+      <span>{formatMetricValue(matched)} / {formatMetricValue(completed)} records</span>
+      <span className="muted tiny">Avg score {formatMetricValue(entry.avgScore)}</span>
+      {completed < total ? <span className="muted tiny">{formatMetricValue(completed)} / {formatMetricValue(total)} classified</span> : null}
+    </div>
+  );
+}
+
 function LocalLLMSummaryTable({ summaries, currentModelId, modelStatusCounts = {} }) {
   const priorityLabels = new Set(["action_required", "customer_support", "invoice", "shipment", "security"]);
+  const labelModelSummaries = sortLocalLabelSummaries(summaries);
   const labelBreakdownRows = summaries.flatMap((summary) =>
     Array.isArray(summary.labelBreakdown)
       ? summary.labelBreakdown.map((entry) => ({ ...entry, summary }))
@@ -382,40 +442,33 @@ function LocalLLMSummaryTable({ summaries, currentModelId, modelStatusCounts = {
             <thead>
               <tr>
                 <th>Label</th>
-                <th>Model</th>
-                <th>Match</th>
-                <th>Matched</th>
-                <th>Classified</th>
-                <th>Total Records</th>
+                {labelModelSummaries.map((summary) => (
+                  <th className={summary.modelId === currentModelId ? "local-llm-loaded-column-header" : ""} key={summary.modelId}>
+                    {localLlmDisplayName(summary.modelId)}
+                    {summary.modelId === currentModelId ? <span className="benchmark-state-badge benchmark-state-badge-loaded">Loaded</span> : null}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {orderedLabels.flatMap((label) =>
-                summaries.map((summary) => {
+              {orderedLabels.map((label) => (
+                <tr key={label}>
+                  <td>
+                    <code>{formatLabelName(label)}</code>
+                    {priorityLabels.has(label) ? <span className="benchmark-state-badge benchmark-state-badge-loaded">Priority</span> : null}
+                  </td>
+                  {labelModelSummaries.map((summary) => {
                   const entry = Array.isArray(summary.labelBreakdown)
                     ? summary.labelBreakdown.find((item) => item?.label === label)
                     : null;
-                  if (!entry) {
-                    return null;
-                  }
                   return (
-                    <tr key={`${label}-${summary.modelId}`}>
-                      <td>
-                        <code>{formatLabelName(label)}</code>
-                        {priorityLabels.has(label) ? <span className="benchmark-state-badge benchmark-state-badge-loaded">Priority</span> : null}
-                      </td>
-                      <td>
-                        <code>{summary.modelId === "__openai__" ? "OpenAI" : localLlmDisplayName(summary.modelId)}</code>
-                        <span className="muted tiny benchmark-snippet">{summary.modelId === "__openai__" ? "baseline" : summary.modelId}</span>
-                      </td>
-                      <td>{entry.matchRate === null || entry.matchRate === undefined ? "pending" : `${formatMetricValue(entry.matchRate * 100)}%`}</td>
-                      <td>{formatMetricValue(entry.matched)}</td>
-                      <td>{formatMetricValue(entry.completed)}</td>
-                      <td>{formatMetricValue(entry.total)}</td>
-                    </tr>
+                    <td className={summary.modelId === currentModelId ? "local-llm-loaded-column" : ""} key={`${label}-${summary.modelId}`}>
+                      <LabelModelMetricCell entry={entry} />
+                    </td>
                   );
-                }).filter(Boolean)
-              )}
+                  })}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
