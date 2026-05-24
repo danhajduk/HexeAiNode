@@ -508,3 +508,51 @@ Task mapping:
 - Task 384: Add scheduled llama.cpp model switching for queued benchmark replay
 - Task 385: Expose local LLM benchmark comparison API
 - Task 386: Add local LLM benchmark comparison table to the node UI
+
+## Task 916-924
+Original task source: user request on 2026-05-24
+
+Preserved scope:
+- Rework benchmarking so the AI Node is an execution-only proxy to provider/model power, not the owner of benchmark truth.
+- Benchmark ownership must move to the prompt-owning client node because that node knows:
+  - what the prompt is intended to do
+  - which labels or outputs are expected
+  - which mistakes matter
+  - how benchmark results should drive prompt tuning
+- The AI Node must not judge correctness, choose winners, or score model outputs for external benchmark requests.
+- The AI Node should run requested prompts against requested provider/model targets and return one unified response containing:
+  - provider id
+  - model id
+  - status
+  - raw output text
+  - parsed structured output when possible
+  - token usage when available
+  - latency
+  - cost when available
+  - provider/model errors
+  - local runtime metrics when available, such as VRAM and GPU utilization
+- Cloud baselines must be optional. A client can request:
+  - local-only execution
+  - cloud-only execution
+  - cloud plus local comparison execution
+  - multiple local/cloud candidates in one request
+- The original local LLM shadow benchmark must remain supported during migration until prompt-owning nodes migrate to the new execution-only benchmark API.
+- Prompt versions `v2.0+` should be treated as the new benchmark-capable prompt contract line.
+- Benchmark enablement belongs in the prompt contract/metadata owned by the client or prompt registry, while benchmark execution mode and target provider/model list belong in the execution API request.
+- Task family should remain a request field such as `task.classification` or `task.summarization`; do not split into separate `/classify`, `/summarize`, or `/summary` API routes unless a future standards decision requires convenience wrappers.
+- The canonical API should stay task-family based so new tasks do not require new routes.
+- Documentation must clearly distinguish:
+  - legacy node-local shadow benchmarking: Implemented
+  - new client-owned execution-only benchmark API: Not developed until implemented
+  - prompt tuning consumers: client-owned, not AI Node judgment
+
+Task mapping:
+- Task 916: Document the execution-only benchmark architecture and migration boundary
+- Task 917: Add prompt contract support for benchmark-capable prompt versions v2.0 and later
+- Task 918: Add an execution-only multi-target benchmark API that returns provider/model outputs without scoring
+- Task 919: Support cloud-optional and local-only benchmark execution targets
+- Task 920: Preserve the existing local LLM shadow benchmark during migration
+- Task 921: Move benchmark ownership, expected outputs, and scoring to prompt-owning client nodes
+- Task 922: Add benchmark execution result schemas and tests for raw and parsed outputs
+- Task 923: Update the node UI to separate legacy local benchmark views from external benchmark execution
+- Task 924: Add migration docs for prompt tuning workflows that consume benchmark execution results

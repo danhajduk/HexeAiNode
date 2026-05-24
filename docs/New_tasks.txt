@@ -47,3 +47,12 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
+[TODO] Task 916: Document the execution-only benchmark architecture and migration boundary
+[TODO] Task 917: Add prompt contract support for benchmark-capable prompt versions v2.0 and later
+[TODO] Task 918: Add an execution-only multi-target benchmark API that returns provider/model outputs without scoring
+[TODO] Task 919: Support cloud-optional and local-only benchmark execution targets
+[TODO] Task 920: Preserve the existing local LLM shadow benchmark during migration
+[TODO] Task 921: Move benchmark ownership, expected outputs, and scoring to prompt-owning client nodes
+[TODO] Task 922: Add benchmark execution result schemas and tests for raw and parsed outputs
+[TODO] Task 923: Update the node UI to separate legacy local benchmark views from external benchmark execution
+[TODO] Task 924: Add migration docs for prompt tuning workflows that consume benchmark execution results
