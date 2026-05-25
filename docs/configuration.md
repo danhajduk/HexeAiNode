@@ -32,7 +32,7 @@ Backend runtime:
 - `SYNTHIA_FINALIZE_POLL_INTERVAL_SECONDS` default `2`
 - `SYNTHIA_PROVIDER_REGISTRY_PATH` default `data/provider_registry.json`
 - `SYNTHIA_PROVIDER_METRICS_PATH` default `data/provider_metrics.json`
-- `SYNTHIA_PROVIDER_LOCAL_DEFAULT_MODEL_ID` default `qwen3-8b-q4_k_m`
+- `SYNTHIA_PROVIDER_LOCAL_DEFAULT_MODEL_ID` default `qwen3-14b-q4_k_m`
 - `SYNTHIA_PROVIDER_LOCAL_TRANSPORT` default `socket`
 - `SYNTHIA_PROVIDER_LOCAL_SOCKET` default `/run/hexe/ai-node/llamacpp.sock`
 - `SYNTHIA_PROVIDER_LOCAL_BASE_URL` default `http://127.0.0.1:8011/v1`

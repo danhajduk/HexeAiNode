@@ -2,28 +2,12 @@
   "schema_version": "1.0",
   "models": [
     {
-      "id": "qwen3-8b-q4_k_m",
-      "repo": "Qwen/Qwen3-8B-GGUF",
-      "file": "qwen3-8b-q4_k_m.gguf",
-      "quantization": "Q4_K_M",
-      "role": "primary_reasoning_classification",
-      "ctx_size": 4096
-    },
-    {
       "id": "qwen3-14b-q4_k_m",
       "repo": "Qwen/Qwen3-14B-GGUF",
       "file": "qwen3-14b-q4_k_m.gguf",
       "quantization": "Q4_K_M",
       "role": "strong_reasoning_classification",
       "ctx_size": 4096
-    },
-    {
-      "id": "qwen3-4b-q5_k_m",
-      "repo": "Qwen/Qwen3-4B-GGUF",
-      "file": "qwen3-4b-q5_k_m.gguf",
-      "quantization": "Q5_K_M",
-      "role": "safe_reasoning_classification",
-      "ctx_size": 8192
     },
     {
       "id": "gemma-3-12b-it-q4_k_m",
@@ -40,22 +24,6 @@
       "quantization": "Q4_K_M",
       "role": "long_context_classification",
       "ctx_size": 8192
-    },
-    {
-      "id": "qwen2.5-coder-7b-q4_k_m",
-      "repo": "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF",
-      "file": "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
-      "quantization": "Q4_K_M",
-      "role": "coding_comparator",
-      "ctx_size": 4096
-    },
-    {
-      "id": "gemma-3-1b-it",
-      "repo": "ggml-org/gemma-3-1b-it-GGUF",
-      "file": "",
-      "quantization": "default",
-      "role": "smoke_load_control",
-      "ctx_size": 2048
     }
   ]
 }

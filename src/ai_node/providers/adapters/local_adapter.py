@@ -21,7 +21,7 @@ class LocalProviderAdapter(ProviderAdapter):
         timeout_seconds: float = 60.0,
     ) -> None:
         self.provider_id = str(provider_id or "local").strip()
-        self._default_model_id = str(default_model_id or "").strip() or "qwen3-8b-q4_k_m"
+        self._default_model_id = str(default_model_id or "").strip() or "qwen3-14b-q4_k_m"
         self._base_url = str(base_url or "http://127.0.0.1:8011/v1").rstrip("/")
         self._transport = str(transport or "socket").strip().lower()
         self._socket_path = str(socket_path or "/run/hexe/ai-node/llamacpp.sock").strip()

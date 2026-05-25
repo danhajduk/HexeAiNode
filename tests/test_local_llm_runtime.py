@@ -28,7 +28,7 @@ class _LlamaCompatHandler(BaseHTTPRequestHandler):
                 {
                     "data": [
                         {
-                            "id": "qwen3-8b-q4_k_m",
+                            "id": "qwen3-14b-q4_k_m",
                             "created": 1760000000,
                         }
                     ]
@@ -81,7 +81,7 @@ class LocalLlmRuntimeTests(unittest.IsolatedAsyncioTestCase):
             thread.start()
             try:
                 adapter = LocalProviderAdapter(
-                    default_model_id="qwen3-8b-q4_k_m",
+                    default_model_id="qwen3-14b-q4_k_m",
                     transport="socket",
                     socket_path=socket_path,
                     timeout_seconds=5,
@@ -92,7 +92,7 @@ class LocalLlmRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     UnifiedExecutionRequest(
                         task_family="task.classification",
                         prompt="classify",
-                        requested_model="qwen3-8b-q4_k_m",
+                        requested_model="qwen3-14b-q4_k_m",
                     )
                 )
             finally:
@@ -101,8 +101,8 @@ class LocalLlmRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.sleep(0)
 
         self.assertEqual(health["availability"], "available")
-        self.assertEqual(models[0].model_id, "qwen3-8b-q4_k_m")
-        self.assertEqual(response.output_text, "local:qwen3-8b-q4_k_m")
+        self.assertEqual(models[0].model_id, "qwen3-14b-q4_k_m")
+        self.assertEqual(response.output_text, "local:qwen3-14b-q4_k_m")
         self.assertIn("/v1/models", _LlamaCompatHandler.seen_paths)
         self.assertIn("/v1/chat/completions", _LlamaCompatHandler.seen_paths)
 

@@ -137,7 +137,7 @@ class ProviderConfigLoader:
             default_model_id=_first_non_empty_string(
                 str(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_DEFAULT_MODEL_ID") or "").strip() or None,
                 local_default_model,
-                "qwen3-8b-q4_k_m" if normalized_provider_id == "local" else None,
+                "qwen3-14b-q4_k_m" if normalized_provider_id == "local" else None,
             ),
             base_url=_first_non_empty_string(
                 str(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_BASE_URL") or "").strip() or None,

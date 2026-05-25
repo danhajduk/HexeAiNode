@@ -527,7 +527,7 @@ class NodeControlApiTests(unittest.TestCase):
                     messages=None,
                     providers=[
                         {"provider": "openai", "model": "gpt-5-mini"},
-                        {"provider": "local", "model": "qwen3-8b-q4_k_m"},
+                        {"provider": "local", "model": "qwen3-14b-q4_k_m"},
                     ],
                     temperature=0.0,
                     max_tokens=64,
@@ -537,7 +537,7 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(result["status"], "completed")
             self.assertEqual([item["provider"] for item in result["results"]], ["openai", "local"])
             self.assertEqual(result["results"][0]["model"], "gpt-5-mini")
-            self.assertEqual(result["results"][1]["model"], "qwen3-8b-q4_k_m")
+            self.assertEqual(result["results"][1]["model"], "qwen3-14b-q4_k_m")
             self.assertEqual(result["results"][0]["estimated_cost"], 0.001)
 
     def test_initiate_onboarding_persists_config_and_moves_state(self):
