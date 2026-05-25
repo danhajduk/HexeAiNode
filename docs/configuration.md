@@ -32,6 +32,10 @@ Backend runtime:
 - `SYNTHIA_FINALIZE_POLL_INTERVAL_SECONDS` default `2`
 - `SYNTHIA_PROVIDER_REGISTRY_PATH` default `data/provider_registry.json`
 - `SYNTHIA_PROVIDER_METRICS_PATH` default `data/provider_metrics.json`
+- `SYNTHIA_PROVIDER_LOCAL_DEFAULT_MODEL_ID` default `qwen3-8b-q4_k_m`
+- `SYNTHIA_PROVIDER_LOCAL_TRANSPORT` default `socket`
+- `SYNTHIA_PROVIDER_LOCAL_SOCKET` default `/run/hexe/ai-node/llamacpp.sock`
+- `SYNTHIA_PROVIDER_LOCAL_BASE_URL` default `http://127.0.0.1:8011/v1`
 - `SYNTHIA_OPENAI_PRICING_CATALOG_PATH` default `providers/openai/provider_model_pricing.json`
 - `SYNTHIA_OPENAI_PRICING_MANUAL_CONFIG_PATH` default `config/openai-pricing.yaml`
 - `SYNTHIA_DEBUG_AOPENAI` optional boolean; when true, writes full OpenAI request/response debug payloads
@@ -88,7 +92,8 @@ Provider-specific:
 
 ## Defaults And Required Values
 
-- Provider selection defaults to OpenAI as a supported cloud provider and starts disabled until configured.
+- Provider selection defaults to OpenAI as a supported cloud provider and local LLM as a supported local provider; both start disabled until configured.
+- Existing provider selection files are normalized on load so stale configs gain the built-in `local` supported provider before local enablement is saved.
 - Provider selection may also persist optional per-provider budget ceilings in `providers.budget_limits.<provider_id>`.
 - Each provider budget entry may include:
   - `max_cost_cents`

@@ -11,6 +11,7 @@ class CapabilityProviderTests(unittest.TestCase):
     def test_create_provider_capabilities_supports_openai_by_default(self):
         providers = create_provider_capabilities()
         self.assertIn("openai", providers["supported"])
+        self.assertIn("local", providers["supported"])
         self.assertEqual(providers["enabled"], [])
 
     def test_create_provider_capabilities_from_selection_config(self):

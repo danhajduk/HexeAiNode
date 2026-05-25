@@ -106,8 +106,32 @@ class ProviderSelectionConfigTests(unittest.TestCase):
             store = ProviderSelectionConfigStore(path=str(path), logger=self.logger)
             config = store.load_or_create(openai_enabled=False)
             self.assertIn("openai", config["providers"]["supported"]["cloud"])
+            self.assertIn("local", config["providers"]["supported"]["local"])
             self.assertEqual(config["providers"]["enabled"], [])
             self.assertTrue(path.exists())
+            persisted = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(persisted, config)
+
+    def test_store_load_migrates_stale_config_to_support_local(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "provider_selection.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "providers": {
+                            "supported": {"cloud": ["openai"], "local": [], "future": []},
+                            "enabled": ["openai"],
+                            "budget_limits": {},
+                        },
+                        "services": {"enabled": [], "future": []},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            store = ProviderSelectionConfigStore(path=str(path), logger=self.logger)
+            config = store.load()
+            self.assertIn("local", config["providers"]["supported"]["local"])
             persisted = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(persisted, config)
 

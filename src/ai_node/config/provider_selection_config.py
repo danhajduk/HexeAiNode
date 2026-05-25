@@ -32,6 +32,37 @@ def _collect_supported_providers(payload: dict) -> set[str]:
     return {item for item in all_supported if item}
 
 
+def normalize_provider_selection_config(data: dict) -> tuple[dict, bool]:
+    normalized = json.loads(json.dumps(data))
+    providers = normalized.setdefault("providers", {})
+    supported = providers.setdefault("supported", {})
+
+    changed = False
+    cloud_supported = _normalize_string_list(supported.get("cloud"))
+    if DEFAULT_OPENAI_PROVIDER not in cloud_supported:
+        cloud_supported.append(DEFAULT_OPENAI_PROVIDER)
+        changed = True
+
+    local_supported = _normalize_string_list(supported.get("local"))
+    if DEFAULT_LOCAL_PROVIDER not in local_supported:
+        local_supported.append(DEFAULT_LOCAL_PROVIDER)
+        changed = True
+
+    future_supported = _normalize_string_list(supported.get("future"))
+    if cloud_supported != supported.get("cloud"):
+        changed = True
+    if local_supported != supported.get("local"):
+        changed = True
+    if future_supported != supported.get("future"):
+        changed = True
+
+    supported["cloud"] = sorted(set(cloud_supported))
+    supported["local"] = sorted(set(local_supported))
+    supported["future"] = sorted(set(future_supported))
+
+    return normalized, changed
+
+
 def _normalize_provider_budget_limits(value: object) -> dict[str, dict[str, int | str]]:
     if not isinstance(value, dict):
         return {}
@@ -165,6 +196,11 @@ class ProviderSelectionConfigStore:
                 )
             return None
 
+        if isinstance(payload, dict):
+            payload, changed = normalize_provider_selection_config(payload)
+        else:
+            changed = False
+
         is_valid, error = validate_provider_selection_config(payload)
         if not is_valid:
             if hasattr(self._logger, "warning"):
@@ -173,6 +209,9 @@ class ProviderSelectionConfigStore:
                     {"path": str(self._path), "reason": error},
                 )
             return None
+
+        if changed:
+            self.save(payload)
 
         if hasattr(self._logger, "info"):
             self._logger.info("[provider-selection-config-loaded] %s", {"path": str(self._path)})

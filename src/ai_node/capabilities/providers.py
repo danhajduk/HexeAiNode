@@ -1,7 +1,7 @@
 from typing import Optional, Tuple
 
 
-DEFAULT_SUPPORTED_PROVIDERS = ("openai",)
+DEFAULT_SUPPORTED_PROVIDERS = ("openai", "local")
 
 
 def _normalize_string_list(value: object) -> list[str]:
@@ -24,6 +24,8 @@ def create_provider_capabilities(
         supported = list(DEFAULT_SUPPORTED_PROVIDERS)
     if "openai" not in supported:
         supported.append("openai")
+    if "local" not in supported:
+        supported.append("local")
     enabled = _normalize_string_list(enabled_providers)
 
     payload = {

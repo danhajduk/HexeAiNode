@@ -1774,6 +1774,14 @@ class NodeControlState:
             raise ValueError("provider selection store is not configured")
         payload = self._provider_selection_store.load_or_create(openai_enabled=False)
         providers = payload.setdefault("providers", {})
+        supported = providers.setdefault("supported", {})
+        cloud_supported = {str(item).strip() for item in list(supported.get("cloud") or []) if str(item).strip()}
+        local_supported = {str(item).strip() for item in list(supported.get("local") or []) if str(item).strip()}
+        cloud_supported.add("openai")
+        local_supported.add("local")
+        supported["cloud"] = sorted(cloud_supported)
+        supported["local"] = sorted(local_supported)
+        supported["future"] = sorted(str(item).strip() for item in list(supported.get("future") or []) if str(item).strip())
         enabled = set(providers.get("enabled") or [])
         if openai_enabled:
             enabled.add("openai")

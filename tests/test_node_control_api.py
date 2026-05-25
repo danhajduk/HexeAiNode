@@ -711,6 +711,25 @@ class NodeControlApiTests(unittest.TestCase):
             disabled_payload = state.update_provider_selection(openai_enabled=False)
             self.assertNotIn("openai", disabled_payload["config"]["providers"]["enabled"])
 
+    def test_update_provider_selection_enables_local_on_stale_config(self):
+        class _StaleProviderSelectionStore(self._FakeProviderSelectionStore):
+            def __init__(self):
+                super().__init__()
+                self.payload["providers"]["supported"]["local"] = []
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_selection_store=_StaleProviderSelectionStore(),
+            )
+            payload = state.update_provider_selection(openai_enabled=True, local_enabled=True)
+
+            self.assertIn("local", payload["config"]["providers"]["supported"]["local"])
+            self.assertIn("local", payload["config"]["providers"]["enabled"])
+
     def test_update_provider_selection_persists_provider_budget_limits(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
