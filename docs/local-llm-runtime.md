@@ -11,8 +11,10 @@ This is intended for stronger reasoning and classification on hosts with roughly
 Configured local model download targets live in `config/local-llm-models.json`:
 
 - `qwen3-14b-q4_k_m`: Qwen 14B higher-capacity comparator.
+- `qwen3-8b-q4_k_m`: Qwen 8B faster same-family comparator.
 - `gemma-3-12b-it-q4_k_m`: Gemma 12B instruction comparator.
 - `mistral-nemo-instruct-2407-q4_k_m`: Mistral Nemo comparator.
+- `llama-3.1-8b-instruct-q4_k_m`: Llama 3.1 8B instruction baseline.
 
 ## Runtime Commands
 
