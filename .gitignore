@@ -28,3 +28,4 @@ docs/report-format.md
 data/
 providers/
 runtime/cache/
+runtime/models/

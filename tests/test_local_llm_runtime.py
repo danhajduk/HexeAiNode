@@ -143,7 +143,7 @@ class LocalLlmRuntimeTests(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(result.stdout)
         self.assertTrue(payload["models"][0]["skipped_missing_file"])
         self.assertIsNone(payload["models"][0]["download_command"])
-        self.assertEqual(payload["models"][1]["download_command"][:4], ["huggingface-cli", "download", "example/qwen", "qwen.gguf"])
+        self.assertEqual(payload["models"][1]["download_command"][1:4], ["download", "example/qwen", "qwen.gguf"])
 
 
 if __name__ == "__main__":

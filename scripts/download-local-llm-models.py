@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -19,6 +20,10 @@ def _file_size(path: Path) -> int | None:
         return path.stat().st_size
     except OSError:
         return None
+
+
+def _download_tool() -> str:
+    return shutil.which("hf") or shutil.which("huggingface-cli") or "hf"
 
 
 def main() -> int:
@@ -60,7 +65,7 @@ def main() -> int:
                 }
             )
             continue
-        command = ["huggingface-cli", "download", repo, "--local-dir", str(target_dir)]
+        command = [_download_tool(), "download", repo, "--local-dir", str(target_dir)]
         if filename:
             command.insert(3, filename)
         existing = target_dir / filename if filename else None
