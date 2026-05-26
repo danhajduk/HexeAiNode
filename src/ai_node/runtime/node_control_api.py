@@ -45,6 +45,10 @@ class CapabilityDeclarationPrerequisiteError(ValueError):
         super().__init__(str(payload.get("message") or "capability declaration prerequisites are not satisfied"))
 
 
+class LocalLlmBusyError(RuntimeError):
+    pass
+
+
 def _mask_grant_name(value: object) -> str | None:
     normalized = str(value or "").strip()
     if not normalized:
@@ -347,6 +351,7 @@ class NodeControlState:
         self._supervisor_registered = False
         self._supervisor_last_error = None
         self._supervisor_last_seen = None
+        self._local_llm_switch_lock = asyncio.Lock()
         self._load_identity()
         self._rehydrate_trusted_state()
         self._load_provider_selection_config()
@@ -1374,6 +1379,12 @@ class NodeControlState:
         except Exception:
             return None
 
+    async def _ensure_local_benchmark_model(self, *, model_id: str) -> dict:
+        if self._local_llm_switch_lock.locked():
+            raise LocalLlmBusyError("local LLM runtime is busy loading another benchmark model")
+        async with self._local_llm_switch_lock:
+            return await asyncio.to_thread(self._service_manager.ensure_local_llm_model, model_id=model_id)
+
     async def execute_benchmark_v2(
         self,
         *,
@@ -1502,7 +1513,7 @@ class NodeControlState:
             started = time.perf_counter()
             try:
                 if provider_id == "local" and model_id and hasattr(self._service_manager, "ensure_local_llm_model"):
-                    switch_result = await asyncio.to_thread(self._service_manager.ensure_local_llm_model, model_id=model_id)
+                    switch_result = await self._ensure_local_benchmark_model(model_id=model_id)
                     runtime_metrics = {
                         "vram_used_mib": None,
                         "vram_delta_mib": None,
@@ -1547,6 +1558,29 @@ class NodeControlState:
                         "cost_usd": response.estimated_cost,
                         "runtime_metrics": runtime_metrics,
                         "error": None,
+                    }
+                )
+            except LocalLlmBusyError as exc:
+                message = str(exc).strip() or "local LLM runtime is busy"
+                results.append(
+                    {
+                        "target_id": target_id,
+                        "provider": provider_id,
+                        "model": model_id,
+                        "role": role,
+                        "status": "failed",
+                        "output_text": None,
+                        "parsed_output": None,
+                        "usage": None,
+                        "latency_ms": None,
+                        "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
+                        "cost_usd": None,
+                        "runtime_metrics": runtime_metrics,
+                        "error": {
+                            "code": "local_llm_busy",
+                            "message": message,
+                            "retryable": True,
+                        },
                     }
                 )
             except Exception as exc:

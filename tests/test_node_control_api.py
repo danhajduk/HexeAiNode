@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -1379,6 +1381,80 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item["provider"] for item in payload["results"]], ["local", "local"])
         self.assertEqual(payload["results"][0]["runtime_metrics"]["load_seconds"], 4.25)
         self.assertEqual(payload["results"][0]["latency_ms"], 12.5)
+
+    async def test_benchmark_v2_returns_busy_for_concurrent_local_model_switches(self):
+        class _LocalBenchmarkServiceManager:
+            def __init__(self):
+                self.calls = []
+                self.active_switches = 0
+                self.max_active_switches = 0
+                self.lock = threading.Lock()
+
+            def is_local_llm_model(self, *, model_id: str | None):
+                return model_id in {"qwen3-14b-q4_k_m", "qwen3-8b-q4_k_m"}
+
+            def ensure_local_llm_model(self, *, model_id: str | None):
+                with self.lock:
+                    self.calls.append(model_id)
+                    self.active_switches += 1
+                    self.max_active_switches = max(self.max_active_switches, self.active_switches)
+                time.sleep(0.05)
+                with self.lock:
+                    self.active_switches -= 1
+                return {"model_id": model_id, "switched": True, "load_seconds": 0.05}
+
+        class _LocalBenchmarkRuntimeManager:
+            async def execute_explicit(self, request):
+                return UnifiedExecutionResponse(
+                    provider_id=str(request.requested_provider or "local"),
+                    model_id=str(request.requested_model or "unknown"),
+                    output_text="mock:local",
+                    usage=UnifiedExecutionUsage(prompt_tokens=2, completion_tokens=4, total_tokens=6),
+                    latency_ms=12.5,
+                    estimated_cost=0.0,
+                )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            service_manager = _LocalBenchmarkServiceManager()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_runtime_manager=_LocalBenchmarkRuntimeManager(),
+                service_manager=service_manager,
+            )
+
+            async def run_benchmark(model_id: str):
+                return await state.execute_benchmark_v2(
+                    benchmark_id=f"bench-{model_id}",
+                    prompt_id=None,
+                    prompt_version=None,
+                    task_family="task.classification",
+                    requested_by="mail-node",
+                    service_id="mail-node",
+                    customer_id=None,
+                    inputs={"text": "one email"},
+                    output_contract=None,
+                    targets=[{"model": model_id}],
+                    timeout_s=60,
+                    trace_id=f"trace-{model_id}",
+                )
+
+            payloads = await asyncio.gather(
+                run_benchmark("qwen3-14b-q4_k_m"),
+                run_benchmark("qwen3-8b-q4_k_m"),
+            )
+
+        self.assertEqual(service_manager.max_active_switches, 1)
+        self.assertEqual(len(service_manager.calls), 1)
+        result_statuses = [payload["results"][0]["status"] for payload in payloads]
+        error_codes = [
+            payload["results"][0]["error"]["code"]
+            for payload in payloads
+            if payload["results"][0].get("error")
+        ]
+        self.assertEqual(sorted(result_statuses), ["completed", "failed"])
+        self.assertEqual(error_codes, ["local_llm_busy"])
 
     async def test_unhealthy_operational_mqtt_transitions_to_degraded_and_schedules_restart(self):
         with tempfile.TemporaryDirectory() as tmp:

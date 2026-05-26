@@ -56,3 +56,5 @@ Example provider list:
 ```
 
 For `POST /api/benchmarks/execution/v2`, local targets are loaded one at a time before execution. If a target names a configured local model without a provider, the node treats it as `provider: local`. The node restarts llama.cpp when the requested local model is not already active, waits for readiness, then starts the timed inference request. Per-target `latency_ms` measures only the `/v1/chat/completions` execution after the model is ready; model load/swap duration is reported separately as `runtime_metrics.load_seconds`.
+
+The benchmark execution endpoint is synchronous, so the client HTTP timeout must cover total wall time for every requested target: model swaps plus inference. Use at least 300 seconds for a five-model local benchmark, and 420 seconds for five models across five test inputs or a cold runtime. Concurrent local benchmark requests do not start competing model restarts; if another request is already loading a local benchmark model, the overlapping target returns `status: failed` with `error.code: local_llm_busy` and `error.retryable: true`.
