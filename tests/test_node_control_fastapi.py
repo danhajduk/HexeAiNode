@@ -213,12 +213,20 @@ class NodeControlFastApiTests(unittest.TestCase):
     class _FakeServiceManager:
         def __init__(self):
             self.status = {"backend": "running", "frontend": "running", "node": "running"}
+            self.local_model_calls = []
 
         def get_status(self):
             return self.status
 
         def restart(self, *, target: str):
             return {"target": target, "result": "restarted"}
+
+        def is_local_llm_model(self, *, model_id: str | None):
+            return model_id == "mistral-nemo-instruct-2407-q4_k_m"
+
+        def ensure_local_llm_model(self, *, model_id: str | None):
+            self.local_model_calls.append(model_id)
+            return {"model_id": model_id, "switched": False, "load_seconds": 0.0}
 
     class _FakePromptServiceStateStore:
         def __init__(self):
@@ -490,6 +498,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 logger=logging.getLogger("node-control-fastapi-test"),
                 provider_runtime_manager=self._FakeProviderRuntimeManager(),
                 prompt_service_state_store=self._FakePromptServiceStateStore(),
+                service_manager=self._FakeServiceManager(),
             )
             app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
             client = TestClient(app)
@@ -544,7 +553,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                     "inputs": {"body": "Your package has shipped."},
                     "targets": [
                         {"provider": "openai", "model": "gpt-5-mini", "role": "baseline"},
-                        {"provider": "local", "model": "mistral-nemo-instruct-2407-q4_k_m"},
+                        {"model": "mistral-nemo-instruct-2407-q4_k_m"},
                     ],
                 },
             )

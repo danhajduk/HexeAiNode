@@ -97,7 +97,6 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "provider",
         "model"
       ],
       "properties": {
@@ -110,7 +109,10 @@
           "maxLength": 128
         },
         "provider": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "minLength": 1,
           "maxLength": 128,
           "examples": [

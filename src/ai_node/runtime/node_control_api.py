@@ -3220,7 +3220,7 @@ class BenchmarkExecutionTargetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     target_id: str | None = None
-    provider: str
+    provider: str | None = None
     model: str | None = None
     role: str = "candidate"
     timeout_s: int | None = None
