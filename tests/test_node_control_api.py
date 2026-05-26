@@ -25,6 +25,7 @@ class NodeControlApiTests(unittest.TestCase):
             self.refresh_calls = 0
             self.openai_reload_calls = 0
             self.last_execution_request = None
+            self.execution_requests = []
             self._enabled_models = ["gpt-5-mini"]
             self._resolved_tasks = ["task.classification"]
 
@@ -34,6 +35,7 @@ class NodeControlApiTests(unittest.TestCase):
 
         async def execute(self, request):
             self.last_execution_request = request
+            self.execution_requests.append(request)
             return UnifiedExecutionResponse(
                 provider_id=str(request.requested_provider or "openai"),
                 model_id=str(request.requested_model or "gpt-5-mini"),
@@ -1315,6 +1317,68 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             payload = {"target": target, "delay_seconds": delay_seconds}
             self.calls.append(payload)
             return {"target": target, "result": "scheduled", "delay_seconds": delay_seconds}
+
+    async def test_benchmark_v2_switches_local_models_before_timed_execution(self):
+        class _LocalBenchmarkServiceManager:
+            def __init__(self):
+                self.calls = []
+
+            def is_local_llm_model(self, *, model_id: str | None):
+                return model_id in {"qwen3-14b-q4_k_m", "gemma-3-12b-it-q4_k_m"}
+
+            def ensure_local_llm_model(self, *, model_id: str | None):
+                self.calls.append(model_id)
+                return {"model_id": model_id, "switched": True, "load_seconds": 4.25}
+
+        class _LocalBenchmarkRuntimeManager:
+            def __init__(self):
+                self.execution_requests = []
+
+            async def execute_explicit(self, request):
+                self.execution_requests.append(request)
+                return UnifiedExecutionResponse(
+                    provider_id=str(request.requested_provider or "local"),
+                    model_id=str(request.requested_model or "unknown"),
+                    output_text="mock:local",
+                    usage=UnifiedExecutionUsage(prompt_tokens=2, completion_tokens=4, total_tokens=6),
+                    latency_ms=12.5,
+                    estimated_cost=0.0,
+                )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_manager = _LocalBenchmarkRuntimeManager()
+            service_manager = _LocalBenchmarkServiceManager()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_runtime_manager=runtime_manager,
+                service_manager=service_manager,
+            )
+
+            payload = await state.execute_benchmark_v2(
+                benchmark_id="bench-local",
+                prompt_id=None,
+                prompt_version=None,
+                task_family="task.classification",
+                requested_by="mail-node",
+                service_id="mail-node",
+                customer_id=None,
+                inputs={"text": "one email"},
+                output_contract=None,
+                targets=[
+                    {"model": "qwen3-14b-q4_k_m"},
+                    {"provider": "local", "model": "gemma-3-12b-it-q4_k_m"},
+                ],
+                timeout_s=60,
+                trace_id="trace-local",
+            )
+
+        self.assertEqual(service_manager.calls, ["qwen3-14b-q4_k_m", "gemma-3-12b-it-q4_k_m"])
+        self.assertEqual([request.requested_provider for request in runtime_manager.execution_requests], ["local", "local"])
+        self.assertEqual([item["provider"] for item in payload["results"]], ["local", "local"])
+        self.assertEqual(payload["results"][0]["runtime_metrics"]["load_seconds"], 4.25)
+        self.assertEqual(payload["results"][0]["latency_ms"], 12.5)
 
     async def test_unhealthy_operational_mqtt_transitions_to_degraded_and_schedules_restart(self):
         with tempfile.TemporaryDirectory() as tmp:

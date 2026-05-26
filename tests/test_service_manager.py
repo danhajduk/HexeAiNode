@@ -1,5 +1,8 @@
 import logging
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from ai_node.runtime.service_manager import UserSystemdServiceManager
@@ -102,6 +105,57 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(first_payload["mem_percent"], 12.5)
         self.assertEqual(first_payload["container_name"], "hexe-ai-node-llamacpp")
         self.assertEqual(second_payload["cpu_percent"], 25.0)
+
+    def test_ensure_local_llm_model_restarts_with_configured_model_env(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "models.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "models": [
+                            {
+                                "id": "gemma-3-12b-it-q4_k_m",
+                                "repo": "bartowski/google_gemma-3-12b-it-GGUF",
+                                "quantization": "Q4_K_M",
+                                "ctx_size": 4096,
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._local_llm_models_config = str(config_path)
+            manager._local_llm_control_script = "scripts/llamacpp-control.sh"
+            invoked = []
+
+            def _fake_run(cmd, check, capture_output, text, env=None):
+                invoked.append((cmd, env))
+                return _Completed("{}")
+
+            with (
+                patch("os.path.exists", return_value=True),
+                patch.object(manager, "_active_local_llm_model_ids", side_effect=[["qwen3-14b-q4_k_m"], ["gemma-3-12b-it-q4_k_m"]]),
+                patch("subprocess.run", side_effect=_fake_run),
+            ):
+                result = manager.ensure_local_llm_model(model_id="gemma-3-12b-it-q4_k_m")
+
+        self.assertTrue(result["switched"])
+        self.assertEqual(invoked[0][0], ["scripts/llamacpp-control.sh", "ready"])
+        self.assertEqual(invoked[0][1]["LLAMACPP_MODEL_ALIAS"], "gemma-3-12b-it-q4_k_m")
+        self.assertEqual(invoked[0][1]["LLAMACPP_MODEL_HF"], "bartowski/google_gemma-3-12b-it-GGUF:Q4_K_M")
+        self.assertEqual(invoked[0][1]["LLAMACPP_CTX_SIZE"], "4096")
+
+    def test_ensure_local_llm_model_skips_restart_when_model_is_active(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+        manager._local_llm_models_config = "config/local-llm-models.json"
+        with (
+            patch.object(manager, "_active_local_llm_model_ids", return_value=["qwen3-14b-q4_k_m"]),
+            patch("subprocess.run") as fake_run,
+        ):
+            result = manager.ensure_local_llm_model(model_id="qwen3-14b-q4_k_m")
+        self.assertFalse(result["switched"])
+        fake_run.assert_not_called()
 
 
 if __name__ == "__main__":

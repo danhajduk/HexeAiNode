@@ -54,3 +54,5 @@ Example provider list:
   {"provider": "local", "model": "qwen3-14b-q4_k_m"}
 ]
 ```
+
+For `POST /api/benchmarks/execution/v2`, local targets are loaded one at a time before execution. If a target names a configured local model without a provider, the node treats it as `provider: local`. The node restarts llama.cpp when the requested local model is not already active, waits for readiness, then starts the timed inference request. Per-target `latency_ms` measures only the `/v1/chat/completions` execution after the model is ready; model load/swap duration is reported separately as `runtime_metrics.load_seconds`.

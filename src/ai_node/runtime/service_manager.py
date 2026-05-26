@@ -1,6 +1,9 @@
+import json
 import os
 import shlex
+import socket
 import subprocess
+import time
 
 
 class UserSystemdServiceManager:
@@ -19,6 +22,9 @@ class UserSystemdServiceManager:
         ).strip()
         self._local_llm_container_name = str(
             os.environ.get("LLAMACPP_CONTAINER_NAME") or "hexe-ai-node-llamacpp"
+        ).strip()
+        self._local_llm_models_config = str(
+            os.environ.get("SYNTHIA_LOCAL_LLM_MODELS_CONFIG") or "config/local-llm-models.json"
         ).strip()
         self._docker_bin = str(os.environ.get("DOCKER_BIN") or "docker").strip() or "docker"
         self._cpu_samples: dict[str, tuple[float, float]] = {}
@@ -111,6 +117,44 @@ class UserSystemdServiceManager:
         )
         return {"target": value, "result": "scheduled", "delay_seconds": delay}
 
+    def is_local_llm_model(self, *, model_id: str | None) -> bool:
+        normalized = str(model_id or "").strip()
+        return bool(normalized and normalized in self._local_llm_model_map())
+
+    def ensure_local_llm_model(self, *, model_id: str | None) -> dict:
+        normalized = str(model_id or "").strip()
+        if not normalized:
+            raise ValueError("local llm model is required")
+        model = self._local_llm_model_map().get(normalized)
+        if model is None:
+            raise ValueError("local llm model is not configured")
+        active_models = self._active_local_llm_model_ids()
+        if normalized in active_models:
+            return {
+                "model_id": normalized,
+                "switched": False,
+                "load_seconds": 0.0,
+                "active_model_ids": active_models,
+            }
+
+        env = dict(os.environ)
+        env["LLAMACPP_MODEL_HF"] = f"{model['repo']}:{model['quantization']}"
+        env["LLAMACPP_MODEL_ALIAS"] = normalized
+        if model.get("ctx_size") is not None:
+            env["LLAMACPP_CTX_SIZE"] = str(model["ctx_size"])
+        started = time.perf_counter()
+        self._run_local_llm_control("ready", env=env)
+        load_seconds = round(time.perf_counter() - started, 3)
+        active_after = self._active_local_llm_model_ids()
+        if normalized not in active_after:
+            raise RuntimeError("local llm model did not become active after switch")
+        return {
+            "model_id": normalized,
+            "switched": True,
+            "load_seconds": load_seconds,
+            "active_model_ids": active_after,
+        }
+
     def _local_llm_status(self) -> dict:
         service_id = "local_llm"
         script_exists = os.path.exists(self._local_llm_control_script)
@@ -152,7 +196,63 @@ class UserSystemdServiceManager:
         except Exception:
             return 0
 
-    def _run_local_llm_control(self, command: str) -> None:
+    def _local_llm_model_map(self) -> dict[str, dict]:
+        try:
+            with open(self._local_llm_models_config, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except Exception:
+            return {}
+        models = payload.get("models") if isinstance(payload, dict) else []
+        out: dict[str, dict] = {}
+        for item in models if isinstance(models, list) else []:
+            if not isinstance(item, dict):
+                continue
+            model_id = str(item.get("id") or "").strip()
+            repo = str(item.get("repo") or "").strip()
+            quantization = str(item.get("quantization") or "").strip()
+            if not model_id or not repo or not quantization:
+                continue
+            out[model_id] = {
+                "repo": repo,
+                "quantization": quantization,
+                "ctx_size": item.get("ctx_size") if isinstance(item.get("ctx_size"), int) else None,
+            }
+        return out
+
+    def _active_local_llm_model_ids(self) -> list[str]:
+        if not self._local_llm_socket:
+            return []
+        try:
+            request = b"GET /v1/models HTTP/1.1\r\nHost: llamacpp\r\nConnection: close\r\n\r\n"
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.settimeout(5)
+                client.connect(self._local_llm_socket)
+                client.sendall(request)
+                chunks: list[bytes] = []
+                while True:
+                    chunk = client.recv(65536)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+            raw = b"".join(chunks)
+            _, _, body = raw.partition(b"\r\n\r\n")
+            payload = json.loads(body.decode("utf-8")) if body else {}
+        except Exception:
+            return []
+        out: list[str] = []
+        for key in ("models", "data"):
+            entries = payload.get(key) if isinstance(payload, dict) else None
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                model_id = str(entry.get("id") or entry.get("model") or entry.get("name") or "").strip()
+                if model_id and model_id not in out:
+                    out.append(model_id)
+        return out
+
+    def _run_local_llm_control(self, command: str, *, env: dict | None = None) -> None:
         if not os.path.exists(self._local_llm_control_script):
             raise ValueError("local llm control script is not configured")
         subprocess.run(
@@ -160,6 +260,7 @@ class UserSystemdServiceManager:
             check=True,
             capture_output=True,
             text=True,
+            env=env,
         )
 
     def _query_active(self, unit: str) -> str:
@@ -377,4 +478,10 @@ class NullServiceManager:
         raise ValueError("service manager is not configured")
 
     def schedule_restart(self, *, target: str, delay_seconds: int) -> dict:
+        raise ValueError("service manager is not configured")
+
+    def is_local_llm_model(self, *, model_id: str | None) -> bool:
+        return False
+
+    def ensure_local_llm_model(self, *, model_id: str | None) -> dict:
         raise ValueError("service manager is not configured")

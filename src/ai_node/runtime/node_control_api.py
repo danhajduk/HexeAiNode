@@ -1440,6 +1440,12 @@ class NodeControlState:
         for target in target_specs:
             provider_id = str(target.get("provider") or target.get("provider_id") or "").strip().lower()
             model_id = str(target.get("model") or target.get("model_id") or "").strip() or None
+            if not provider_id and model_id and hasattr(self._service_manager, "is_local_llm_model"):
+                try:
+                    if self._service_manager.is_local_llm_model(model_id=model_id):
+                        provider_id = "local"
+                except Exception:
+                    provider_id = ""
             target_id = str(target.get("target_id") or f"{provider_id}:{model_id or 'default'}").strip()
             role = str(target.get("role") or "candidate").strip() or "candidate"
             if not provider_id:
@@ -1492,8 +1498,18 @@ class NodeControlState:
                         }
                     )
                     continue
+            runtime_metrics = None
             started = time.perf_counter()
             try:
+                if provider_id == "local" and model_id and hasattr(self._service_manager, "ensure_local_llm_model"):
+                    switch_result = await asyncio.to_thread(self._service_manager.ensure_local_llm_model, model_id=model_id)
+                    runtime_metrics = {
+                        "vram_used_mib": None,
+                        "vram_delta_mib": None,
+                        "gpu_util_percent": None,
+                        "load_seconds": switch_result.get("load_seconds") if isinstance(switch_result, dict) else None,
+                    }
+                started = time.perf_counter()
                 response = await self._provider_runtime_manager.execute_explicit(
                     UnifiedExecutionRequest(
                         task_family=task_family,
@@ -1529,7 +1545,7 @@ class NodeControlState:
                         "latency_ms": response.latency_ms,
                         "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
                         "cost_usd": response.estimated_cost,
-                        "runtime_metrics": None,
+                        "runtime_metrics": runtime_metrics,
                         "error": None,
                     }
                 )
