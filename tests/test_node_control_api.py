@@ -20,6 +20,44 @@ from ai_node.runtime.operational_mqtt_recovery_store import OperationalMqttRecov
 
 
 class NodeControlApiTests(unittest.TestCase):
+    def test_parse_output_payload_unwraps_tool_wrapper_when_arguments_match_schema(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "label": {"type": "string"},
+                "confidence": {"type": "number"},
+                "rationale": {"type": "string"},
+            },
+            "required": ["label", "confidence", "rationale"],
+        }
+        payload = NodeControlState._parse_output_payload(
+            '{"name":"classify_email","parameters":{"label":"action_required","confidence":0.95,"rationale":"Needs a reply."}}',
+            expected_schema=schema,
+        )
+
+        self.assertEqual(
+            payload,
+            {"label": "action_required", "confidence": 0.95, "rationale": "Needs a reply."},
+        )
+
+    def test_parse_output_payload_does_not_unwrap_input_echo_tool_wrapper(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "label": {"type": "string"},
+                "confidence": {"type": "number"},
+                "rationale": {"type": "string"},
+            },
+            "required": ["label", "confidence", "rationale"],
+        }
+        payload = NodeControlState._parse_output_payload(
+            '{"name":"classify_email","parameters":{"email":"from: a@example.com subject: hi body: please help"}}',
+            expected_schema=schema,
+        )
+
+        self.assertEqual(payload["name"], "classify_email")
+        self.assertEqual(payload["parameters"], {"email": "from: a@example.com subject: hi body: please help"})
+
     class _FakeNotificationService:
         def __init__(self):
             self.calls = []

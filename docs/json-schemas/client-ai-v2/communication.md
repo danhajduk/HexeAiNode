@@ -508,6 +508,23 @@ Benchmark clients should still be conservative with concurrency. Current code en
 the benchmark route boundary, and each accepted benchmark request consumes one shared execution slot even if it runs
 multiple provider/model targets internally.
 
+When `output_contract.json_schema` is present, the AI Node sends the schema to each provider target as the required
+structured response format. Local LLM targets, including llama.cpp-compatible models such as
+`llama-3.1-8b-instruct-q4_k_m`, must return the result object directly:
+
+```json
+{
+  "label": "action_required",
+  "confidence": 0.95,
+  "rationale": "short reason"
+}
+```
+
+Do not treat the schema as a tool/function definition for the model to call. A response such as
+`{"name":"classify_email","parameters":{"email":"..."}}` is an input echo, not a classifier result, and clients should
+not count it as parseable output. If a model still emits a function-style wrapper, the wrapper arguments are only
+accepted when they contain the fields required by the output schema, for example `label`, `confidence`, and `rationale`.
+
 ## Schema Discovery
 
 Fetch the V2 schema catalog:

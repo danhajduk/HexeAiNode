@@ -1741,7 +1741,7 @@ class NodeControlState:
         return path.read_text(encoding="utf-8")
 
     @staticmethod
-    def _parse_output_payload(output_text: object):
+    def _parse_output_payload(output_text: object, *, expected_schema: dict | None = None):
         text = str(output_text or "").strip()
         if text.startswith("```"):
             lines = text.splitlines()
@@ -1753,9 +1753,36 @@ class NodeControlState:
         if not text:
             return None
         try:
-            return json.loads(text)
+            parsed = json.loads(text)
         except Exception:
             return None
+        if isinstance(parsed, dict) and isinstance(expected_schema, dict):
+            return NodeControlState._unwrap_structured_output_payload(parsed, expected_schema=expected_schema)
+        return parsed
+
+    @staticmethod
+    def _unwrap_structured_output_payload(parsed: dict, *, expected_schema: dict):
+        if not isinstance(parsed, dict):
+            return parsed
+        wrapper_name = str(parsed.get("name") or parsed.get("function") or "").strip()
+        if not wrapper_name:
+            return parsed
+        wrapper_payload = parsed.get("parameters") if isinstance(parsed.get("parameters"), (dict, str)) else parsed.get("arguments")
+        if isinstance(wrapper_payload, str):
+            try:
+                wrapper_payload = json.loads(wrapper_payload)
+            except Exception:
+                return parsed
+        if not isinstance(wrapper_payload, dict):
+            return parsed
+
+        required_fields = expected_schema.get("required") if isinstance(expected_schema.get("required"), list) else []
+        required = {str(item) for item in required_fields if str(item or "").strip()}
+        if not required:
+            return parsed
+        if required.issubset(set(wrapper_payload.keys())):
+            return wrapper_payload
+        return parsed
 
     async def _ensure_local_benchmark_model(self, *, model_id: str) -> dict:
         if self._local_llm_switch_lock.locked():
@@ -1923,7 +1950,11 @@ class NodeControlState:
                             },
                         )
                     )
-                    parsed_output = self._parse_output_payload(response.output_text) if output_payload.get("parse_json_output", True) else None
+                    parsed_output = (
+                        self._parse_output_payload(response.output_text, expected_schema=schema)
+                        if output_payload.get("parse_json_output", True)
+                        else None
+                    )
                     results.append(
                         {
                             "target_id": target_id,

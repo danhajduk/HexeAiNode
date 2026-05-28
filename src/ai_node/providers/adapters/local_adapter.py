@@ -5,6 +5,13 @@ import httpx
 
 from ai_node.providers.base import ProviderAdapter
 from ai_node.providers.models import ModelCapability, UnifiedExecutionRequest, UnifiedExecutionResponse, UnifiedExecutionUsage
+from ai_node.capabilities.task_families import TASK_CLASSIFICATION, TASK_CLASSIFICATION_TEXT
+
+
+STRUCTURED_OUTPUT_SYSTEM_PROMPT_SUFFIX = (
+    " Return only the final JSON object that satisfies the requested response schema. "
+    "Do not return a tool call, function call, name/parameters wrapper, arguments wrapper, markdown fences, or input echo."
+)
 
 
 class LocalProviderAdapter(ProviderAdapter):
@@ -59,6 +66,60 @@ class LocalProviderAdapter(ProviderAdapter):
         from datetime import datetime, timezone
 
         return datetime.now(timezone.utc).isoformat()
+
+    @staticmethod
+    def _structured_output_schema(request: UnifiedExecutionRequest) -> dict[str, Any] | None:
+        metadata = request.metadata if isinstance(request.metadata, dict) else {}
+        schema = metadata.get("structured_output_schema")
+        return schema if isinstance(schema, dict) else None
+
+    @classmethod
+    def _response_format_payload(cls, request: UnifiedExecutionRequest) -> dict[str, Any] | None:
+        metadata = request.metadata if isinstance(request.metadata, dict) else {}
+        explicit_response_format = metadata.get("response_format")
+        if isinstance(explicit_response_format, dict):
+            return explicit_response_format
+
+        schema = cls._structured_output_schema(request)
+        if isinstance(schema, dict):
+            prompt_id = str(metadata.get("prompt_id") or "structured_output").strip().replace(".", "_")
+            version = str(metadata.get("prompt_version") or "").strip().replace(".", "_")
+            schema_name = f"{prompt_id}_{version}" if version else prompt_id
+            return {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_name[:64] or "structured_output",
+                    "strict": True,
+                    "schema": schema,
+                },
+            }
+        if request.task_family in {TASK_CLASSIFICATION, TASK_CLASSIFICATION_TEXT}:
+            return {"type": "json_object"}
+        return None
+
+    @classmethod
+    def _messages_with_structured_output_guard(
+        cls,
+        *,
+        request: UnifiedExecutionRequest,
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if cls._structured_output_schema(request) is None:
+            return messages
+
+        guarded = list(messages)
+        for index, message in enumerate(guarded):
+            if not isinstance(message, dict) or str(message.get("role") or "").strip().lower() != "system":
+                continue
+            content = str(message.get("content") or "").strip()
+            if "name/parameters wrapper" in content:
+                return guarded
+            updated = dict(message)
+            updated["content"] = f"{content}{STRUCTURED_OUTPUT_SYSTEM_PROMPT_SUFFIX}" if content else STRUCTURED_OUTPUT_SYSTEM_PROMPT_SUFFIX.strip()
+            guarded[index] = updated
+            return guarded
+
+        return [{"role": "system", "content": STRUCTURED_OUTPUT_SYSTEM_PROMPT_SUFFIX.strip()}, *guarded]
 
     async def health_check(self) -> dict[str, Any]:
         try:
@@ -170,6 +231,7 @@ class LocalProviderAdapter(ProviderAdapter):
                 messages.append({"role": "system", "content": request.system_prompt})
             if request.prompt:
                 messages.append({"role": "user", "content": request.prompt})
+        messages = self._messages_with_structured_output_guard(request=request, messages=messages)
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -179,9 +241,8 @@ class LocalProviderAdapter(ProviderAdapter):
             payload["temperature"] = request.temperature
         if request.max_tokens is not None:
             payload["max_tokens"] = request.max_tokens
-        metadata = request.metadata if isinstance(request.metadata, dict) else {}
-        response_format = metadata.get("response_format")
-        if isinstance(response_format, dict):
+        response_format = self._response_format_payload(request)
+        if response_format is not None:
             payload["response_format"] = response_format
 
         try:
