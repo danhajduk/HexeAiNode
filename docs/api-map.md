@@ -178,11 +178,13 @@ Canonical routes:
 Compatibility or convenience:
 
 - `GET /debug/execution`
+- `GET /debug/execution/admission`
 
 Notes:
 
 - Authorization and direct execution are explicitly separated from setup and provider configuration routes.
 - Execution authorization now includes caller-aware prompt access checks through `requested_by`, `service_id`, and `customer_id`.
+- Direct execution can return HTTP `503` with `Retry-After` when node admission guardrails reject work due to in-flight count or host memory/swap/load pressure.
 - V2 benchmark execution is execution-only: it returns target outputs and metadata without correctness scoring.
 - Client AI V2 schema discovery is exposed for prompt and execution contract consumers.
 - `communication.md` is a Markdown developer guide served through the same V2 schema/discovery route family.

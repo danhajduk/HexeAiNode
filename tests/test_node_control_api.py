@@ -10,7 +10,12 @@ from ai_node.config.task_capability_selection_config import TaskCapabilitySelect
 from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
-from ai_node.runtime.node_control_api import NodeControlState
+from ai_node.runtime.node_control_api import (
+    DirectExecutionAdmissionConfig,
+    DirectExecutionAdmissionGuard,
+    DirectExecutionBusyError,
+    NodeControlState,
+)
 from ai_node.runtime.operational_mqtt_recovery_store import OperationalMqttRecoveryStore
 
 
@@ -140,6 +145,20 @@ class NodeControlApiTests(unittest.TestCase):
                     }
                 }
             }
+
+    class _SlowProviderRuntimeManager(_FakeProviderRuntimeManager):
+        async def execute(self, request):
+            self.last_execution_request = request
+            self.execution_requests.append(request)
+            await asyncio.sleep(0.05)
+            return UnifiedExecutionResponse(
+                provider_id=str(request.requested_provider or "openai"),
+                model_id=str(request.requested_model or "gpt-5-mini"),
+                output_text="mock:slow",
+                usage=UnifiedExecutionUsage(prompt_tokens=2, completion_tokens=4, total_tokens=6),
+                latency_ms=50.0,
+                estimated_cost=0.001,
+            )
 
     class _FakeBootstrapRunner:
         def __init__(self):
@@ -511,6 +530,138 @@ class NodeControlApiTests(unittest.TestCase):
                         )
                     )
                 )
+
+    def test_execute_direct_rejects_when_max_in_flight_is_reached(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+                runtime_manager = self._SlowProviderRuntimeManager()
+                guard = DirectExecutionAdmissionGuard(
+                    config=DirectExecutionAdmissionConfig(max_in_flight=1, retry_after_seconds=17),
+                    resource_sampler=lambda: {
+                        "memory_available_mb": 4096,
+                        "swap_used_ratio": 0.1,
+                        "load_per_cpu": 0.2,
+                    },
+                    logger=logging.getLogger("node-control-test"),
+                )
+                state = NodeControlState(
+                    lifecycle=lifecycle,
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=runtime_manager,
+                    direct_execution_admission_guard=guard,
+                )
+                request = TaskExecutionRequest.model_validate(
+                    {
+                        "task_id": "task-guard-001",
+                        "task_family": "task.classification",
+                        "requested_by": "service.alpha",
+                        "inputs": {"text": "hello"},
+                        "trace_id": "trace-guard-001",
+                    }
+                )
+                first = asyncio.create_task(state.execute_direct(request=request))
+                await asyncio.sleep(0)
+                with self.assertRaises(DirectExecutionBusyError) as context:
+                    await state.execute_direct(
+                        request=request.model_copy(update={"task_id": "task-guard-002", "trace_id": "trace-guard-002"})
+                    )
+                self.assertEqual(context.exception.payload["reason"], "max_in_flight_exceeded")
+                self.assertEqual(context.exception.retry_after_seconds, 17)
+                result = await first
+                self.assertEqual(result["status"], "completed")
+                self.assertEqual(state.direct_execution_admission_payload()["in_flight"], 0)
+                self.assertEqual(len(runtime_manager.execution_requests), 1)
+
+        asyncio.run(run_scenario())
+
+    def test_execute_direct_rejects_when_memory_or_swap_threshold_is_exceeded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            runtime_manager = self._FakeProviderRuntimeManager()
+            guard = DirectExecutionAdmissionGuard(
+                config=DirectExecutionAdmissionConfig(
+                    min_memory_available_mb=1024,
+                    max_swap_used_ratio=0.9,
+                    retry_after_seconds=23,
+                ),
+                resource_sampler=lambda: {
+                    "memory_available_mb": 256,
+                    "swap_used_ratio": 0.95,
+                    "load_per_cpu": 0.2,
+                },
+                logger=logging.getLogger("node-control-test"),
+            )
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_runtime_manager=runtime_manager,
+                direct_execution_admission_guard=guard,
+            )
+
+            with self.assertRaises(DirectExecutionBusyError) as context:
+                asyncio.run(
+                    state.execute_direct(
+                        request=TaskExecutionRequest.model_validate(
+                            {
+                                "task_id": "task-guard-003",
+                                "task_family": "task.classification",
+                                "requested_by": "service.alpha",
+                                "inputs": {"text": "hello"},
+                                "trace_id": "trace-guard-003",
+                            }
+                        )
+                    )
+                )
+
+            self.assertEqual(context.exception.payload["status"], "busy")
+            self.assertEqual(context.exception.payload["reason"], "memory_available_below_floor")
+            self.assertEqual(context.exception.retry_after_seconds, 23)
+            self.assertIsNone(runtime_manager.last_execution_request)
+            admission = state.direct_execution_admission_payload()
+            self.assertEqual(admission["rejected_count"], 1)
+            self.assertEqual(admission["last_rejection"]["reason"], "memory_available_below_floor")
+
+    def test_execute_direct_rejects_when_load_threshold_is_exceeded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            runtime_manager = self._FakeProviderRuntimeManager()
+            guard = DirectExecutionAdmissionGuard(
+                config=DirectExecutionAdmissionConfig(max_load_per_cpu=1.0),
+                resource_sampler=lambda: {
+                    "memory_available_mb": 4096,
+                    "swap_used_ratio": 0.1,
+                    "load_per_cpu": 1.5,
+                },
+                logger=logging.getLogger("node-control-test"),
+            )
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_runtime_manager=runtime_manager,
+                direct_execution_admission_guard=guard,
+            )
+
+            with self.assertRaises(DirectExecutionBusyError) as context:
+                asyncio.run(
+                    state.execute_direct(
+                        request=TaskExecutionRequest.model_validate(
+                            {
+                                "task_id": "task-guard-004",
+                                "task_family": "task.classification",
+                                "requested_by": "service.alpha",
+                                "inputs": {"text": "hello"},
+                                "trace_id": "trace-guard-004",
+                            }
+                        )
+                    )
+                )
+
+            self.assertEqual(context.exception.payload["reason"], "load_average_high")
+            self.assertIsNone(runtime_manager.last_execution_request)
 
     def test_compare_provider_execution_returns_per_provider_results(self):
         with tempfile.TemporaryDirectory() as tmp:

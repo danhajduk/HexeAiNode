@@ -496,3 +496,9 @@ Task 922: Add benchmark execution result schemas and tests for raw and parsed ou
 Task 923: Remove the legacy node-local benchmark surface after V2 execution-only benchmark support - Completed on 05/24/2026 09:41
 Task 924: Add migration docs for prompt tuning workflows that consume benchmark execution results - Completed on 05/24/2026 09:15
 Task 925: Add client AI V2 schema discovery endpoints for prompt and execution contracts - Completed on 05/24/2026 09:15
+Task 926: Define direct execution admission guardrail thresholds - Completed on 05/27/2026 23:55
+Task 927: Add AI Node workload and resource monitor - Completed on 05/27/2026 23:55
+Task 928: Enforce busy rejection for direct execution calls - Completed on 05/27/2026 23:55
+Task 929: Surface admission guardrail metrics and diagnostics - Completed on 05/27/2026 23:55
+Task 930: Add tests for execution admission guardrails - Completed on 05/27/2026 23:55
+Task 931: Track upstream email batch throttling dependency - Completed on 05/27/2026 23:55

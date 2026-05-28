@@ -49,6 +49,12 @@ Backend runtime:
 - `SYNTHIA_OPENAI_PRICING_PROMPT_SENT_PATH` default `data/promtp_sent.txt`; set empty to disable prompt debug output
 - `SYNTHIA_OPENAI_PRICING_MARKDOWN_URL` default `https://developers.openai.com/api/docs/pricing.md`
 - `SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED` default `false`; set `true` to enable OpenAI API pricing extraction calls
+- `SYNTHIA_DIRECT_EXECUTION_ADMISSION_ENABLED` default `true`; enables local busy rejection before direct task execution
+- `SYNTHIA_DIRECT_EXECUTION_MAX_IN_FLIGHT` default `2`; maximum concurrent `/api/execution/direct` executions
+- `SYNTHIA_DIRECT_EXECUTION_MIN_MEMORY_AVAILABLE_MB` default `512`; rejects direct execution when host available memory drops below this floor
+- `SYNTHIA_DIRECT_EXECUTION_MAX_SWAP_USED_RATIO` default `0.95`; rejects direct execution when swap usage is at or above this ratio
+- `SYNTHIA_DIRECT_EXECUTION_MAX_LOAD_PER_CPU` default `2.0`; rejects direct execution when 1-minute load divided by CPU count is at or above this value
+- `SYNTHIA_DIRECT_EXECUTION_RETRY_AFTER_SECONDS` default `30`; retry hint returned with direct execution busy responses
 
 Provider-specific:
 

@@ -56,6 +56,15 @@
 - supervisor runtime heartbeats include rolling API metrics (RPS, p95 latency, error rate) plus node process CPU and memory usage when available
 - supervisor runtime metadata includes node service inventory (`backend`, `frontend`, `node`) when the service manager is configured
 - `GET /api/node/status` includes `api_metrics` with rolling RPS, p95 latency, error rate, and node process CPU/memory usage when available
+- `GET /api/node/status` also includes `direct_execution_admission` with direct execution in-flight count, guardrail thresholds, recent rejection details, and current host memory/swap/load snapshot
+
+## Direct Execution Admission
+
+- `/api/execution/direct` is protected by a local admission guard before provider execution begins
+- by default, direct execution is rejected when there are already 2 in-flight direct executions, available memory is below 512 MB, swap usage is 95% or higher, or 1-minute load per CPU is 2.0 or higher
+- rejected calls return HTTP `503` with `Retry-After` and a structured body containing `accepted=false`, `status=busy`, `reason`, `retry_after_seconds`, `in_flight`, and a small resource snapshot
+- `GET /debug/execution` includes the admission snapshot, and `GET /debug/execution/admission` exposes the admission data directly
+- upstream batch callers, including email-driven workloads routed through Core, should send smaller batches, limit per-node concurrency, pause between batches, and honor `429`/`503` retry hints instead of retrying a full batch immediately
 
 ## Runtime Health
 

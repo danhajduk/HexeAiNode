@@ -11,7 +11,12 @@ from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.persistence.budget_state_store import BudgetStateStore
 from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
 from ai_node.runtime.budget_manager import BudgetManager
-from ai_node.runtime.node_control_api import NodeControlState, create_node_control_app
+from ai_node.runtime.node_control_api import (
+    DirectExecutionAdmissionConfig,
+    DirectExecutionAdmissionGuard,
+    NodeControlState,
+    create_node_control_app,
+)
 
 
 class NodeControlFastApiTests(unittest.TestCase):
@@ -1148,6 +1153,56 @@ class NodeControlFastApiTests(unittest.TestCase):
             budget_state_response = client.get("/api/budgets/state")
             self.assertEqual(budget_state_response.status_code, 200)
             self.assertEqual(budget_state_response.json()["grant_count"], 1)
+
+    def test_direct_execution_endpoint_returns_structured_busy_response(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
+            runtime_manager = self._FakeProviderRuntimeManager()
+            guard = DirectExecutionAdmissionGuard(
+                config=DirectExecutionAdmissionConfig(min_memory_available_mb=1024, retry_after_seconds=31),
+                resource_sampler=lambda: {
+                    "memory_available_mb": 128,
+                    "swap_used_ratio": 0.1,
+                    "load_per_cpu": 0.2,
+                },
+                logger=logging.getLogger("node-control-fastapi-test"),
+            )
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                provider_selection_store=self._FakeProviderSelectionStore(),
+                task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
+                capability_runner=self._FakeCapabilityRunner(),
+                provider_runtime_manager=runtime_manager,
+                prompt_service_state_store=self._FakePromptServiceStateStore(),
+                direct_execution_admission_guard=guard,
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            response = client.post(
+                "/api/execution/direct",
+                json={
+                    "task_id": "task-guard-fastapi",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5-mini",
+                    "inputs": {"text": "hello direct"},
+                    "timeout_s": 45,
+                    "trace_id": "trace-guard-fastapi",
+                },
+            )
+
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.headers["retry-after"], "31")
+            payload = response.json()["detail"]
+            self.assertFalse(payload["accepted"])
+            self.assertEqual(payload["status"], "busy")
+            self.assertEqual(payload["reason"], "memory_available_below_floor")
+            self.assertEqual(payload["retry_after_seconds"], 31)
+            self.assertIsNone(runtime_manager.last_execution_request)
 
 
 if __name__ == "__main__":

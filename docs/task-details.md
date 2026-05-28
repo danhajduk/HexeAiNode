@@ -1,5 +1,42 @@
 # Task Details
 
+## Task 926-930
+Original task source: ad hoc operator request on 2026-05-27.
+
+Summary of preserved scope:
+- Add the first AI Node overload guardrail before implementing the larger async queue/job system.
+- Monitor node workload and local resources so the node can deny new execution calls when it is busy.
+- Protect `/api/execution/direct` from piling up work during memory pressure, high concurrency, unhealthy local runtime state, or retry storms from Core.
+- Return a structured busy response instead of letting requests accumulate until caller timeouts or process-level memory failures occur.
+- Keep the first pass focused on admission control and observability; defer durable queueing, callback jobs, and priority scheduling to later tasks.
+
+Task mapping:
+- Task 926: Define direct execution admission guardrail thresholds
+  - Decide initial configurable limits for max in-flight direct executions, optional small pending wait, memory availability floor, swap pressure threshold, and CPU/load threshold.
+  - Prefer conservative defaults that protect the node even if Core retries aggressively.
+  - Preserve compatibility by only changing behavior when the node is actually above admission limits.
+- Task 927: Add AI Node workload and resource monitor
+  - Track current direct execution in-flight count and recent rejection/failure signals.
+  - Sample host memory, swap, and load average using local OS data available without extra services.
+  - Expose a simple admission decision object with accepted/rejected reason, retry-after hint, and resource snapshot.
+- Task 928: Enforce busy rejection for direct execution calls
+  - Apply the admission guard before executing `/api/execution/direct`.
+  - Return a structured busy response with HTTP `429` or `503`, a stable reason code, and `retry_after_seconds`.
+  - Ensure rejected calls do not enter provider execution or allocate large downstream work.
+- Task 929: Surface admission guardrail metrics and diagnostics
+  - Add logs and existing diagnostics/status surface data for accepted, rejected, and in-flight execution counts.
+  - Include current resource pressure summary and last rejection reason.
+  - Keep sensitive request payloads out of admission logs.
+- Task 930: Add tests for execution admission guardrails
+  - Cover accepted execution when resources are healthy.
+  - Cover rejection when max in-flight is reached.
+  - Cover rejection when memory/swap/load thresholds are exceeded.
+  - Cover response shape and retry-after behavior.
+- Task 931: Track upstream email batch throttling dependency
+  - The observed overload pattern likely came from an upstream batch sender through Core, so add an implementation dependency for the email-side caller to send smaller batches.
+  - Recommended upstream behavior: cap batch size, limit concurrent direct executions per AI node, pause between batches, and honor `429`/`503` retry-after responses from the AI Node.
+  - This repository should not implement email-node behavior directly; use this task to preserve the cross-repo dependency and acceptance signal for the AI Node guardrail.
+
 ## Task 902-910
 Original task source: ad hoc operator request on 2026-05-18.
 

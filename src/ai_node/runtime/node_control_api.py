@@ -4,6 +4,7 @@ import os
 import socket
 import time
 from collections import deque
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
@@ -47,6 +48,257 @@ class CapabilityDeclarationPrerequisiteError(ValueError):
 
 class LocalLlmBusyError(RuntimeError):
     pass
+
+
+class DirectExecutionBusyError(RuntimeError):
+    def __init__(self, *, payload: dict, retry_after_seconds: int, status_code: int = 503) -> None:
+        self.payload = payload
+        self.retry_after_seconds = max(int(retry_after_seconds), 1)
+        self.status_code = int(status_code)
+        super().__init__(str(payload.get("reason") or "direct_execution_busy"))
+
+
+@dataclass(frozen=True)
+class DirectExecutionAdmissionConfig:
+    enabled: bool = True
+    max_in_flight: int = 2
+    min_memory_available_mb: int = 512
+    max_swap_used_ratio: float = 0.95
+    max_load_per_cpu: float = 2.0
+    retry_after_seconds: int = 30
+
+    @classmethod
+    def from_env(cls) -> "DirectExecutionAdmissionConfig":
+        return cls(
+            enabled=_env_bool("SYNTHIA_DIRECT_EXECUTION_ADMISSION_ENABLED", True),
+            max_in_flight=max(_env_int("SYNTHIA_DIRECT_EXECUTION_MAX_IN_FLIGHT", 2), 1),
+            min_memory_available_mb=max(_env_int("SYNTHIA_DIRECT_EXECUTION_MIN_MEMORY_AVAILABLE_MB", 512), 0),
+            max_swap_used_ratio=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_MAX_SWAP_USED_RATIO", 0.95)),
+            max_load_per_cpu=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_MAX_LOAD_PER_CPU", 2.0)),
+            retry_after_seconds=max(_env_int("SYNTHIA_DIRECT_EXECUTION_RETRY_AFTER_SECONDS", 30), 1),
+        )
+
+    def payload(self) -> dict:
+        return {
+            "enabled": self.enabled,
+            "max_in_flight": self.max_in_flight,
+            "min_memory_available_mb": self.min_memory_available_mb,
+            "max_swap_used_ratio": self.max_swap_used_ratio,
+            "max_load_per_cpu": self.max_load_per_cpu,
+            "retry_after_seconds": self.retry_after_seconds,
+        }
+
+
+@dataclass(frozen=True)
+class DirectExecutionAdmissionDecision:
+    accepted: bool
+    reason: str | None
+    retry_after_seconds: int
+    resources: dict
+    in_flight: int
+
+
+class DirectExecutionAdmissionGuard:
+    def __init__(self, *, config: DirectExecutionAdmissionConfig | None = None, resource_sampler=None, logger=None) -> None:
+        self._config = config or DirectExecutionAdmissionConfig.from_env()
+        self._resource_sampler = resource_sampler or self._sample_resources
+        self._logger = logger
+        self._lock = Lock()
+        self._in_flight = 0
+        self._accepted_count = 0
+        self._rejected_count = 0
+        self._last_decision: DirectExecutionAdmissionDecision | None = None
+        self._last_rejection: dict | None = None
+
+    @property
+    def config(self) -> DirectExecutionAdmissionConfig:
+        return self._config
+
+    def try_acquire(self) -> DirectExecutionAdmissionDecision:
+        resources = self._resource_sampler()
+        reason = self._rejection_reason(resources=resources)
+        with self._lock:
+            if self._config.enabled and reason is None and self._in_flight >= self._config.max_in_flight:
+                reason = "max_in_flight_exceeded"
+            if self._config.enabled and reason is not None:
+                self._rejected_count += 1
+                decision = DirectExecutionAdmissionDecision(
+                    accepted=False,
+                    reason=reason,
+                    retry_after_seconds=self._config.retry_after_seconds,
+                    resources=resources,
+                    in_flight=self._in_flight,
+                )
+                self._last_decision = decision
+                self._last_rejection = self._decision_payload(decision)
+                if hasattr(self._logger, "warning"):
+                    self._logger.warning(
+                        "[direct-execution-admission-rejected] %s",
+                        {
+                            "reason": reason,
+                            "in_flight": self._in_flight,
+                            "retry_after_seconds": self._config.retry_after_seconds,
+                            "resources": resources,
+                        },
+                    )
+                return decision
+
+            self._in_flight += 1
+            self._accepted_count += 1
+            decision = DirectExecutionAdmissionDecision(
+                accepted=True,
+                reason=None,
+                retry_after_seconds=0,
+                resources=resources,
+                in_flight=self._in_flight,
+            )
+            self._last_decision = decision
+            return decision
+
+    def release(self) -> None:
+        with self._lock:
+            self._in_flight = max(self._in_flight - 1, 0)
+
+    def snapshot(self) -> dict:
+        resources = self._resource_sampler()
+        reason = self._rejection_reason(resources=resources)
+        with self._lock:
+            would_accept = (not self._config.enabled) or (reason is None and self._in_flight < self._config.max_in_flight)
+            return {
+                "configured": True,
+                "enabled": self._config.enabled,
+                "would_accept_now": would_accept,
+                "current_rejection_reason": None if would_accept else (reason or "max_in_flight_exceeded"),
+                "in_flight": self._in_flight,
+                "accepted_count": self._accepted_count,
+                "rejected_count": self._rejected_count,
+                "last_rejection": dict(self._last_rejection) if self._last_rejection else None,
+                "thresholds": self._config.payload(),
+                "resources": resources,
+            }
+
+    def busy_payload(self, *, decision: DirectExecutionAdmissionDecision) -> dict:
+        return {
+            "accepted": False,
+            "status": "busy",
+            "reason": decision.reason or "node_at_capacity",
+            "retry_after_seconds": decision.retry_after_seconds,
+            "in_flight": decision.in_flight,
+            "resources": decision.resources,
+        }
+
+    def _decision_payload(self, decision: DirectExecutionAdmissionDecision) -> dict:
+        return {
+            "accepted": decision.accepted,
+            "reason": decision.reason,
+            "retry_after_seconds": decision.retry_after_seconds,
+            "in_flight": decision.in_flight,
+            "resources": decision.resources,
+            "timestamp": local_now_iso(),
+        }
+
+    def _rejection_reason(self, *, resources: dict) -> str | None:
+        if not self._config.enabled:
+            return None
+        memory_available_mb = resources.get("memory_available_mb")
+        if memory_available_mb is not None and memory_available_mb < self._config.min_memory_available_mb:
+            return "memory_available_below_floor"
+        swap_used_ratio = resources.get("swap_used_ratio")
+        if swap_used_ratio is not None and swap_used_ratio >= self._config.max_swap_used_ratio:
+            return "swap_pressure_high"
+        load_per_cpu = resources.get("load_per_cpu")
+        if load_per_cpu is not None and load_per_cpu >= self._config.max_load_per_cpu:
+            return "load_average_high"
+        return None
+
+    @staticmethod
+    def _sample_resources() -> dict:
+        memory = _read_memory_snapshot()
+        load = _read_load_snapshot()
+        return {**memory, **load}
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = str(os.environ.get(name) or "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = str(os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = str(os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _read_memory_snapshot() -> dict:
+    values: dict[str, int] = {}
+    try:
+        with open("/proc/meminfo", "r", encoding="utf-8") as handle:
+            for line in handle:
+                parts = line.split()
+                if len(parts) < 2:
+                    continue
+                key = parts[0].rstrip(":")
+                if key in {"MemTotal", "MemAvailable", "SwapTotal", "SwapFree"}:
+                    try:
+                        values[key] = int(parts[1])
+                    except ValueError:
+                        continue
+    except OSError:
+        return {}
+
+    total_memory_kb = values.get("MemTotal")
+    available_memory_kb = values.get("MemAvailable")
+    total_swap_kb = values.get("SwapTotal")
+    free_swap_kb = values.get("SwapFree")
+    payload: dict[str, int | float | None] = {}
+    if total_memory_kb is not None:
+        payload["memory_total_mb"] = round(total_memory_kb / 1024)
+    if available_memory_kb is not None:
+        payload["memory_available_mb"] = round(available_memory_kb / 1024)
+    if total_swap_kb is not None:
+        payload["swap_total_mb"] = round(total_swap_kb / 1024)
+    if free_swap_kb is not None:
+        payload["swap_free_mb"] = round(free_swap_kb / 1024)
+    if total_swap_kb and free_swap_kb is not None and total_swap_kb > 0:
+        payload["swap_used_ratio"] = round(max(total_swap_kb - free_swap_kb, 0) / total_swap_kb, 4)
+    elif total_swap_kb == 0:
+        payload["swap_used_ratio"] = 0.0
+    return payload
+
+
+def _read_load_snapshot() -> dict:
+    try:
+        load_1m, load_5m, load_15m = os.getloadavg()
+    except OSError:
+        return {}
+    cpu_count = os.cpu_count() or 1
+    return {
+        "load_1m": round(load_1m, 2),
+        "load_5m": round(load_5m, 2),
+        "load_15m": round(load_15m, 2),
+        "cpu_count": cpu_count,
+        "load_per_cpu": round(load_1m / cpu_count, 3),
+    }
 
 
 def _mask_grant_name(value: object) -> str | None:
@@ -291,6 +543,8 @@ class NodeControlState:
         operational_mqtt_restart_max_attempts: int = 3,
         startup_mode: str = "bootstrap_onboarding",
         trusted_runtime_context: dict | None = None,
+        direct_execution_admission_guard: DirectExecutionAdmissionGuard | None = None,
+        direct_execution_admission_config: DirectExecutionAdmissionConfig | None = None,
     ) -> None:
         self._lifecycle = lifecycle
         self._config_path = Path(config_path)
@@ -337,6 +591,10 @@ class NodeControlState:
         self._startup_mode = startup_mode
         self._trusted_runtime_context = trusted_runtime_context or {}
         self._runtime_metrics = NodeRuntimeMetrics()
+        self._direct_execution_admission_guard = direct_execution_admission_guard or DirectExecutionAdmissionGuard(
+            config=direct_execution_admission_config,
+            logger=logger,
+        )
         self._operational_mqtt_fast_until = local_now() + timedelta(
             seconds=self._operational_mqtt_health_fast_window_seconds
         )
@@ -694,6 +952,7 @@ class NodeControlState:
             "startup_mode": self._startup_mode,
             "trusted_runtime_context": self._trusted_runtime_context,
             "api_metrics": self._resource_usage_payload(),
+            "direct_execution_admission": self.direct_execution_admission_payload(),
             "provider_selection_configured": self._provider_selection_config is not None,
             "provider_credentials": self.provider_credentials_payload(provider_id="openai"),
             "task_capability_selection_configured": self._task_capability_selection_config is not None,
@@ -1201,6 +1460,11 @@ class NodeControlState:
             return {}
         return dict(self._runtime_metrics.snapshot())
 
+    def direct_execution_admission_payload(self) -> dict:
+        if self._direct_execution_admission_guard is None:
+            return {"configured": False, "enabled": False}
+        return self._direct_execution_admission_guard.snapshot()
+
     def _supervisor_runtime_state_payload(self) -> dict:
         state = self._lifecycle.get_state()
         runtime_state = "starting"
@@ -1311,9 +1575,20 @@ class NodeControlState:
         return self._task_execution_service
 
     async def execute_direct(self, *, request: TaskExecutionRequest) -> dict:
-        service = self._get_task_execution_service()
-        result = await service.execute(request)
-        return result.model_dump(mode="json")
+        admission = self._direct_execution_admission_guard.try_acquire()
+        if not admission.accepted:
+            payload = self._direct_execution_admission_guard.busy_payload(decision=admission)
+            raise DirectExecutionBusyError(
+                payload=payload,
+                retry_after_seconds=admission.retry_after_seconds,
+                status_code=503,
+            )
+        try:
+            service = self._get_task_execution_service()
+            result = await service.execute(request)
+            return result.model_dump(mode="json")
+        finally:
+            self._direct_execution_admission_guard.release()
 
     @staticmethod
     def _client_ai_v2_schema_dir() -> Path:
@@ -2855,6 +3130,7 @@ class NodeControlState:
                 "failure_reasons": {},
                 "provider_usage": {},
                 "model_usage": {},
+                "admission": self.direct_execution_admission_payload(),
             }
 
         lifecycle_tracker = service.lifecycle_tracker
@@ -2918,6 +3194,7 @@ class NodeControlState:
             "failure_reasons": failure_reasons,
             "provider_usage": provider_usage,
             "model_usage": model_usage,
+            "admission": self.direct_execution_admission_payload(),
         }
 
     def recover_from_degraded(self) -> dict:
@@ -3375,6 +3652,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/debug/providers/models",
                 "/debug/providers/metrics",
                 "/debug/prompts",
+                "/debug/execution",
+                "/debug/execution/admission",
                 "/api/health",
             ],
         }
@@ -3819,6 +4098,12 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     async def post_execution_direct(payload: TaskExecutionRequest):
         try:
             return await state.execute_direct(request=payload)
+        except DirectExecutionBusyError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=exc.payload,
+                headers={"Retry-After": str(exc.retry_after_seconds)},
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -3906,6 +4191,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/debug/execution")
     def get_debug_execution():
         return state.execution_observability_payload()
+
+    @app.get("/debug/execution/admission")
+    def get_debug_execution_admission():
+        return state.direct_execution_admission_payload()
 
     @app.get("/api/capabilities/diagnostics")
     def get_capability_diagnostics(x_admin_token: str | None = Header(default=None, alias="X-Synthia-Admin-Token")):
