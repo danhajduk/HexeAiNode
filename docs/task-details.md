@@ -1,5 +1,70 @@
 # Task Details
 
+## Task 932-935
+Original task source: ad hoc operator request on 2026-05-28.
+
+Summary of preserved scope:
+- Make direct execution `max_in_flight` dynamic so the AI Node can advertise and enforce a current effective capacity based on local resource health.
+- Preserve an operator-configured hard ceiling and never auto-scale above that ceiling.
+- Keep the current static limit behavior available for conservative operation.
+- Expose both configured and effective capacity through the stable execution admission endpoint so Core/client nodes can batch accordingly.
+
+Task mapping:
+- Task 932: Define dynamic direct execution in-flight capacity policy
+  - Add configuration for enabling dynamic capacity and setting a minimum effective in-flight value.
+  - Define resource tiers based on available memory, swap usage, and load per CPU.
+  - Suggested first-pass tiers:
+    - healthy: use configured `max_in_flight`
+    - warm pressure: use half of configured `max_in_flight`, minimum configured floor
+    - hot pressure: use the configured floor, usually `1`
+    - critical pressure: reject new work using the existing resource pressure rejection reasons
+  - Keep the existing `SYNTHIA_DIRECT_EXECUTION_MAX_IN_FLIGHT` as the hard ceiling.
+- Task 933: Implement effective max-in-flight calculation
+  - Compute `effective_max_in_flight` from current resource snapshot before admission.
+  - Use effective capacity for `max_in_flight_exceeded` checks.
+  - Preserve current behavior when dynamic capacity is disabled.
+- Task 934: Expose dynamic admission capacity in execution admission status
+  - Return `configured_max_in_flight`, `effective_max_in_flight`, `dynamic_in_flight_enabled`, and the selected capacity tier in `GET /api/execution/admission`.
+  - Keep existing `thresholds.max_in_flight` for compatibility if practical.
+  - Include enough status for Core/email nodes to decide batch size without reading debug endpoints.
+- Task 935: Add tests and documentation for dynamic in-flight capacity
+  - Cover static mode compatibility.
+  - Cover healthy/warm/hot/critical resource tiers.
+  - Cover response shape for `GET /api/execution/admission`.
+  - Document new environment variables and recommended client behavior.
+
+## Task 936-939
+Original task source: ad hoc operator request on 2026-05-28.
+
+Summary of preserved scope:
+- Extend execution admission guardrails beyond `/api/execution/direct` to all expensive execution routes.
+- Keep lightweight authorization, health, status, diagnostics, and configuration routes available even when execution work is busy.
+- Prevent benchmark and comparison requests from bypassing the same resource/concurrency protection used by direct execution.
+
+Task mapping:
+- Task 936: Define shared admission scope for expensive execution routes
+  - Include expensive routes:
+    - `POST /api/execution/direct`
+    - `POST /api/benchmarks/execution/v2`
+    - `POST /api/execution/compare`
+  - Exclude lightweight routes:
+    - `POST /api/execution/authorize`
+    - `GET /api/execution/admission`
+    - health, status, debug, config, capability, and provider catalog routes unless they later become expensive.
+  - Decide whether counters should be global across all execution work, per route, or both.
+- Task 937: Apply admission guard to benchmark execution route
+  - Run benchmark execution through the shared admission guard before provider/model work starts.
+  - Return the same structured `503` busy response and `Retry-After` header when rejected.
+  - Preserve benchmark response behavior when accepted.
+- Task 938: Apply admission guard to provider comparison execution route
+  - Run provider comparison execution through the shared admission guard before any provider calls start.
+  - Return the same structured busy response when rejected.
+  - Ensure comparison requests count against shared execution capacity because they can fan out to multiple provider/model calls.
+- Task 939: Expose per-route admission counters and tests
+  - Expose accepted/rejected/in-flight counts by route or execution class in `GET /api/execution/admission`.
+  - Add tests for direct, benchmark, and compare rejection behavior.
+  - Add tests confirming `authorize` and admission status remain available under execution pressure.
+
 ## Task 926-930
 Original task source: ad hoc operator request on 2026-05-27.
 

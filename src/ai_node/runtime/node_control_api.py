@@ -62,9 +62,17 @@ class DirectExecutionBusyError(RuntimeError):
 class DirectExecutionAdmissionConfig:
     enabled: bool = True
     max_in_flight: int = 2
+    dynamic_in_flight_enabled: bool = False
+    min_effective_in_flight: int = 1
     min_memory_available_mb: int = 512
+    warm_memory_available_mb: int = 8192
+    hot_memory_available_mb: int = 2048
     max_swap_used_ratio: float = 0.95
+    warm_swap_used_ratio: float = 0.5
+    hot_swap_used_ratio: float = 0.8
     max_load_per_cpu: float = 2.0
+    warm_load_per_cpu: float = 0.8
+    hot_load_per_cpu: float = 1.5
     retry_after_seconds: int = 30
 
     @classmethod
@@ -72,9 +80,17 @@ class DirectExecutionAdmissionConfig:
         return cls(
             enabled=_env_bool("SYNTHIA_DIRECT_EXECUTION_ADMISSION_ENABLED", True),
             max_in_flight=max(_env_int("SYNTHIA_DIRECT_EXECUTION_MAX_IN_FLIGHT", 2), 1),
+            dynamic_in_flight_enabled=_env_bool("SYNTHIA_DIRECT_EXECUTION_DYNAMIC_IN_FLIGHT_ENABLED", False),
+            min_effective_in_flight=max(_env_int("SYNTHIA_DIRECT_EXECUTION_MIN_EFFECTIVE_IN_FLIGHT", 1), 1),
             min_memory_available_mb=max(_env_int("SYNTHIA_DIRECT_EXECUTION_MIN_MEMORY_AVAILABLE_MB", 512), 0),
+            warm_memory_available_mb=max(_env_int("SYNTHIA_DIRECT_EXECUTION_WARM_MEMORY_AVAILABLE_MB", 8192), 0),
+            hot_memory_available_mb=max(_env_int("SYNTHIA_DIRECT_EXECUTION_HOT_MEMORY_AVAILABLE_MB", 2048), 0),
             max_swap_used_ratio=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_MAX_SWAP_USED_RATIO", 0.95)),
+            warm_swap_used_ratio=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_WARM_SWAP_USED_RATIO", 0.5)),
+            hot_swap_used_ratio=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_HOT_SWAP_USED_RATIO", 0.8)),
             max_load_per_cpu=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_MAX_LOAD_PER_CPU", 2.0)),
+            warm_load_per_cpu=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_WARM_LOAD_PER_CPU", 0.8)),
+            hot_load_per_cpu=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_HOT_LOAD_PER_CPU", 1.5)),
             retry_after_seconds=max(_env_int("SYNTHIA_DIRECT_EXECUTION_RETRY_AFTER_SECONDS", 30), 1),
         )
 
@@ -82,9 +98,18 @@ class DirectExecutionAdmissionConfig:
         return {
             "enabled": self.enabled,
             "max_in_flight": self.max_in_flight,
+            "configured_max_in_flight": self.max_in_flight,
+            "dynamic_in_flight_enabled": self.dynamic_in_flight_enabled,
+            "min_effective_in_flight": min(self.min_effective_in_flight, self.max_in_flight),
             "min_memory_available_mb": self.min_memory_available_mb,
+            "warm_memory_available_mb": self.warm_memory_available_mb,
+            "hot_memory_available_mb": self.hot_memory_available_mb,
             "max_swap_used_ratio": self.max_swap_used_ratio,
+            "warm_swap_used_ratio": self.warm_swap_used_ratio,
+            "hot_swap_used_ratio": self.hot_swap_used_ratio,
             "max_load_per_cpu": self.max_load_per_cpu,
+            "warm_load_per_cpu": self.warm_load_per_cpu,
+            "hot_load_per_cpu": self.hot_load_per_cpu,
             "retry_after_seconds": self.retry_after_seconds,
         }
 
@@ -96,6 +121,9 @@ class DirectExecutionAdmissionDecision:
     retry_after_seconds: int
     resources: dict
     in_flight: int
+    route: str
+    effective_max_in_flight: int
+    capacity_tier: str
 
 
 class DirectExecutionAdmissionGuard:
@@ -107,6 +135,7 @@ class DirectExecutionAdmissionGuard:
         self._in_flight = 0
         self._accepted_count = 0
         self._rejected_count = 0
+        self._route_counts: dict[str, dict[str, int]] = {}
         self._last_decision: DirectExecutionAdmissionDecision | None = None
         self._last_rejection: dict | None = None
 
@@ -114,20 +143,27 @@ class DirectExecutionAdmissionGuard:
     def config(self) -> DirectExecutionAdmissionConfig:
         return self._config
 
-    def try_acquire(self) -> DirectExecutionAdmissionDecision:
+    def try_acquire(self, *, route: str = "direct") -> DirectExecutionAdmissionDecision:
+        route_key = self._normalize_route(route)
         resources = self._resource_sampler()
         reason = self._rejection_reason(resources=resources)
+        effective_max, capacity_tier = self._effective_capacity(resources=resources)
         with self._lock:
-            if self._config.enabled and reason is None and self._in_flight >= self._config.max_in_flight:
+            route_counts = self._route_counts.setdefault(route_key, {"in_flight": 0, "accepted_count": 0, "rejected_count": 0})
+            if self._config.enabled and reason is None and self._in_flight >= effective_max:
                 reason = "max_in_flight_exceeded"
             if self._config.enabled and reason is not None:
                 self._rejected_count += 1
+                route_counts["rejected_count"] += 1
                 decision = DirectExecutionAdmissionDecision(
                     accepted=False,
                     reason=reason,
                     retry_after_seconds=self._config.retry_after_seconds,
                     resources=resources,
                     in_flight=self._in_flight,
+                    route=route_key,
+                    effective_max_in_flight=effective_max,
+                    capacity_tier=capacity_tier,
                 )
                 self._last_decision = decision
                 self._last_rejection = self._decision_payload(decision)
@@ -135,8 +171,11 @@ class DirectExecutionAdmissionGuard:
                     self._logger.warning(
                         "[direct-execution-admission-rejected] %s",
                         {
+                            "route": route_key,
                             "reason": reason,
                             "in_flight": self._in_flight,
+                            "effective_max_in_flight": effective_max,
+                            "capacity_tier": capacity_tier,
                             "retry_after_seconds": self._config.retry_after_seconds,
                             "resources": resources,
                         },
@@ -145,25 +184,34 @@ class DirectExecutionAdmissionGuard:
 
             self._in_flight += 1
             self._accepted_count += 1
+            route_counts["in_flight"] += 1
+            route_counts["accepted_count"] += 1
             decision = DirectExecutionAdmissionDecision(
                 accepted=True,
                 reason=None,
                 retry_after_seconds=0,
                 resources=resources,
                 in_flight=self._in_flight,
+                route=route_key,
+                effective_max_in_flight=effective_max,
+                capacity_tier=capacity_tier,
             )
             self._last_decision = decision
             return decision
 
-    def release(self) -> None:
+    def release(self, *, route: str = "direct") -> None:
+        route_key = self._normalize_route(route)
         with self._lock:
             self._in_flight = max(self._in_flight - 1, 0)
+            route_counts = self._route_counts.setdefault(route_key, {"in_flight": 0, "accepted_count": 0, "rejected_count": 0})
+            route_counts["in_flight"] = max(route_counts.get("in_flight", 0) - 1, 0)
 
     def snapshot(self) -> dict:
         resources = self._resource_sampler()
         reason = self._rejection_reason(resources=resources)
+        effective_max, capacity_tier = self._effective_capacity(resources=resources)
         with self._lock:
-            would_accept = (not self._config.enabled) or (reason is None and self._in_flight < self._config.max_in_flight)
+            would_accept = (not self._config.enabled) or (reason is None and self._in_flight < effective_max)
             return {
                 "configured": True,
                 "enabled": self._config.enabled,
@@ -173,7 +221,12 @@ class DirectExecutionAdmissionGuard:
                 "accepted_count": self._accepted_count,
                 "rejected_count": self._rejected_count,
                 "last_rejection": dict(self._last_rejection) if self._last_rejection else None,
-                "thresholds": self._config.payload(),
+                "route_counts": {key: dict(value) for key, value in sorted(self._route_counts.items())},
+                "thresholds": {
+                    **self._config.payload(),
+                    "effective_max_in_flight": effective_max,
+                    "capacity_tier": capacity_tier,
+                },
                 "resources": resources,
             }
 
@@ -184,18 +237,61 @@ class DirectExecutionAdmissionGuard:
             "reason": decision.reason or "node_at_capacity",
             "retry_after_seconds": decision.retry_after_seconds,
             "in_flight": decision.in_flight,
+            "route": decision.route,
+            "effective_max_in_flight": decision.effective_max_in_flight,
+            "capacity_tier": decision.capacity_tier,
             "resources": decision.resources,
         }
 
     def _decision_payload(self, decision: DirectExecutionAdmissionDecision) -> dict:
         return {
             "accepted": decision.accepted,
+            "route": decision.route,
             "reason": decision.reason,
             "retry_after_seconds": decision.retry_after_seconds,
             "in_flight": decision.in_flight,
+            "effective_max_in_flight": decision.effective_max_in_flight,
+            "capacity_tier": decision.capacity_tier,
             "resources": decision.resources,
             "timestamp": local_now_iso(),
         }
+
+    @staticmethod
+    def _normalize_route(route: str) -> str:
+        normalized = str(route or "").strip().lower().replace("/", "_").replace("-", "_")
+        return normalized or "execution"
+
+    def _effective_capacity(self, *, resources: dict) -> tuple[int, str]:
+        max_in_flight = max(int(self._config.max_in_flight), 1)
+        floor = min(max(int(self._config.min_effective_in_flight), 1), max_in_flight)
+        if not self._config.dynamic_in_flight_enabled:
+            return max_in_flight, "static"
+
+        tier = "healthy"
+        memory_available_mb = resources.get("memory_available_mb")
+        if memory_available_mb is not None:
+            if memory_available_mb <= self._config.hot_memory_available_mb:
+                tier = "hot"
+            elif memory_available_mb <= self._config.warm_memory_available_mb and tier == "healthy":
+                tier = "warm"
+        swap_used_ratio = resources.get("swap_used_ratio")
+        if swap_used_ratio is not None:
+            if swap_used_ratio >= self._config.hot_swap_used_ratio:
+                tier = "hot"
+            elif swap_used_ratio >= self._config.warm_swap_used_ratio and tier == "healthy":
+                tier = "warm"
+        load_per_cpu = resources.get("load_per_cpu")
+        if load_per_cpu is not None:
+            if load_per_cpu >= self._config.hot_load_per_cpu:
+                tier = "hot"
+            elif load_per_cpu >= self._config.warm_load_per_cpu and tier == "healthy":
+                tier = "warm"
+
+        if tier == "hot":
+            return floor, tier
+        if tier == "warm":
+            return max(floor, (max_in_flight + 1) // 2), tier
+        return max_in_flight, tier
 
     def _rejection_reason(self, *, resources: dict) -> str | None:
         if not self._config.enabled:
@@ -1465,6 +1561,20 @@ class NodeControlState:
             return {"configured": False, "enabled": False}
         return self._direct_execution_admission_guard.snapshot()
 
+    def _acquire_execution_admission(self, *, route: str) -> DirectExecutionAdmissionDecision:
+        admission = self._direct_execution_admission_guard.try_acquire(route=route)
+        if admission.accepted:
+            return admission
+        payload = self._direct_execution_admission_guard.busy_payload(decision=admission)
+        raise DirectExecutionBusyError(
+            payload=payload,
+            retry_after_seconds=admission.retry_after_seconds,
+            status_code=503,
+        )
+
+    def _release_execution_admission(self, *, route: str) -> None:
+        self._direct_execution_admission_guard.release(route=route)
+
     def _supervisor_runtime_state_payload(self) -> dict:
         state = self._lifecycle.get_state()
         runtime_state = "starting"
@@ -1575,20 +1685,13 @@ class NodeControlState:
         return self._task_execution_service
 
     async def execute_direct(self, *, request: TaskExecutionRequest) -> dict:
-        admission = self._direct_execution_admission_guard.try_acquire()
-        if not admission.accepted:
-            payload = self._direct_execution_admission_guard.busy_payload(decision=admission)
-            raise DirectExecutionBusyError(
-                payload=payload,
-                retry_after_seconds=admission.retry_after_seconds,
-                status_code=503,
-            )
+        self._acquire_execution_admission(route="direct")
         try:
             service = self._get_task_execution_service()
             result = await service.execute(request)
             return result.model_dump(mode="json")
         finally:
-            self._direct_execution_admission_guard.release()
+            self._release_execution_admission(route="direct")
 
     @staticmethod
     def _client_ai_v2_schema_dir() -> Path:
@@ -1682,91 +1785,164 @@ class NodeControlState:
         target_specs = [item for item in list(targets or []) if isinstance(item, dict)]
         if not target_specs:
             raise ValueError("targets_required")
-        inputs_payload = inputs if isinstance(inputs, dict) else {}
-        output_payload = output_contract if isinstance(output_contract, dict) else {}
-        schema = output_payload.get("json_schema") if isinstance(output_payload.get("json_schema"), dict) else None
-        execution_inputs = dict(inputs_payload)
-        if schema is not None and "json_schema" not in execution_inputs and "structured_output_schema" not in execution_inputs:
-            execution_inputs["json_schema"] = schema
 
-        prompt_definition = {}
-        authorized_version = prompt_version
-        if prompt_id:
-            if self._prompt_registry is not None:
-                self._prompt_service_state = self._prompt_registry.snapshot()
-            state = self._prompt_service_state if isinstance(self._prompt_service_state, dict) else None
-            authorization = self._execution_gateway.authorize(
-                prompt_id=prompt_id,
-                task_family=task_family,
-                prompt_services_state=state,
-                prompt_version=prompt_version,
-                requested_by=requested_by,
-                service_id=service_id,
-                customer_id=customer_id,
-                inputs=execution_inputs,
-            )
-            if not authorization.allowed:
-                raise ValueError(authorization.reason)
-            prompt_definition = authorization.prompt_definition if isinstance(authorization.prompt_definition, dict) else {}
-            authorized_version = authorization.prompt_version
+        self._acquire_execution_admission(route="benchmark")
+        try:
+            inputs_payload = inputs if isinstance(inputs, dict) else {}
+            output_payload = output_contract if isinstance(output_contract, dict) else {}
+            schema = output_payload.get("json_schema") if isinstance(output_payload.get("json_schema"), dict) else None
+            execution_inputs = dict(inputs_payload)
+            if schema is not None and "json_schema" not in execution_inputs and "structured_output_schema" not in execution_inputs:
+                execution_inputs["json_schema"] = schema
 
-        prompt = render_prompt_template(prompt_definition=prompt_definition, request_inputs=execution_inputs)
-        if prompt is None:
-            prompt = execution_inputs.get("prompt")
-        if prompt is None:
-            prompt = execution_inputs.get("text")
-        system_prompt = execution_inputs.get("system_prompt")
-        if system_prompt is None:
-            system_prompt = prompt_definition.get("system_prompt")
-        messages = execution_inputs.get("messages") if isinstance(execution_inputs.get("messages"), list) else []
-        temperature = execution_inputs.get("temperature")
-        max_tokens = execution_inputs.get("max_tokens")
-
-        results = []
-        for target in target_specs:
-            provider_id = str(target.get("provider") or target.get("provider_id") or "").strip().lower()
-            model_id = str(target.get("model") or target.get("model_id") or "").strip() or None
-            if not provider_id and model_id and hasattr(self._service_manager, "is_local_llm_model"):
-                try:
-                    if self._service_manager.is_local_llm_model(model_id=model_id):
-                        provider_id = "local"
-                except Exception:
-                    provider_id = ""
-            target_id = str(target.get("target_id") or f"{provider_id}:{model_id or 'default'}").strip()
-            role = str(target.get("role") or "candidate").strip() or "candidate"
-            if not provider_id:
-                results.append(
-                    {
-                        "target_id": target_id or None,
-                        "provider": provider_id,
-                        "model": model_id,
-                        "role": role,
-                        "status": "failed",
-                        "output_text": None,
-                        "parsed_output": None,
-                        "usage": None,
-                        "latency_ms": None,
-                        "cost_usd": None,
-                        "runtime_metrics": None,
-                        "error": {"code": "provider_required", "message": "provider_required"},
-                    }
-                )
-                continue
+            prompt_definition = {}
+            authorized_version = prompt_version
             if prompt_id:
+                if self._prompt_registry is not None:
+                    self._prompt_service_state = self._prompt_registry.snapshot()
                 state = self._prompt_service_state if isinstance(self._prompt_service_state, dict) else None
-                target_authorization = self._execution_gateway.authorize(
+                authorization = self._execution_gateway.authorize(
                     prompt_id=prompt_id,
                     task_family=task_family,
                     prompt_services_state=state,
-                    prompt_version=authorized_version,
+                    prompt_version=prompt_version,
                     requested_by=requested_by,
                     service_id=service_id,
                     customer_id=customer_id,
-                    requested_provider=provider_id,
-                    requested_model=model_id,
                     inputs=execution_inputs,
                 )
-                if not target_authorization.allowed:
+                if not authorization.allowed:
+                    raise ValueError(authorization.reason)
+                prompt_definition = authorization.prompt_definition if isinstance(authorization.prompt_definition, dict) else {}
+                authorized_version = authorization.prompt_version
+
+            prompt = render_prompt_template(prompt_definition=prompt_definition, request_inputs=execution_inputs)
+            if prompt is None:
+                prompt = execution_inputs.get("prompt")
+            if prompt is None:
+                prompt = execution_inputs.get("text")
+            system_prompt = execution_inputs.get("system_prompt")
+            if system_prompt is None:
+                system_prompt = prompt_definition.get("system_prompt")
+            messages = execution_inputs.get("messages") if isinstance(execution_inputs.get("messages"), list) else []
+            temperature = execution_inputs.get("temperature")
+            max_tokens = execution_inputs.get("max_tokens")
+
+            results = []
+            for target in target_specs:
+                provider_id = str(target.get("provider") or target.get("provider_id") or "").strip().lower()
+                model_id = str(target.get("model") or target.get("model_id") or "").strip() or None
+                if not provider_id and model_id and hasattr(self._service_manager, "is_local_llm_model"):
+                    try:
+                        if self._service_manager.is_local_llm_model(model_id=model_id):
+                            provider_id = "local"
+                    except Exception:
+                        provider_id = ""
+                target_id = str(target.get("target_id") or f"{provider_id}:{model_id or 'default'}").strip()
+                role = str(target.get("role") or "candidate").strip() or "candidate"
+                if not provider_id:
+                    results.append(
+                        {
+                            "target_id": target_id or None,
+                            "provider": provider_id,
+                            "model": model_id,
+                            "role": role,
+                            "status": "failed",
+                            "output_text": None,
+                            "parsed_output": None,
+                            "usage": None,
+                            "latency_ms": None,
+                            "cost_usd": None,
+                            "runtime_metrics": None,
+                            "error": {"code": "provider_required", "message": "provider_required"},
+                        }
+                    )
+                    continue
+                if prompt_id:
+                    state = self._prompt_service_state if isinstance(self._prompt_service_state, dict) else None
+                    target_authorization = self._execution_gateway.authorize(
+                        prompt_id=prompt_id,
+                        task_family=task_family,
+                        prompt_services_state=state,
+                        prompt_version=authorized_version,
+                        requested_by=requested_by,
+                        service_id=service_id,
+                        customer_id=customer_id,
+                        requested_provider=provider_id,
+                        requested_model=model_id,
+                        inputs=execution_inputs,
+                    )
+                    if not target_authorization.allowed:
+                        results.append(
+                            {
+                                "target_id": target_id,
+                                "provider": provider_id,
+                                "model": model_id,
+                                "role": role,
+                                "status": "failed",
+                                "output_text": None,
+                                "parsed_output": None,
+                                "usage": None,
+                                "latency_ms": None,
+                                "cost_usd": None,
+                                "runtime_metrics": None,
+                                "error": {"code": target_authorization.reason, "message": target_authorization.reason},
+                            }
+                        )
+                        continue
+                runtime_metrics = None
+                started = time.perf_counter()
+                try:
+                    if provider_id == "local" and model_id and hasattr(self._service_manager, "ensure_local_llm_model"):
+                        switch_result = await self._ensure_local_benchmark_model(model_id=model_id)
+                        runtime_metrics = {
+                            "vram_used_mib": None,
+                            "vram_delta_mib": None,
+                            "gpu_util_percent": None,
+                            "load_seconds": switch_result.get("load_seconds") if isinstance(switch_result, dict) else None,
+                        }
+                    started = time.perf_counter()
+                    response = await self._provider_runtime_manager.execute_explicit(
+                        UnifiedExecutionRequest(
+                            task_family=task_family,
+                            prompt=str(prompt or "") if prompt is not None else None,
+                            system_prompt=str(system_prompt or "") if system_prompt is not None else None,
+                            messages=list(messages or []),
+                            requested_provider=provider_id,
+                            requested_model=model_id,
+                            temperature=float(temperature) if isinstance(temperature, (int, float)) else None,
+                            max_tokens=int(max_tokens) if isinstance(max_tokens, int) else None,
+                            metadata={
+                                "benchmark": True,
+                                "benchmark_id": benchmark_id,
+                                "trace_id": trace_id,
+                                "prompt_id": prompt_id,
+                                "prompt_version": authorized_version,
+                                "structured_output_schema": schema,
+                                **(metadata if isinstance(metadata, dict) else {}),
+                            },
+                        )
+                    )
+                    parsed_output = self._parse_output_payload(response.output_text) if output_payload.get("parse_json_output", True) else None
+                    results.append(
+                        {
+                            "target_id": target_id,
+                            "provider": response.provider_id,
+                            "model": response.model_id,
+                            "role": role,
+                            "status": "completed",
+                            "output_text": response.output_text,
+                            "parsed_output": parsed_output,
+                            "usage": response.usage.model_dump(mode="json"),
+                            "latency_ms": response.latency_ms,
+                            "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
+                            "cost_usd": response.estimated_cost,
+                            "runtime_metrics": runtime_metrics,
+                            "error": None,
+                        }
+                    )
+                except LocalLlmBusyError as exc:
+                    message = str(exc).strip() or "local LLM runtime is busy"
                     results.append(
                         {
                             "target_id": target_id,
@@ -1778,114 +1954,46 @@ class NodeControlState:
                             "parsed_output": None,
                             "usage": None,
                             "latency_ms": None,
+                            "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
                             "cost_usd": None,
-                            "runtime_metrics": None,
-                            "error": {"code": target_authorization.reason, "message": target_authorization.reason},
+                            "runtime_metrics": runtime_metrics,
+                            "error": {
+                                "code": "local_llm_busy",
+                                "message": message,
+                                "retryable": True,
+                            },
                         }
                     )
-                    continue
-            runtime_metrics = None
-            started = time.perf_counter()
-            try:
-                if provider_id == "local" and model_id and hasattr(self._service_manager, "ensure_local_llm_model"):
-                    switch_result = await self._ensure_local_benchmark_model(model_id=model_id)
-                    runtime_metrics = {
-                        "vram_used_mib": None,
-                        "vram_delta_mib": None,
-                        "gpu_util_percent": None,
-                        "load_seconds": switch_result.get("load_seconds") if isinstance(switch_result, dict) else None,
-                    }
-                started = time.perf_counter()
-                response = await self._provider_runtime_manager.execute_explicit(
-                    UnifiedExecutionRequest(
-                        task_family=task_family,
-                        prompt=str(prompt or "") if prompt is not None else None,
-                        system_prompt=str(system_prompt or "") if system_prompt is not None else None,
-                        messages=list(messages or []),
-                        requested_provider=provider_id,
-                        requested_model=model_id,
-                        temperature=float(temperature) if isinstance(temperature, (int, float)) else None,
-                        max_tokens=int(max_tokens) if isinstance(max_tokens, int) else None,
-                        metadata={
-                            "benchmark": True,
-                            "benchmark_id": benchmark_id,
-                            "trace_id": trace_id,
-                            "prompt_id": prompt_id,
-                            "prompt_version": authorized_version,
-                            "structured_output_schema": schema,
-                            **(metadata if isinstance(metadata, dict) else {}),
-                        },
+                except Exception as exc:
+                    message = str(exc).strip() or type(exc).__name__
+                    results.append(
+                        {
+                            "target_id": target_id,
+                            "provider": provider_id,
+                            "model": model_id,
+                            "role": role,
+                            "status": "failed",
+                            "output_text": None,
+                            "parsed_output": None,
+                            "usage": None,
+                            "latency_ms": None,
+                            "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
+                            "cost_usd": None,
+                            "runtime_metrics": None,
+                            "error": {"code": "execution_failed", "message": message},
+                        }
                     )
-                )
-                parsed_output = self._parse_output_payload(response.output_text) if output_payload.get("parse_json_output", True) else None
-                results.append(
-                    {
-                        "target_id": target_id,
-                        "provider": response.provider_id,
-                        "model": response.model_id,
-                        "role": role,
-                        "status": "completed",
-                        "output_text": response.output_text,
-                        "parsed_output": parsed_output,
-                        "usage": response.usage.model_dump(mode="json"),
-                        "latency_ms": response.latency_ms,
-                        "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
-                        "cost_usd": response.estimated_cost,
-                        "runtime_metrics": runtime_metrics,
-                        "error": None,
-                    }
-                )
-            except LocalLlmBusyError as exc:
-                message = str(exc).strip() or "local LLM runtime is busy"
-                results.append(
-                    {
-                        "target_id": target_id,
-                        "provider": provider_id,
-                        "model": model_id,
-                        "role": role,
-                        "status": "failed",
-                        "output_text": None,
-                        "parsed_output": None,
-                        "usage": None,
-                        "latency_ms": None,
-                        "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
-                        "cost_usd": None,
-                        "runtime_metrics": runtime_metrics,
-                        "error": {
-                            "code": "local_llm_busy",
-                            "message": message,
-                            "retryable": True,
-                        },
-                    }
-                )
-            except Exception as exc:
-                message = str(exc).strip() or type(exc).__name__
-                results.append(
-                    {
-                        "target_id": target_id,
-                        "provider": provider_id,
-                        "model": model_id,
-                        "role": role,
-                        "status": "failed",
-                        "output_text": None,
-                        "parsed_output": None,
-                        "usage": None,
-                        "latency_ms": None,
-                        "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
-                        "cost_usd": None,
-                        "runtime_metrics": None,
-                        "error": {"code": "execution_failed", "message": message},
-                    }
-                )
-        return {
-            "benchmark_id": str(benchmark_id or "").strip(),
-            "prompt_id": str(prompt_id or "").strip() or None,
-            "prompt_version": authorized_version,
-            "task_family": task_family,
-            "trace_id": trace_id,
-            "generated_at": local_now_iso(),
-            "results": results,
-        }
+            return {
+                "benchmark_id": str(benchmark_id or "").strip(),
+                "prompt_id": str(prompt_id or "").strip() or None,
+                "prompt_version": authorized_version,
+                "task_family": task_family,
+                "trace_id": trace_id,
+                "generated_at": local_now_iso(),
+                "results": results,
+            }
+        finally:
+            self._release_execution_admission(route="benchmark")
 
     async def compare_provider_execution(
         self,
@@ -1903,61 +2011,65 @@ class NodeControlState:
         provider_specs = [item for item in list(providers or []) if isinstance(item, dict)]
         if not provider_specs:
             raise ValueError("providers_required")
-        results = []
-        for provider_spec in provider_specs:
-            provider_id = str(provider_spec.get("provider") or provider_spec.get("provider_id") or "").strip().lower()
-            model_id = str(provider_spec.get("model") or provider_spec.get("model_id") or "").strip() or None
-            if not provider_id:
-                results.append({"status": "failed", "error": "provider_required"})
-                continue
-            started = time.perf_counter()
-            try:
-                response = await self._provider_runtime_manager.execute_explicit(
-                    UnifiedExecutionRequest(
-                        task_family=task_family,
-                        prompt=prompt,
-                        system_prompt=system_prompt,
-                        messages=list(messages or []),
-                        requested_provider=provider_id,
-                        requested_model=model_id,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        metadata={"comparison": True},
+        self._acquire_execution_admission(route="compare")
+        try:
+            results = []
+            for provider_spec in provider_specs:
+                provider_id = str(provider_spec.get("provider") or provider_spec.get("provider_id") or "").strip().lower()
+                model_id = str(provider_spec.get("model") or provider_spec.get("model_id") or "").strip() or None
+                if not provider_id:
+                    results.append({"status": "failed", "error": "provider_required"})
+                    continue
+                started = time.perf_counter()
+                try:
+                    response = await self._provider_runtime_manager.execute_explicit(
+                        UnifiedExecutionRequest(
+                            task_family=task_family,
+                            prompt=prompt,
+                            system_prompt=system_prompt,
+                            messages=list(messages or []),
+                            requested_provider=provider_id,
+                            requested_model=model_id,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                            metadata={"comparison": True},
+                        )
                     )
-                )
-                results.append(
-                    {
-                        "provider": response.provider_id,
-                        "model": response.model_id,
-                        "status": "completed",
-                        "latency_ms": response.latency_ms,
-                        "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
-                        "output_text": response.output_text,
-                        "usage": response.usage.model_dump(mode="json"),
-                        "estimated_cost": response.estimated_cost,
-                        "finish_reason": response.finish_reason,
-                    }
-                )
-            except Exception as exc:
-                results.append(
-                    {
-                        "provider": provider_id,
-                        "model": model_id,
-                        "status": "failed",
-                        "latency_ms": None,
-                        "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
-                        "output_text": None,
-                        "usage": None,
-                        "estimated_cost": None,
-                        "error": str(exc).strip() or type(exc).__name__,
-                    }
-                )
-        return {
-            "status": "completed",
-            "task_family": task_family,
-            "results": results,
-            "generated_at": local_now_iso(),
-        }
+                    results.append(
+                        {
+                            "provider": response.provider_id,
+                            "model": response.model_id,
+                            "status": "completed",
+                            "latency_ms": response.latency_ms,
+                            "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
+                            "output_text": response.output_text,
+                            "usage": response.usage.model_dump(mode="json"),
+                            "estimated_cost": response.estimated_cost,
+                            "finish_reason": response.finish_reason,
+                        }
+                    )
+                except Exception as exc:
+                    results.append(
+                        {
+                            "provider": provider_id,
+                            "model": model_id,
+                            "status": "failed",
+                            "latency_ms": None,
+                            "total_elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
+                            "output_text": None,
+                            "usage": None,
+                            "estimated_cost": None,
+                            "error": str(exc).strip() or type(exc).__name__,
+                        }
+                    )
+            return {
+                "status": "completed",
+                "task_family": task_family,
+                "results": results,
+                "generated_at": local_now_iso(),
+            }
+        finally:
+            self._release_execution_admission(route="compare")
 
     async def refresh_budget_policy(self) -> dict:
         if self._budget_manager is None:
@@ -4124,6 +4236,12 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 temperature=payload.temperature,
                 max_tokens=payload.max_tokens,
             )
+        except DirectExecutionBusyError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=exc.payload,
+                headers={"Retry-After": str(exc.retry_after_seconds)},
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -4145,6 +4263,12 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 trace_id=payload.trace_id,
                 metadata=payload.metadata,
             )
+        except DirectExecutionBusyError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=exc.payload,
+                headers={"Retry-After": str(exc.retry_after_seconds)},
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -1208,7 +1208,13 @@ class NodeControlFastApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
             guard = DirectExecutionAdmissionGuard(
-                config=DirectExecutionAdmissionConfig(max_in_flight=7, retry_after_seconds=19),
+                config=DirectExecutionAdmissionConfig(
+                    max_in_flight=7,
+                    dynamic_in_flight_enabled=True,
+                    min_effective_in_flight=2,
+                    warm_memory_available_mb=8192,
+                    retry_after_seconds=19,
+                ),
                 resource_sampler=lambda: {
                     "memory_available_mb": 4096,
                     "swap_used_ratio": 0.1,
@@ -1232,8 +1238,77 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertTrue(payload["configured"])
             self.assertTrue(payload["enabled"])
             self.assertEqual(payload["thresholds"]["max_in_flight"], 7)
+            self.assertEqual(payload["thresholds"]["configured_max_in_flight"], 7)
+            self.assertEqual(payload["thresholds"]["effective_max_in_flight"], 4)
+            self.assertEqual(payload["thresholds"]["capacity_tier"], "warm")
+            self.assertTrue(payload["thresholds"]["dynamic_in_flight_enabled"])
             self.assertEqual(payload["thresholds"]["retry_after_seconds"], 19)
             self.assertEqual(payload["in_flight"], 0)
+
+    def test_expensive_execution_routes_share_admission_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
+            runtime_manager = self._FakeProviderRuntimeManager()
+            guard = DirectExecutionAdmissionGuard(
+                config=DirectExecutionAdmissionConfig(min_memory_available_mb=1024, retry_after_seconds=29),
+                resource_sampler=lambda: {
+                    "memory_available_mb": 128,
+                    "swap_used_ratio": 0.1,
+                    "load_per_cpu": 0.2,
+                },
+                logger=logging.getLogger("node-control-fastapi-test"),
+            )
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                provider_runtime_manager=runtime_manager,
+                direct_execution_admission_guard=guard,
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            compare_response = client.post(
+                "/api/execution/compare",
+                json={
+                    "task_family": "task.classification",
+                    "prompt": "classify hello",
+                    "providers": [{"provider": "openai", "model": "gpt-5-mini"}],
+                },
+            )
+            benchmark_response = client.post(
+                "/api/benchmarks/execution/v2",
+                json={
+                    "benchmark_id": "bench-admission",
+                    "task_family": "task.classification",
+                    "requested_by": "mail-node",
+                    "trace_id": "trace-bench-admission",
+                    "inputs": {"body": "hello"},
+                    "targets": [{"provider": "openai", "model": "gpt-5-mini"}],
+                },
+            )
+            authorize_response = client.post(
+                "/api/execution/authorize",
+                json={
+                    "prompt_id": "missing.prompt",
+                    "task_family": "task.classification",
+                    "requested_by": "mail-node",
+                },
+            )
+            admission_response = client.get("/api/execution/admission")
+
+            self.assertEqual(compare_response.status_code, 503)
+            self.assertEqual(compare_response.headers["retry-after"], "29")
+            self.assertEqual(compare_response.json()["detail"]["route"], "compare")
+            self.assertEqual(benchmark_response.status_code, 503)
+            self.assertEqual(benchmark_response.headers["retry-after"], "29")
+            self.assertEqual(benchmark_response.json()["detail"]["route"], "benchmark")
+            self.assertEqual(authorize_response.status_code, 200)
+            self.assertEqual(admission_response.status_code, 200)
+            route_counts = admission_response.json()["route_counts"]
+            self.assertEqual(route_counts["compare"]["rejected_count"], 1)
+            self.assertEqual(route_counts["benchmark"]["rejected_count"], 1)
+            self.assertIsNone(runtime_manager.last_execution_request)
 
 
 if __name__ == "__main__":

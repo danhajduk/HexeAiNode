@@ -502,3 +502,11 @@ Task 928: Enforce busy rejection for direct execution calls - Completed on 05/27
 Task 929: Surface admission guardrail metrics and diagnostics - Completed on 05/27/2026 23:55
 Task 930: Add tests for execution admission guardrails - Completed on 05/27/2026 23:55
 Task 931: Track upstream email batch throttling dependency - Completed on 05/27/2026 23:55
+Task 932: Define dynamic direct execution in-flight capacity policy - Completed on 05/28/2026 00:49
+Task 933: Implement effective max-in-flight calculation - Completed on 05/28/2026 00:49
+Task 934: Expose dynamic admission capacity in execution admission status - Completed on 05/28/2026 00:49
+Task 935: Add tests and documentation for dynamic in-flight capacity - Completed on 05/28/2026 00:49
+Task 936: Define shared admission scope for expensive execution routes - Completed on 05/28/2026 00:49
+Task 937: Apply admission guard to benchmark execution route - Completed on 05/28/2026 00:49
+Task 938: Apply admission guard to provider comparison execution route - Completed on 05/28/2026 00:49
+Task 939: Expose per-route admission counters and tests - Completed on 05/28/2026 00:49
