@@ -169,6 +169,7 @@ Notes:
 Canonical routes:
 
 - `POST /api/execution/authorize`
+- `GET /api/execution/admission`
 - `POST /api/execution/direct`
 - `POST /api/benchmarks/execution/v2`
 - `GET /api/schemas/client-ai/v2`
@@ -184,6 +185,7 @@ Notes:
 
 - Authorization and direct execution are explicitly separated from setup and provider configuration routes.
 - Execution authorization now includes caller-aware prompt access checks through `requested_by`, `service_id`, and `customer_id`.
+- Execution admission exposes the node's direct execution guardrails, including `thresholds.max_in_flight`, current in-flight count, rejection counters, retry hint, and resource snapshot.
 - Direct execution can return HTTP `503` with `Retry-After` when node admission guardrails reject work due to in-flight count or host memory/swap/load pressure.
 - V2 benchmark execution is execution-only: it returns target outputs and metadata without correctness scoring.
 - Client AI V2 schema discovery is exposed for prompt and execution contract consumers.

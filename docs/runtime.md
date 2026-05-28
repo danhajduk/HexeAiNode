@@ -63,7 +63,8 @@
 - `/api/execution/direct` is protected by a local admission guard before provider execution begins
 - by default, direct execution is rejected when there are already 2 in-flight direct executions, available memory is below 512 MB, swap usage is 95% or higher, or 1-minute load per CPU is 2.0 or higher
 - rejected calls return HTTP `503` with `Retry-After` and a structured body containing `accepted=false`, `status=busy`, `reason`, `retry_after_seconds`, `in_flight`, and a small resource snapshot
-- `GET /debug/execution` includes the admission snapshot, and `GET /debug/execution/admission` exposes the admission data directly
+- `GET /api/execution/admission` exposes the stable admission snapshot for clients that need to inspect `max_in_flight`, current in-flight count, retry hint, and resource thresholds
+- `GET /debug/execution` includes the same admission snapshot, and `GET /debug/execution/admission` mirrors the admission data for operator debugging
 - upstream batch callers, including email-driven workloads routed through Core, should send smaller batches, limit per-node concurrency, pause between batches, and honor `429`/`503` retry hints instead of retrying a full batch immediately
 
 ## Runtime Health

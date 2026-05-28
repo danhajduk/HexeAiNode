@@ -1204,6 +1204,37 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(payload["retry_after_seconds"], 31)
             self.assertIsNone(runtime_manager.last_execution_request)
 
+    def test_execution_admission_endpoint_exposes_max_in_flight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
+            guard = DirectExecutionAdmissionGuard(
+                config=DirectExecutionAdmissionConfig(max_in_flight=7, retry_after_seconds=19),
+                resource_sampler=lambda: {
+                    "memory_available_mb": 4096,
+                    "swap_used_ratio": 0.1,
+                    "load_per_cpu": 0.2,
+                },
+                logger=logging.getLogger("node-control-fastapi-test"),
+            )
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                direct_execution_admission_guard=guard,
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            response = client.get("/api/execution/admission")
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertTrue(payload["configured"])
+            self.assertTrue(payload["enabled"])
+            self.assertEqual(payload["thresholds"]["max_in_flight"], 7)
+            self.assertEqual(payload["thresholds"]["retry_after_seconds"], 19)
+            self.assertEqual(payload["in_flight"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3644,6 +3644,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/schemas/client-ai/v2/communication.md",
                 "/api/schemas/client-ai/v2/{schema_name}",
                 "/api/execution/authorize",
+                "/api/execution/admission",
                 "/api/execution/compare",
                 "/api/benchmarks/execution/v2",
                 "/api/services/status",
@@ -4093,6 +4094,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             requested_model=payload.requested_model,
             inputs=payload.inputs,
         )
+
+    @app.get("/api/execution/admission")
+    def get_execution_admission():
+        return state.direct_execution_admission_payload()
 
     @app.post("/api/execution/direct")
     async def post_execution_direct(payload: TaskExecutionRequest):
