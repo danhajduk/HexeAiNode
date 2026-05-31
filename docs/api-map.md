@@ -20,7 +20,7 @@ Compatibility or convenience surfaces in this repository:
 
 - `GET /` is a convenience index route, not the canonical application API surface
 - `/debug/...` routes are compatibility and admin-convenience mirrors, not the preferred operator route family
-- admin-protected routes still use the legacy compatibility header `X-Synthia-Admin-Token`
+- admin-protected routes still use the legacy compatibility header `X-Hexe-Admin-Token`
 
 ## Route Families
 
@@ -224,6 +224,6 @@ Notes:
 
 The admin-protected routes in this repo still use:
 
-- `X-Synthia-Admin-Token`
+- `X-Hexe-Admin-Token`
 
 This is a compatibility-sensitive protocol identifier and should be treated as a documented legacy exception during the Hexe migration rather than a silent naming inconsistency.

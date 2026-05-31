@@ -33,7 +33,7 @@ class CapabilityClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result.retryable)
         self.assertEqual(adapter.last_url, "http://10.0.0.100:9001/api/system/nodes/capabilities/declaration")
         self.assertEqual(adapter.last_payload, {"manifest": {"manifest_version": "1.0"}})
-        self.assertEqual(adapter.last_headers["X-Synthia-Node-Id"], "node-001")
+        self.assertEqual(adapter.last_headers["X-Hexe-Node-Id"], "node-001")
         self.assertEqual(adapter.last_headers["X-Node-Trust-Token"], "secret")
         self.assertIn("Bearer secret", adapter.last_headers["Authorization"])
 

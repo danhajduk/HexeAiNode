@@ -248,7 +248,7 @@ class ProviderIntelligenceService:
 
     async def _discover_openai(self, previous: dict | None) -> dict:
         api_key = self._resolve_openai_api_key()
-        base_url = str(os.environ.get("SYNTHIA_OPENAI_BASE_URL") or "https://api.openai.com/v1").strip()
+        base_url = str(os.environ.get("HEXE_OPENAI_BASE_URL") or "https://api.openai.com/v1").strip()
         if not api_key:
             return self._unsupported_provider_payload(
                 provider="openai",

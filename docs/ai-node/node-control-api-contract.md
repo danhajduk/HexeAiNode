@@ -262,8 +262,8 @@ For OpenAI, this response only includes regular base-model families used for nor
 ### Refresh OpenAI model capability catalog (admin)
 
 - `POST /api/providers/openai/models/classification/refresh`
-- Header (required when `SYNTHIA_ADMIN_TOKEN` is configured):
-  - `X-Synthia-Admin-Token: <token>`
+- Header (required when `HEXE_ADMIN_TOKEN` is configured):
+  - `X-Hexe-Admin-Token: <token>`
 - Success:
   - capability refresh payload
   - `redeclare`: capability redeclaration result triggered with reason `capability_catalog_refresh`
@@ -345,7 +345,7 @@ For OpenAI, this response only includes regular base-model families used for nor
   - `snapshot: object | null`
   - `notes?: string[]`
 - Behavior:
-  - returns `status = "manual_only"` when `SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED` is unset or `false`
+  - returns `status = "manual_only"` when `HEXE_OPENAI_API_PRICING_FETCH_ENABLED` is unset or `false`
   - when live pricing fetch is enabled, extraction is run only for filtered target model IDs
 - Error:
   - `400` when pricing refresh runtime is unavailable.
@@ -432,8 +432,8 @@ For OpenAI, this response only includes regular base-model families used for nor
 - `POST /api/capabilities/providers/refresh`
 - Request:
   - `force_refresh: boolean` (default `false`)
-- Header (required when `SYNTHIA_ADMIN_TOKEN` is configured):
-  - `X-Synthia-Admin-Token: <token>`
+- Header (required when `HEXE_ADMIN_TOKEN` is configured):
+  - `X-Hexe-Admin-Token: <token>`
 - Success: provider intelligence refresh payload.
 - Error:
   - `403` when admin token is required and missing/invalid
@@ -444,8 +444,8 @@ For OpenAI, this response only includes regular base-model families used for nor
 ### Diagnostics payload
 
 - `GET /api/capabilities/diagnostics`
-- Header (required when `SYNTHIA_ADMIN_TOKEN` is configured):
-  - `X-Synthia-Admin-Token: <token>`
+- Header (required when `HEXE_ADMIN_TOKEN` is configured):
+  - `X-Hexe-Admin-Token: <token>`
 - Response:
   - `discovered_models`
   - `enabled_models`
@@ -459,8 +459,8 @@ For OpenAI, this response only includes regular base-model families used for nor
 ### Rebuild capabilities
 
 - `POST /api/capabilities/rebuild`
-- Header (required when `SYNTHIA_ADMIN_TOKEN` is configured):
-  - `X-Synthia-Admin-Token: <token>`
+- Header (required when `HEXE_ADMIN_TOKEN` is configured):
+  - `X-Hexe-Admin-Token: <token>`
 - Success:
   - `status: "rebuilt"`
   - `resolved_capabilities`
@@ -474,8 +474,8 @@ For OpenAI, this response only includes regular base-model families used for nor
 - `POST /api/capabilities/redeclare`
 - Request:
   - `force_refresh: boolean` (default `false`)
-- Header (required when `SYNTHIA_ADMIN_TOKEN` is configured):
-  - `X-Synthia-Admin-Token: <token>`
+- Header (required when `HEXE_ADMIN_TOKEN` is configured):
+  - `X-Hexe-Admin-Token: <token>`
 - Success:
   - capability redeclaration result payload
 - Error:

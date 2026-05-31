@@ -6,8 +6,8 @@ BOOTSTRAP_SCRIPT="$ROOT_DIR/scripts/bootstrap.sh"
 STACK_CONTROL_SCRIPT="$ROOT_DIR/scripts/stack-control.sh"
 VENV_PY="$ROOT_DIR/.venv/bin/python"
 REQ_FILE="$ROOT_DIR/requirements.txt"
-BACKEND_SERVICE="synthia-ai-node-backend.service"
-FRONTEND_SERVICE="synthia-ai-node-frontend.service"
+BACKEND_SERVICE="hexe-ai-node-backend.service"
+FRONTEND_SERVICE="hexe-ai-node-frontend.service"
 
 have_user_units() {
   systemctl --user list-unit-files | grep -Eq "^${BACKEND_SERVICE}|^${FRONTEND_SERVICE}"

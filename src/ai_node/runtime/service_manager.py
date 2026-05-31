@@ -9,13 +9,13 @@ import time
 class UserSystemdServiceManager:
     def __init__(self, *, logger) -> None:
         self._logger = logger
-        self._backend_unit = "synthia-ai-node-backend.service"
-        self._frontend_unit = "synthia-ai-node-frontend.service"
+        self._backend_unit = "hexe-ai-node-backend.service"
+        self._frontend_unit = "hexe-ai-node-frontend.service"
         self._local_llm_control_script = str(
-            os.environ.get("SYNTHIA_LOCAL_LLM_CONTROL_SCRIPT") or "scripts/llamacpp-control.sh"
+            os.environ.get("HEXE_LOCAL_LLM_CONTROL_SCRIPT") or "scripts/llamacpp-control.sh"
         ).strip()
         self._local_llm_socket = str(
-            os.environ.get("SYNTHIA_PROVIDER_LOCAL_SOCKET") or os.environ.get("LLAMACPP_SOCKET_PATH") or "/run/hexe/ai-node/llamacpp.sock"
+            os.environ.get("HEXE_PROVIDER_LOCAL_SOCKET") or os.environ.get("LLAMACPP_SOCKET_PATH") or "/run/hexe/ai-node/llamacpp.sock"
         ).strip()
         self._local_llm_health_socket = str(
             os.environ.get("LLAMACPP_HEALTH_SOCKET") or "/run/hexe/ai-node/llamacpp-health.sock"
@@ -24,7 +24,7 @@ class UserSystemdServiceManager:
             os.environ.get("LLAMACPP_CONTAINER_NAME") or "hexe-ai-node-llamacpp"
         ).strip()
         self._local_llm_models_config = str(
-            os.environ.get("SYNTHIA_LOCAL_LLM_MODELS_CONFIG") or "config/local-llm-models.json"
+            os.environ.get("HEXE_LOCAL_LLM_MODELS_CONFIG") or "config/local-llm-models.json"
         ).strip()
         self._docker_bin = str(os.environ.get("DOCKER_BIN") or "docker").strip() or "docker"
         self._cpu_samples: dict[str, tuple[float, float]] = {}

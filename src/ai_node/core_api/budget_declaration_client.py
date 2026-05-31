@@ -74,7 +74,7 @@ class BudgetDeclarationClient:
         headers = {
             "Authorization": f"Bearer {normalized_token}",
             "X-Node-Trust-Token": normalized_token,
-            "X-Synthia-Node-Id": normalized_node_id,
+            "X-Hexe-Node-Id": normalized_node_id,
             "Content-Type": "application/json",
         }
         if hasattr(self._logger, "info"):

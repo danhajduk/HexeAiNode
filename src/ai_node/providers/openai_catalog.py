@@ -173,7 +173,7 @@ def _normalize_url_list(raw_value: object) -> list[str]:
 
 
 def get_configured_openai_pricing_source_urls() -> list[str]:
-    configured = _normalize_url_list(os.environ.get("SYNTHIA_OPENAI_PRICING_SOURCE_URLS"))
+    configured = _normalize_url_list(os.environ.get("HEXE_OPENAI_PRICING_SOURCE_URLS"))
     return configured or list(DEFAULT_OPENAI_PRICING_SOURCE_URLS)
 
 
@@ -1193,8 +1193,8 @@ class OpenAIPricingCatalogService:
         self._refresh_interval_seconds = int(refresh_interval_seconds)
         self._stale_tolerance_seconds = int(stale_tolerance_seconds)
         self._fetcher = fetcher or OpenAIPricingHTMLFetcher(
-            timeout_seconds=float(os.environ.get("SYNTHIA_OPENAI_PRICING_FETCH_TIMEOUT_SECONDS") or DEFAULT_OPENAI_PRICING_FETCH_TIMEOUT_SECONDS),
-            retry_count=int(os.environ.get("SYNTHIA_OPENAI_PRICING_FETCH_RETRY_COUNT") or DEFAULT_OPENAI_PRICING_FETCH_RETRY_COUNT),
+            timeout_seconds=float(os.environ.get("HEXE_OPENAI_PRICING_FETCH_TIMEOUT_SECONDS") or DEFAULT_OPENAI_PRICING_FETCH_TIMEOUT_SECONDS),
+            retry_count=int(os.environ.get("HEXE_OPENAI_PRICING_FETCH_RETRY_COUNT") or DEFAULT_OPENAI_PRICING_FETCH_RETRY_COUNT),
         )
         self._parser = parser or OpenAIPricingPageParser()
         self._store = store or OpenAIPricingCatalogStore(path=catalog_path, logger=logger)
@@ -1206,7 +1206,7 @@ class OpenAIPricingCatalogService:
         configured_debug_path = (
             debug_response_path
             if debug_response_path is not None
-            else os.environ.get("SYNTHIA_OPENAI_PRICING_DEBUG_RESPONSE_PATH", DEFAULT_OPENAI_PRICING_DEBUG_RESPONSE_PATH)
+            else os.environ.get("HEXE_OPENAI_PRICING_DEBUG_RESPONSE_PATH", DEFAULT_OPENAI_PRICING_DEBUG_RESPONSE_PATH)
         )
         self._debug_response_path = (
             Path(str(configured_debug_path).strip())
@@ -1216,7 +1216,7 @@ class OpenAIPricingCatalogService:
         configured_prompt_path = (
             prompt_sent_path
             if prompt_sent_path is not None
-            else os.environ.get("SYNTHIA_OPENAI_PRICING_PROMPT_SENT_PATH", DEFAULT_OPENAI_PRICING_PROMPT_SENT_PATH)
+            else os.environ.get("HEXE_OPENAI_PRICING_PROMPT_SENT_PATH", DEFAULT_OPENAI_PRICING_PROMPT_SENT_PATH)
         )
         self._prompt_sent_path = (
             Path(str(configured_prompt_path).strip())
@@ -1693,7 +1693,7 @@ class OpenAIPricingCatalogService:
             fetch_status = "unknown"
             page_text = ""
             markdown_url = str(
-                os.environ.get("SYNTHIA_OPENAI_PRICING_MARKDOWN_URL", DEFAULT_OPENAI_PRICING_MARKDOWN_URL) or ""
+                os.environ.get("HEXE_OPENAI_PRICING_MARKDOWN_URL", DEFAULT_OPENAI_PRICING_MARKDOWN_URL) or ""
             ).strip()
             if markdown_url:
                 try:
@@ -2354,21 +2354,21 @@ class OpenAIPricingCatalogService:
 def get_openai_model_pricing(model_id: str, *, pricing_service: OpenAIPricingCatalogService | None = None) -> dict | None:
     service = pricing_service or OpenAIPricingCatalogService(
         logger=_NullLogger(),
-        catalog_path=os.environ.get("SYNTHIA_OPENAI_PRICING_CATALOG_PATH", DEFAULT_OPENAI_PRICING_CATALOG_PATH),
+        catalog_path=os.environ.get("HEXE_OPENAI_PRICING_CATALOG_PATH", DEFAULT_OPENAI_PRICING_CATALOG_PATH),
         refresh_interval_seconds=int(
             os.environ.get(
-                "SYNTHIA_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS",
+                "HEXE_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS",
                 str(DEFAULT_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS),
             )
         ),
         stale_tolerance_seconds=int(
             os.environ.get(
-                "SYNTHIA_OPENAI_PRICING_STALE_TOLERANCE_SECONDS",
+                "HEXE_OPENAI_PRICING_STALE_TOLERANCE_SECONDS",
                 str(DEFAULT_OPENAI_PRICING_STALE_TOLERANCE_SECONDS),
             )
         ),
         manual_config_path=os.environ.get(
-            "SYNTHIA_OPENAI_PRICING_MANUAL_CONFIG_PATH",
+            "HEXE_OPENAI_PRICING_MANUAL_CONFIG_PATH",
             DEFAULT_OPENAI_PRICING_MANUAL_CONFIG_PATH,
         ),
     )

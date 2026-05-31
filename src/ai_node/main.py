@@ -125,187 +125,187 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--api-host",
-        default=os.environ.get("SYNTHIA_API_HOST", "127.0.0.1"),
+        default=os.environ.get("HEXE_API_HOST", "127.0.0.1"),
         help="Node control API host",
     )
     parser.add_argument(
         "--api-port",
         type=int,
-        default=int(os.environ.get("SYNTHIA_API_PORT", "9002")),
+        default=int(os.environ.get("HEXE_API_PORT", "9002")),
         help="Node control API port",
     )
     parser.add_argument(
         "--bootstrap-config-path",
-        default=os.environ.get("SYNTHIA_BOOTSTRAP_CONFIG_PATH", ".run/bootstrap_config.json"),
+        default=os.environ.get("HEXE_BOOTSTRAP_CONFIG_PATH", ".run/bootstrap_config.json"),
         help="Path for persisted bootstrap setup config",
     )
     parser.add_argument(
         "--log-file",
-        default=os.environ.get("SYNTHIA_BACKEND_LOG_PATH", "logs/backend.log"),
+        default=os.environ.get("HEXE_BACKEND_LOG_PATH", "logs/backend.log"),
         help="Backend log file path",
     )
     parser.add_argument(
         "--bootstrap-connect-timeout-seconds",
         type=float,
-        default=float(os.environ.get("SYNTHIA_BOOTSTRAP_CONNECT_TIMEOUT_SECONDS", "30")),
+        default=float(os.environ.get("HEXE_BOOTSTRAP_CONNECT_TIMEOUT_SECONDS", "30")),
         help="Timeout for waiting in bootstrap_connecting before degraded",
     )
     parser.add_argument(
         "--node-software-version",
-        default=os.environ.get("SYNTHIA_NODE_SOFTWARE_VERSION", "0.1.0"),
+        default=os.environ.get("HEXE_NODE_SOFTWARE_VERSION", "0.1.0"),
         help="Node software version used during registration",
     )
     parser.add_argument(
         "--protocol-version",
-        default=os.environ.get("SYNTHIA_NODE_PROTOCOL_VERSION", "1.0"),
+        default=os.environ.get("HEXE_NODE_PROTOCOL_VERSION", "1.0"),
         help="Onboarding protocol version used during registration",
     )
     parser.add_argument(
         "--node-hostname",
-        default=os.environ.get("SYNTHIA_NODE_HOSTNAME", ""),
+        default=os.environ.get("HEXE_NODE_HOSTNAME", ""),
         help="Hostname sent during registration",
     )
     parser.add_argument(
         "--node-ui-endpoint",
-        default=os.environ.get("SYNTHIA_NODE_UI_ENDPOINT", ""),
+        default=os.environ.get("HEXE_NODE_UI_ENDPOINT", ""),
         help="Optional absolute node UI URL sent during registration",
     )
     parser.add_argument(
         "--node-ui-port",
         type=int,
-        default=int(os.environ.get("SYNTHIA_NODE_UI_PORT", "8081")),
+        default=int(os.environ.get("HEXE_NODE_UI_PORT", "8081")),
         help="Frontend port used when auto-building the node UI endpoint from the detected node IP",
     )
     parser.add_argument(
         "--node-api-base-url",
-        default=os.environ.get("SYNTHIA_NODE_API_BASE_URL", ""),
+        default=os.environ.get("HEXE_NODE_API_BASE_URL", ""),
         help="Optional absolute node API base URL sent during registration",
     )
     parser.add_argument(
         "--trust-state-path",
-        default=os.environ.get("SYNTHIA_TRUST_STATE_PATH", ".run/trust_state.json"),
+        default=os.environ.get("HEXE_TRUST_STATE_PATH", ".run/trust_state.json"),
         help="Path to persisted trusted state",
     )
     parser.add_argument(
         "--node-identity-path",
-        default=os.environ.get("SYNTHIA_NODE_IDENTITY_PATH", ".run/node_identity.json"),
+        default=os.environ.get("HEXE_NODE_IDENTITY_PATH", ".run/node_identity.json"),
         help="Path to persisted node identity state",
     )
     parser.add_argument(
         "--provider-selection-config-path",
-        default=os.environ.get("SYNTHIA_PROVIDER_SELECTION_CONFIG_PATH", ".run/provider_selection_config.json"),
+        default=os.environ.get("HEXE_PROVIDER_SELECTION_CONFIG_PATH", ".run/provider_selection_config.json"),
         help="Path to persisted provider selection config state",
     )
     parser.add_argument(
         "--provider-credentials-path",
-        default=os.environ.get("SYNTHIA_PROVIDER_CREDENTIALS_PATH", ".run/provider_credentials.json"),
+        default=os.environ.get("HEXE_PROVIDER_CREDENTIALS_PATH", ".run/provider_credentials.json"),
         help="Path to persisted provider credentials state",
     )
     parser.add_argument(
         "--task-capability-selection-config-path",
         default=os.environ.get(
-            "SYNTHIA_TASK_CAPABILITY_SELECTION_CONFIG_PATH",
+            "HEXE_TASK_CAPABILITY_SELECTION_CONFIG_PATH",
             ".run/task_capability_selection_config.json",
         ),
         help="Path to persisted selected task capability declarations",
     )
     parser.add_argument(
         "--capability-state-path",
-        default=os.environ.get("SYNTHIA_CAPABILITY_STATE_PATH", ".run/capability_state.json"),
+        default=os.environ.get("HEXE_CAPABILITY_STATE_PATH", ".run/capability_state.json"),
         help="Path to persisted accepted capability profile state",
     )
     parser.add_argument(
         "--governance-state-path",
-        default=os.environ.get("SYNTHIA_GOVERNANCE_STATE_PATH", ".run/governance_state.json"),
+        default=os.environ.get("HEXE_GOVERNANCE_STATE_PATH", ".run/governance_state.json"),
         help="Path to persisted governance bundle state",
     )
     parser.add_argument(
         "--phase2-state-path",
-        default=os.environ.get("SYNTHIA_PHASE2_STATE_PATH", ".run/phase2_state.json"),
+        default=os.environ.get("HEXE_PHASE2_STATE_PATH", ".run/phase2_state.json"),
         help="Path to persisted combined phase-2 activation state",
     )
     parser.add_argument(
         "--provider-capability-report-path",
-        default=os.environ.get("SYNTHIA_PROVIDER_CAPABILITY_REPORT_PATH", ".run/provider_capability_report.json"),
+        default=os.environ.get("HEXE_PROVIDER_CAPABILITY_REPORT_PATH", ".run/provider_capability_report.json"),
         help="Path to persisted provider capability report cache",
     )
     parser.add_argument(
         "--prompt-service-state-path",
-        default=os.environ.get("SYNTHIA_PROMPT_SERVICE_STATE_PATH", ".run/prompt_service_state.json"),
+        default=os.environ.get("HEXE_PROMPT_SERVICE_STATE_PATH", ".run/prompt_service_state.json"),
         help="Path to persisted prompt/service registration and probation state",
     )
     parser.add_argument(
         "--budget-state-path",
-        default=os.environ.get("SYNTHIA_BUDGET_STATE_PATH", ".run/budget_state.json"),
+        default=os.environ.get("HEXE_BUDGET_STATE_PATH", ".run/budget_state.json"),
         help="Path to persisted budget policy, grant usage, and reservation state",
     )
     parser.add_argument(
         "--provider-capability-refresh-interval-seconds",
         type=int,
-        default=int(os.environ.get("SYNTHIA_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS", "14400")),
+        default=int(os.environ.get("HEXE_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS", "14400")),
         help="Provider capability refresh interval in seconds (recommended: 3600-21600)",
     )
     parser.add_argument(
         "--openai-pricing-catalog-path",
-        default=os.environ.get("SYNTHIA_OPENAI_PRICING_CATALOG_PATH", "providers/openai/provider_model_pricing.json"),
+        default=os.environ.get("HEXE_OPENAI_PRICING_CATALOG_PATH", "providers/openai/provider_model_pricing.json"),
         help="Path to persisted OpenAI pricing catalog cache",
     )
     parser.add_argument(
         "--openai-pricing-manual-config-path",
-        default=os.environ.get("SYNTHIA_OPENAI_PRICING_MANUAL_CONFIG_PATH", "config/openai-pricing.yaml"),
+        default=os.environ.get("HEXE_OPENAI_PRICING_MANUAL_CONFIG_PATH", "config/openai-pricing.yaml"),
         help="Path to manual OpenAI pricing YAML overrides",
     )
     parser.add_argument(
         "--openai-pricing-refresh-interval-seconds",
         type=int,
-        default=int(os.environ.get("SYNTHIA_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS", "86400")),
+        default=int(os.environ.get("HEXE_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS", "86400")),
         help="OpenAI pricing refresh interval in seconds; 0 disables scheduled refresh",
     )
     parser.add_argument(
         "--openai-pricing-stale-tolerance-seconds",
         type=int,
-        default=int(os.environ.get("SYNTHIA_OPENAI_PRICING_STALE_TOLERANCE_SECONDS", "172800")),
+        default=int(os.environ.get("HEXE_OPENAI_PRICING_STALE_TOLERANCE_SECONDS", "172800")),
         help="Maximum pricing catalog age before cost estimation is disabled",
     )
     parser.add_argument(
         "--finalize-poll-interval-seconds",
         type=float,
-        default=float(os.environ.get("SYNTHIA_FINALIZE_POLL_INTERVAL_SECONDS", "2")),
+        default=float(os.environ.get("HEXE_FINALIZE_POLL_INTERVAL_SECONDS", "2")),
         help="Polling interval for onboarding finalize status",
     )
     parser.add_argument(
         "--operational-mqtt-recovery-state-path",
-        default=os.environ.get("SYNTHIA_OPERATIONAL_MQTT_RECOVERY_STATE_PATH", ".run/operational_mqtt_recovery.json"),
+        default=os.environ.get("HEXE_OPERATIONAL_MQTT_RECOVERY_STATE_PATH", ".run/operational_mqtt_recovery.json"),
         help="Path to persisted operational MQTT recovery state",
     )
     parser.add_argument(
         "--operational-mqtt-health-check-interval-seconds",
         type=int,
-        default=int(os.environ.get("SYNTHIA_OPERATIONAL_MQTT_HEALTH_CHECK_INTERVAL_SECONDS", "10")),
+        default=int(os.environ.get("HEXE_OPERATIONAL_MQTT_HEALTH_CHECK_INTERVAL_SECONDS", "10")),
         help="Fast interval between operational MQTT health checks while degraded, trusted, or in recovery",
     )
     parser.add_argument(
         "--operational-mqtt-health-normal-interval-seconds",
         type=int,
-        default=int(os.environ.get("SYNTHIA_OPERATIONAL_MQTT_HEALTH_NORMAL_INTERVAL_SECONDS", "300")),
+        default=int(os.environ.get("HEXE_OPERATIONAL_MQTT_HEALTH_NORMAL_INTERVAL_SECONDS", "300")),
         help="Normal interval between operational MQTT health checks while stably operational",
     )
     parser.add_argument(
         "--operational-mqtt-health-fast-window-seconds",
         type=int,
-        default=int(os.environ.get("SYNTHIA_OPERATIONAL_MQTT_HEALTH_FAST_WINDOW_SECONDS", "300")),
+        default=int(os.environ.get("HEXE_OPERATIONAL_MQTT_HEALTH_FAST_WINDOW_SECONDS", "300")),
         help="How long operational MQTT health stays on the fast interval after startup or return to operational",
     )
     parser.add_argument(
         "--operational-mqtt-restart-delay-seconds",
         type=int,
-        default=int(os.environ.get("SYNTHIA_OPERATIONAL_MQTT_RESTART_DELAY_SECONDS", "10")),
+        default=int(os.environ.get("HEXE_OPERATIONAL_MQTT_RESTART_DELAY_SECONDS", "10")),
         help="Delay before requesting an automatic backend restart after MQTT health failure",
     )
     parser.add_argument(
         "--operational-mqtt-restart-max-attempts",
         type=int,
-        default=int(os.environ.get("SYNTHIA_OPERATIONAL_MQTT_RESTART_MAX_ATTEMPTS", "3")),
+        default=int(os.environ.get("HEXE_OPERATIONAL_MQTT_RESTART_MAX_ATTEMPTS", "3")),
         help="Maximum automatic backend restart attempts for operational MQTT recovery",
     )
     return parser
@@ -435,8 +435,8 @@ def run(
         logger=LOGGER,
         provider_selection_store=provider_selection_store,
         provider_credentials_store=provider_credentials_store,
-        registry_path=os.environ.get("SYNTHIA_PROVIDER_REGISTRY_PATH", "data/provider_registry.json"),
-        metrics_path=os.environ.get("SYNTHIA_PROVIDER_METRICS_PATH", "data/provider_metrics.json"),
+        registry_path=os.environ.get("HEXE_PROVIDER_REGISTRY_PATH", "data/provider_registry.json"),
+        metrics_path=os.environ.get("HEXE_PROVIDER_METRICS_PATH", "data/provider_metrics.json"),
         pricing_catalog_path=openai_pricing_catalog_path,
         pricing_manual_config_path=openai_pricing_manual_config_path,
         pricing_refresh_interval_seconds=openai_pricing_refresh_interval_seconds,
@@ -766,7 +766,7 @@ def main() -> int:
         provider_capability_report_path=args.provider_capability_report_path,
         prompt_service_state_path=args.prompt_service_state_path,
         budget_state_path=args.budget_state_path,
-        client_usage_db_path=os.environ.get("SYNTHIA_CLIENT_USAGE_DB_PATH", ".run/client_usage.db"),
+        client_usage_db_path=os.environ.get("HEXE_CLIENT_USAGE_DB_PATH", ".run/client_usage.db"),
         provider_capability_refresh_interval_seconds=args.provider_capability_refresh_interval_seconds,
         openai_pricing_catalog_path=args.openai_pricing_catalog_path,
         openai_pricing_manual_config_path=args.openai_pricing_manual_config_path,

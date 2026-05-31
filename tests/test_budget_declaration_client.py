@@ -41,7 +41,7 @@ class BudgetDeclarationClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(adapter.last_url, "http://10.0.0.100:9001/api/system/nodes/budgets/declaration")
         self.assertEqual(adapter.last_payload["node_id"], "node-001")
         self.assertEqual(adapter.last_payload["service_capacity"]["limits"]["max_cost_cents"], 2500)
-        self.assertEqual(adapter.last_headers["X-Synthia-Node-Id"], "node-001")
+        self.assertEqual(adapter.last_headers["X-Hexe-Node-Id"], "node-001")
         self.assertEqual(adapter.last_headers["X-Node-Trust-Token"], "secret")
         self.assertIn("Bearer secret", adapter.last_headers["Authorization"])
 

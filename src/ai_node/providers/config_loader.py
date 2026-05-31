@@ -39,10 +39,10 @@ class ProviderConfigLoader:
     def load(self) -> ProviderRuntimeConfig:
         enabled = self._enabled_from_selection_store()
         if not enabled:
-            raw = str(os.environ.get("SYNTHIA_ENABLED_PROVIDERS") or "openai").strip()
+            raw = str(os.environ.get("HEXE_ENABLED_PROVIDERS") or "openai").strip()
             enabled = [item.strip() for item in raw.split(",") if item.strip()]
 
-        default_provider = str(os.environ.get("SYNTHIA_DEFAULT_PROVIDER") or "").strip() or (enabled[0] if enabled else None)
+        default_provider = str(os.environ.get("HEXE_DEFAULT_PROVIDER") or "").strip() or (enabled[0] if enabled else None)
         providers: dict[str, ProviderSettings] = {}
 
         for provider_id in enabled:
@@ -61,8 +61,8 @@ class ProviderConfigLoader:
         if not normalized_provider_id:
             return None
         upper = normalized_provider_id.upper().replace("-", "_")
-        timeout = float(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_TIMEOUT_SECONDS") or "20")
-        retries = int(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_RETRY_COUNT") or "1")
+        timeout = float(os.environ.get(f"HEXE_PROVIDER_{upper}_TIMEOUT_SECONDS") or "20")
+        retries = int(os.environ.get(f"HEXE_PROVIDER_{upper}_RETRY_COUNT") or "1")
         provider_budget_limits = self._provider_budget_limits()
         provider_budget = provider_budget_limits.get(normalized_provider_id) if isinstance(provider_budget_limits, dict) else None
         max_cost_cents = provider_budget.get("max_cost_cents") if isinstance(provider_budget, dict) else None
@@ -87,7 +87,7 @@ class ProviderConfigLoader:
                 ),
                 default_model_id=(
                     _first_non_empty_string(
-                        str(os.environ.get("SYNTHIA_OPENAI_DEFAULT_MODEL_ID") or "").strip() or None,
+                        str(os.environ.get("HEXE_OPENAI_DEFAULT_MODEL_ID") or "").strip() or None,
                         (
                             (stored_openai.get("selected_model_ids") or [None])
                             if isinstance(stored_openai, dict)
@@ -96,13 +96,13 @@ class ProviderConfigLoader:
                         stored_openai.get("default_model_id") if isinstance(stored_openai, dict) else None,
                     )
                 ),
-                base_url=str(os.environ.get("SYNTHIA_OPENAI_BASE_URL") or "https://api.openai.com/v1").strip(),
+                base_url=str(os.environ.get("HEXE_OPENAI_BASE_URL") or "https://api.openai.com/v1").strip(),
                 debug_aopenai=_parse_bool(
-                    os.environ.get("SYNTHIA_DEBUG_AOPENAI"),
+                    os.environ.get("HEXE_DEBUG_AOPENAI"),
                     default=bool(stored_openai.get("debug_aopenai")) if isinstance(stored_openai, dict) else False,
                 ),
                 debug_aopenai_log_path=_first_non_empty_string(
-                    str(os.environ.get("SYNTHIA_DEBUG_AOPENAI_LOG_PATH") or "").strip() or None,
+                    str(os.environ.get("HEXE_DEBUG_AOPENAI_LOG_PATH") or "").strip() or None,
                     stored_openai.get("debug_aopenai_log_path") if isinstance(stored_openai, dict) else None,
                 ),
                 timeout_seconds=max(timeout, 1.0),
@@ -111,22 +111,22 @@ class ProviderConfigLoader:
                 budget_period=str(budget_period).strip().lower() if budget_period is not None else None,
             )
         local_default_model = (
-            str(os.environ.get("SYNTHIA_PROVIDER_LOCAL_DEFAULT_MODEL_ID") or "").strip() or None
+            str(os.environ.get("HEXE_PROVIDER_LOCAL_DEFAULT_MODEL_ID") or "").strip() or None
             if normalized_provider_id == "local"
             else None
         )
         local_base_url = (
-            str(os.environ.get("SYNTHIA_PROVIDER_LOCAL_BASE_URL") or "").strip() or None
+            str(os.environ.get("HEXE_PROVIDER_LOCAL_BASE_URL") or "").strip() or None
             if normalized_provider_id == "local"
             else None
         )
         local_transport = (
-            str(os.environ.get("SYNTHIA_PROVIDER_LOCAL_TRANSPORT") or "").strip() or None
+            str(os.environ.get("HEXE_PROVIDER_LOCAL_TRANSPORT") or "").strip() or None
             if normalized_provider_id == "local"
             else None
         )
         local_socket_path = (
-            str(os.environ.get("SYNTHIA_PROVIDER_LOCAL_SOCKET") or "").strip() or None
+            str(os.environ.get("HEXE_PROVIDER_LOCAL_SOCKET") or "").strip() or None
             if normalized_provider_id == "local"
             else None
         )
@@ -135,22 +135,22 @@ class ProviderConfigLoader:
             provider_type="local",
             enabled=bool(enabled),
             default_model_id=_first_non_empty_string(
-                str(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_DEFAULT_MODEL_ID") or "").strip() or None,
+                str(os.environ.get(f"HEXE_PROVIDER_{upper}_DEFAULT_MODEL_ID") or "").strip() or None,
                 local_default_model,
                 "qwen3-14b-q4_k_m" if normalized_provider_id == "local" else None,
             ),
             base_url=_first_non_empty_string(
-                str(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_BASE_URL") or "").strip() or None,
+                str(os.environ.get(f"HEXE_PROVIDER_{upper}_BASE_URL") or "").strip() or None,
                 local_base_url,
                 "http://127.0.0.1:8011/v1" if normalized_provider_id == "local" else None,
             ),
             transport=_first_non_empty_string(
-                str(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_TRANSPORT") or "").strip() or None,
+                str(os.environ.get(f"HEXE_PROVIDER_{upper}_TRANSPORT") or "").strip() or None,
                 local_transport,
                 "socket" if normalized_provider_id == "local" else None,
             ),
             socket_path=_first_non_empty_string(
-                str(os.environ.get(f"SYNTHIA_PROVIDER_{upper}_SOCKET") or "").strip() or None,
+                str(os.environ.get(f"HEXE_PROVIDER_{upper}_SOCKET") or "").strip() or None,
                 local_socket_path,
                 "/run/hexe/ai-node/llamacpp.sock" if normalized_provider_id == "local" else None,
             ),

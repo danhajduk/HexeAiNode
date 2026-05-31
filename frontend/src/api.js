@@ -30,7 +30,7 @@ function adminHeaders() {
   if (!token) {
     return {};
   }
-  return { "X-Synthia-Admin-Token": token };
+  return { "X-Hexe-Admin-Token": token };
 }
 
 function formatBlockingReasons(blockingReasons) {

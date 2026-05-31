@@ -70,7 +70,7 @@ class GovernanceSyncClient:
         headers = {
             "X-Node-Trust-Token": _require_non_empty_string(trust_token, "trust_token"),
             "Authorization": f"Bearer {_require_non_empty_string(trust_token, 'trust_token')}",
-            "X-Synthia-Node-Id": _require_non_empty_string(node_id, "node_id"),
+            "X-Hexe-Node-Id": _require_non_empty_string(node_id, "node_id"),
         }
         if hasattr(self._logger, "info"):
             self._logger.info("[governance-sync-request] %s", {"url": url, "node_id": node_id})

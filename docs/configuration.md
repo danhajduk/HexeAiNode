@@ -6,68 +6,68 @@ Only configuration verified from this repository is documented here.
 
 Backend runtime:
 
-- `SYNTHIA_API_HOST` default `127.0.0.1`
-- `SYNTHIA_API_PORT` default `9002`
-- `SYNTHIA_BOOTSTRAP_CONFIG_PATH` default `.run/bootstrap_config.json`
-- `SYNTHIA_BACKEND_LOG_PATH` default `logs/backend.log`
-- `SYNTHIA_BOOTSTRAP_CONNECT_TIMEOUT_SECONDS` default `30`
-- `SYNTHIA_NODE_SOFTWARE_VERSION` default `0.1.0`
-- `SYNTHIA_NODE_PROTOCOL_VERSION` default `1.0`
-- `SYNTHIA_NODE_HOSTNAME` default local hostname
-- `SYNTHIA_NODE_UI_ENDPOINT` optional absolute node UI URL sent during onboarding; when unset the node derives `http://<detected-ip>:<ui-port>/`
-- `SYNTHIA_NODE_UI_PORT` default `8081`
-- `SYNTHIA_NODE_API_BASE_URL` optional absolute node API base URL sent during onboarding; when unset the node derives `http://<detected-ip>:<api-port>`
-- `SYNTHIA_TRUST_STATE_PATH` default `.run/trust_state.json`
-- `SYNTHIA_NODE_IDENTITY_PATH` default `.run/node_identity.json`
-- `SYNTHIA_PROVIDER_SELECTION_CONFIG_PATH` default `.run/provider_selection_config.json`
-- `SYNTHIA_PROVIDER_CREDENTIALS_PATH` default `.run/provider_credentials.json`
-- `SYNTHIA_TASK_CAPABILITY_SELECTION_CONFIG_PATH` default `.run/task_capability_selection_config.json`
-- `SYNTHIA_CAPABILITY_STATE_PATH` default `.run/capability_state.json`
-- `SYNTHIA_GOVERNANCE_STATE_PATH` default `.run/governance_state.json`
-- `SYNTHIA_PHASE2_STATE_PATH` default `.run/phase2_state.json`
-- `SYNTHIA_PROVIDER_CAPABILITY_REPORT_PATH` default `.run/provider_capability_report.json`
-- `SYNTHIA_PROMPT_SERVICE_STATE_PATH` default `.run/prompt_service_state.json`
-- `SYNTHIA_BUDGET_STATE_PATH` default `.run/budget_state.json`
-- `SYNTHIA_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS` default `14400`
-- `SYNTHIA_FINALIZE_POLL_INTERVAL_SECONDS` default `2`
-- `SYNTHIA_PROVIDER_REGISTRY_PATH` default `data/provider_registry.json`
-- `SYNTHIA_PROVIDER_METRICS_PATH` default `data/provider_metrics.json`
-- `SYNTHIA_PROVIDER_LOCAL_DEFAULT_MODEL_ID` default `qwen3-14b-q4_k_m`
-- `SYNTHIA_PROVIDER_LOCAL_TRANSPORT` default `socket`
-- `SYNTHIA_PROVIDER_LOCAL_SOCKET` default `/run/hexe/ai-node/llamacpp.sock`
-- `SYNTHIA_PROVIDER_LOCAL_BASE_URL` default `http://127.0.0.1:8011/v1`
-- `SYNTHIA_OPENAI_PRICING_CATALOG_PATH` default `providers/openai/provider_model_pricing.json`
-- `SYNTHIA_OPENAI_PRICING_MANUAL_CONFIG_PATH` default `config/openai-pricing.yaml`
-- `SYNTHIA_DEBUG_AOPENAI` optional boolean; when true, writes full OpenAI request/response debug payloads
-- `SYNTHIA_DEBUG_AOPENAI_LOG_PATH` default `logs/openai_debug.jsonl`
-- `SYNTHIA_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS` default `86400`
-- `SYNTHIA_OPENAI_PRICING_STALE_TOLERANCE_SECONDS` default `172800`
-- `SYNTHIA_OPENAI_PRICING_SOURCE_URLS` optional comma-separated OpenAI pricing URLs, including `https://developers.openai.com/...`
-- `SYNTHIA_OPENAI_PRICING_FETCH_TIMEOUT_SECONDS` default `20`
-- `SYNTHIA_OPENAI_PRICING_FETCH_RETRY_COUNT` default `2`
-- `SYNTHIA_OPENAI_PRICING_DEBUG_RESPONSE_PATH` default `data/response.json`; set empty to disable raw AI extraction debug output
-- `SYNTHIA_OPENAI_PRICING_PROMPT_SENT_PATH` default `data/promtp_sent.txt`; set empty to disable prompt debug output
-- `SYNTHIA_OPENAI_PRICING_MARKDOWN_URL` default `https://developers.openai.com/api/docs/pricing.md`
-- `SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED` default `false`; set `true` to enable OpenAI API pricing extraction calls
-- `SYNTHIA_DIRECT_EXECUTION_ADMISSION_ENABLED` default `true`; enables local busy rejection before direct task execution
-- `SYNTHIA_DIRECT_EXECUTION_MAX_IN_FLIGHT` default `2`; hard ceiling for concurrent expensive execution work across direct, benchmark, and compare routes
-- `SYNTHIA_DIRECT_EXECUTION_DYNAMIC_IN_FLIGHT_ENABLED` default `false`; when true, computes a lower effective concurrency limit from current host memory, swap, and load pressure
-- `SYNTHIA_DIRECT_EXECUTION_MIN_EFFECTIVE_IN_FLIGHT` default `1`; minimum effective concurrency when dynamic in-flight capacity is enabled and the node is hot but not critical
-- `SYNTHIA_DIRECT_EXECUTION_MIN_MEMORY_AVAILABLE_MB` default `512`; rejects direct execution when host available memory drops below this floor
-- `SYNTHIA_DIRECT_EXECUTION_WARM_MEMORY_AVAILABLE_MB` default `8192`; dynamic capacity enters warm tier at or below this available-memory value
-- `SYNTHIA_DIRECT_EXECUTION_HOT_MEMORY_AVAILABLE_MB` default `2048`; dynamic capacity enters hot tier at or below this available-memory value
-- `SYNTHIA_DIRECT_EXECUTION_MAX_SWAP_USED_RATIO` default `0.95`; rejects direct execution when swap usage is at or above this ratio
-- `SYNTHIA_DIRECT_EXECUTION_WARM_SWAP_USED_RATIO` default `0.5`; dynamic capacity enters warm tier at or above this swap ratio
-- `SYNTHIA_DIRECT_EXECUTION_HOT_SWAP_USED_RATIO` default `0.8`; dynamic capacity enters hot tier at or above this swap ratio
-- `SYNTHIA_DIRECT_EXECUTION_MAX_LOAD_PER_CPU` default `2.0`; rejects direct execution when 1-minute load divided by CPU count is at or above this value
-- `SYNTHIA_DIRECT_EXECUTION_WARM_LOAD_PER_CPU` default `0.8`; dynamic capacity enters warm tier at or above this load-per-CPU value
-- `SYNTHIA_DIRECT_EXECUTION_HOT_LOAD_PER_CPU` default `1.5`; dynamic capacity enters hot tier at or above this load-per-CPU value
-- `SYNTHIA_DIRECT_EXECUTION_RETRY_AFTER_SECONDS` default `30`; retry hint returned with direct execution busy responses
+- `HEXE_API_HOST` default `127.0.0.1`
+- `HEXE_API_PORT` default `9002`
+- `HEXE_BOOTSTRAP_CONFIG_PATH` default `.run/bootstrap_config.json`
+- `HEXE_BACKEND_LOG_PATH` default `logs/backend.log`
+- `HEXE_BOOTSTRAP_CONNECT_TIMEOUT_SECONDS` default `30`
+- `HEXE_NODE_SOFTWARE_VERSION` default `0.1.0`
+- `HEXE_NODE_PROTOCOL_VERSION` default `1.0`
+- `HEXE_NODE_HOSTNAME` default local hostname
+- `HEXE_NODE_UI_ENDPOINT` optional absolute node UI URL sent during onboarding; when unset the node derives `http://<detected-ip>:<ui-port>/`
+- `HEXE_NODE_UI_PORT` default `8081`
+- `HEXE_NODE_API_BASE_URL` optional absolute node API base URL sent during onboarding; when unset the node derives `http://<detected-ip>:<api-port>`
+- `HEXE_TRUST_STATE_PATH` default `.run/trust_state.json`
+- `HEXE_NODE_IDENTITY_PATH` default `.run/node_identity.json`
+- `HEXE_PROVIDER_SELECTION_CONFIG_PATH` default `.run/provider_selection_config.json`
+- `HEXE_PROVIDER_CREDENTIALS_PATH` default `.run/provider_credentials.json`
+- `HEXE_TASK_CAPABILITY_SELECTION_CONFIG_PATH` default `.run/task_capability_selection_config.json`
+- `HEXE_CAPABILITY_STATE_PATH` default `.run/capability_state.json`
+- `HEXE_GOVERNANCE_STATE_PATH` default `.run/governance_state.json`
+- `HEXE_PHASE2_STATE_PATH` default `.run/phase2_state.json`
+- `HEXE_PROVIDER_CAPABILITY_REPORT_PATH` default `.run/provider_capability_report.json`
+- `HEXE_PROMPT_SERVICE_STATE_PATH` default `.run/prompt_service_state.json`
+- `HEXE_BUDGET_STATE_PATH` default `.run/budget_state.json`
+- `HEXE_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS` default `14400`
+- `HEXE_FINALIZE_POLL_INTERVAL_SECONDS` default `2`
+- `HEXE_PROVIDER_REGISTRY_PATH` default `data/provider_registry.json`
+- `HEXE_PROVIDER_METRICS_PATH` default `data/provider_metrics.json`
+- `HEXE_PROVIDER_LOCAL_DEFAULT_MODEL_ID` default `qwen3-14b-q4_k_m`
+- `HEXE_PROVIDER_LOCAL_TRANSPORT` default `socket`
+- `HEXE_PROVIDER_LOCAL_SOCKET` default `/run/hexe/ai-node/llamacpp.sock`
+- `HEXE_PROVIDER_LOCAL_BASE_URL` default `http://127.0.0.1:8011/v1`
+- `HEXE_OPENAI_PRICING_CATALOG_PATH` default `providers/openai/provider_model_pricing.json`
+- `HEXE_OPENAI_PRICING_MANUAL_CONFIG_PATH` default `config/openai-pricing.yaml`
+- `HEXE_DEBUG_AOPENAI` optional boolean; when true, writes full OpenAI request/response debug payloads
+- `HEXE_DEBUG_AOPENAI_LOG_PATH` default `logs/openai_debug.jsonl`
+- `HEXE_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS` default `86400`
+- `HEXE_OPENAI_PRICING_STALE_TOLERANCE_SECONDS` default `172800`
+- `HEXE_OPENAI_PRICING_SOURCE_URLS` optional comma-separated OpenAI pricing URLs, including `https://developers.openai.com/...`
+- `HEXE_OPENAI_PRICING_FETCH_TIMEOUT_SECONDS` default `20`
+- `HEXE_OPENAI_PRICING_FETCH_RETRY_COUNT` default `2`
+- `HEXE_OPENAI_PRICING_DEBUG_RESPONSE_PATH` default `data/response.json`; set empty to disable raw AI extraction debug output
+- `HEXE_OPENAI_PRICING_PROMPT_SENT_PATH` default `data/promtp_sent.txt`; set empty to disable prompt debug output
+- `HEXE_OPENAI_PRICING_MARKDOWN_URL` default `https://developers.openai.com/api/docs/pricing.md`
+- `HEXE_OPENAI_API_PRICING_FETCH_ENABLED` default `false`; set `true` to enable OpenAI API pricing extraction calls
+- `HEXE_DIRECT_EXECUTION_ADMISSION_ENABLED` default `true`; enables local busy rejection before direct task execution
+- `HEXE_DIRECT_EXECUTION_MAX_IN_FLIGHT` default `2`; hard ceiling for concurrent expensive execution work across direct, benchmark, and compare routes
+- `HEXE_DIRECT_EXECUTION_DYNAMIC_IN_FLIGHT_ENABLED` default `false`; when true, computes a lower effective concurrency limit from current host memory, swap, and load pressure
+- `HEXE_DIRECT_EXECUTION_MIN_EFFECTIVE_IN_FLIGHT` default `1`; minimum effective concurrency when dynamic in-flight capacity is enabled and the node is hot but not critical
+- `HEXE_DIRECT_EXECUTION_MIN_MEMORY_AVAILABLE_MB` default `512`; rejects direct execution when host available memory drops below this floor
+- `HEXE_DIRECT_EXECUTION_WARM_MEMORY_AVAILABLE_MB` default `8192`; dynamic capacity enters warm tier at or below this available-memory value
+- `HEXE_DIRECT_EXECUTION_HOT_MEMORY_AVAILABLE_MB` default `2048`; dynamic capacity enters hot tier at or below this available-memory value
+- `HEXE_DIRECT_EXECUTION_MAX_SWAP_USED_RATIO` default `0.95`; rejects direct execution when swap usage is at or above this ratio
+- `HEXE_DIRECT_EXECUTION_WARM_SWAP_USED_RATIO` default `0.5`; dynamic capacity enters warm tier at or above this swap ratio
+- `HEXE_DIRECT_EXECUTION_HOT_SWAP_USED_RATIO` default `0.8`; dynamic capacity enters hot tier at or above this swap ratio
+- `HEXE_DIRECT_EXECUTION_MAX_LOAD_PER_CPU` default `2.0`; rejects direct execution when 1-minute load divided by CPU count is at or above this value
+- `HEXE_DIRECT_EXECUTION_WARM_LOAD_PER_CPU` default `0.8`; dynamic capacity enters warm tier at or above this load-per-CPU value
+- `HEXE_DIRECT_EXECUTION_HOT_LOAD_PER_CPU` default `1.5`; dynamic capacity enters hot tier at or above this load-per-CPU value
+- `HEXE_DIRECT_EXECUTION_RETRY_AFTER_SECONDS` default `30`; retry hint returned with direct execution busy responses
 
 Provider-specific:
 
 - `OPENAI_API_KEY` required for live OpenAI discovery and use
-- `SYNTHIA_OPENAI_BASE_URL` optional OpenAI-compatible override
+- `HEXE_OPENAI_BASE_URL` optional OpenAI-compatible override
 
 ## Config Files
 

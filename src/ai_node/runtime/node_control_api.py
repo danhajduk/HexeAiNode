@@ -78,20 +78,20 @@ class DirectExecutionAdmissionConfig:
     @classmethod
     def from_env(cls) -> "DirectExecutionAdmissionConfig":
         return cls(
-            enabled=_env_bool("SYNTHIA_DIRECT_EXECUTION_ADMISSION_ENABLED", True),
-            max_in_flight=max(_env_int("SYNTHIA_DIRECT_EXECUTION_MAX_IN_FLIGHT", 2), 1),
-            dynamic_in_flight_enabled=_env_bool("SYNTHIA_DIRECT_EXECUTION_DYNAMIC_IN_FLIGHT_ENABLED", False),
-            min_effective_in_flight=max(_env_int("SYNTHIA_DIRECT_EXECUTION_MIN_EFFECTIVE_IN_FLIGHT", 1), 1),
-            min_memory_available_mb=max(_env_int("SYNTHIA_DIRECT_EXECUTION_MIN_MEMORY_AVAILABLE_MB", 512), 0),
-            warm_memory_available_mb=max(_env_int("SYNTHIA_DIRECT_EXECUTION_WARM_MEMORY_AVAILABLE_MB", 8192), 0),
-            hot_memory_available_mb=max(_env_int("SYNTHIA_DIRECT_EXECUTION_HOT_MEMORY_AVAILABLE_MB", 2048), 0),
-            max_swap_used_ratio=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_MAX_SWAP_USED_RATIO", 0.95)),
-            warm_swap_used_ratio=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_WARM_SWAP_USED_RATIO", 0.5)),
-            hot_swap_used_ratio=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_HOT_SWAP_USED_RATIO", 0.8)),
-            max_load_per_cpu=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_MAX_LOAD_PER_CPU", 2.0)),
-            warm_load_per_cpu=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_WARM_LOAD_PER_CPU", 0.8)),
-            hot_load_per_cpu=max(0.0, _env_float("SYNTHIA_DIRECT_EXECUTION_HOT_LOAD_PER_CPU", 1.5)),
-            retry_after_seconds=max(_env_int("SYNTHIA_DIRECT_EXECUTION_RETRY_AFTER_SECONDS", 30), 1),
+            enabled=_env_bool("HEXE_DIRECT_EXECUTION_ADMISSION_ENABLED", True),
+            max_in_flight=max(_env_int("HEXE_DIRECT_EXECUTION_MAX_IN_FLIGHT", 2), 1),
+            dynamic_in_flight_enabled=_env_bool("HEXE_DIRECT_EXECUTION_DYNAMIC_IN_FLIGHT_ENABLED", False),
+            min_effective_in_flight=max(_env_int("HEXE_DIRECT_EXECUTION_MIN_EFFECTIVE_IN_FLIGHT", 1), 1),
+            min_memory_available_mb=max(_env_int("HEXE_DIRECT_EXECUTION_MIN_MEMORY_AVAILABLE_MB", 512), 0),
+            warm_memory_available_mb=max(_env_int("HEXE_DIRECT_EXECUTION_WARM_MEMORY_AVAILABLE_MB", 8192), 0),
+            hot_memory_available_mb=max(_env_int("HEXE_DIRECT_EXECUTION_HOT_MEMORY_AVAILABLE_MB", 2048), 0),
+            max_swap_used_ratio=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_MAX_SWAP_USED_RATIO", 0.95)),
+            warm_swap_used_ratio=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_WARM_SWAP_USED_RATIO", 0.5)),
+            hot_swap_used_ratio=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_HOT_SWAP_USED_RATIO", 0.8)),
+            max_load_per_cpu=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_MAX_LOAD_PER_CPU", 2.0)),
+            warm_load_per_cpu=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_WARM_LOAD_PER_CPU", 0.8)),
+            hot_load_per_cpu=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_HOT_LOAD_PER_CPU", 1.5)),
+            retry_after_seconds=max(_env_int("HEXE_DIRECT_EXECUTION_RETRY_AFTER_SECONDS", 30), 1),
         )
 
     def payload(self) -> dict:
@@ -1695,7 +1695,7 @@ class NodeControlState:
 
     @staticmethod
     def _client_ai_v2_schema_dir() -> Path:
-        configured = str(os.environ.get("SYNTHIA_CLIENT_AI_V2_SCHEMA_DIR") or "").strip()
+        configured = str(os.environ.get("HEXE_CLIENT_AI_V2_SCHEMA_DIR") or "").strip()
         if configured:
             return Path(configured)
         return Path(__file__).resolve().parents[3] / "docs/json-schemas/client-ai-v2"
@@ -3714,7 +3714,7 @@ def _metadata_with_v2_contracts(
 
 def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     app = FastAPI(title="Hexe AI Node Control API", version="0.1.0")
-    configured_admin_token = str(os.environ.get("SYNTHIA_ADMIN_TOKEN") or "").strip()
+    configured_admin_token = str(os.environ.get("HEXE_ADMIN_TOKEN") or "").strip()
 
     def require_admin(admin_token: str | None) -> None:
         if not configured_admin_token:
@@ -3755,7 +3755,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/")
     def root():
         return {
-            "service": "synthia-ai-node-control-api",
+            "service": "hexe-ai-node-control-api",
             "status": "ok",
             "version": "0.1.0",
             "endpoints": [
@@ -3964,7 +3964,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
 
     @app.post("/api/providers/openai/models/classification/refresh")
     async def post_openai_model_capabilities_refresh(
-        x_admin_token: str | None = Header(default=None, alias="X-Synthia-Admin-Token")
+        x_admin_token: str | None = Header(default=None, alias="X-Hexe-Admin-Token")
     ):
         try:
             require_admin(x_admin_token)
@@ -4022,7 +4022,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
 
     @app.post("/api/capabilities/rebuild")
     async def post_capability_rebuild(
-        x_admin_token: str | None = Header(default=None, alias="X-Synthia-Admin-Token")
+        x_admin_token: str | None = Header(default=None, alias="X-Hexe-Admin-Token")
     ):
         try:
             require_admin(x_admin_token)
@@ -4044,7 +4044,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.post("/api/capabilities/redeclare")
     async def post_capability_redeclare(
         payload: RefreshTriggerRequest,
-        x_admin_token: str | None = Header(default=None, alias="X-Synthia-Admin-Token"),
+        x_admin_token: str | None = Header(default=None, alias="X-Hexe-Admin-Token"),
     ):
         try:
             require_admin(x_admin_token)
@@ -4088,7 +4088,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.post("/api/capabilities/providers/refresh")
     async def post_provider_capability_refresh(
         payload: ProviderCapabilityRefreshRequest,
-        x_admin_token: str | None = Header(default=None, alias="X-Synthia-Admin-Token"),
+        x_admin_token: str | None = Header(default=None, alias="X-Hexe-Admin-Token"),
     ):
         try:
             require_admin(x_admin_token)
@@ -4357,7 +4357,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         return state.direct_execution_admission_payload()
 
     @app.get("/api/capabilities/diagnostics")
-    def get_capability_diagnostics(x_admin_token: str | None = Header(default=None, alias="X-Synthia-Admin-Token")):
+    def get_capability_diagnostics(x_admin_token: str | None = Header(default=None, alias="X-Hexe-Admin-Token")):
         require_admin(x_admin_token)
         return state.capability_diagnostics_payload()
 

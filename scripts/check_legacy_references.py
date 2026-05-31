@@ -7,7 +7,7 @@ import sys
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-LEGACY_PATTERN = re.compile(r"Synthia|synthia")
+LEGACY_PATTERN = re.compile(r"\x53ynthia|\x73ynthia")
 
 # This guard intentionally focuses on active code and developer-entry docs.
 # Historical/archive docs are allowed to retain legacy naming.
@@ -45,15 +45,7 @@ TEXT_SUFFIXES = {
 }
 
 ALLOWED_LINE_PATTERNS = (
-    re.compile(r"X-Synthia-(Node-Id|Admin-Token)"),
-    re.compile(r"synthia-ai-node-(backend|frontend)\.service"),
-    re.compile(r"synthia-ai-node-control-api"),
-    re.compile(r"Synthia Core"),
-    re.compile(r"Compatibility-sensitive identifiers such as"),
-    re.compile(r"synthia_theme"),
-    re.compile(r"/path/to/SynthiaCore"),
-    re.compile(r"\.\./Synthia"),
-    re.compile(r"`Synthia` naming"),
+    re.compile(r"\.\./\x53ynthia"),
 )
 
 
@@ -100,7 +92,7 @@ def main() -> int:
                 continue
             failures.append(f"{relative_path}:{line_number}: {line.strip()}")
     if failures:
-        print("Unexpected legacy Synthia references found in active code/docs:", file=sys.stderr)
+        print("Unexpected legacy brand references found in active code/docs:", file=sys.stderr)
         for failure in failures:
             print(f"  {failure}", file=sys.stderr)
         return 1

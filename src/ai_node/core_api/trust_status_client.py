@@ -70,7 +70,7 @@ class TrustStatusClient:
         headers = {
             "X-Node-Trust-Token": normalized_token,
             "Authorization": f"Bearer {normalized_token}",
-            "X-Synthia-Node-Id": _require_non_empty_string(node_id, "node_id"),
+            "X-Hexe-Node-Id": _require_non_empty_string(node_id, "node_id"),
         }
         if hasattr(self._logger, "info"):
             self._logger.info("[trust-status-request] %s", {"url": url, "node_id": node_id})

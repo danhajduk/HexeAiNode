@@ -78,7 +78,7 @@ class ServiceManagerTests(unittest.TestCase):
         command = fake_popen.call_args.args[0]
         self.assertEqual(command[:2], ["bash", "-lc"])
         self.assertIn("sleep 10;", command[2])
-        self.assertIn("systemctl --user restart synthia-ai-node-backend.service", command[2])
+        self.assertIn("systemctl --user restart hexe-ai-node-backend.service", command[2])
 
     def test_local_llm_status_reports_container_pid_cpu_and_memory(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))

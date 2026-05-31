@@ -80,7 +80,7 @@ class SchedulerLeaseClient:
             headers["Authorization"] = f"Bearer {trust_token.strip()}"
             headers["X-Node-Trust-Token"] = trust_token.strip()
         if isinstance(node_id, str) and node_id.strip():
-            headers["X-Synthia-Node-Id"] = node_id.strip()
+            headers["X-Hexe-Node-Id"] = node_id.strip()
         return headers
 
     async def request_lease(

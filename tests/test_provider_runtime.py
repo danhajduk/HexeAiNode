@@ -570,7 +570,7 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_refresh_pricing_uses_filtered_catalog_models(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
-            os.environ, {"SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED": "true"}, clear=False
+            os.environ, {"HEXE_OPENAI_API_PRICING_FETCH_ENABLED": "true"}, clear=False
         ):
             runtime = ProviderRuntimeManager(
                 logger=logging.getLogger("provider-runtime-test"),
@@ -595,7 +595,7 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_rerun_openai_capabilities_scopes_to_filtered_catalog_models(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
-            os.environ, {"SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED": "true"}, clear=False
+            os.environ, {"HEXE_OPENAI_API_PRICING_FETCH_ENABLED": "true"}, clear=False
         ):
             runtime = ProviderRuntimeManager(
                 logger=logging.getLogger("provider-runtime-test"),
@@ -632,7 +632,7 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_refresh_pricing_returns_manual_only_when_api_fetch_disabled(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
-            os.environ, {"SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED": "false"}, clear=False
+            os.environ, {"HEXE_OPENAI_API_PRICING_FETCH_ENABLED": "false"}, clear=False
         ):
             runtime = ProviderRuntimeManager(
                 logger=logging.getLogger("provider-runtime-test"),

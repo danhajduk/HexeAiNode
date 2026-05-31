@@ -33,8 +33,8 @@ This is the preferred repo-local status path because it:
 When user services are installed, the service-level inspection path is:
 
 ```bash
-systemctl --user status synthia-ai-node-backend.service
-systemctl --user status synthia-ai-node-frontend.service
+systemctl --user status hexe-ai-node-backend.service
+systemctl --user status hexe-ai-node-frontend.service
 ```
 
 ## Environment-Driven Startup
@@ -54,13 +54,13 @@ systemctl --user status synthia-ai-node-frontend.service
 
 Current user service template names:
 
-- `synthia-ai-node-backend.service.in`
-- `synthia-ai-node-frontend.service.in`
+- `hexe-ai-node-backend.service.in`
+- `hexe-ai-node-frontend.service.in`
 
 Current installed user service names:
 
-- `synthia-ai-node-backend.service`
-- `synthia-ai-node-frontend.service`
+- `hexe-ai-node-backend.service`
+- `hexe-ai-node-frontend.service`
 
 These names remain legacy compatibility-era identifiers and should be treated as documented operational exceptions unless a later coordinated migration changes them.
 

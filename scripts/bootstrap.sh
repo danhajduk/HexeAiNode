@@ -2,13 +2,16 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BACKEND_SERVICE_NAME="synthia-ai-node-backend.service"
-FRONTEND_SERVICE_NAME="synthia-ai-node-frontend.service"
+BACKEND_SERVICE_NAME="hexe-ai-node-backend.service"
+FRONTEND_SERVICE_NAME="hexe-ai-node-frontend.service"
 SYSTEMD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-BACKEND_TEMPLATE="$ROOT_DIR/scripts/systemd/synthia-ai-node-backend.service.in"
-FRONTEND_TEMPLATE="$ROOT_DIR/scripts/systemd/synthia-ai-node-frontend.service.in"
+BACKEND_TEMPLATE="$ROOT_DIR/scripts/systemd/hexe-ai-node-backend.service.in"
+FRONTEND_TEMPLATE="$ROOT_DIR/scripts/systemd/hexe-ai-node-frontend.service.in"
 BACKEND_UNIT_PATH="$SYSTEMD_DIR/$BACKEND_SERVICE_NAME"
 FRONTEND_UNIT_PATH="$SYSTEMD_DIR/$FRONTEND_SERVICE_NAME"
+LEGACY_PREFIX="syn""thia-ai-node"
+LEGACY_BACKEND_SERVICE_NAME="${LEGACY_PREFIX}-backend.service"
+LEGACY_FRONTEND_SERVICE_NAME="${LEGACY_PREFIX}-frontend.service"
 
 if [[ ! -f "$ROOT_DIR/scripts/stack.env" ]]; then
   echo "Missing $ROOT_DIR/scripts/stack.env"
@@ -41,6 +44,8 @@ chmod +x \
   "$ROOT_DIR/scripts/restart-stack.sh"
 
 systemctl --user daemon-reload
+systemctl --user stop "$LEGACY_BACKEND_SERVICE_NAME" "$LEGACY_FRONTEND_SERVICE_NAME" 2>/dev/null || true
+systemctl --user disable "$LEGACY_BACKEND_SERVICE_NAME" "$LEGACY_FRONTEND_SERVICE_NAME" 2>/dev/null || true
 systemctl --user enable "$BACKEND_SERVICE_NAME" "$FRONTEND_SERVICE_NAME"
 systemctl --user restart "$BACKEND_SERVICE_NAME" "$FRONTEND_SERVICE_NAME"
 

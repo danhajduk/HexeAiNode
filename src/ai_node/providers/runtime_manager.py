@@ -659,7 +659,7 @@ class ProviderRuntimeManager:
         }
 
     def _openai_api_pricing_fetch_enabled(self) -> bool:
-        raw = str(os.environ.get("SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED", "")).strip().lower()
+        raw = str(os.environ.get("HEXE_OPENAI_API_PRICING_FETCH_ENABLED", "")).strip().lower()
         if raw in {"1", "true", "yes", "on"}:
             return True
         if raw in {"0", "false", "no", "off", ""}:

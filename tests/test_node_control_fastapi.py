@@ -1031,8 +1031,8 @@ class NodeControlFastApiTests(unittest.TestCase):
 
     def test_admin_routes_require_token_when_configured(self):
         with tempfile.TemporaryDirectory() as tmp:
-            old_admin_token = os.environ.get("SYNTHIA_ADMIN_TOKEN")
-            os.environ["SYNTHIA_ADMIN_TOKEN"] = "admin-token"
+            old_admin_token = os.environ.get("HEXE_ADMIN_TOKEN")
+            os.environ["HEXE_ADMIN_TOKEN"] = "admin-token"
             try:
                 lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
                 state = NodeControlState(
@@ -1050,7 +1050,7 @@ class NodeControlFastApiTests(unittest.TestCase):
 
                 authorized_diag = client.get(
                     "/api/capabilities/diagnostics",
-                    headers={"X-Synthia-Admin-Token": "admin-token"},
+                    headers={"X-Hexe-Admin-Token": "admin-token"},
                 )
                 self.assertEqual(authorized_diag.status_code, 200)
 
@@ -1060,7 +1060,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 authorized_refresh = client.post(
                     "/api/capabilities/providers/refresh",
                     json={"force_refresh": True},
-                    headers={"X-Synthia-Admin-Token": "admin-token"},
+                    headers={"X-Hexe-Admin-Token": "admin-token"},
                 )
                 self.assertEqual(authorized_refresh.status_code, 200)
 
@@ -1069,7 +1069,7 @@ class NodeControlFastApiTests(unittest.TestCase):
 
                 authorized_rebuild = client.post(
                     "/api/capabilities/rebuild",
-                    headers={"X-Synthia-Admin-Token": "admin-token"},
+                    headers={"X-Hexe-Admin-Token": "admin-token"},
                 )
                 self.assertEqual(authorized_rebuild.status_code, 200)
 
@@ -1079,14 +1079,14 @@ class NodeControlFastApiTests(unittest.TestCase):
                 authorized_redeclare = client.post(
                     "/api/capabilities/redeclare",
                     json={"force_refresh": False},
-                    headers={"X-Synthia-Admin-Token": "admin-token"},
+                    headers={"X-Hexe-Admin-Token": "admin-token"},
                 )
                 self.assertEqual(authorized_redeclare.status_code, 200)
             finally:
                 if old_admin_token is None:
-                    os.environ.pop("SYNTHIA_ADMIN_TOKEN", None)
+                    os.environ.pop("HEXE_ADMIN_TOKEN", None)
                 else:
-                    os.environ["SYNTHIA_ADMIN_TOKEN"] = old_admin_token
+                    os.environ["HEXE_ADMIN_TOKEN"] = old_admin_token
 
     def test_openapi_uses_hexe_control_api_title(self):
         with tempfile.TemporaryDirectory() as tmp:

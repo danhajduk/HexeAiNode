@@ -1,6 +1,6 @@
 # Hexe AI Node (Python)
 
-Compatibility-sensitive identifiers such as `X-Synthia-*` headers and `synthia-*` service IDs still use legacy naming during this migration phase.
+Compatibility-sensitive identifiers now use Hexe naming in active node code, scripts, and environment variables.
 
 ## Environment setup
 
@@ -38,7 +38,7 @@ Node control API contract:
 Bootstrap connection timeout:
 - Default: 30 seconds in `bootstrap_connecting`
 - Behavior: transitions back to `unconfigured` if timeout expires
-- Override with env var: `SYNTHIA_BOOTSTRAP_CONNECT_TIMEOUT_SECONDS`
+- Override with env var: `HEXE_BOOTSTRAP_CONNECT_TIMEOUT_SECONDS`
 
 Smoke-check mode:
 
@@ -51,20 +51,20 @@ PYTHONPATH=src python -m ai_node.main --once
 Provider capability intelligence is cached locally and refreshed on-demand/periodically with a default 4-hour interval.
 
 Config knobs:
-- `SYNTHIA_PROVIDER_CAPABILITY_REPORT_PATH` (default: `.run/provider_capability_report.json`)
-- `SYNTHIA_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS` (default: `14400`)
-- `SYNTHIA_PROVIDER_CREDENTIALS_PATH` (default: `.run/provider_credentials.json`)
-- `SYNTHIA_TASK_CAPABILITY_SELECTION_CONFIG_PATH` (default: `.run/task_capability_selection_config.json`)
-- `SYNTHIA_PROMPT_SERVICE_STATE_PATH` (default: `.run/prompt_service_state.json`)
-- `SYNTHIA_OPENAI_PRICING_CATALOG_PATH` (default: `providers/openai/provider_model_pricing.json`)
-- `SYNTHIA_OPENAI_PRICING_MANUAL_CONFIG_PATH` (default: `config/openai-pricing.yaml`)
-- `SYNTHIA_DEBUG_AOPENAI` (optional; `true` enables full OpenAI request/response debug capture)
-- `SYNTHIA_DEBUG_AOPENAI_LOG_PATH` (default: `logs/openai_debug.jsonl`)
-- `SYNTHIA_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS` (default: `86400`)
-- `SYNTHIA_OPENAI_PRICING_STALE_TOLERANCE_SECONDS` (default: `172800`)
-- `SYNTHIA_OPENAI_PRICING_SOURCE_URLS` (optional comma-separated OpenAI pricing URLs; defaults include `https://developers.openai.com/api/docs/pricing`)
+- `HEXE_PROVIDER_CAPABILITY_REPORT_PATH` (default: `.run/provider_capability_report.json`)
+- `HEXE_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS` (default: `14400`)
+- `HEXE_PROVIDER_CREDENTIALS_PATH` (default: `.run/provider_credentials.json`)
+- `HEXE_TASK_CAPABILITY_SELECTION_CONFIG_PATH` (default: `.run/task_capability_selection_config.json`)
+- `HEXE_PROMPT_SERVICE_STATE_PATH` (default: `.run/prompt_service_state.json`)
+- `HEXE_OPENAI_PRICING_CATALOG_PATH` (default: `providers/openai/provider_model_pricing.json`)
+- `HEXE_OPENAI_PRICING_MANUAL_CONFIG_PATH` (default: `config/openai-pricing.yaml`)
+- `HEXE_DEBUG_AOPENAI` (optional; `true` enables full OpenAI request/response debug capture)
+- `HEXE_DEBUG_AOPENAI_LOG_PATH` (default: `logs/openai_debug.jsonl`)
+- `HEXE_OPENAI_PRICING_REFRESH_INTERVAL_SECONDS` (default: `86400`)
+- `HEXE_OPENAI_PRICING_STALE_TOLERANCE_SECONDS` (default: `172800`)
+- `HEXE_OPENAI_PRICING_SOURCE_URLS` (optional comma-separated OpenAI pricing URLs; defaults include `https://developers.openai.com/api/docs/pricing`)
 - `OPENAI_API_KEY` (required for live OpenAI model discovery)
-- `SYNTHIA_OPENAI_BASE_URL` (optional OpenAI-compatible endpoint override)
+- `HEXE_OPENAI_BASE_URL` (optional OpenAI-compatible endpoint override)
 
 Control API refresh endpoint:
 
@@ -125,8 +125,8 @@ Manual price file:
 
 OpenAI full debug capture:
 
-- Set `debug_aopenai: true` under the OpenAI entry in `.run/provider_credentials.json`, or set `SYNTHIA_DEBUG_AOPENAI=true`
-- Optional log path: `debug_aopenai_log_path` or `SYNTHIA_DEBUG_AOPENAI_LOG_PATH`
+- Set `debug_aopenai: true` under the OpenAI entry in `.run/provider_credentials.json`, or set `HEXE_DEBUG_AOPENAI=true`
+- Optional log path: `debug_aopenai_log_path` or `HEXE_DEBUG_AOPENAI_LOG_PATH`
 - Full OpenAI request/response payloads are written to a separate JSONL file, defaulting to `logs/openai_debug.jsonl`
 
 UI behavior:
@@ -143,8 +143,8 @@ UI behavior:
 - `Review Selected Model Prices` walks through the currently selected models one by one so you can set different prices per model.
 - Manual pricing can be saved for the primary selected model or applied across all selected models from the provider page.
 - For token-priced models, cards show input/output `/1M token` prices; for other families they show normalized pricing units such as `per image`, `per minute`, or `per 1M characters`.
-- The OpenAI pricing refresh endpoint is disabled by default. When `SYNTHIA_OPENAI_API_PRICING_FETCH_ENABLED=true`, it fetches official pricing page text, runs strict extraction for filtered catalog models, validates the output, and preserves last-known-good data on extraction failures.
-- Raw AI pricing extraction responses are saved to `data/response.json` for debugging by default; set `SYNTHIA_OPENAI_PRICING_DEBUG_RESPONSE_PATH=` (empty) to disable or set a custom path.
+- The OpenAI pricing refresh endpoint is disabled by default. When `HEXE_OPENAI_API_PRICING_FETCH_ENABLED=true`, it fetches official pricing page text, runs strict extraction for filtered catalog models, validates the output, and preserves last-known-good data on extraction failures.
+- Raw AI pricing extraction responses are saved to `data/response.json` for debugging by default; set `HEXE_OPENAI_PRICING_DEBUG_RESPONSE_PATH=` (empty) to disable or set a custom path.
 - Filtered OpenAI provider models are also persisted locally in `data/provider_models.json`.
 - After filtered models are refreshed, capability classification is resolved locally with deterministic rules and stored in `providers/openai/provider_model_classifications.json`.
 - Capability classification no longer depends on calling an OpenAI classifier model at runtime.
@@ -229,8 +229,8 @@ Edit `scripts/stack.env` and set:
 ```
 
 This installs two rendered systemd units from templates:
-- `scripts/systemd/synthia-ai-node-backend.service.in`
-- `scripts/systemd/synthia-ai-node-frontend.service.in`
+- `scripts/systemd/hexe-ai-node-backend.service.in`
+- `scripts/systemd/hexe-ai-node-frontend.service.in`
 
 Optional for automatic start at boot even without active login session:
 

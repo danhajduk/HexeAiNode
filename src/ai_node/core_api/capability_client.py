@@ -69,7 +69,7 @@ class CapabilityDeclarationClient:
         headers = {
             "Authorization": f"Bearer {_require_non_empty_string(trust_token, 'trust_token')}",
             "X-Node-Trust-Token": _require_non_empty_string(trust_token, "trust_token"),
-            "X-Synthia-Node-Id": _require_non_empty_string(node_id, "node_id"),
+            "X-Hexe-Node-Id": _require_non_empty_string(node_id, "node_id"),
             "Content-Type": "application/json",
         }
         if hasattr(self._logger, "info"):
@@ -103,7 +103,7 @@ class CapabilityDeclarationClient:
         headers = {
             "Authorization": f"Bearer {_require_non_empty_string(trust_token, 'trust_token')}",
             "X-Node-Trust-Token": _require_non_empty_string(trust_token, "trust_token"),
-            "X-Synthia-Node-Id": _require_non_empty_string(node_id, "node_id"),
+            "X-Hexe-Node-Id": _require_non_empty_string(node_id, "node_id"),
             "Content-Type": "application/json",
         }
         if hasattr(self._logger, "info"):
