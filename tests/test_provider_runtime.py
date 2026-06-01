@@ -248,6 +248,33 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(response.output_text.startswith("mock:"))
             self.assertGreaterEqual(response.usage.total_tokens, 1)
 
+    async def test_execute_explicit_refreshes_cached_unavailable_provider_health(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["local"]),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+            )
+            adapter = MockProviderAdapter(provider_id="local")
+            runtime._registry.register_provider(provider_id="local", adapter=adapter)  # noqa: SLF001
+            runtime._registry.set_provider_health(  # noqa: SLF001
+                provider_id="local",
+                payload={"availability": "unavailable", "last_error": "socket_missing"},
+            )
+
+            response = await runtime.execute_explicit(
+                UnifiedExecutionRequest(
+                    task_family="task.classification",
+                    prompt="hello world",
+                    requested_provider="local",
+                    requested_model="mock-model-v1",
+                )
+            )
+
+            self.assertEqual(response.provider_id, "local")
+            self.assertEqual(runtime.providers_snapshot()["providers"][0]["availability"], "available")
+
     async def test_latest_models_payload_filters_dated_openai_variants(self):
         with tempfile.TemporaryDirectory() as tmp:
             runtime = ProviderRuntimeManager(

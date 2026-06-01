@@ -257,7 +257,14 @@ class ProviderRuntimeManager:
         health = self._registry.get_provider_health(provider_id) or {}
         availability = str(health.get("availability") or "").strip().lower()
         if availability and availability not in {"available", "degraded"}:
-            raise RuntimeError("provider_unavailable")
+            health = await adapter.health_check()
+            self._registry.set_provider_health(provider_id=provider_id, payload=health)
+            models = await adapter.list_models()
+            self._registry.set_models_for_provider(provider_id=provider_id, models=models)
+            self._registry.persist(path=self._registry_path)
+            availability = str(health.get("availability") or "").strip().lower()
+            if availability and availability not in {"available", "degraded"}:
+                raise RuntimeError("provider_unavailable")
         try:
             response = await adapter.execute_prompt(request)
             self._metrics.record_success(
