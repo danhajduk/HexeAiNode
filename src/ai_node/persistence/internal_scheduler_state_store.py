@@ -7,6 +7,7 @@ from ai_node.time_utils import local_now_iso
 
 
 INTERNAL_SCHEDULER_STATE_SCHEMA_VERSION = "1.0"
+MAX_LAST_RESULT_BYTES = 8192
 
 
 def _now_iso() -> str:
@@ -15,6 +16,70 @@ def _now_iso() -> str:
 
 def _is_non_empty_string(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
+
+
+def _json_size(value: object) -> int:
+    try:
+        return len(json.dumps(value).encode("utf-8"))
+    except Exception:
+        return MAX_LAST_RESULT_BYTES + 1
+
+
+def _summarize_provider_capability_refresh(payload: dict) -> dict:
+    report = payload.get("report") if isinstance(payload.get("report"), dict) else {}
+    providers = report.get("providers") if isinstance(report.get("providers"), list) else []
+    provider_summary = []
+    for provider in providers:
+        if not isinstance(provider, dict):
+            continue
+        models = provider.get("models") if isinstance(provider.get("models"), list) else []
+        model_count = provider.get("model_count")
+        if not isinstance(model_count, int):
+            model_count = len(models)
+        provider_summary.append(
+            {
+                "provider_id": str(provider.get("provider_id") or "").strip() or None,
+                "availability": str(provider.get("availability") or "").strip() or None,
+                "model_count": model_count,
+            }
+        )
+
+    core_submission = payload.get("core_submission") if isinstance(payload.get("core_submission"), dict) else {}
+    summary = {
+        "status": str(payload.get("status") or "").strip() or None,
+        "changed": bool(payload.get("changed")) if payload.get("changed") is not None else None,
+        "core_submission": {
+            "submitted": bool(core_submission.get("submitted")) if core_submission.get("submitted") is not None else None,
+            "status": str(core_submission.get("status") or "").strip() or None,
+            "retryable": bool(core_submission.get("retryable")) if core_submission.get("retryable") is not None else None,
+            "error": str(core_submission.get("error") or "").strip() or None,
+        },
+        "report": {
+            "generated_at": str(report.get("generated_at") or "").strip() or None,
+            "provider_count": len(providers),
+            "providers": provider_summary,
+        },
+    }
+    return summary
+
+
+def _summarize_last_result(*, task_id: str, value: object) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+
+    result = deepcopy(value)
+    if _json_size(result) <= MAX_LAST_RESULT_BYTES:
+        return result
+
+    normalized_task_id = str(task_id or "").strip()
+    if normalized_task_id == "provider_capability_refresh":
+        return _summarize_provider_capability_refresh(result)
+
+    return {
+        "status": str(result.get("status") or "summarized").strip() or "summarized",
+        "summary": "last_result_truncated",
+        "original_size_bytes": _json_size(result),
+    }
 
 
 def create_internal_scheduler_state() -> dict:
@@ -56,7 +121,7 @@ def normalize_internal_scheduler_state(data: object) -> dict:
             "last_error": str(entry.get("last_error") or "").strip() or None,
             "current_error": str(entry.get("current_error") or "").strip() or None,
             "next_run_at": str(entry.get("next_run_at") or "").strip() or None,
-            "last_result": deepcopy(entry.get("last_result")) if isinstance(entry.get("last_result"), dict) else None,
+            "last_result": _summarize_last_result(task_id=str(task_id), value=entry.get("last_result")),
             "attempt_count": max(int(entry.get("attempt_count") or 0), 0),
             "consecutive_failures": max(int(entry.get("consecutive_failures") or 0), 0),
             "updated_at": str(entry.get("updated_at") or _now_iso()),
@@ -86,7 +151,7 @@ class InternalSchedulerStateStore:
         normalized = normalize_internal_scheduler_state(payload)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = self._path.with_suffix(f"{self._path.suffix}.tmp")
-        temp_path.write_text(json.dumps(normalized, indent=2, sort_keys=True), encoding="utf-8")
+        temp_path.write_text(json.dumps(normalized, indent=2), encoding="utf-8")
         temp_path.replace(self._path)
 
     def load(self) -> Optional[dict]:
