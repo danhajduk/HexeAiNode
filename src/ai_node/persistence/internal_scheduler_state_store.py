@@ -3,6 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Optional, Tuple
 
+from ai_node.persistence.file_storage_lock import file_storage_lock, locked_json_temp_path
 from ai_node.time_utils import local_now_iso
 
 
@@ -148,11 +149,12 @@ class InternalSchedulerStateStore:
         self._logger = logger
 
     def save(self, payload: dict) -> None:
-        normalized = normalize_internal_scheduler_state(payload)
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = self._path.with_suffix(f"{self._path.suffix}.tmp")
-        temp_path.write_text(json.dumps(normalized, indent=2), encoding="utf-8")
-        temp_path.replace(self._path)
+        with file_storage_lock(self._path):
+            normalized = normalize_internal_scheduler_state(payload)
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = locked_json_temp_path(self._path)
+            temp_path.write_text(json.dumps(normalized, indent=2), encoding="utf-8")
+            temp_path.replace(self._path)
 
     def load(self) -> Optional[dict]:
         if not self._path.exists():

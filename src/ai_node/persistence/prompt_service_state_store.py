@@ -3,6 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Optional, Tuple
 
+from ai_node.persistence.file_storage_lock import file_storage_lock, locked_json_temp_path
 from ai_node.prompts.registration import (
     apply_probation_transition,
     create_prompt_service_registration,
@@ -220,14 +221,15 @@ class PromptServiceStateStore:
         self._logger = logger
 
     def save(self, payload: dict) -> None:
-        try:
-            normalized = normalize_prompt_service_state(payload)
-        except ValueError as exc:
-            raise ValueError(f"cannot save invalid prompt service state: {exc}") from exc
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = self._path.with_suffix(f"{self._path.suffix}.tmp")
-        temp_path.write_text(json.dumps(normalized, indent=2, sort_keys=True), encoding="utf-8")
-        temp_path.replace(self._path)
+        with file_storage_lock(self._path):
+            try:
+                normalized = normalize_prompt_service_state(payload)
+            except ValueError as exc:
+                raise ValueError(f"cannot save invalid prompt service state: {exc}") from exc
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = locked_json_temp_path(self._path)
+            temp_path.write_text(json.dumps(normalized, indent=2, sort_keys=True), encoding="utf-8")
+            temp_path.replace(self._path)
         if hasattr(self._logger, "info"):
             self._logger.info("[prompt-service-state-saved] %s", {"path": str(self._path)})
 

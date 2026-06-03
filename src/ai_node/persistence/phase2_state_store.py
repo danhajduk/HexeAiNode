@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from typing import Optional, Tuple
 
+from ai_node.persistence.file_storage_lock import file_storage_lock, locked_json_temp_path
+
 
 PHASE2_STATE_SCHEMA_VERSION = "1.0"
 
@@ -44,13 +46,14 @@ class Phase2StateStore:
         self._logger = logger
 
     def save(self, payload: dict) -> None:
-        is_valid, error = validate_phase2_state(payload)
-        if not is_valid:
-            raise ValueError(f"cannot save invalid phase2 state: {error}")
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = self._path.with_suffix(f"{self._path.suffix}.tmp")
-        temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-        temp_path.replace(self._path)
+        with file_storage_lock(self._path):
+            is_valid, error = validate_phase2_state(payload)
+            if not is_valid:
+                raise ValueError(f"cannot save invalid phase2 state: {error}")
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = locked_json_temp_path(self._path)
+            temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+            temp_path.replace(self._path)
         if hasattr(self._logger, "info"):
             self._logger.info("[phase2-state-saved] %s", {"path": str(self._path)})
 

@@ -2,6 +2,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from ai_node.persistence.file_storage_lock import file_storage_lock, locked_json_temp_path
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -46,8 +48,9 @@ class OperationalMqttRecoveryStore:
         return self._normalize(payload)
 
     def clear(self) -> None:
-        if self._path.exists():
-            self._path.unlink()
+        with file_storage_lock(self._path):
+            if self._path.exists():
+                self._path.unlink()
         if hasattr(self._logger, "info"):
             self._logger.info("[operational-mqtt-recovery-cleared] %s", {"path": str(self._path)})
 
@@ -94,10 +97,11 @@ class OperationalMqttRecoveryStore:
         return state
 
     def _save(self, payload: dict) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        normalized = self._normalize(payload)
-        temp_path = self._path.with_suffix(f"{self._path.suffix}.tmp")
-        temp_path.write_text(json.dumps(normalized, indent=2, sort_keys=True), encoding="utf-8")
-        temp_path.replace(self._path)
+        with file_storage_lock(self._path):
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            normalized = self._normalize(payload)
+            temp_path = locked_json_temp_path(self._path)
+            temp_path.write_text(json.dumps(normalized, indent=2, sort_keys=True), encoding="utf-8")
+            temp_path.replace(self._path)
         if hasattr(self._logger, "info"):
             self._logger.info("[operational-mqtt-recovery-saved] %s", {"path": str(self._path), "state": normalized})

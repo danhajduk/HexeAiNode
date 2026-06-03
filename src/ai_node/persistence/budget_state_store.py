@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Optional, Tuple
 
+from ai_node.persistence.file_storage_lock import file_storage_lock, locked_json_temp_path
 from ai_node.time_utils import local_now_iso
 
 
@@ -188,13 +189,14 @@ class BudgetStateStore:
         self._logger = logger
 
     def save(self, payload: dict) -> None:
-        is_valid, error = validate_budget_state(payload)
-        if not is_valid:
-            raise ValueError(f"cannot save invalid budget state: {error}")
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = self._path.with_suffix(f"{self._path.suffix}.tmp")
-        temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-        temp_path.replace(self._path)
+        with file_storage_lock(self._path):
+            is_valid, error = validate_budget_state(payload)
+            if not is_valid:
+                raise ValueError(f"cannot save invalid budget state: {error}")
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = locked_json_temp_path(self._path)
+            temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+            temp_path.replace(self._path)
         if hasattr(self._logger, "info"):
             self._logger.info("[budget-state-saved] %s", {"path": str(self._path)})
 
