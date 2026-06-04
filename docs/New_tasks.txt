@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 941: Enforce V3 local-only privacy routing in provider resolution and execution
 [TODO] Task 942: Add tests for V3 local-only routing and local-preferred cloud fallback behavior
 [TODO] Task 943: Document V1, V2, and V3 prompt contract versioning
 [TODO] Task 944: Define local LLM default model precedence for runtime and execution

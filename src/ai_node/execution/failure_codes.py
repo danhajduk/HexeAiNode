@@ -10,12 +10,14 @@ FAILURE_CODE_TAXONOMY = {
             "no_governance_approved_providers",
             "no_eligible_provider_available",
             "no_provider_configured",
+            "local_only_provider_unavailable",
+            "cloud_only_provider_unavailable",
             "provider_execution_failed",
         ],
     },
     "model_unavailable": {
         "canonical_code": "model_unavailable",
-        "aliases": ["no_eligible_model_available"],
+        "aliases": ["no_eligible_model_available", "local_only_no_eligible_model"],
     },
     "governance_violation": {
         "canonical_code": "governance_violation",
@@ -32,6 +34,7 @@ FAILURE_CODE_TAXONOMY = {
             "prompt_provider_not_allowed",
             "prompt_model_override_not_allowed",
             "prompt_structured_output_required",
+            "prompt_routing_policy_conflict",
             "governance_stale",
             "governance_violation_task_family",
             "governance_violation_timeout",

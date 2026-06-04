@@ -143,6 +143,39 @@ class ProviderResolverTests(unittest.TestCase):
             self.assertFalse(result.allowed)
             self.assertEqual(result.rejection_reason, "no_eligible_model_available")
 
+    def test_resolve_reports_local_only_no_eligible_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-resolver-test"),
+                provider_selection_store=_SelectionStore(enabled=["openai", "local"]),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+            )
+            runtime._registry.set_provider_health(provider_id="openai", payload={"availability": "available"})  # noqa: SLF001
+            runtime._registry.set_provider_health(provider_id="local", payload={"availability": "available"})  # noqa: SLF001
+            runtime._registry.set_models_for_provider(  # noqa: SLF001
+                provider_id="openai",
+                models=[ModelCapability(model_id="gpt-5-mini", display_name="gpt-5-mini", status="available")],
+            )
+            runtime._registry.set_models_for_provider(  # noqa: SLF001
+                provider_id="local",
+                models=[ModelCapability(model_id="qwen3-8b-q4_k_m", display_name="qwen3-8b-q4_k_m", status="available")],
+            )
+            resolver = ProviderResolver(runtime_manager=runtime, logger=logging.getLogger("provider-resolver-test"))
+
+            result = resolver.resolve(
+                request=ProviderResolutionRequest(
+                    task_family="task.classification",
+                    requested_provider="local",
+                    requested_model="missing-local-model",
+                    timeout_s=30,
+                ),
+                governance_constraints={"routing_policy_constraints": {"mode": "local_only"}},
+            )
+
+            self.assertFalse(result.allowed)
+            self.assertEqual(result.rejection_reason, "local_only_no_eligible_model")
+
     def test_resolve_falls_back_to_later_provider_when_first_has_no_eligible_model(self):
         with tempfile.TemporaryDirectory() as tmp:
             runtime = ProviderRuntimeManager(

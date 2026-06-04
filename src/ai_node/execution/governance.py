@@ -65,6 +65,9 @@ def evaluate_execution_governance(
     if not isinstance(routing_policy, dict):
         routing_policy = bundle.get("routing_policy_constraints") if isinstance(bundle.get("routing_policy_constraints"), dict) else {}
 
+    if routing_policy.get("routing_policy_conflict") is True:
+        return ExecutionGovernanceDecision(False, "prompt_routing_policy_conflict")
+
     allowed_task_families = _normalize_string_list(generic_rules.get("allow_task_families"))
     if not _task_family_allowed(task_family=task_family, allowed_families=allowed_task_families):
         return ExecutionGovernanceDecision(False, "governance_violation_task_family")

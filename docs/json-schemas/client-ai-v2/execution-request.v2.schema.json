@@ -83,7 +83,12 @@
     "constraints": {
       "type": "object",
       "additionalProperties": true,
-      "default": {}
+      "default": {},
+      "properties": {
+        "routing_policy": {
+          "$ref": "#/$defs/requestRoutingPolicy"
+        }
+      }
     },
     "priority": {
       "type": "string",
@@ -146,6 +151,28 @@
         "parse_json_output": {
           "type": "boolean",
           "default": true
+        }
+      }
+    },
+    "requestRoutingPolicy": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "local_only",
+            "local_preferred",
+            "cloud_only",
+            "cloud_fallback"
+          ],
+          "description": "Per-request routing mode. The request may narrow a V3 prompt routing boundary but must not broaden it."
         }
       }
     }

@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 
-from ai_node.prompts.registration import find_prompt_entry, find_prompt_version, normalize_prompt_lifecycle_state
+from ai_node.prompts.registration import (
+    VALID_PROMPT_ROUTING_POLICY_MODES,
+    find_prompt_entry,
+    find_prompt_version,
+    normalize_prompt_lifecycle_state,
+)
 
 
 def _normalize_string(value: object) -> str:
@@ -16,6 +21,29 @@ def _normalize_string_list(value: object) -> list[str]:
         if text and text not in normalized:
             normalized.append(text)
     return normalized
+
+
+def _normalize_routing_mode(value: object) -> str | None:
+    mode = _normalize_string(value).lower()
+    return mode if mode in VALID_PROMPT_ROUTING_POLICY_MODES else None
+
+
+def _provider_scope(provider_id: object) -> str | None:
+    provider = _normalize_string(provider_id).lower()
+    if not provider:
+        return None
+    return "local" if provider == "local" else "cloud"
+
+
+def _routing_mode_allows_provider(*, mode: str | None, provider_id: object) -> bool:
+    scope = _provider_scope(provider_id)
+    if scope is None or mode is None:
+        return True
+    if mode == "local_only":
+        return scope == "local"
+    if mode == "cloud_only":
+        return scope == "cloud"
+    return True
 
 
 @dataclass(frozen=True)
@@ -138,6 +166,11 @@ class ExecutionGateway:
         requested_model_value = _normalize_string(requested_model).lower()
         if requested_model_value and allowed_model_overrides and requested_model_value not in set(allowed_model_overrides + preferred_models):
             return ExecutionAuthorizationResult(False, "prompt_model_override_not_allowed", prompt, task, prompt_state=prompt_state)
+
+        routing_policy = prompt_constraints.get("routing_policy") if isinstance(prompt_constraints.get("routing_policy"), dict) else {}
+        routing_mode = _normalize_routing_mode(routing_policy.get("mode") if isinstance(routing_policy, dict) else None)
+        if requested_provider_value and not _routing_mode_allows_provider(mode=routing_mode, provider_id=requested_provider_value):
+            return ExecutionAuthorizationResult(False, "prompt_routing_policy_conflict", prompt, task, prompt_state=prompt_state)
 
         inputs_payload = inputs if isinstance(inputs, dict) else {}
         structured_output_required = bool(prompt_constraints.get("structured_output_required"))

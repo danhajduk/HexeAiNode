@@ -91,6 +91,8 @@ class ProviderResolver:
             model_id = candidate_model_id
             break
         if model_id is None or provider_id is None:
+            routing_policy = governance_constraints.get("routing_policy_constraints") if isinstance(governance_constraints, dict) else {}
+            routing_mode = str((routing_policy if isinstance(routing_policy, dict) else {}).get("mode") or "").strip().lower()
             return ProviderResolutionResult(
                 allowed=False,
                 provider_id=str(decision.provider_order[0]).strip() if decision.provider_order else None,
@@ -102,7 +104,7 @@ class ProviderResolver:
                 retry_count=int(decision.retry_count_by_provider.get(str(decision.provider_order[0]).strip()) or 0)
                 if decision.provider_order
                 else 0,
-                rejection_reason="no_eligible_model_available",
+                rejection_reason="local_only_no_eligible_model" if routing_mode == "local_only" else "no_eligible_model_available",
             )
 
         if hasattr(self._logger, "info"):

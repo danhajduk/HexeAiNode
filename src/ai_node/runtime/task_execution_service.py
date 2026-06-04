@@ -454,7 +454,16 @@ class TaskExecutionService:
     def _safe_governance_constraints(*, request: TaskExecutionRequest) -> dict:
         constraints = request.constraints if isinstance(request.constraints, dict) else {}
         governance = constraints.get("governance") if isinstance(constraints.get("governance"), dict) else {}
-        return governance
+        merged = dict(governance)
+        request_routing_policy = constraints.get("routing_policy") if isinstance(constraints.get("routing_policy"), dict) else {}
+        request_routing_mode = TaskExecutionService._normalize_routing_policy_mode(
+            request_routing_policy.get("mode") if isinstance(request_routing_policy, dict) else None
+        )
+        if request_routing_mode:
+            routing = merged.get("routing_policy_constraints") if isinstance(merged.get("routing_policy_constraints"), dict) else {}
+            routing["mode"] = request_routing_mode
+            merged["routing_policy_constraints"] = routing
+        return merged
 
     @staticmethod
     def _effective_requested_provider(*, request: TaskExecutionRequest, authorization) -> str | None:
@@ -483,6 +492,34 @@ class TaskExecutionService:
         return min(timeout_s, max(int(max_timeout_s), 1))
 
     @staticmethod
+    def _normalize_routing_policy_mode(value: object) -> str | None:
+        mode = str(value or "").strip().lower()
+        return mode if mode in {"local_only", "local_preferred", "cloud_only", "cloud_fallback"} else None
+
+    @staticmethod
+    def _routing_mode_scope(mode: str | None) -> set[str]:
+        if mode == "local_only":
+            return {"local"}
+        if mode == "cloud_only":
+            return {"cloud"}
+        if mode in {"local_preferred", "cloud_fallback"}:
+            return {"local", "cloud"}
+        return {"local", "cloud"}
+
+    @staticmethod
+    def _merge_routing_policy_modes(*, prompt_mode: str | None, request_mode: str | None) -> tuple[str | None, bool]:
+        prompt_scope = TaskExecutionService._routing_mode_scope(prompt_mode)
+        request_scope = TaskExecutionService._routing_mode_scope(request_mode)
+        effective_scope = prompt_scope.intersection(request_scope)
+        if not effective_scope:
+            return None, True
+        if effective_scope == {"local"}:
+            return "local_only", False
+        if effective_scope == {"cloud"}:
+            return "cloud_only", False
+        return request_mode or prompt_mode, False
+
+    @staticmethod
     def _merge_prompt_governance_constraints(*, governance_constraints: dict, authorization) -> dict:
         merged = dict(governance_constraints or {})
         provider_preferences = authorization.provider_preferences if isinstance(authorization.provider_preferences, dict) else {}
@@ -507,6 +544,22 @@ class TaskExecutionService:
             current_timeout = routing.get("max_timeout_s")
             prompt_timeout = int(prompt_constraints.get("max_timeout_s"))
             routing["max_timeout_s"] = min(int(current_timeout), prompt_timeout) if current_timeout is not None else prompt_timeout
+            merged["routing_policy_constraints"] = routing
+        prompt_routing_policy = prompt_constraints.get("routing_policy") if isinstance(prompt_constraints.get("routing_policy"), dict) else {}
+        prompt_mode = TaskExecutionService._normalize_routing_policy_mode(
+            prompt_routing_policy.get("mode") if isinstance(prompt_routing_policy, dict) else None
+        )
+        routing = merged.get("routing_policy_constraints") if isinstance(merged.get("routing_policy_constraints"), dict) else {}
+        request_mode = TaskExecutionService._normalize_routing_policy_mode(routing.get("mode"))
+        effective_mode, conflict = TaskExecutionService._merge_routing_policy_modes(
+            prompt_mode=prompt_mode,
+            request_mode=request_mode,
+        )
+        if conflict:
+            routing["routing_policy_conflict"] = True
+        elif effective_mode:
+            routing["mode"] = effective_mode
+        if routing:
             merged["routing_policy_constraints"] = routing
         return merged
 

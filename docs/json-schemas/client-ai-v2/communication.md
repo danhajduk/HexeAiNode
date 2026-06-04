@@ -71,8 +71,8 @@ V3 prompt routing modes:
 
 The prompt routing policy and the API request both participate in routing, but they do not have equal authority. The
 prompt policy is the maximum allowed boundary for the prompt. The API request may narrow or prefer a route for a single
-call, and node governance may restrict it further. A request must not weaken prompt privacy or broaden the prompt's
-routing boundary.
+call by sending `constraints.routing_policy.mode`, and node governance may restrict it further. A request must not
+weaken prompt privacy or broaden the prompt's routing boundary.
 
 Examples:
 
@@ -225,7 +225,49 @@ Use `requested_provider` only when the client needs to prefer a provider. Use `r
 override. If the requested provider is not enabled or does not have an eligible model, the resolver may use another
 eligible provider unless governance constraints prohibit fallback.
 
-To require local-only execution, set both `requested_provider` and the request governance provider allowlist:
+For V3 prompts, local-only execution should be declared on the prompt contract:
+
+```json
+{
+  "prompt_id": "mail.classifier",
+  "service_id": "mail-node",
+  "task_family": "task.classification",
+  "version": "v3.0",
+  "constraints": {
+    "routing_policy": {
+      "mode": "local_only"
+    }
+  },
+  "definition": {
+    "prompt_template": "Classify: {{normalized_text}}"
+  }
+}
+```
+
+A single execution request can narrow routing with `constraints.routing_policy.mode`:
+
+```json
+{
+  "task_id": "task-local-123",
+  "prompt_id": "mail.classifier",
+  "prompt_version": "v3.0",
+  "task_family": "task.classification",
+  "requested_by": "mail-node",
+  "service_id": "mail-node",
+  "trace_id": "trace-local-123",
+  "inputs": {
+    "normalized_text": "subject: Package update\nbody: Your package has shipped."
+  },
+  "constraints": {
+    "routing_policy": {
+      "mode": "local_only"
+    }
+  }
+}
+```
+
+For V1/V2 clients that do not have prompt-level routing policy, local-only behavior can still be requested with both
+`requested_provider` and the request governance provider allowlist:
 
 ```json
 {

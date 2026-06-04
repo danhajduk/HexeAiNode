@@ -42,6 +42,38 @@ class ProviderSelectionPolicyTests(unittest.TestCase):
         self.assertEqual(decision.provider_order, ["local"])
         self.assertFalse(decision.fallback_allowed)
 
+    def test_local_only_routing_filters_to_local_provider(self):
+        decision = build_provider_selection_policy(
+            ProviderSelectionPolicyInput(
+                enabled_providers=["openai", "local"],
+                default_provider="openai",
+                provider_health={
+                    "openai": {"availability": "available"},
+                    "local": {"availability": "available"},
+                },
+                governance_constraints={"routing_policy_constraints": {"mode": "local_only"}},
+            )
+        )
+
+        self.assertEqual(decision.provider_order, ["local"])
+        self.assertFalse(decision.fallback_allowed)
+
+    def test_local_preferred_routing_orders_local_before_cloud(self):
+        decision = build_provider_selection_policy(
+            ProviderSelectionPolicyInput(
+                enabled_providers=["openai", "local"],
+                default_provider="openai",
+                provider_health={
+                    "openai": {"availability": "available"},
+                    "local": {"availability": "available"},
+                },
+                governance_constraints={"routing_policy_constraints": {"mode": "local_preferred"}},
+            )
+        )
+
+        self.assertEqual(decision.provider_order, ["local", "openai"])
+        self.assertTrue(decision.fallback_allowed)
+
     def test_intersects_usable_models_with_governance_approved_models(self):
         decision = build_provider_selection_policy(
             ProviderSelectionPolicyInput(
@@ -94,6 +126,22 @@ class ProviderSelectionPolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.provider_order, [])
         self.assertEqual(decision.rejection_reason, "no_eligible_provider_available")
+
+    def test_local_only_reports_provider_unavailable_when_local_is_unhealthy(self):
+        decision = build_provider_selection_policy(
+            ProviderSelectionPolicyInput(
+                enabled_providers=["openai", "local"],
+                default_provider="openai",
+                provider_health={
+                    "openai": {"availability": "available"},
+                    "local": {"availability": "unavailable"},
+                },
+                governance_constraints={"routing_policy_constraints": {"mode": "local_only"}},
+            )
+        )
+
+        self.assertEqual(decision.provider_order, [])
+        self.assertEqual(decision.rejection_reason, "local_only_provider_unavailable")
 
     def test_filters_providers_exceeding_request_cost_ceiling(self):
         decision = build_provider_selection_policy(

@@ -451,6 +451,110 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "completed")
         self.assertEqual(resolver.last_request.timeout_s, 30)
         self.assertEqual(runtime_manager.last_request.system_prompt, "new prompt")
+        self.assertEqual(resolver.last_governance["routing_policy_constraints"]["max_timeout_s"], 30)
+
+    async def test_execute_applies_prompt_local_only_routing_to_resolution(self):
+        runtime_manager = _FakeProviderRuntimeManager()
+        resolver = _FakeProviderResolver(
+            ProviderResolutionResult(
+                allowed=True,
+                provider_id="local",
+                model_id="qwen3-8b-q4_k_m",
+                provider_order=["local"],
+                fallback_provider_ids=[],
+                model_allowlist_by_provider={"local": ["qwen3-8b-q4_k_m"]},
+                timeout_s=45,
+                retry_count=0,
+                rejection_reason=None,
+            )
+        )
+        service = TaskExecutionService(
+            provider_runtime_manager=runtime_manager,
+            provider_resolver=resolver,
+            logger=logging.getLogger("task-execution-service-test"),
+            prompt_services_state_provider=lambda: {
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.local",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "current_version": "v3.0",
+                        "versions": [{"version": "v3.0", "definition": {"system_prompt": "local only"}}],
+                        "constraints": {"routing_policy": {"mode": "local_only"}},
+                    }
+                ]
+            },
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-local-only",
+                    "prompt_id": "prompt.local",
+                    "prompt_version": "v3.0",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "inputs": {"text": "hello"},
+                    "trace_id": "trace-local-only",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(resolver.last_governance["routing_policy_constraints"]["mode"], "local_only")
+
+    async def test_execute_rejects_requested_cloud_provider_for_local_only_prompt(self):
+        service = TaskExecutionService(
+            provider_runtime_manager=_FakeProviderRuntimeManager(),
+            provider_resolver=_FakeProviderResolver(
+                ProviderResolutionResult(
+                    allowed=True,
+                    provider_id="openai",
+                    model_id="gpt-5-mini",
+                    provider_order=["openai"],
+                    fallback_provider_ids=[],
+                    model_allowlist_by_provider={"openai": ["gpt-5-mini"]},
+                    timeout_s=45,
+                    retry_count=0,
+                    rejection_reason=None,
+                )
+            ),
+            logger=logging.getLogger("task-execution-service-test"),
+            prompt_services_state_provider=lambda: {
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.local",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "current_version": "v3.0",
+                        "versions": [{"version": "v3.0", "definition": {"system_prompt": "local only"}}],
+                        "constraints": {"routing_policy": {"mode": "local_only"}},
+                    }
+                ]
+            },
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-local-only-cloud-request",
+                    "prompt_id": "prompt.local",
+                    "prompt_version": "v3.0",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "requested_provider": "openai",
+                    "inputs": {"text": "hello"},
+                    "trace_id": "trace-local-only-cloud-request",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "rejected")
+        self.assertEqual(result.error_code, "prompt_routing_policy_conflict")
 
     async def test_execute_renders_prompt_template_for_structured_extraction(self):
         runtime_manager = _FakeProviderRuntimeManager()

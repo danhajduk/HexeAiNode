@@ -840,6 +840,7 @@ Preserved scope:
 - The AI Node local queue should order queued work by V3 prompt importance, then FIFO within the same importance level, with anti-starvation behavior for lower-importance work.
 - The cloud queue should also honor V3 importance while preserving cloud-specific budget/governance checks and provider rate-limit behavior.
 - Requests that require a local model swap should not be sent immediately if the active model is busy.
+- Model swaps should be represented as local queue-owned work or dispatch gates, not unmanaged runtime side effects.
 - Local model-swap jobs should wait in the AI Node local queue until it is safe to switch:
   - no in-flight local execution on the active model
   - no protected llama.cpp occupancy that would be interrupted

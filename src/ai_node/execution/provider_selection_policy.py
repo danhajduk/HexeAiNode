@@ -43,6 +43,17 @@ def _normalize_provider_budget_limits(value: object) -> dict[str, int]:
     return normalized
 
 
+def _normalize_routing_mode(value: object) -> str | None:
+    mode = _normalize_string(value).lower()
+    if mode in {"local_only", "local_preferred", "cloud_only", "cloud_fallback"}:
+        return mode
+    return None
+
+
+def _is_local_provider(provider_id: str) -> bool:
+    return _normalize_string(provider_id).lower() == "local"
+
+
 @dataclass(frozen=True)
 class ProviderSelectionPolicyInput:
     enabled_providers: list[str]
@@ -104,11 +115,55 @@ def build_provider_selection_policy(policy: ProviderSelectionPolicyInput) -> Pro
     routing_policy = governance.get("routing_policy_constraints") if isinstance(governance.get("routing_policy_constraints"), dict) else {}
     max_timeout = routing_policy.get("max_timeout_s")
     governance_max_retries = routing_policy.get("max_retry_count")
+    routing_mode = _normalize_routing_mode(routing_policy.get("mode"))
+
+    if routing_mode == "local_only":
+        if "local" not in enabled:
+            return ProviderSelectionPolicyDecision(
+                provider_order=[],
+                model_allowlist_by_provider={},
+                timeout_s=max(int(policy.request_timeout_s), 1),
+                retry_count_by_provider={},
+                fallback_allowed=False,
+                rejection_reason="local_only_provider_unavailable",
+            )
+        eligible_providers = [provider_id for provider_id in eligible_providers if _is_local_provider(provider_id)]
+        if not eligible_providers:
+            return ProviderSelectionPolicyDecision(
+                provider_order=[],
+                model_allowlist_by_provider={},
+                timeout_s=max(int(policy.request_timeout_s), 1),
+                retry_count_by_provider={},
+                fallback_allowed=False,
+                rejection_reason="local_only_provider_unavailable",
+            )
+    elif routing_mode == "cloud_only":
+        eligible_providers = [provider_id for provider_id in eligible_providers if not _is_local_provider(provider_id)]
+        if not eligible_providers:
+            return ProviderSelectionPolicyDecision(
+                provider_order=[],
+                model_allowlist_by_provider={},
+                timeout_s=max(int(policy.request_timeout_s), 1),
+                retry_count_by_provider={},
+                fallback_allowed=False,
+                rejection_reason="cloud_only_provider_unavailable",
+            )
 
     requested_provider = _normalize_string(policy.requested_provider).lower()
     default_provider = _normalize_string(policy.default_provider).lower()
     provider_order: list[str] = []
-    for candidate in [requested_provider, default_provider, *eligible_providers]:
+    if routing_mode == "local_preferred":
+        routing_candidates = ["local", *eligible_providers]
+    elif routing_mode == "cloud_fallback":
+        routing_candidates = [item for item in eligible_providers if not _is_local_provider(item)]
+        routing_candidates.extend([item for item in eligible_providers if _is_local_provider(item)])
+    else:
+        routing_candidates = list(eligible_providers)
+    if routing_mode in {"local_preferred", "cloud_fallback"}:
+        candidate_order = [requested_provider, *routing_candidates, default_provider]
+    else:
+        candidate_order = [requested_provider, default_provider, *routing_candidates]
+    for candidate in candidate_order:
         if not candidate or candidate in provider_order:
             continue
         if candidate not in eligible_providers:
@@ -122,13 +177,14 @@ def build_provider_selection_policy(policy: ProviderSelectionPolicyInput) -> Pro
         provider_order.append(candidate)
 
     if not provider_order:
+        rejection_reason = "local_only_provider_unavailable" if routing_mode == "local_only" else "no_eligible_provider_available"
         return ProviderSelectionPolicyDecision(
             provider_order=[],
             model_allowlist_by_provider={},
             timeout_s=max(int(policy.request_timeout_s), 1),
             retry_count_by_provider={},
             fallback_allowed=False,
-            rejection_reason="no_eligible_provider_available",
+            rejection_reason=rejection_reason,
         )
 
     requested_model = _normalize_string(policy.requested_model).lower()
