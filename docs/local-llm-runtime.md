@@ -5,8 +5,9 @@ The default container image is pinned to `ghcr.io/ggml-org/llama.cpp:server-cuda
 
 ## Default Model Set
 
-The default runtime target is `Qwen/Qwen3-14B-GGUF:Q4_K_M` with alias `qwen3-14b-q4_k_m`.
-This is intended for stronger reasoning and classification on hosts with roughly 11-12 GB VRAM.
+The default runtime target is `Qwen/Qwen3-8B-GGUF:Q4_K_M` with alias `qwen3-8b-q4_k_m`.
+This is intended as the default local LLM for the RTX 3060 12 GB node because it leaves more VRAM headroom than the
+14B comparator.
 
 Configured local model download targets live in `config/local-llm-models.json`:
 
@@ -37,7 +38,7 @@ The node service status resolves the llama.cpp container from `LLAMACPP_CONTAINE
 ```bash
 scripts/download-local-llm-models.py --dry-run
 scripts/download-local-llm-models.py
-scripts/local-llm-gpu-load-test.py --model qwen3-14b-q4_k_m --concurrency 1 --iterations 3
+scripts/local-llm-gpu-load-test.py --model qwen3-8b-q4_k_m --concurrency 1 --iterations 3
 ```
 
 The downloader will not download an entire Hugging Face repository unless `--allow-full-repo` is supplied.
@@ -51,7 +52,7 @@ Example provider list:
 ```json
 [
   {"provider": "openai", "model": "gpt-5-mini"},
-  {"provider": "local", "model": "qwen3-14b-q4_k_m"}
+  {"provider": "local", "model": "qwen3-8b-q4_k_m"}
 ]
 ```
 

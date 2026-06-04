@@ -111,7 +111,7 @@ def _worker(socket_path: str, model: str, iterations: int, max_tokens: int, resu
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run a bounded local LLM GPU load test.")
     parser.add_argument("--socket-path", default="/run/hexe/ai-node/llamacpp.sock")
-    parser.add_argument("--model", default="qwen3-14b-q4_k_m")
+    parser.add_argument("--model", default="qwen3-8b-q4_k_m")
     parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("--iterations", type=int, default=3)
     parser.add_argument("--max-tokens", type=int, default=128)

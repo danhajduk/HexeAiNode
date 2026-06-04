@@ -99,7 +99,7 @@ def _float_or_none(value: object) -> float | None:
 
 class LlamaCppHealthHandler(BaseHTTPRequestHandler):
     llama_socket_path = "/run/hexe/ai-node/llamacpp.sock"
-    model_id = "qwen3-14b-q4_k_m"
+    model_id = "qwen3-8b-q4_k_m"
     timeout_s = 2.0
 
     def do_GET(self) -> None:  # noqa: N802
@@ -161,7 +161,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Serve llama.cpp runtime health over a Unix socket.")
     parser.add_argument("--socket-path", default=os.environ.get("LLAMACPP_HEALTH_SOCKET", "/run/hexe/ai-node/llamacpp-health.sock"))
     parser.add_argument("--llama-socket-path", default=os.environ.get("LLAMACPP_SOCKET_PATH", "/run/hexe/ai-node/llamacpp.sock"))
-    parser.add_argument("--model-id", default=os.environ.get("LLAMACPP_MODEL_ALIAS", "qwen3-14b-q4_k_m"))
+    parser.add_argument("--model-id", default=os.environ.get("LLAMACPP_MODEL_ALIAS", "qwen3-8b-q4_k_m"))
     parser.add_argument("--timeout-s", type=float, default=float(os.environ.get("LLAMACPP_HEALTH_TIMEOUT_S", "2")))
     args = parser.parse_args()
 

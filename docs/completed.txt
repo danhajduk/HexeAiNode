@@ -515,3 +515,4 @@ Task 941: Enforce V3 local-only privacy routing in provider resolution and execu
 Task 942: Add tests for V3 local-only routing and local-preferred cloud fallback behavior - Completed on 06/04/2026 16:37
 Task 943: Document V1, V2, and V3 prompt contract versioning - Completed on 06/04/2026 16:38
 Task 944: Define local LLM default model precedence for runtime and execution - Completed on 06/04/2026 16:40
+Task 945: Change local LLM runtime defaults to qwen3-8b-q4_k_m - Completed on 06/04/2026 16:41
