@@ -149,12 +149,14 @@ class ProviderResolver:
             if not allowed and requested in set(available):
                 return requested
             return None
-        if allowed:
-            return allowed[0]
 
         default_model = _normalize_string(default_model_id)
-        if default_model and (not available or default_model in set(available)):
+        if default_model and allowed and default_model in set(allowed):
             return default_model
+        if default_model and not allowed and (not available or default_model in set(available)):
+            return default_model
+        if allowed:
+            return allowed[0]
 
         if available:
             return available[0]

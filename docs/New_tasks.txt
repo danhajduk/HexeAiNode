@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 946: Apply qwen3-8b-q4_k_m when local execution omits an explicit model
 [TODO] Task 947: Preserve explicit local model overrides across direct benchmark and compare execution
 [TODO] Task 948: Add idle reversion from explicit local model overrides back to qwen3-8b-q4_k_m
 [TODO] Task 949: Add tests and documentation for local LLM default model behavior

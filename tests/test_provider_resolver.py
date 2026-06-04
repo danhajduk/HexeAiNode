@@ -89,6 +89,36 @@ class ProviderResolverTests(unittest.TestCase):
             self.assertEqual(result.provider_id, "local")
             self.assertEqual(result.model_id, "mock-model-v1")
 
+    def test_resolve_uses_configured_local_default_when_request_omits_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-resolver-test"),
+                provider_selection_store=_SelectionStore(enabled=["local"]),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+            )
+            runtime._registry.set_provider_health(provider_id="local", payload={"availability": "available"})  # noqa: SLF001
+            runtime._registry.set_models_for_provider(  # noqa: SLF001
+                provider_id="local",
+                models=[
+                    ModelCapability(model_id="qwen3-14b-q4_k_m", display_name="qwen3-14b-q4_k_m", status="available"),
+                    ModelCapability(model_id="qwen3-8b-q4_k_m", display_name="qwen3-8b-q4_k_m", status="available"),
+                ],
+            )
+            resolver = ProviderResolver(runtime_manager=runtime, logger=logging.getLogger("provider-resolver-test"))
+
+            result = resolver.resolve(
+                request=ProviderResolutionRequest(
+                    task_family="task.classification",
+                    requested_provider="local",
+                    timeout_s=60,
+                )
+            )
+
+            self.assertTrue(result.allowed)
+            self.assertEqual(result.provider_id, "local")
+            self.assertEqual(result.model_id, "qwen3-8b-q4_k_m")
+
     def test_resolve_applies_governance_provider_and_timeout_limits(self):
         with tempfile.TemporaryDirectory() as tmp:
             runtime = ProviderRuntimeManager(
