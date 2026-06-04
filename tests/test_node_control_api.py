@@ -1509,6 +1509,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.calls.append(payload)
             return {"target": target, "result": "scheduled", "delay_seconds": delay_seconds}
 
+        def revert_local_llm_to_default_if_idle(self, *, local_in_flight: int = 0, queued_model_ids=None):
+            payload = {"local_in_flight": local_in_flight, "queued_model_ids": list(queued_model_ids or [])}
+            self.calls.append(payload)
+            return {"switched": False, **payload}
+
     async def test_benchmark_v2_switches_local_models_before_timed_execution(self):
         class _LocalBenchmarkServiceManager:
             def __init__(self):
@@ -1776,6 +1781,56 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(payload["tasks"]["operational_mqtt_health"]["schedule_name"], "every_5_minutes")
             self.assertEqual(payload["tasks"]["operational_mqtt_health"]["interval_seconds"], 300)
+
+    async def test_local_llm_default_revert_scheduler_task_is_registered(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=self._FakeServiceManager(),
+            )
+
+            payload = state.internal_scheduler_payload()
+
+            self.assertIn("local_llm_default_revert", payload["tasks"])
+            self.assertEqual(payload["tasks"]["local_llm_default_revert"]["schedule_name"], "interval_seconds")
+
+    async def test_local_llm_default_revert_job_calls_service_manager(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service_manager = self._FakeServiceManager()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=service_manager,
+            )
+
+            result = await state._local_llm_default_revert_job_once()
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(service_manager.calls[-1]["local_in_flight"], 0)
+
+    async def test_local_llm_default_revert_job_waits_while_model_switch_lock_is_held(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service_manager = self._FakeServiceManager()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=service_manager,
+            )
+            await state._local_llm_switch_lock.acquire()
+            try:
+                result = await state._local_llm_default_revert_job_once()
+            finally:
+                state._local_llm_switch_lock.release()
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(service_manager.calls[-1]["local_in_flight"], 1)
 
     async def test_operational_mqtt_health_uses_fast_interval_for_five_minutes_after_startup(self):
         with tempfile.TemporaryDirectory() as tmp:

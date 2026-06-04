@@ -33,6 +33,8 @@ Backend runtime:
 - `HEXE_PROVIDER_REGISTRY_PATH` default `data/provider_registry.json`
 - `HEXE_PROVIDER_METRICS_PATH` default `data/provider_metrics.json`
 - `HEXE_PROVIDER_LOCAL_DEFAULT_MODEL_ID` default `qwen3-8b-q4_k_m`
+- `HEXE_LOCAL_LLM_DEFAULT_REVERT_IDLE_SECONDS` default `900`; set `0` to disable automatic return to the default local model
+- `HEXE_LOCAL_LLM_DEFAULT_REVERT_CHECK_INTERVAL_SECONDS` default `60`
 - `HEXE_PROVIDER_LOCAL_TRANSPORT` default `socket`
 - `HEXE_PROVIDER_LOCAL_SOCKET` default `/run/hexe/ai-node/llamacpp.sock`
 - `HEXE_PROVIDER_LOCAL_BASE_URL` default `http://127.0.0.1:8011/v1`
