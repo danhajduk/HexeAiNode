@@ -4,6 +4,10 @@ from dataclasses import dataclass, field
 from ai_node.config.provider_credentials_config import ProviderCredentialsStore
 
 
+LOCAL_PROVIDER_DEFAULT_MODEL_ENV = "HEXE_PROVIDER_LOCAL_DEFAULT_MODEL_ID"
+LOCAL_PROVIDER_BUILTIN_DEFAULT_MODEL_ID = "qwen3-8b-q4_k_m"
+
+
 @dataclass
 class ProviderSettings:
     provider_id: str
@@ -110,8 +114,9 @@ class ProviderConfigLoader:
                 max_cost_cents=int(max_cost_cents) if max_cost_cents is not None else None,
                 budget_period=str(budget_period).strip().lower() if budget_period is not None else None,
             )
+        provider_default_model = str(os.environ.get(f"HEXE_PROVIDER_{upper}_DEFAULT_MODEL_ID") or "").strip() or None
         local_default_model = (
-            str(os.environ.get("HEXE_PROVIDER_LOCAL_DEFAULT_MODEL_ID") or "").strip() or None
+            str(os.environ.get(LOCAL_PROVIDER_DEFAULT_MODEL_ENV) or "").strip() or None
             if normalized_provider_id == "local"
             else None
         )
@@ -134,10 +139,14 @@ class ProviderConfigLoader:
             provider_id=normalized_provider_id,
             provider_type="local",
             enabled=bool(enabled),
+            # Local default model precedence:
+            # 1. explicit provider default from HEXE_PROVIDER_LOCAL_DEFAULT_MODEL_ID
+            # 2. built-in local fallback
+            # Explicit request and prompt preference overrides are resolved later by execution.
             default_model_id=_first_non_empty_string(
-                str(os.environ.get(f"HEXE_PROVIDER_{upper}_DEFAULT_MODEL_ID") or "").strip() or None,
+                provider_default_model,
                 local_default_model,
-                "qwen3-14b-q4_k_m" if normalized_provider_id == "local" else None,
+                LOCAL_PROVIDER_BUILTIN_DEFAULT_MODEL_ID if normalized_provider_id == "local" else None,
             ),
             base_url=_first_non_empty_string(
                 str(os.environ.get(f"HEXE_PROVIDER_{upper}_BASE_URL") or "").strip() or None,

@@ -32,7 +32,7 @@ Backend runtime:
 - `HEXE_FINALIZE_POLL_INTERVAL_SECONDS` default `2`
 - `HEXE_PROVIDER_REGISTRY_PATH` default `data/provider_registry.json`
 - `HEXE_PROVIDER_METRICS_PATH` default `data/provider_metrics.json`
-- `HEXE_PROVIDER_LOCAL_DEFAULT_MODEL_ID` default `qwen3-14b-q4_k_m`
+- `HEXE_PROVIDER_LOCAL_DEFAULT_MODEL_ID` default `qwen3-8b-q4_k_m`
 - `HEXE_PROVIDER_LOCAL_TRANSPORT` default `socket`
 - `HEXE_PROVIDER_LOCAL_SOCKET` default `/run/hexe/ai-node/llamacpp.sock`
 - `HEXE_PROVIDER_LOCAL_BASE_URL` default `http://127.0.0.1:8011/v1`
@@ -68,6 +68,9 @@ Provider-specific:
 
 - `OPENAI_API_KEY` required for live OpenAI discovery and use
 - `HEXE_OPENAI_BASE_URL` optional OpenAI-compatible override
+- Local model precedence: explicit execution request or benchmark/compare target model wins first, then prompt/provider
+  model preference when allowed, then `HEXE_PROVIDER_LOCAL_DEFAULT_MODEL_ID`, then the built-in fallback
+  `qwen3-8b-q4_k_m`.
 
 ## Config Files
 
