@@ -56,6 +56,10 @@ The AI Node does not judge benchmark correctness and does not pick a winner.
 The AI Node accepts legacy and V2+ prompt registrations. Prefer V3 for new prompt contracts because it is the first
 contract version that can declare routing intent directly in the prompt policy.
 
+Status: V3 routing policy is implemented for prompt registration and direct execution routing. V3 importance policy,
+local/cloud execution queues, and async queued-job responses are documented in the task plan but are not developed in
+this API yet.
+
 | Version | Use | Routing behavior |
 | --- | --- | --- |
 | V1 | Legacy prompt records and older clients. | No prompt-level routing policy; requests use legacy provider selection. |

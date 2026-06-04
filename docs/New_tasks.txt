@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 943: Document V1, V2, and V3 prompt contract versioning
 [TODO] Task 944: Define local LLM default model precedence for runtime and execution
 [TODO] Task 945: Change local LLM runtime defaults to qwen3-8b-q4_k_m
 [TODO] Task 946: Apply qwen3-8b-q4_k_m when local execution omits an explicit model
