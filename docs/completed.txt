@@ -512,3 +512,4 @@ Task 938: Apply admission guard to provider comparison execution route - Complet
 Task 939: Expose per-route admission counters and tests - Completed on 05/28/2026 00:49
 Task 940: Define V3 prompt contract routing policy modes - Completed on 06/04/2026 16:29
 Task 941: Enforce V3 local-only privacy routing in provider resolution and execution - Completed on 06/04/2026 16:36
+Task 942: Add tests for V3 local-only routing and local-preferred cloud fallback behavior - Completed on 06/04/2026 16:37

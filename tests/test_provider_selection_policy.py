@@ -74,6 +74,22 @@ class ProviderSelectionPolicyTests(unittest.TestCase):
         self.assertEqual(decision.provider_order, ["local", "openai"])
         self.assertTrue(decision.fallback_allowed)
 
+    def test_local_preferred_routing_can_fall_back_to_cloud_when_local_unavailable(self):
+        decision = build_provider_selection_policy(
+            ProviderSelectionPolicyInput(
+                enabled_providers=["openai", "local"],
+                default_provider="openai",
+                provider_health={
+                    "openai": {"availability": "available"},
+                    "local": {"availability": "unavailable"},
+                },
+                governance_constraints={"routing_policy_constraints": {"mode": "local_preferred"}},
+            )
+        )
+
+        self.assertEqual(decision.provider_order, ["openai"])
+        self.assertFalse(decision.fallback_allowed)
+
     def test_intersects_usable_models_with_governance_approved_models(self):
         decision = build_provider_selection_policy(
             ProviderSelectionPolicyInput(

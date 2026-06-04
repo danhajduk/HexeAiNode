@@ -505,6 +505,59 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "completed")
         self.assertEqual(resolver.last_governance["routing_policy_constraints"]["mode"], "local_only")
 
+    async def test_execute_allows_request_to_narrow_prompt_local_preferred_to_local_only(self):
+        runtime_manager = _FakeProviderRuntimeManager()
+        resolver = _FakeProviderResolver(
+            ProviderResolutionResult(
+                allowed=True,
+                provider_id="local",
+                model_id="qwen3-8b-q4_k_m",
+                provider_order=["local"],
+                fallback_provider_ids=[],
+                model_allowlist_by_provider={"local": ["qwen3-8b-q4_k_m"]},
+                timeout_s=45,
+                retry_count=0,
+                rejection_reason=None,
+            )
+        )
+        service = TaskExecutionService(
+            provider_runtime_manager=runtime_manager,
+            provider_resolver=resolver,
+            logger=logging.getLogger("task-execution-service-test"),
+            prompt_services_state_provider=lambda: {
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.local-preferred",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "current_version": "v3.0",
+                        "versions": [{"version": "v3.0", "definition": {"system_prompt": "local preferred"}}],
+                        "constraints": {"routing_policy": {"mode": "local_preferred"}},
+                    }
+                ]
+            },
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-local-preferred-narrowed",
+                    "prompt_id": "prompt.local-preferred",
+                    "prompt_version": "v3.0",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "inputs": {"text": "hello"},
+                    "constraints": {"routing_policy": {"mode": "local_only"}},
+                    "trace_id": "trace-local-preferred-narrowed",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(resolver.last_governance["routing_policy_constraints"]["mode"], "local_only")
+
     async def test_execute_rejects_requested_cloud_provider_for_local_only_prompt(self):
         service = TaskExecutionService(
             provider_runtime_manager=_FakeProviderRuntimeManager(),
