@@ -47,3 +47,14 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
+[TODO] Task 941: Enforce V3 local-only privacy routing in provider resolution and execution
+[TODO] Task 942: Add tests for V3 local-only routing and local-preferred cloud fallback behavior
+[TODO] Task 943: Document V1, V2, and V3 prompt contract versioning
+[TODO] Task 944: Define local LLM default model precedence for runtime and execution
+[TODO] Task 945: Change local LLM runtime defaults to qwen3-8b-q4_k_m
+[TODO] Task 946: Apply qwen3-8b-q4_k_m when local execution omits an explicit model
+[TODO] Task 947: Preserve explicit local model overrides across direct benchmark and compare execution
+[TODO] Task 948: Add idle reversion from explicit local model overrides back to qwen3-8b-q4_k_m
+[TODO] Task 949: Add tests and documentation for local LLM default model behavior
+[TODO] Task 950: Add V3 prompt importance policy for execution priority and latency preference
+[TODO] Task 951: Add local and cloud execution queues with async queued-job response contract

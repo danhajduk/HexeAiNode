@@ -510,3 +510,4 @@ Task 936: Define shared admission scope for expensive execution routes - Complet
 Task 937: Apply admission guard to benchmark execution route - Completed on 05/28/2026 00:49
 Task 938: Apply admission guard to provider comparison execution route - Completed on 05/28/2026 00:49
 Task 939: Expose per-route admission counters and tests - Completed on 05/28/2026 00:49
+Task 940: Define V3 prompt contract routing policy modes - Completed on 06/04/2026 16:29

@@ -8,6 +8,7 @@ VALID_PROMPT_LIFECYCLE_STATES = {"draft", "probation", "active", "review_due", "
 LEGACY_PROMPT_STATES = {"registered": "active", "probation": "probation"}
 VALID_PROMPT_PRIVACY_CLASSES = {"public", "internal", "restricted", "sensitive"}
 VALID_PROMPT_ACCESS_SCOPES = {"private", "service", "shared", "public"}
+VALID_PROMPT_ROUTING_POLICY_MODES = {"local_only", "local_preferred", "cloud_only", "cloud_fallback"}
 
 
 def _now_iso() -> str:
@@ -72,6 +73,18 @@ def normalize_execution_policy(value: object) -> dict:
     }
 
 
+def normalize_prompt_routing_policy(value: object) -> dict | None:
+    if value is None:
+        return None
+    payload = _normalize_mapping(value)
+    mode = str(payload.get("mode") or "").strip().lower()
+    if not mode:
+        return None
+    if mode not in VALID_PROMPT_ROUTING_POLICY_MODES:
+        raise ValueError("invalid_prompt_routing_policy_mode")
+    return {"mode": mode}
+
+
 def normalize_prompt_constraints(value: object) -> dict:
     payload = _normalize_mapping(value)
     max_timeout_s = payload.get("max_timeout_s")
@@ -80,6 +93,7 @@ def normalize_prompt_constraints(value: object) -> dict:
         "max_timeout_s": max(int(max_timeout_s), 1) if max_timeout_s is not None else None,
         "structured_output_required": bool(payload.get("structured_output_required", False)),
         "allowed_model_overrides": allowed_model_overrides,
+        "routing_policy": normalize_prompt_routing_policy(payload.get("routing_policy")),
     }
 
 

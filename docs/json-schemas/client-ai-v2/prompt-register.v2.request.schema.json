@@ -156,6 +156,31 @@
             "minLength": 1
           },
           "uniqueItems": true
+        },
+        "routing_policy": {
+          "$ref": "#/$defs/promptRoutingPolicy"
+        }
+      }
+    },
+    "promptRoutingPolicy": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "local_only",
+            "local_preferred",
+            "cloud_only",
+            "cloud_fallback"
+          ],
+          "description": "V3 routing policy mode. The prompt policy is the maximum allowed routing boundary; API requests may only narrow it."
         }
       }
     },

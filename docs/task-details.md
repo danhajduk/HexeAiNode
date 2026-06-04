@@ -662,3 +662,246 @@ Task mapping:
 - Task 923: Remove the legacy node-local benchmark surface after V2 execution-only benchmark support
 - Task 924: Add migration docs for prompt tuning workflows that consume benchmark execution results
 - Task 925: Add client AI V2 schema discovery endpoints for prompt and execution contracts
+
+## Task 940-943
+Original task source: user request on 2026-06-01
+
+Preserved scope:
+- Preserve prompt contract version meaning:
+  - V1: old legacy prompts.
+  - V2: benchmark-capable prompts.
+  - V3: V2 plus explicit routing policy.
+- Add an explicit V3 routing contract for privacy-sensitive prompts and caller requests.
+- V3 routing belongs in both the prompt contract and the API request, but with different authority:
+  - prompt contract routing defines the maximum allowed policy boundary
+  - API request routing can request or narrow behavior for a single call
+  - governance can further restrict either one
+  - nothing can weaken a prompt's privacy/routing policy
+- Supported modes should include:
+  - `local_only`: only local providers/models may be selected; never send prompt/input to cloud.
+  - `local_preferred`: local is preferred, but cloud fallback is allowed during provider resolution when local is not eligible.
+  - `cloud_only`: only cloud providers/models may be selected.
+  - `cloud_fallback`: cloud fallback is explicitly allowed after local selection failure only if the API contract intentionally supports retry/fallback.
+- Do not rely on `requested_provider: "local"` as an implicit privacy guarantee.
+- V3 prompt registration should be able to declare local-only routing for sensitive prompts.
+- Direct execution requests should be able to request or override routing mode only when allowed by V3 prompt/governance constraints.
+- Effective routing should be resolved as the most restrictive allowed combination of:
+  - prompt contract routing policy
+  - request routing policy
+  - governance constraints
+- Examples:
+  - prompt says `local_only`, API asks `cloud_only` -> reject
+  - prompt says `local_only`, API asks `local_preferred` -> execute as `local_only`
+  - prompt says `local_preferred`, API asks `local_only` -> allow stricter `local_only`
+  - pre-V3 prompt has no routing policy -> use legacy routing unless request/governance narrows it
+  - governance disallows OpenAI -> cloud modes unavailable even if prompt/request asks for cloud
+- Local-only behavior must fail closed:
+  - if no local model can satisfy the task
+  - if the local runtime is unavailable
+  - if the local model load or execution fails
+  - if governance would otherwise choose cloud
+- Local-only failures must return an explicit error reason such as `local_only_no_eligible_model`, `local_only_provider_unavailable`, or `local_only_execution_failed`.
+- The node must expose enough response metadata or telemetry to show whether fallback was allowed, blocked, or used.
+- Add tests proving:
+  - local-only never selects OpenAI/cloud
+  - local-preferred can fall back during provider resolution when local has no eligible model
+  - a runtime failure after local selection does not silently send the same request to cloud unless an explicit future retry mode is implemented
+  - V3 prompt-level local-only constraints cannot be weakened by a caller request
+- Update Client AI docs and schemas so clients know V1/V2/V3 meanings and how to request V3 local-only privacy behavior.
+
+Task mapping:
+- Task 940: Define V3 prompt contract routing policy modes
+  - Define prompt contract routing authority versus request routing preference/narrowing.
+  - Define effective routing precedence across prompt, request, and governance constraints.
+- Task 941: Enforce V3 local-only privacy routing in provider resolution and execution
+- Task 942: Add tests for V3 local-only routing and local-preferred cloud fallback behavior
+- Task 943: Document V1, V2, and V3 prompt contract versioning
+
+## Task 944-949
+Original task source: ad hoc operator request on 2026-06-04.
+
+Preserved scope:
+- Make `qwen3-8b-q4_k_m` the default local LLM model for this AI Node.
+- When local LLM execution is requested without a specific model, use `qwen3-8b-q4_k_m`.
+- Preserve explicit operator/client model choice: if a request, prompt preference, benchmark target, compare target, or runtime command names another configured local model, that explicit model must still be used.
+- Keep the rule local-provider scoped. This must not change OpenAI/cloud model defaults or provider selection behavior when `local` was not selected/requested.
+- Wire both default surfaces:
+  - runtime startup defaults: `LLAMACPP_MODEL_HF`, `LLAMACPP_MODEL_ALIAS`, fallback defaults in scripts, docs, and sample env/config
+  - execution defaults: provider resolution and local provider execution should resolve missing local model IDs to `qwen3-8b-q4_k_m`
+- Keep model switching behavior intact for explicit benchmark or comparison targets that name another configured local model.
+- If an explicit request switches the local runtime away from the default model, the node should swap back to `qwen3-8b-q4_k_m` after the non-default model has been idle for a configurable period.
+- Ensure health/status output still reports the actually loaded model, not merely the configured default.
+- Update operator docs so the default model and override behavior are clear.
+
+Implementation notes:
+- Current runtime/config references include:
+  - `scripts/stack.env`
+  - `scripts/stack.env.example`
+  - `scripts/llamacpp-control.sh`
+  - `scripts/llamacpp-health.py`
+  - `scripts/local-llm-gpu-load-test.py`
+  - `docs/configuration.md`
+  - `docs/local-llm-runtime.md`
+  - local provider config/default model loading under `src/ai_node/providers/` and `src/ai_node/runtime/`
+- Avoid hard-coding the default in only one place if an existing configuration path can own it cleanly.
+- Treat `qwen3-8b-q4_k_m` as the default alias and `Qwen/Qwen3-8B-GGUF:Q4_K_M` as the matching Hugging Face source unless code/config proves a different source string is already canonical.
+- Idle reversion should be conservative:
+  - do not interrupt in-flight execution
+  - reset/extend the idle timer whenever the active non-default model is used
+  - make the idle threshold configurable
+  - expose enough service/status metadata to show the active model, default model, and pending/default-revert state if practical
+  - log idle reversion without logging prompts or sensitive request payloads
+
+Task mapping:
+- Task 944: Define local LLM default model precedence for runtime and execution
+  - Document precedence in code comments or docs near the config boundary:
+    1. explicit request/target model
+    2. prompt/provider preference model when allowed
+    3. configured local provider default model
+    4. built-in fallback `qwen3-8b-q4_k_m`
+  - Verify which existing config object should own the local default.
+- Task 945: Change local LLM runtime defaults to qwen3-8b-q4_k_m
+  - Update runtime env/sample defaults and script fallbacks from `qwen3-14b-q4_k_m` to `qwen3-8b-q4_k_m`.
+  - Update matching Hugging Face default from Qwen3 14B to Qwen3 8B.
+  - Ensure startup/restart/ready flows use the 8B model unless overridden.
+- Task 946: Apply qwen3-8b-q4_k_m when local execution omits an explicit model
+  - Update local provider/provider resolution so `provider=local` with no model resolves to the configured local default.
+  - Cover direct execution, benchmark V2 targets, and comparison execution where applicable.
+  - Ensure missing model behavior remains explicit for non-local providers and invalid local model IDs.
+- Task 947: Preserve explicit local model overrides across direct benchmark and compare execution
+  - Verify explicit local model IDs such as `qwen3-14b-q4_k_m` still trigger model switching and execution.
+  - Ensure explicit request values are not overwritten by the default resolver.
+  - Keep `local_llm_busy` and configured-model validation behavior unchanged.
+- Task 948: Add idle reversion from explicit local model overrides back to qwen3-8b-q4_k_m
+  - Track when a non-default local model became active and when it was last used.
+  - Add a configurable idle timeout before switching back to the default model.
+  - Reuse existing llama.cpp control/model-switching paths so the default reversion follows the same readiness checks.
+  - Do not switch while local execution or benchmark model loading is in flight.
+  - Make idle reversion observable through logs and, where natural, service/status diagnostics.
+- Task 949: Add tests and documentation for local LLM default model behavior
+  - Add targeted tests for default resolution and explicit override behavior.
+  - Add tests for idle timeout reversion, timer reset on non-default usage, and no reversion while work is in flight.
+  - Update local LLM runtime/config docs and examples.
+  - Include a lightweight validation command showing the currently loaded model and a local execution request without explicit model.
+
+## Task 950
+Original task source: ad hoc operator request on 2026-06-04.
+
+Preserved scope:
+- Add a V3 prompt importance policy separate from V3 routing policy.
+- V3 routing policy answers where execution may run, such as `local_only` or `local_preferred`.
+- V3 importance policy answers how urgently/preferentially execution should be handled.
+- A prompt can be both privacy-sensitive and important, for example:
+  - `routing_policy.mode = local_only`
+  - `importance.level = high`
+- Proposed importance levels:
+  - `background`: low urgency, batchable, can wait behind interactive work
+  - `normal`: default behavior
+  - `high`: user-visible or time-sensitive; prefer lower latency where allowed
+  - `critical`: rare, user-blocking or safety/ops-sensitive; must be tightly governed
+- All prompts before V3 must be treated as `normal` importance unless a future migration explicitly assigns a different importance.
+- Importance must not weaken routing/privacy constraints. A `critical` local-only prompt must still never fall back to cloud.
+- Importance should feed execution priority and latency preference, not silently bypass budget, governance, or admission safety.
+- The node should expose enough metadata to show prompt importance, selected execution priority, and whether the request was delayed/rejected by admission.
+- Client-facing communication docs must explain all three prompt contract versions and make clear that V3 is the preferred version for new prompt/API use.
+
+Implementation notes:
+- Current task execution models already have `priority: background | low | normal | high`.
+- Prompt records currently preserve flexible `metadata` and normalized `constraints`.
+- The V3 implementation should decide whether importance belongs in prompt `constraints`, prompt `metadata`, or a dedicated V3 contract object.
+- If `critical` is added, define whether it maps to existing `high` priority internally or requires expanding the execution priority enum.
+- Keep caller-provided request priority subordinate to prompt/governance constraints.
+- Backward compatibility rule: V1, V2, missing version, or unrecognized pre-V3 prompt contracts normalize to `importance.level = normal`.
+
+Task mapping:
+- Task 950: Add V3 prompt importance policy for execution priority and latency preference
+  - Define the V3 prompt `importance` contract shape.
+  - Map importance levels to execution priority and latency preference without bypassing admission guardrails.
+  - Prevent caller requests from weakening or inflating prompt importance unless explicitly allowed by governance/prompt owner policy.
+  - Add tests for local-only plus high/critical importance, normal default behavior, and caller override denial.
+  - Document V1, V2, and V3 prompt contract versions in the client communication docs, including that V3 is preferred for new use.
+  - Document the difference between routing policy and importance policy.
+
+## Task 951
+Original task source: ad hoc operator request on 2026-06-04.
+
+Preserved scope:
+- Add AI Node-owned execution queues so scheduling can use Hexe prompt importance, routing policy, provider type, budgets, and runtime state.
+- Use two primary queues:
+  - local queue for llama.cpp/local-provider work
+  - cloud queue for OpenAI/cloud-provider work
+- Implement the queues as internal runtime service/modules with a clear ownership boundary instead of embedding queue logic directly in API route handlers.
+- Do not rely on llama.cpp's internal queue as the primary policy layer because llama.cpp does not know prompt importance, privacy/routing mode, caller identity, budgets, or task family.
+- Keep only a small number of local requests in llama.cpp at once.
+- Clarified occupancy target: allow at most `LLAMACPP_PARALLEL + 1` local requests to be in llama.cpp land at once, where:
+  - up to `LLAMACPP_PARALLEL` requests may be actively processed by llama.cpp
+  - one additional request may be allowed to wait in llama.cpp's own queue
+  - all other admitted local requests stay in the AI Node priority queue
+- The AI Node local queue should order queued work by V3 prompt importance, then FIFO within the same importance level, with anti-starvation behavior for lower-importance work.
+- The cloud queue should also honor V3 importance while preserving cloud-specific budget/governance checks and provider rate-limit behavior.
+- Requests that require a local model swap should not be sent immediately if the active model is busy.
+- Local model-swap jobs should wait in the AI Node local queue until it is safe to switch:
+  - no in-flight local execution on the active model
+  - no protected llama.cpp occupancy that would be interrupted
+  - model-switch lock is available
+  - requested model is configured and allowed by routing/prompt policy
+- The idle default-return behavior should coordinate with the local queue:
+  - return to default when non-default model is idle and no queued job needs that non-default model
+  - delay returning to default if queued work for the active non-default model is waiting
+  - if queued work requires the default model, return to default when safe and dispatch it
+- V3-capable clients should be able to receive an async queued response instead of holding the HTTP request open indefinitely.
+- Queued response should include a stable job identifier/name and retry/check guidance, for example:
+  - `status: queued`
+  - `job_id`
+  - `job_name` or display label
+  - `check_after_seconds`
+  - `status_url` or polling route
+  - `queue_position` when safe/useful
+  - `importance`
+  - `expires_at` or timeout information
+- The job status route should let clients poll for:
+  - queued
+  - running
+  - completed
+  - failed
+  - expired/cancelled
+  - result payload or error payload when complete
+- The queue must preserve privacy and routing constraints. A queued `local_only` job must remain local-only even if it waits.
+- The queue must not bypass the existing global admission guardrails; it should work with admission, not replace resource safety.
+- Add observability for local/cloud queue depth, active local/cloud count, llama occupancy, pending model swaps, active/default model, oldest queued age, and per-importance counts.
+- When implemented, document the API request/response behavior in `docs/json-schemas/client-ai-v2/communication.md`, including V1/V2/V3 prompt contract versioning, V3 as the preferred version for new prompt/API use, importance fields, local/cloud queue behavior, queued-job responses, polling routes, and model-swap/default-return behavior that affects client expectations.
+
+Implementation notes:
+- Start with conservative defaults:
+  - llama.cpp `LLAMACPP_PARALLEL` remains configurable.
+  - local LLM dispatch occupancy defaults to `LLAMACPP_PARALLEL + 1`.
+  - cloud dispatch concurrency should be independently configurable from local dispatch concurrency.
+  - allow synchronous behavior for tiny/fast requests only if they can start immediately and finish within caller timeout.
+  - use async queued response for V3 clients or when local/cloud queue wait is expected.
+- Define how callers opt into async queued behavior:
+  - V3 prompt contract flag
+  - request flag such as `response_mode: async_if_queued`
+  - or server-side policy when estimated local wait exceeds a threshold
+- Job IDs must be non-sensitive and must not encode prompt text, customer secrets, or raw input.
+- Queue persistence can be in-memory for first pass unless durability is required by the contract; document the restart behavior clearly.
+- Suggested module boundary:
+  - `src/ai_node/runtime/execution_queue.py` or a small `execution_queue/` package owns common queue entries, importance ordering, job state, async response contracts, expiry, and diagnostics.
+  - `src/ai_node/runtime/local_llm_queue.py` owns local-provider dispatch, llama occupancy accounting, model-swap gating, default-model return coordination, and local diagnostics.
+  - `src/ai_node/runtime/cloud_execution_queue.py` owns cloud-provider dispatch concurrency, cloud retry/rate-limit coordination, and cloud diagnostics.
+  - `node_control_api.py` only adapts HTTP request/response shape and delegates queued work to the queue service.
+  - provider/local adapter code remains responsible for the actual llama.cpp HTTP call.
+  - service manager remains responsible for model switching/start/stop, not queue policy.
+
+Task mapping:
+- Task 951: Add local and cloud execution queues with async queued-job response contract
+  - Create internal queue service/modules with explicit interfaces for enqueue, dispatch, job status, cancellation/expiry, and diagnostics.
+  - Define the V3 async queue response and polling contract.
+  - Implement local and cloud priority queues using V3 importance.
+  - Enforce local llama occupancy as `LLAMACPP_PARALLEL + 1`.
+  - Delay local model-swap work until safe, then dispatch using existing model-switching/readiness paths.
+  - Coordinate queued model-swap work with idle default-model return behavior.
+  - Add independent local and cloud concurrency settings.
+  - Add job status storage, status route, and result retrieval path.
+  - Add queue diagnostics in node status/debug surfaces.
+  - Add tests for importance ordering, FIFO within priority, anti-starvation, timeout/expiry, queued response shape, local-only privacy preservation, cloud/local queue separation, and model-swap delay behavior.
+  - Update `docs/json-schemas/client-ai-v2/communication.md` with all three prompt contract versions, V3 preferred-use guidance, the API call contract, and client behavior: if the node replies `job queued`, poll after `check_after_seconds` using the returned job id/status route.

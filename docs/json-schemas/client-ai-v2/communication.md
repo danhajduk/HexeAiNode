@@ -51,6 +51,36 @@ The AI Node owns:
 
 The AI Node does not judge benchmark correctness and does not pick a winner.
 
+## Prompt Contract Versions
+
+The AI Node accepts legacy and V2+ prompt registrations. Prefer V3 for new prompt contracts because it is the first
+contract version that can declare routing intent directly in the prompt policy.
+
+| Version | Use | Routing behavior |
+| --- | --- | --- |
+| V1 | Legacy prompt records and older clients. | No prompt-level routing policy; requests use legacy provider selection. |
+| V2 | Benchmark-capable prompt contracts with output and evaluation metadata. | No prompt-level routing policy; requests may still narrow routing with provider/governance fields. |
+| V3 | Preferred contract for new clients. | Adds `constraints.routing_policy.mode` as the prompt-level routing boundary. |
+
+V3 prompt routing modes:
+
+- `local_only`: execute only on the local provider. Do not fall back to cloud.
+- `local_preferred`: prefer local execution, but cloud may be eligible if local cannot serve the request.
+- `cloud_only`: execute only on a cloud provider.
+- `cloud_fallback`: prefer cloud execution, but local may be eligible if cloud cannot serve the request.
+
+The prompt routing policy and the API request both participate in routing, but they do not have equal authority. The
+prompt policy is the maximum allowed boundary for the prompt. The API request may narrow or prefer a route for a single
+call, and node governance may restrict it further. A request must not weaken prompt privacy or broaden the prompt's
+routing boundary.
+
+Examples:
+
+- Prompt `local_only` plus API `cloud_only`: reject as incompatible.
+- Prompt `local_preferred` plus API `local_only`: allowed because the request is stricter.
+- Prompt V1 or V2 without routing policy: use legacy provider selection unless the request narrows it.
+- Governance that disables OpenAI: cloud routes are unavailable even when the prompt or request allows cloud.
+
 ## Production Execution
 
 Production execution continues to use the existing route:

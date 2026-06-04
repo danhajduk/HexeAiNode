@@ -9,6 +9,7 @@ from ai_node.persistence.prompt_service_state_store import (
     normalize_prompt_service_state,
     validate_prompt_service_state,
 )
+from ai_node.prompts.registration import normalize_prompt_constraints
 
 
 class PromptServiceStateStoreTests(unittest.TestCase):
@@ -42,7 +43,7 @@ class PromptServiceStateStoreTests(unittest.TestCase):
                     "allowed_customers": [],
                     "execution_policy": {"allow_direct_execution": True, "allow_version_pinning": True},
                     "provider_preferences": {"preferred_providers": ["openai"], "preferred_models": ["gpt-5-mini"]},
-                    "constraints": {"max_timeout_s": 30, "structured_output_required": False, "allowed_model_overrides": []},
+                    "constraints": {"max_timeout_s": 30, "structured_output_required": False, "allowed_model_overrides": [], "routing_policy": None},
                     "metadata": {},
                     "current_version": "v1",
                     "versions": [
@@ -101,6 +102,20 @@ class PromptServiceStateStoreTests(unittest.TestCase):
             loaded = store.load_or_create()
             self.assertTrue(path.exists())
             self.assertIn("prompt_services", loaded)
+
+    def test_normalize_constraints_accepts_v3_routing_policy(self):
+        payload = normalize_prompt_constraints(
+            {
+                "max_timeout_s": 30,
+                "routing_policy": {"mode": "LOCAL_ONLY"},
+            }
+        )
+
+        self.assertEqual(payload["routing_policy"], {"mode": "local_only"})
+
+    def test_normalize_constraints_rejects_unknown_v3_routing_policy(self):
+        with self.assertRaisesRegex(ValueError, "invalid_prompt_routing_policy_mode"):
+            normalize_prompt_constraints({"routing_policy": {"mode": "edge_only"}})
 
     def test_normalize_preserves_review_due_and_access_policy(self):
         payload = normalize_prompt_service_state(
