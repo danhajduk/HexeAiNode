@@ -47,6 +47,5 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 949: Add tests and documentation for local LLM default model behavior
 [TODO] Task 950: Add V3 prompt importance policy for execution priority and latency preference
 [TODO] Task 951: Add local and cloud execution queues with async queued-job response contract

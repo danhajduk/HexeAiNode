@@ -28,6 +28,31 @@ scripts/llamacpp-control.sh logs
 scripts/llamacpp-control.sh stop
 ```
 
+Validate the currently loaded model:
+
+```bash
+curl --unix-socket /run/hexe/ai-node/llamacpp.sock http://llamacpp/v1/models
+```
+
+Validate local default-model resolution through the AI Node by omitting `requested_model` while requesting the local
+provider:
+
+```bash
+curl -s http://127.0.0.1:9002/api/execution/direct \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "task_id": "local-default-smoke",
+    "task_family": "task.chat",
+    "requested_by": "operator",
+    "requested_provider": "local",
+    "inputs": {"prompt": "Reply with the word ready."},
+    "trace_id": "local-default-smoke"
+  }'
+```
+
+The response should report `provider_used: "local"` and `model_used: "qwen3-8b-q4_k_m"` unless an explicit prompt or
+request model override is in effect.
+
 The llama.cpp socket defaults to `/run/hexe/ai-node/llamacpp.sock`.
 The health wrapper socket defaults to `/run/hexe/ai-node/llamacpp-health.sock`.
 Downloaded model cache defaults to `runtime/cache/llamacpp` so Hugging Face downloads survive container recreation.

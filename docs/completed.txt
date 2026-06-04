@@ -519,3 +519,4 @@ Task 945: Change local LLM runtime defaults to qwen3-8b-q4_k_m - Completed on 06
 Task 946: Apply qwen3-8b-q4_k_m when local execution omits an explicit model - Completed on 06/04/2026 16:44
 Task 947: Preserve explicit local model overrides across direct benchmark and compare execution - Completed on 06/04/2026 16:44
 Task 948: Add idle reversion from explicit local model overrides back to qwen3-8b-q4_k_m - Completed on 06/04/2026 16:55
+Task 949: Add tests and documentation for local LLM default model behavior - Completed on 06/04/2026 16:56

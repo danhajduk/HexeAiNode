@@ -129,6 +129,9 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertIsNone(first_payload["cpu_percent"])
         self.assertEqual(first_payload["mem_percent"], 12.5)
         self.assertEqual(first_payload["container_name"], "hexe-ai-node-llamacpp")
+        self.assertEqual(first_payload["default_model_id"], "qwen3-8b-q4_k_m")
+        self.assertIn("default_revert", first_payload)
+        self.assertEqual(first_payload["default_revert"]["default_model_id"], "qwen3-8b-q4_k_m")
         self.assertEqual(second_payload["cpu_percent"], 25.0)
 
     def test_ensure_local_llm_model_restarts_with_configured_model_env(self):
