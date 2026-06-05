@@ -1,9 +1,11 @@
 import asyncio
 import heapq
 import itertools
+import json
 import uuid
 from copy import deepcopy
 from datetime import timedelta
+from pathlib import Path
 from typing import Awaitable, Callable
 
 from ai_node.time_utils import local_now, local_now_iso
@@ -27,6 +29,7 @@ class ExecutionQueueService:
         cloud_concurrency: int = 4,
         check_after_seconds: int = 5,
         job_ttl_seconds: int = 3600,
+        state_path: str | None = None,
     ) -> None:
         self._logger = logger
         self._local_concurrency = max(int(local_concurrency), 1)
@@ -39,6 +42,9 @@ class ExecutionQueueService:
         self._queues: dict[str, list[tuple[int, int, str]]] = {"local": [], "cloud": []}
         self._active_counts: dict[str, int] = {"local": 0, "cloud": 0}
         self._dispatcher_tasks: dict[str, asyncio.Task] = {}
+        self._state_path = Path(state_path) if str(state_path or "").strip() else None
+        self._recovered_unfinished_count = 0
+        self._load_persisted_jobs()
 
     def queued_response(self, *, job_id: str, base_path: str = "/api/execution/jobs") -> dict:
         job = self._jobs.get(job_id) or {}
@@ -94,6 +100,7 @@ class ExecutionQueueService:
         async with self._lock:
             self._jobs[job_id] = job
             heapq.heappush(self._queues[queue_key], (rank, sequence, job_id))
+            self._persist_jobs_locked()
             self._ensure_dispatcher_locked(queue_key)
         return self.queued_response(job_id=job_id)
 
@@ -123,6 +130,7 @@ class ExecutionQueueService:
                 job["completed_at"] = cancelled_at
                 job["error"] = {"code": "cancelled", "message": cancel_reason}
                 job["_runner"] = None
+                self._persist_jobs_locked()
                 return self._public_job_payload(job)
             if current_status in {"running"}:
                 payload = self._public_job_payload(job)
@@ -157,6 +165,11 @@ class ExecutionQueueService:
                 }
             return {
                 "configured": True,
+                "persistence": {
+                    "configured": self._state_path is not None,
+                    "path": str(self._state_path) if self._state_path is not None else None,
+                    "recovered_unfinished_count": self._recovered_unfinished_count,
+                },
                 "queues": queues,
                 "job_count": len(self._jobs),
                 "generated_at": local_now_iso(),
@@ -197,6 +210,7 @@ class ExecutionQueueService:
                 job["started_at"] = local_now_iso()
                 self._active_counts[queue_key] = self._active_counts.get(queue_key, 0) + 1
                 runner = job.get("_runner")
+                self._persist_jobs_locked()
             asyncio.create_task(self._run_job(queue_key=queue_key, job_id=job_id, runner=runner))
 
     async def _run_job(self, *, queue_key: str, job_id: str, runner) -> None:
@@ -210,6 +224,8 @@ class ExecutionQueueService:
                     job["status"] = "completed"
                     job["result"] = result if isinstance(result, dict) else {}
                     job["completed_at"] = local_now_iso()
+                    job["_runner"] = None
+                    self._persist_jobs_locked()
         except Exception as exc:
             if hasattr(self._logger, "warning"):
                 self._logger.warning(
@@ -225,6 +241,8 @@ class ExecutionQueueService:
                         "message": str(exc).strip() or type(exc).__name__,
                     }
                     job["completed_at"] = local_now_iso()
+                    job["_runner"] = None
+                    self._persist_jobs_locked()
         finally:
             async with self._lock:
                 self._active_counts[queue_key] = max(self._active_counts.get(queue_key, 0) - 1, 0)
@@ -297,3 +315,69 @@ class ExecutionQueueService:
         payload["eta"] = self._queue_eta(job_id=str(job.get("job_id") or ""))
         payload["check_after_seconds"] = self._check_after_seconds
         return payload
+
+    def _load_persisted_jobs(self) -> None:
+        if self._state_path is None or not self._state_path.exists():
+            return
+        try:
+            payload = json.loads(self._state_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            if hasattr(self._logger, "warning"):
+                self._logger.warning(
+                    "[execution-queue-state-load-failed] %s",
+                    {"path": str(self._state_path), "error": str(exc).strip() or type(exc).__name__},
+                )
+            return
+        jobs = payload.get("jobs") if isinstance(payload, dict) else []
+        max_sequence = 0
+        now_iso = local_now_iso()
+        for item in jobs if isinstance(jobs, list) else []:
+            if not isinstance(item, dict):
+                continue
+            job_id = str(item.get("job_id") or "").strip()
+            if not job_id:
+                continue
+            job = deepcopy(item)
+            queue_key = "local" if str(job.get("queue") or "").strip().lower() == "local" else "cloud"
+            importance = str(job.get("importance") or "normal").strip().lower()
+            sequence = max(int(job.get("sequence") or 0), 0)
+            max_sequence = max(max_sequence, sequence)
+            job["queue"] = queue_key
+            job["importance"] = importance if importance in IMPORTANCE_RANK else "normal"
+            job["_runner"] = None
+            if str(job.get("status") or "").strip().lower() in {"queued", "running"}:
+                self._recovered_unfinished_count += 1
+                job["status"] = "failed"
+                job["completed_at"] = job.get("completed_at") or now_iso
+                job["error"] = {
+                    "code": "execution_queue_recovery_required",
+                    "message": "queued job was recovered after restart without an executable runner; resubmit if still needed",
+                }
+            self._jobs[job_id] = job
+        self._sequence = itertools.count(max_sequence + 1)
+        if self._recovered_unfinished_count:
+            self._persist_jobs_locked()
+
+    def _persist_jobs_locked(self) -> None:
+        if self._state_path is None:
+            return
+        jobs = []
+        for job in self._jobs.values():
+            public_job = self._public_job_payload(job)
+            if job.get("sequence") is not None:
+                public_job["sequence"] = int(job.get("sequence") or 0)
+            jobs.append(public_job)
+        payload = {
+            "schema_version": "1.0",
+            "generated_at": local_now_iso(),
+            "jobs": sorted(jobs, key=lambda item: int(item.get("sequence") or 0)),
+        }
+        try:
+            self._state_path.parent.mkdir(parents=True, exist_ok=True)
+            self._state_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        except Exception as exc:
+            if hasattr(self._logger, "warning"):
+                self._logger.warning(
+                    "[execution-queue-state-save-failed] %s",
+                    {"path": str(self._state_path), "error": str(exc).strip() or type(exc).__name__},
+                )

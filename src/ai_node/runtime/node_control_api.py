@@ -704,6 +704,12 @@ class NodeControlState:
             cloud_concurrency=max(_env_int("HEXE_EXECUTION_QUEUE_CLOUD_CONCURRENCY", 4), 1),
             check_after_seconds=max(_env_int("HEXE_EXECUTION_QUEUE_CHECK_AFTER_SECONDS", 5), 1),
             job_ttl_seconds=max(_env_int("HEXE_EXECUTION_QUEUE_JOB_TTL_SECONDS", 3600), 60),
+            state_path=str(
+                Path(
+                    os.environ.get("HEXE_EXECUTION_QUEUE_STATE_PATH")
+                    or self._config_path.parent / "execution_queue_jobs.json"
+                )
+            ),
         )
         self._local_preferred_spillover_enabled = _env_bool("HEXE_LOCAL_PREFERRED_SPILLOVER_ENABLED", True)
         self._local_preferred_spillover_critical_pending = max(

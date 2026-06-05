@@ -47,5 +47,4 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 965: Add persisted queued job state for async execution recovery
 [TODO] Task 966: Add per-client queue fairness limits

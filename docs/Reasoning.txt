@@ -768,3 +768,9 @@ Chosen fix: Added queued-only cancellation to the internal execution queue and e
 What changed: Added queue cancellation state transitions, NodeControl cancellation method, FastAPI route, queue/state/API tests, and Client AI communication docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py tests/test_node_control_fastapi.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
 ###########
+Task #965
+Step objective: Add persisted queued job state for async execution recovery.
+Chosen fix: Persisted public async job records to a queue state file and recovered unfinished queued/running jobs as terminal failures with `execution_queue_recovery_required`, since in-memory runners cannot be resumed safely after restart.
+What changed: Added queue state persistence, startup recovery, diagnostics persistence metadata, default NodeControl state path wiring, focused recovery tests, and Client AI/configuration docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py tests/test_node_control_fastapi.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
+###########

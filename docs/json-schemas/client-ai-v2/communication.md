@@ -300,8 +300,13 @@ The job status payload includes `status` as `queued`, `running`, `completed`, `f
 place the normal `TaskExecutionResult` under `result`; failed jobs return a short `error` object. Both the initial
 queued response and the polled job status include `routing_decision` and `eta`. The `eta` object is a rough start-time
 estimate based on current queue position, active jobs, queue concurrency, and `check_after_seconds`; clients should poll
-using `check_after_seconds` rather than treating the estimate as a guarantee. Queue records are process-local and
-intended for short client polling, not durable storage across API restarts.
+using `check_after_seconds` rather than treating the estimate as a guarantee.
+
+Queued job status is persisted to `HEXE_EXECUTION_QUEUE_STATE_PATH`, or by default to `execution_queue_jobs.json` next
+to the node config. Completed, failed, and cancelled job records can still be polled after API restart while they remain
+in the queue state file. Jobs that were `queued` or `running` when the API stopped are recovered as `failed` with
+`error.code = "execution_queue_recovery_required"` because the in-memory execution runner cannot be safely resumed from
+disk. Clients should resubmit the request if it is still needed.
 
 Cancel a queued job before it starts with:
 
@@ -320,6 +325,9 @@ Optional body:
 Cancellation returns the job payload with `status = "cancelled"` and `error.code = "cancelled"`. Running or already
 terminal jobs cannot be cancelled; the API returns HTTP `409` with `cancel_rejected_reason`. Missing jobs return HTTP
 `404`.
+
+Queue diagnostics include a `persistence` object showing whether status persistence is configured, the state-file path,
+and `recovered_unfinished_count` for unfinished jobs recovered during startup.
 
 Queue selection:
 

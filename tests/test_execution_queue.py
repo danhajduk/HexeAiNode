@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import tempfile
 import unittest
+from pathlib import Path
 
 from ai_node.runtime.execution_queue import ExecutionQueueService
 
@@ -198,6 +200,78 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response["cancel_rejected_reason"], "job_already_running")
         release_first.set()
         await _wait_for_status(queue, job_id=first["job_id"], status="completed")
+
+    async def test_persists_completed_job_for_later_status_polling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "execution_queue_jobs.json"
+            queue = ExecutionQueueService(
+                logger=logging.getLogger("execution-queue-test"),
+                local_concurrency=1,
+                state_path=str(state_path),
+            )
+            response = await queue.enqueue(
+                queue="local",
+                importance="normal",
+                job_name="persisted",
+                request_payload={"task_id": "persisted"},
+                runner=lambda: _completed({"ok": True}),
+            )
+            await _wait_for_status(queue, job_id=response["job_id"], status="completed")
+
+            restored = ExecutionQueueService(
+                logger=logging.getLogger("execution-queue-test"),
+                local_concurrency=1,
+                state_path=str(state_path),
+            )
+            status = await restored.job_status(job_id=response["job_id"])
+            diagnostics = await restored.diagnostics()
+
+            self.assertEqual(status["status"], "completed")
+            self.assertEqual(status["result"], {"ok": True})
+            self.assertTrue(diagnostics["persistence"]["configured"])
+            self.assertEqual(diagnostics["persistence"]["recovered_unfinished_count"], 0)
+
+    async def test_recovers_unfinished_jobs_as_failed_after_restart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "execution_queue_jobs.json"
+            queue = ExecutionQueueService(
+                logger=logging.getLogger("execution-queue-test"),
+                local_concurrency=1,
+                state_path=str(state_path),
+            )
+            release_first = asyncio.Event()
+            first = await queue.enqueue(
+                queue="local",
+                importance="normal",
+                job_name="running",
+                request_payload={"task_id": "running"},
+                runner=lambda: _blocking_job(name="running", order=[], release=release_first),
+            )
+            await _wait_for_status(queue, job_id=first["job_id"], status="running")
+            second = await queue.enqueue(
+                queue="local",
+                importance="normal",
+                job_name="queued",
+                request_payload={"task_id": "queued"},
+                runner=lambda: _completed({"ok": True}),
+            )
+
+            restored = ExecutionQueueService(
+                logger=logging.getLogger("execution-queue-test"),
+                local_concurrency=1,
+                state_path=str(state_path),
+            )
+            running_status = await restored.job_status(job_id=first["job_id"])
+            queued_status = await restored.job_status(job_id=second["job_id"])
+            diagnostics = await restored.diagnostics()
+
+            self.assertEqual(running_status["status"], "failed")
+            self.assertEqual(queued_status["status"], "failed")
+            self.assertEqual(running_status["error"]["code"], "execution_queue_recovery_required")
+            self.assertEqual(queued_status["error"]["code"], "execution_queue_recovery_required")
+            self.assertEqual(diagnostics["persistence"]["recovered_unfinished_count"], 2)
+            release_first.set()
+            await _wait_for_status(queue, job_id=first["job_id"], status="completed")
 
 
 async def _completed(payload: dict) -> dict:
