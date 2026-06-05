@@ -1917,9 +1917,9 @@ class NodeControlState:
         )
         if int(pressure.get("pending_count") or 0) < threshold:
             return False
-        return self._cloud_execution_queue_available()
+        return self._cloud_execution_queue_available(request=request)
 
-    def _cloud_execution_queue_available(self) -> bool:
+    def _cloud_execution_queue_available(self, *, request: TaskExecutionRequest) -> bool:
         if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "provider_selection_context_payload"):
             return False
         try:
@@ -1930,6 +1930,8 @@ class NodeControlState:
         usable_by_provider = context.get("usable_models_by_provider") if isinstance(context.get("usable_models_by_provider"), dict) else {}
         available_by_provider = context.get("available_models_by_provider") if isinstance(context.get("available_models_by_provider"), dict) else {}
         health_by_provider = context.get("provider_health") if isinstance(context.get("provider_health"), dict) else {}
+        provider_budget_limits = context.get("provider_budget_limits") if isinstance(context.get("provider_budget_limits"), dict) else {}
+        request_max_cost_cents = TaskExecutionService._request_max_cost_cents(request=request)
         for provider_id in enabled:
             if not provider_id or provider_id == "local":
                 continue
@@ -1937,9 +1939,53 @@ class NodeControlState:
             if availability and availability not in {"available", "degraded"}:
                 continue
             models = list(usable_by_provider.get(provider_id) or available_by_provider.get(provider_id) or [])
-            if any(str(model_id or "").strip() for model_id in models):
-                return True
+            if not any(str(model_id or "").strip() for model_id in models):
+                continue
+            if not self._cloud_provider_budget_allows_spillover(
+                provider_id=provider_id,
+                request_max_cost_cents=request_max_cost_cents,
+                provider_budget_limits=provider_budget_limits,
+            ):
+                continue
+            return True
         return False
+
+    def _cloud_provider_budget_allows_spillover(
+        self,
+        *,
+        provider_id: str,
+        request_max_cost_cents: int | None,
+        provider_budget_limits: dict,
+    ) -> bool:
+        budget_limit = provider_budget_limits.get(provider_id) if isinstance(provider_budget_limits, dict) else None
+        if request_max_cost_cents is not None and isinstance(budget_limit, dict):
+            max_cost = self._optional_int(budget_limit.get("max_cost_cents"))
+            if max_cost is not None and int(request_max_cost_cents) > max_cost:
+                return False
+        budget_state = self.budget_state_payload()
+        provider_budgets = budget_state.get("provider_budgets") if isinstance(budget_state, dict) else []
+        if isinstance(provider_budgets, list):
+            for item in provider_budgets:
+                if not isinstance(item, dict):
+                    continue
+                if str(item.get("provider_id") or "").strip().lower() != provider_id:
+                    continue
+                remaining = self._optional_int(item.get("remaining_cost_cents"))
+                if remaining is not None and remaining <= 0:
+                    return False
+                if request_max_cost_cents is not None and remaining is not None and int(request_max_cost_cents) > remaining:
+                    return False
+                return True
+        return True
+
+    @staticmethod
+    def _optional_int(value) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _client_ai_v2_schema_dir() -> Path:

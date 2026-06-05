@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 954: Add budget and cost guardrails for local-preferred cloud spillover
 [TODO] Task 955: Add V3 privacy-aware routing constraints for local and cloud execution
 [TODO] Task 956: Add queue ETA estimates to queued execution responses
 [TODO] Task 957: Use provider task capability maps when choosing local or cloud queues

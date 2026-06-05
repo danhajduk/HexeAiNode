@@ -524,3 +524,4 @@ Task 950: Add V3 prompt importance policy for execution priority and latency pre
 Task 951: Add local and cloud execution queues with async queued-job response contract - Completed on 06/04/2026 17:10
 Task 952: Add local-preferred cloud spillover policy for high-importance queued execution - Completed on 06/04/2026 17:52
 Task 953: Add routing decision metadata to queued execution responses - Completed on 06/04/2026 17:55
+Task 954: Add budget and cost guardrails for local-preferred cloud spillover - Completed on 06/04/2026 17:58

@@ -218,8 +218,8 @@ Queue selection:
 - Cloud queue: explicit cloud provider, request `cloud_only`, or a V3 prompt policy that is `cloud_only` or
   `cloud_fallback`.
 - Spillover: `local_preferred` high-importance or critical queued requests may enter the cloud queue when the local
-  queue is already backed up and an eligible cloud model is available. This does not apply to `local_only` or explicit
-  `requested_provider = "local"` requests.
+  queue is already backed up, an eligible cloud model is available, and the request passes configured cloud budget and
+  max-cost guardrails. This does not apply to `local_only` or explicit `requested_provider = "local"` requests.
 - If neither side declares a route, the queued request defaults to the cloud queue and normal provider resolution still
   runs at execution time.
 

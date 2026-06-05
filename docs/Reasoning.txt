@@ -702,3 +702,9 @@ Chosen fix: Stored routing decision metadata on queued jobs so the initial queue
 What changed: Added `routing_decision` to queue storage/public payloads, direct execution queue context, spillover metadata, tests, and client documentation.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
 ###########
+Task #954
+Step objective: Add budget and cost guardrails for local-preferred cloud spillover.
+Chosen fix: Extended the spillover eligibility check so a backed-up local-preferred request only moves to cloud when the eligible cloud provider also fits request max-cost limits and provider budget state.
+What changed: Added spillover budget checks, malformed-budget tolerance, regression coverage for budget-blocked spillover, and client/config documentation.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
+###########

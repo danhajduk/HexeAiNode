@@ -654,6 +654,66 @@ class NodeControlApiTests(unittest.TestCase):
 
         asyncio.run(run_scenario())
 
+    def test_execute_direct_does_not_spill_when_cloud_budget_limit_blocks_request(self):
+        class _BudgetLimitedProviderRuntimeManager(self._FakeProviderRuntimeManager):
+            def provider_selection_context_payload(self):
+                payload = super().provider_selection_context_payload()
+                payload["provider_budget_limits"] = {"openai": {"max_cost_cents": 1, "period": "monthly"}}
+                return payload
+
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                release_local = asyncio.Event()
+                execution_queue = ExecutionQueueService(
+                    logger=logging.getLogger("node-control-test"),
+                    local_concurrency=1,
+                    cloud_concurrency=1,
+                )
+                blocker = await execution_queue.enqueue(
+                    queue="local",
+                    importance="normal",
+                    job_name="local blocker",
+                    request_payload={"task_id": "local-blocker"},
+                    runner=lambda: self._blocking_queue_job(release=release_local),
+                )
+                await self._wait_for_queue_status(execution_queue, blocker["job_id"], "running")
+
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=_BudgetLimitedProviderRuntimeManager(),
+                    execution_queue=execution_queue,
+                )
+                state._local_preferred_spillover_high_pending = 1  # noqa: SLF001
+
+                queued = await state.execute_direct(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-spillover-budget-001",
+                            "task_family": "task.classification",
+                            "requested_by": "service.alpha",
+                            "inputs": {"text": "hello"},
+                            "constraints": {
+                                "routing_policy": {"mode": "local_preferred"},
+                                "budget": {"max_cost_cents": 5},
+                            },
+                            "response_mode": "async_if_queued",
+                            "priority": "high",
+                            "trace_id": "trace-spillover-budget-001",
+                        }
+                    )
+                )
+
+                self.assertEqual(queued["queue"], "local")
+                self.assertEqual(queued["routing_decision"]["reason"], "routing_policy_local_preferred")
+                self.assertFalse(queued["routing_decision"]["spillover"])
+                release_local.set()
+                await self._wait_for_execution_job(state, queued["job_id"], "completed")
+                await self._wait_for_queue_status(execution_queue, blocker["job_id"], "completed")
+
+        asyncio.run(run_scenario())
+
     def test_execute_direct_does_not_spill_local_only_job_to_cloud(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:

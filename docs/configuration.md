@@ -72,6 +72,8 @@ Backend runtime:
 - `HEXE_LOCAL_PREFERRED_SPILLOVER_ENABLED` default `true`; allows high-importance `local_preferred` queued jobs to use cloud when local is backed up and cloud is eligible
 - `HEXE_LOCAL_PREFERRED_SPILLOVER_CRITICAL_PENDING` default `2`; critical spillover threshold for active + queued local jobs
 - `HEXE_LOCAL_PREFERRED_SPILLOVER_HIGH_PENDING` default `5`; high-priority spillover threshold for active + queued local jobs
+- Local-preferred spillover also honors explicit request `constraints.max_cost_cents`, `constraints.max_cost_usd`, or
+  `constraints.budget.max_cost_cents` values plus configured provider budget ceilings before moving work to cloud.
 
 Provider-specific:
 
