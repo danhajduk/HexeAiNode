@@ -710,6 +710,7 @@ class NodeControlState:
                     or self._config_path.parent / "execution_queue_jobs.json"
                 )
             ),
+            max_pending_per_client=max(_env_int("HEXE_EXECUTION_QUEUE_MAX_PENDING_PER_CLIENT", 20), 0),
         )
         self._local_preferred_spillover_enabled = _env_bool("HEXE_LOCAL_PREFERRED_SPILLOVER_ENABLED", True)
         self._local_preferred_spillover_critical_pending = max(
@@ -1834,7 +1835,10 @@ class NodeControlState:
             request_payload=execution_request.model_dump(mode="json"),
             runner=lambda: self._execute_direct_now(request=execution_request),
             routing_decision=queue_context.get("routing_decision") if isinstance(queue_context.get("routing_decision"), dict) else None,
+            client_id=request_copy.requested_by,
         )
+        if response.get("status") != "queued":
+            return response
         return {
             **response,
             "message": f"job queued - check in {response['check_after_seconds']} secs",

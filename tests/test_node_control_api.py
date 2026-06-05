@@ -693,6 +693,55 @@ class NodeControlApiTests(unittest.TestCase):
 
         asyncio.run(run_scenario())
 
+    def test_execute_direct_rejects_async_queue_when_client_pending_limit_is_reached(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                release_local = asyncio.Event()
+                execution_queue = ExecutionQueueService(
+                    logger=logging.getLogger("node-control-test"),
+                    local_concurrency=1,
+                    cloud_concurrency=1,
+                    max_pending_per_client=1,
+                )
+                blocker = await execution_queue.enqueue(
+                    queue="local",
+                    importance="normal",
+                    job_name="client blocker",
+                    request_payload={"task_id": "client-blocker"},
+                    runner=lambda: self._blocking_queue_job(release=release_local),
+                    client_id="service.alpha",
+                )
+                await self._wait_for_queue_status(execution_queue, blocker["job_id"], "running")
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                    execution_queue=execution_queue,
+                )
+
+                rejected = await state.execute_direct(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-fairness-001",
+                            "task_family": "task.classification",
+                            "requested_by": "service.alpha",
+                            "requested_provider": "local",
+                            "inputs": {"text": "hello"},
+                            "response_mode": "async_if_queued",
+                            "trace_id": "trace-fairness-001",
+                        }
+                    )
+                )
+
+                self.assertEqual(rejected["status"], "rejected")
+                self.assertEqual(rejected["error_code"], "queue_client_limit_exceeded")
+                self.assertEqual(rejected["client_id"], "service.alpha")
+                release_local.set()
+                await self._wait_for_queue_status(execution_queue, blocker["job_id"], "completed")
+
+        asyncio.run(run_scenario())
+
     def test_execute_direct_queues_sensitive_v3_prompt_on_local_queue(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:

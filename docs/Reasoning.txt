@@ -774,3 +774,9 @@ Chosen fix: Persisted public async job records to a queue state file and recover
 What changed: Added queue state persistence, startup recovery, diagnostics persistence metadata, default NodeControl state path wiring, focused recovery tests, and Client AI/configuration docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py tests/test_node_control_fastapi.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
 ###########
+Task #966
+Step objective: Add per-client queue fairness limits.
+Chosen fix: Added a configurable per-client pending async job cap keyed by `requested_by`, counting queued plus running jobs across local/cloud queues before accepting another queued job.
+What changed: Added queue fairness enforcement and diagnostics, NodeControl env wiring, async rejection response behavior, queue/state tests, and Client AI/configuration docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py tests/test_node_control_fastapi.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
+###########

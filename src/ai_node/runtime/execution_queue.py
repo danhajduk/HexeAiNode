@@ -30,12 +30,14 @@ class ExecutionQueueService:
         check_after_seconds: int = 5,
         job_ttl_seconds: int = 3600,
         state_path: str | None = None,
+        max_pending_per_client: int = 20,
     ) -> None:
         self._logger = logger
         self._local_concurrency = max(int(local_concurrency), 1)
         self._cloud_concurrency = max(int(cloud_concurrency), 1)
         self._check_after_seconds = max(int(check_after_seconds), 1)
         self._job_ttl_seconds = max(int(job_ttl_seconds), 60)
+        self._max_pending_per_client = max(int(max_pending_per_client), 0)
         self._sequence = itertools.count(1)
         self._lock = asyncio.Lock()
         self._jobs: dict[str, dict] = {}
@@ -72,6 +74,7 @@ class ExecutionQueueService:
         request_payload: dict,
         runner: Callable[[], Awaitable[dict]],
         routing_decision: dict | None = None,
+        client_id: str | None = None,
     ) -> dict:
         queue_key = "local" if str(queue or "").strip().lower() == "local" else "cloud"
         importance_key = str(importance or "normal").strip().lower()
@@ -79,9 +82,11 @@ class ExecutionQueueService:
         sequence = next(self._sequence)
         job_id = f"job-{uuid.uuid4().hex[:16]}"
         now = local_now()
+        client_key = str(client_id or "").strip()
         job = {
             "job_id": job_id,
             "job_name": str(job_name or job_id).strip() or job_id,
+            "client_id": client_key or None,
             "queue": queue_key,
             "importance": importance_key if importance_key in IMPORTANCE_RANK else "normal",
             "routing_decision": deepcopy(routing_decision) if isinstance(routing_decision, dict) else None,
@@ -98,6 +103,19 @@ class ExecutionQueueService:
             "_runner": runner,
         }
         async with self._lock:
+            if client_key and self._max_pending_per_client:
+                pending_count = self._client_pending_count_locked(client_id=client_key)
+                if pending_count >= self._max_pending_per_client:
+                    return {
+                        "status": "rejected",
+                        "error_code": "queue_client_limit_exceeded",
+                        "error_message": "queue_client_limit_exceeded",
+                        "client_id": client_key,
+                        "queue": queue_key,
+                        "pending_count": pending_count,
+                        "max_pending_per_client": self._max_pending_per_client,
+                        "check_after_seconds": self._check_after_seconds,
+                    }
             self._jobs[job_id] = job
             heapq.heappush(self._queues[queue_key], (rank, sequence, job_id))
             self._persist_jobs_locked()
@@ -148,23 +166,38 @@ class ExecutionQueueService:
             for queue_key, entries in self._queues.items():
                 queued_ids = [item[2] for item in sorted(entries)]
                 per_importance: dict[str, int] = {}
+                per_client_pending: dict[str, int] = {}
                 oldest_queued_at = None
                 for job_id in queued_ids:
                     job = self._jobs.get(job_id) or {}
                     importance = str(job.get("importance") or "normal")
                     per_importance[importance] = per_importance.get(importance, 0) + 1
+                    client_id = str(job.get("client_id") or "").strip()
+                    if client_id:
+                        per_client_pending[client_id] = per_client_pending.get(client_id, 0) + 1
                     queued_at = job.get("queued_at")
                     if queued_at and (oldest_queued_at is None or str(queued_at) < str(oldest_queued_at)):
                         oldest_queued_at = queued_at
+                for job in self._jobs.values():
+                    if str(job.get("queue") or "") != queue_key or str(job.get("status") or "") != "running":
+                        continue
+                    client_id = str(job.get("client_id") or "").strip()
+                    if client_id:
+                        per_client_pending[client_id] = per_client_pending.get(client_id, 0) + 1
                 queues[queue_key] = {
                     "queued_count": len(queued_ids),
                     "active_count": self._active_counts.get(queue_key, 0),
                     "concurrency": self._concurrency(queue_key),
                     "oldest_queued_at": oldest_queued_at,
                     "per_importance": per_importance,
+                    "per_client_pending": per_client_pending,
                 }
             return {
                 "configured": True,
+                "fairness": {
+                    "max_pending_per_client": self._max_pending_per_client,
+                    "scope": "all_queues",
+                },
                 "persistence": {
                     "configured": self._state_path is not None,
                     "path": str(self._state_path) if self._state_path is not None else None,
@@ -297,6 +330,7 @@ class ExecutionQueueService:
             for key in (
                 "job_id",
                 "job_name",
+                "client_id",
                 "queue",
                 "importance",
                 "routing_decision",
@@ -381,3 +415,14 @@ class ExecutionQueueService:
                     "[execution-queue-state-save-failed] %s",
                     {"path": str(self._state_path), "error": str(exc).strip() or type(exc).__name__},
                 )
+
+    def _client_pending_count_locked(self, *, client_id: str) -> int:
+        client_key = str(client_id or "").strip()
+        if not client_key:
+            return 0
+        return sum(
+            1
+            for job in self._jobs.values()
+            if str(job.get("client_id") or "").strip() == client_key
+            and str(job.get("status") or "").strip().lower() in {"queued", "running"}
+        )

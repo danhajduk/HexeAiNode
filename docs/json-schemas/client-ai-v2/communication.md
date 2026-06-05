@@ -290,6 +290,26 @@ Queued responses use HTTP `200` and this shape:
 }
 ```
 
+If the client already has too many queued or running async jobs, the node returns HTTP `200` with a queue rejection
+payload instead of creating a job:
+
+```json
+{
+  "status": "rejected",
+  "error_code": "queue_client_limit_exceeded",
+  "error_message": "queue_client_limit_exceeded",
+  "client_id": "mail-node",
+  "queue": "local",
+  "pending_count": 20,
+  "max_pending_per_client": 20,
+  "check_after_seconds": 5
+}
+```
+
+The fairness cap is keyed by `requested_by` and counts queued plus running async jobs across local and cloud queues.
+Clients should poll existing jobs or retry after `check_after_seconds`. The node default is
+`HEXE_EXECUTION_QUEUE_MAX_PENDING_PER_CLIENT = 20`; `0` disables this cap.
+
 Poll the job status with:
 
 ```text
@@ -328,6 +348,7 @@ terminal jobs cannot be cancelled; the API returns HTTP `409` with `cancel_rejec
 
 Queue diagnostics include a `persistence` object showing whether status persistence is configured, the state-file path,
 and `recovered_unfinished_count` for unfinished jobs recovered during startup.
+Diagnostics also include `fairness.max_pending_per_client` and per-queue `per_client_pending` counts.
 
 Queue selection:
 

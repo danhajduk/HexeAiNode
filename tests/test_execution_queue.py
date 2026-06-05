@@ -231,6 +231,50 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(diagnostics["persistence"]["configured"])
             self.assertEqual(diagnostics["persistence"]["recovered_unfinished_count"], 0)
 
+    async def test_rejects_client_when_pending_limit_is_reached(self):
+        queue = ExecutionQueueService(
+            logger=logging.getLogger("execution-queue-test"),
+            local_concurrency=1,
+            max_pending_per_client=1,
+        )
+        release_first = asyncio.Event()
+        first = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="first",
+            request_payload={"task_id": "first"},
+            runner=lambda: _blocking_job(name="first", order=[], release=release_first),
+            client_id="client-a",
+        )
+        await _wait_for_status(queue, job_id=first["job_id"], status="running")
+
+        rejected = await queue.enqueue(
+            queue="cloud",
+            importance="normal",
+            job_name="second",
+            request_payload={"task_id": "second"},
+            runner=lambda: _completed({"ok": True}),
+            client_id="client-a",
+        )
+        other_client = await queue.enqueue(
+            queue="cloud",
+            importance="normal",
+            job_name="third",
+            request_payload={"task_id": "third"},
+            runner=lambda: _completed({"ok": True}),
+            client_id="client-b",
+        )
+        diagnostics = await queue.diagnostics()
+
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["error_code"], "queue_client_limit_exceeded")
+        self.assertEqual(rejected["pending_count"], 1)
+        self.assertEqual(other_client["status"], "queued")
+        self.assertEqual(diagnostics["fairness"]["max_pending_per_client"], 1)
+        await _wait_for_status(queue, job_id=other_client["job_id"], status="completed")
+        release_first.set()
+        await _wait_for_status(queue, job_id=first["job_id"], status="completed")
+
     async def test_recovers_unfinished_jobs_as_failed_after_restart(self):
         with tempfile.TemporaryDirectory() as tmp:
             state_path = Path(tmp) / "execution_queue_jobs.json"
