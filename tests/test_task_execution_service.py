@@ -894,6 +894,78 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "completed")
         self.assertEqual(resolver.last_governance["routing_policy_constraints"]["mode"], "local_only")
 
+    async def test_execute_does_not_treat_openai_prompt_default_as_requested_provider_for_local_preferred(self):
+        runtime_manager = _FakeProviderRuntimeManager()
+        resolver = _FakeProviderResolver(
+            ProviderResolutionResult(
+                allowed=True,
+                provider_id="local",
+                model_id="qwen3-8b-q4_k_m",
+                provider_order=["local", "openai"],
+                fallback_provider_ids=["openai"],
+                model_allowlist_by_provider={
+                    "local": ["qwen3-8b-q4_k_m"],
+                    "openai": ["gpt-5.4-nano"],
+                },
+                timeout_s=45,
+                retry_count=0,
+                rejection_reason=None,
+            )
+        )
+        service = TaskExecutionService(
+            provider_runtime_manager=runtime_manager,
+            provider_resolver=resolver,
+            logger=logging.getLogger("task-execution-service-test"),
+            prompt_services_state_provider=lambda: {
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.email.classifier",
+                        "service_id": "node-email",
+                        "owner_service": "node-email",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "current_version": "v3.0.2",
+                        "versions": [{"version": "v3.0.2", "definition": {"system_prompt": "classify email"}}],
+                        "provider_preferences": {
+                            "default_provider": "openai",
+                            "default_model": "gpt-5.4-nano",
+                        },
+                        "constraints": {
+                            "routing_policy": {"mode": "local_preferred"},
+                            "capability_requirements": {"required_features": ["structured_output"]},
+                        },
+                    }
+                ]
+            },
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "email-classify-local-preferred",
+                    "prompt_id": "prompt.email.classifier",
+                    "prompt_version": "v3.0.2",
+                    "task_family": "task.classification",
+                    "requested_by": "node-email",
+                    "service_id": "node-email",
+                    "inputs": {"text": "Subject: hello\nBody: world"},
+                    "trace_id": "trace-email-local-preferred",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.provider_used, "local")
+        self.assertIsNone(resolver.last_request.requested_provider)
+        self.assertIsNone(resolver.last_request.requested_model)
+        self.assertEqual(resolver.last_governance["routing_policy_constraints"]["mode"], "local_preferred")
+        self.assertEqual(
+            resolver.last_governance["model_capability_requirements"]["required_features"],
+            ["structured_output"],
+        )
+
     async def test_execute_rejects_requested_cloud_provider_for_local_only_prompt(self):
         service = TaskExecutionService(
             provider_runtime_manager=_FakeProviderRuntimeManager(),

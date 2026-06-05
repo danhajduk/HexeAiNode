@@ -122,6 +122,11 @@ V3 prompt capability requirements:
 - Successful and non-success execution results that reached provider resolution include the effective requirements in
   `resolution_metadata.capability_requirements`.
 
+Prompt `provider_preferences.default_provider` and `default_model` remain fallback defaults. They do not override a V3
+`local_preferred` or local-only effective routing policy; clients must send explicit `requested_provider` or
+`requested_model` when they intentionally want a single request to prefer a specific provider/model within the prompt's
+allowed routing boundary.
+
 ## Production Execution
 
 Production execution continues to use the existing route:

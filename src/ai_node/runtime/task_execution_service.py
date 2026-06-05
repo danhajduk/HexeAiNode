@@ -520,18 +520,55 @@ class TaskExecutionService:
         return merged
 
     @staticmethod
+    def _provider_is_local(provider_id: object) -> bool:
+        return str(provider_id or "").strip().lower() == "local"
+
+    @staticmethod
+    def _default_provider_allowed_by_routing(*, default_provider: object, routing_mode: str | None) -> bool:
+        provider = str(default_provider or "").strip().lower()
+        if not provider:
+            return False
+        if routing_mode in {"local_only", "local_preferred"} and not TaskExecutionService._provider_is_local(provider):
+            return False
+        if routing_mode == "cloud_only" and TaskExecutionService._provider_is_local(provider):
+            return False
+        return True
+
+    @staticmethod
     def _effective_requested_provider(*, request: TaskExecutionRequest, authorization) -> str | None:
         if request.requested_provider:
             return request.requested_provider
         if authorization is None or not isinstance(authorization.provider_preferences, dict):
             return None
-        return authorization.provider_preferences.get("default_provider")
+        default_provider = authorization.provider_preferences.get("default_provider")
+        prompt_constraints = authorization.prompt_constraints if isinstance(authorization.prompt_constraints, dict) else {}
+        prompt_routing = prompt_constraints.get("routing_policy") if isinstance(prompt_constraints.get("routing_policy"), dict) else {}
+        prompt_mode = TaskExecutionService._normalize_routing_policy_mode(
+            prompt_routing.get("mode") if isinstance(prompt_routing, dict) else None
+        )
+        request_constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        request_routing = request_constraints.get("routing_policy") if isinstance(request_constraints.get("routing_policy"), dict) else {}
+        request_mode = TaskExecutionService._normalize_routing_policy_mode(
+            request_routing.get("mode") if isinstance(request_routing, dict) else None
+        )
+        effective_mode, conflict = TaskExecutionService._merge_routing_policy_modes(
+            prompt_mode=prompt_mode,
+            request_mode=request_mode,
+        )
+        if conflict or not TaskExecutionService._default_provider_allowed_by_routing(
+            default_provider=default_provider,
+            routing_mode=effective_mode,
+        ):
+            return None
+        return default_provider
 
     @staticmethod
     def _effective_requested_model(*, request: TaskExecutionRequest, authorization) -> str | None:
         if request.requested_model:
             return request.requested_model
         if authorization is None or not isinstance(authorization.provider_preferences, dict):
+            return None
+        if TaskExecutionService._effective_requested_provider(request=request, authorization=authorization) is None:
             return None
         return authorization.provider_preferences.get("default_model")
 
