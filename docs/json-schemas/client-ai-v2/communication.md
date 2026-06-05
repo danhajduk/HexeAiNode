@@ -195,6 +195,12 @@ Queued responses use HTTP `200` and this shape:
   "status_url": "/api/execution/jobs/job-0123456789abcdef",
   "queue": "local",
   "queue_position": 1,
+  "eta": {
+    "estimated_start_seconds": 5,
+    "estimated_start_at": "2026-06-04T17:30:05-07:00",
+    "source": "queue_position",
+    "confidence": "rough"
+  },
   "importance": "normal",
   "routing_decision": {
     "original_routing_mode": "local_preferred",
@@ -216,8 +222,10 @@ GET /api/execution/jobs/{job_id}
 
 The job status payload includes `status` as `queued`, `running`, `completed`, `failed`, or `not_found`. Completed jobs
 place the normal `TaskExecutionResult` under `result`; failed jobs return a short `error` object. Both the initial
-queued response and the polled job status include `routing_decision`. Queue records are process-local and intended for
-short client polling, not durable storage across API restarts.
+queued response and the polled job status include `routing_decision` and `eta`. The `eta` object is a rough start-time
+estimate based on current queue position, active jobs, queue concurrency, and `check_after_seconds`; clients should poll
+using `check_after_seconds` rather than treating the estimate as a guarantee. Queue records are process-local and
+intended for short client polling, not durable storage across API restarts.
 
 Queue selection:
 

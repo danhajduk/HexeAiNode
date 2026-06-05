@@ -714,3 +714,9 @@ Chosen fix: Treated sensitive and restricted V3 prompt privacy classes as local-
 What changed: Added privacy class propagation in execution authorization, privacy-aware routing merge logic for execution and queued route selection, regression coverage, and client communication docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_gateway.py tests/test_task_execution_service.py tests/test_node_control_api.py tests/test_execution_queue.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/execution/gateway.py src/ai_node/runtime/task_execution_service.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
 ###########
+Task #956
+Step objective: Add queue ETA estimates to queued execution responses.
+Chosen fix: Added a rough queue-position ETA to queued responses and job status payloads, based on active job count, queue position, concurrency, and `check_after_seconds`.
+What changed: Added `eta` payload generation in the execution queue service, regression coverage for queued/running/completed ETA states, and client communication docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py`, and `git diff --check` passed.
+###########

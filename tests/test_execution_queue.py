@@ -22,12 +22,14 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response["job_name"], "smoke-job")
         self.assertEqual(response["queue"], "local")
         self.assertEqual(response["routing_decision"]["reason"], "test")
+        self.assertIn("eta", response)
         self.assertIn("/api/execution/jobs/", response["status_url"])
 
         status = await _wait_for_status(queue, job_id=response["job_id"], status="completed")
         self.assertEqual(status["result"], {"ok": True})
         self.assertEqual(status["routing_decision"]["selected_queue"], "local")
         self.assertIsNone(status["queue_position"])
+        self.assertIsNone(status["eta"])
 
     async def test_local_queue_prioritizes_importance_after_active_slot(self):
         queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
@@ -106,6 +108,44 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(pressure["queued_count"], 1)
         self.assertEqual(pressure["pending_count"], 2)
         release_first.set()
+
+    async def test_queue_eta_estimates_start_time_from_position_and_active_jobs(self):
+        queue = ExecutionQueueService(
+            logger=logging.getLogger("execution-queue-test"),
+            local_concurrency=1,
+            check_after_seconds=7,
+        )
+        release_first = asyncio.Event()
+        first = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="first",
+            request_payload={"task_id": "first"},
+            runner=lambda: _blocking_job(name="first", order=[], release=release_first),
+        )
+        await _wait_for_status(queue, job_id=first["job_id"], status="running")
+
+        second = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="second",
+            request_payload={"task_id": "second"},
+            runner=lambda: _completed({"ok": True}),
+        )
+        second_status = await queue.job_status(job_id=second["job_id"])
+
+        self.assertEqual(second["eta"]["estimated_start_seconds"], 7)
+        self.assertEqual(second["eta"]["source"], "queue_position")
+        self.assertEqual(second["eta"]["confidence"], "rough")
+        self.assertEqual(second_status["eta"]["estimated_start_seconds"], 7)
+        self.assertIsNotNone(second_status["eta"]["estimated_start_at"])
+
+        running_status = await queue.job_status(job_id=first["job_id"])
+        self.assertEqual(running_status["eta"]["estimated_start_seconds"], 0)
+        self.assertEqual(running_status["eta"]["source"], "already_running")
+
+        release_first.set()
+        await _wait_for_status(queue, job_id=second["job_id"], status="completed")
 
 
 async def _completed(payload: dict) -> dict:

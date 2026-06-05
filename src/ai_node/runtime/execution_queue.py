@@ -42,6 +42,7 @@ class ExecutionQueueService:
 
     def queued_response(self, *, job_id: str, base_path: str = "/api/execution/jobs") -> dict:
         job = self._jobs.get(job_id) or {}
+        eta = self._queue_eta(job_id=job_id)
         return {
             "status": "queued",
             "job_id": job_id,
@@ -50,6 +51,7 @@ class ExecutionQueueService:
             "status_url": f"{base_path}/{job_id}",
             "queue": job.get("queue"),
             "queue_position": self._queue_position(job_id=job_id),
+            "eta": eta,
             "importance": job.get("importance"),
             "routing_decision": deepcopy(job.get("routing_decision")) if isinstance(job.get("routing_decision"), dict) else None,
             "expires_at": job.get("expires_at"),
@@ -208,6 +210,36 @@ class ExecutionQueueService:
             return None
         return queued_ids.index(job_id) + 1
 
+    def _queue_eta(self, *, job_id: str) -> dict | None:
+        job = self._jobs.get(job_id)
+        if not isinstance(job, dict):
+            return None
+        status = str(job.get("status") or "").strip().lower()
+        if status == "running":
+            return {
+                "estimated_start_seconds": 0,
+                "estimated_start_at": job.get("started_at"),
+                "source": "already_running",
+                "confidence": "observed",
+            }
+        if status != "queued":
+            return None
+        queue_key = str(job.get("queue") or "")
+        position = self._queue_position(job_id=job_id)
+        if position is None:
+            return None
+        concurrency = max(self._concurrency(queue_key), 1)
+        active_count = max(int(self._active_counts.get(queue_key, 0) or 0), 0)
+        jobs_ahead = max(active_count + position - 1, 0)
+        waves_ahead = (jobs_ahead + concurrency - 1) // concurrency if jobs_ahead else 0
+        estimated_seconds = waves_ahead * self._check_after_seconds
+        return {
+            "estimated_start_seconds": estimated_seconds,
+            "estimated_start_at": (local_now() + timedelta(seconds=estimated_seconds)).isoformat(),
+            "source": "queue_position",
+            "confidence": "rough",
+        }
+
     def _concurrency(self, queue_key: str) -> int:
         return self._local_concurrency if queue_key == "local" else self._cloud_concurrency
 
@@ -232,5 +264,6 @@ class ExecutionQueueService:
             )
         }
         payload["queue_position"] = self._queue_position(job_id=str(job.get("job_id") or ""))
+        payload["eta"] = self._queue_eta(job_id=str(job.get("job_id") or ""))
         payload["check_after_seconds"] = self._check_after_seconds
         return payload
