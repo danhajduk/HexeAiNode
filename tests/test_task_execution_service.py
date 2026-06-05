@@ -511,6 +511,65 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "completed")
         self.assertEqual(resolver.last_governance["routing_policy_constraints"]["mode"], "local_only")
 
+    async def test_execute_applies_v3_prompt_capability_requirements_to_resolution(self):
+        runtime_manager = _FakeProviderRuntimeManager()
+        resolver = _FakeProviderResolver(
+            ProviderResolutionResult(
+                allowed=True,
+                provider_id="openai",
+                model_id="gpt-5-mini",
+                provider_order=["openai"],
+                fallback_provider_ids=[],
+                model_allowlist_by_provider={"openai": ["gpt-5-mini"]},
+                timeout_s=45,
+                retry_count=0,
+                rejection_reason=None,
+            )
+        )
+        service = TaskExecutionService(
+            provider_runtime_manager=runtime_manager,
+            provider_resolver=resolver,
+            logger=logging.getLogger("task-execution-service-test"),
+            prompt_services_state_provider=lambda: {
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.reasoning",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "current_version": "v3.0",
+                        "versions": [{"version": "v3.0", "definition": {"system_prompt": "reason carefully"}}],
+                        "constraints": {"capability_requirements": {"required_features": ["reasoning"]}},
+                    }
+                ]
+            },
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-v3-capability",
+                    "prompt_id": "prompt.reasoning",
+                    "prompt_version": "v3.0",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "inputs": {"text": "hello"},
+                    "trace_id": "trace-v3-capability",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(
+            resolver.last_governance["model_capability_requirements"]["required_features"],
+            ["reasoning"],
+        )
+        self.assertEqual(
+            result.resolution_metadata["capability_requirements"]["source"],
+            "prompt_v3_capability_requirements",
+        )
+
     async def test_execute_treats_sensitive_prompt_privacy_as_local_only(self):
         runtime_manager = _FakeProviderRuntimeManager()
         resolver = _FakeProviderResolver(

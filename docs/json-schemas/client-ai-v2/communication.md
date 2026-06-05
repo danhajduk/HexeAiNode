@@ -61,14 +61,15 @@ The AI Node accepts legacy and V2+ prompt registrations. Prefer V3 for new promp
 contract version that can declare routing intent directly in the prompt policy.
 
 Status: V3 routing policy is implemented for prompt registration and direct execution routing. V3 importance policy is
-implemented for prompt registration and direct execution priority mapping. Local/cloud execution queues and async
-queued-job responses are implemented for direct execution.
+implemented for prompt registration and direct execution priority mapping. V3 capability requirements are implemented
+for provider/model selection. Local/cloud execution queues and async queued-job responses are implemented for direct
+execution.
 
 | Version | Use | Routing behavior |
 | --- | --- | --- |
 | V1 | Legacy prompt records and older clients. | No prompt-level routing policy; requests use legacy provider selection. |
 | V2 | Benchmark-capable prompt contracts with output and evaluation metadata. | No prompt-level routing policy; requests may still narrow routing with provider/governance fields. |
-| V3 | Preferred contract for new clients. | Adds `constraints.routing_policy.mode` as the prompt-level routing boundary, privacy-aware local/cloud constraints, and `constraints.importance.level` as prompt-owned urgency. |
+| V3 | Preferred contract for new clients. | Adds `constraints.routing_policy.mode` as the prompt-level routing boundary, privacy-aware local/cloud constraints, `constraints.importance.level` as prompt-owned urgency, and `constraints.capability_requirements.required_features` as prompt-owned model requirements. |
 
 V3 prompt routing modes:
 
@@ -108,6 +109,16 @@ V3 prompt importance levels:
 Importance does not weaken routing or privacy. A `critical` prompt with `routing_policy.mode = local_only` still remains
 local-only. When a prompt is used, the prompt owner's importance policy determines the effective execution priority;
 caller `priority` cannot inflate or reduce that prompt-owned importance.
+
+V3 prompt capability requirements:
+
+- `constraints.capability_requirements.required_features` lists model feature flags that every selected model must
+  support, for example `reasoning`, `structured_output`, `tool_calling`, `vision_input`, or `code_generation`.
+- Capability requirements narrow provider/model selection. They do not broaden routing or override privacy.
+- An explicit `requested_model` cannot bypass prompt-owned required features. If the requested model does not satisfy
+  the requirements, the resolver may select another eligible model or return a model-unavailable result.
+- Successful and non-success execution results that reached provider resolution include the effective requirements in
+  `resolution_metadata.capability_requirements`.
 
 ## Production Execution
 
@@ -373,6 +384,8 @@ Non-success task results still use HTTP `200` when the request reached the execu
 rejected, unsupported, degraded, or failed under the execution contract. In those cases `status`, `error_code`, and
 `error_message` describe the task outcome. When provider resolution ran, `resolution_metadata` is included on both
 successful and non-success task results so clients can inspect why a provider/model was chosen or why resolution failed.
+When a V3 prompt contributes `constraints.capability_requirements.required_features`, the same metadata includes
+`capability_requirements` with the effective feature list and source.
 For non-success results after resolution, `resolution_metadata.error_policy` describes whether the failure class is
 retryable and whether fallback to another provider/model is allowed.
 
@@ -463,6 +476,28 @@ become local-only through `privacy_class`:
 }
 ```
 
+V3 prompts can also require model features. This is prompt-owned selection policy, not a hint:
+
+```json
+{
+  "prompt_id": "mail.reasoned.classifier",
+  "service_id": "mail-node",
+  "task_family": "task.classification",
+  "version": "v3.0",
+  "constraints": {
+    "routing_policy": {
+      "mode": "local_preferred"
+    },
+    "capability_requirements": {
+      "required_features": ["reasoning", "structured_output"]
+    }
+  },
+  "definition": {
+    "prompt_template": "Classify with rationale: {{normalized_text}}"
+  }
+}
+```
+
 A single execution request can narrow routing with `constraints.routing_policy.mode`:
 
 ```json
@@ -528,6 +563,11 @@ GET /api/providers/models/by-task/task.classification
 
 The response includes `providers[]` with `provider_id`, `queue`, `resolved_tasks`, and `models[]` entries containing
 `model_id`, `default`, and `usable`.
+
+Use this discovery route before registering or updating V3 capability requirements when a client needs to check which
+local or cloud side can serve a task family. Feature-level V3 requirements are enforced during execution from model
+feature maps; clients can inspect local capability resolution and OpenAI model feature endpoints when they need to
+preflight specific `required_features`.
 
 ## Execution Admission And Backpressure
 

@@ -623,6 +623,32 @@ class TaskExecutionService:
             prompt_timeout = int(prompt_constraints.get("max_timeout_s"))
             routing["max_timeout_s"] = min(int(current_timeout), prompt_timeout) if current_timeout is not None else prompt_timeout
             merged["routing_policy_constraints"] = routing
+        capability_requirements = (
+            prompt_constraints.get("capability_requirements")
+            if isinstance(prompt_constraints.get("capability_requirements"), dict)
+            else {}
+        )
+        required_features = [
+            str(item or "").strip().lower()
+            for item in list(capability_requirements.get("required_features") or [])
+            if str(item or "").strip()
+        ]
+        if required_features:
+            existing = (
+                merged.get("model_capability_requirements")
+                if isinstance(merged.get("model_capability_requirements"), dict)
+                else {}
+            )
+            existing_required = [
+                str(item or "").strip().lower()
+                for item in list(existing.get("required_features") or [])
+                if str(item or "").strip()
+            ]
+            merged["model_capability_requirements"] = {
+                **existing,
+                "required_features": sorted(set(existing_required + required_features)),
+                "source": "prompt_v3_capability_requirements",
+            }
         prompt_routing_policy = prompt_constraints.get("routing_policy") if isinstance(prompt_constraints.get("routing_policy"), dict) else {}
         prompt_mode = TaskExecutionService._normalize_routing_policy_mode(
             prompt_routing_policy.get("mode") if isinstance(prompt_routing_policy, dict) else None
@@ -757,6 +783,8 @@ class TaskExecutionService:
             "retry_count": getattr(resolution, "retry_count", 0),
             "rejection_reason": rejection_reason,
         }
+        if isinstance(governance_constraints, dict) and isinstance(governance_constraints.get("model_capability_requirements"), dict):
+            payload["capability_requirements"] = dict(governance_constraints.get("model_capability_requirements") or {})
         if rejection_reason:
             payload["error_policy"] = recovery_policy_for_failure_code(rejection_reason)
         return payload

@@ -532,3 +532,4 @@ Task 958: Add task-to-model discovery endpoint for local and cloud providers - C
 Task 959: Add local model health and warmth state for loaded, warm, cold, and swap-required models - Completed on 06/04/2026 18:52
 Task 960: Add provider and model resolution reason metadata to execution results - Completed on 06/04/2026 18:54
 Task 961: Add retry and fallback rules by execution error class - Completed on 06/04/2026 18:58
+Task 962: Add V3 prompt capability requirements for provider and model selection - Completed on 06/04/2026 19:02

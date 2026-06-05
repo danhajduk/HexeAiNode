@@ -51,6 +51,7 @@ class ProviderResolver:
                 requested_model=request.requested_model,
                 provider_health=context.get("provider_health") or {},
                 usable_models_by_provider=context.get("usable_models_by_provider") or {},
+                model_features_by_provider=context.get("model_features_by_provider") or {},
                 provider_retry_count=context.get("provider_retry_count") or {},
                 provider_budget_limits=context.get("provider_budget_limits") or {},
                 request_timeout_s=request.timeout_s,

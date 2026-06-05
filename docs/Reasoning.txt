@@ -750,3 +750,9 @@ Chosen fix: Added a recovery-policy table keyed by existing failure taxonomy and
 What changed: Added `recovery_policy_for_failure_code`, metadata attachment in task execution results, focused tests, and Client AI communication docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_failure_codes.py tests/test_task_execution_service.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/execution/failure_codes.py src/ai_node/runtime/task_execution_service.py`, and `git diff --check` passed.
 ###########
+Task #962
+Step objective: Add V3 prompt capability requirements for provider and model selection.
+Chosen fix: Added prompt-owned `constraints.capability_requirements.required_features` and routed it into provider/model resolution as a model capability requirement.
+What changed: Added schema support, provider selection feature filtering, runtime model feature context, execution metadata, resolver/service/policy tests, and Client AI communication docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_provider_selection_policy.py tests/test_provider_resolver.py tests/test_task_execution_service.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/execution/provider_selection_policy.py src/ai_node/runtime/provider_resolver.py src/ai_node/providers/runtime_manager.py src/ai_node/runtime/task_execution_service.py`, `.venv/bin/python -m json.tool docs/json-schemas/client-ai-v2/prompt-register.v2.request.schema.json >/dev/null`, and `git diff --check` passed.
+###########

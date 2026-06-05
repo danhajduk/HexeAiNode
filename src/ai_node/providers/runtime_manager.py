@@ -457,6 +457,7 @@ class ProviderRuntimeManager:
         provider_health: dict[str, dict] = {}
         available_models_by_provider: dict[str, list[str]] = {}
         usable_models_by_provider: dict[str, list[str]] = {}
+        model_features_by_provider: dict[str, dict[str, dict[str, bool]]] = {}
 
         for provider_id in enabled_providers:
             settings = config.providers.get(provider_id)
@@ -480,6 +481,26 @@ class ProviderRuntimeManager:
         openai_usable_ids = [str(item or "").strip() for item in list(openai_usable.get("usable_model_ids") or []) if str(item or "").strip()]
         if openai_usable_ids:
             usable_models_by_provider["openai"] = openai_usable_ids
+        feature_payload = self.openai_model_features_payload()
+        openai_features: dict[str, dict[str, bool]] = {}
+        for entry in list(feature_payload.get("entries") or []) if isinstance(feature_payload, dict) else []:
+            if not isinstance(entry, dict):
+                continue
+            model_id = str(entry.get("model_id") or "").strip().lower()
+            features = entry.get("features") if isinstance(entry.get("features"), dict) else {}
+            if model_id:
+                openai_features[model_id] = {str(key or "").strip().lower(): bool(value) for key, value in features.items() if str(key or "").strip()}
+        if openai_features:
+            model_features_by_provider["openai"] = openai_features
+        local_model_ids = [str(item or "").strip().lower() for item in list(usable_models_by_provider.get("local") or []) if str(item or "").strip()]
+        local_features: dict[str, dict[str, bool]] = {}
+        for entry in build_local_model_feature_entries(model_ids=local_model_ids):
+            model_id = str(entry.get("model_id") or "").strip().lower()
+            features = entry.get("features") if isinstance(entry.get("features"), dict) else {}
+            if model_id:
+                local_features[model_id] = {str(key or "").strip().lower(): bool(value) for key, value in features.items() if str(key or "").strip()}
+        if local_features:
+            model_features_by_provider["local"] = local_features
 
         return {
             "enabled_providers": enabled_providers,
@@ -490,6 +511,7 @@ class ProviderRuntimeManager:
             "provider_health": provider_health,
             "available_models_by_provider": available_models_by_provider,
             "usable_models_by_provider": usable_models_by_provider,
+            "model_features_by_provider": model_features_by_provider,
             "generated_at": _iso_now(),
             "source": "provider_runtime_manager",
         }

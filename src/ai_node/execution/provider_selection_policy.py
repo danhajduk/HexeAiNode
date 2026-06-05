@@ -43,6 +43,37 @@ def _normalize_provider_budget_limits(value: object) -> dict[str, int]:
     return normalized
 
 
+def _normalize_provider_model_features(value: object) -> dict[str, dict[str, dict[str, bool]]]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, dict[str, dict[str, bool]]] = {}
+    for provider_id, models in value.items():
+        provider_key = _normalize_string(provider_id).lower()
+        if not provider_key or not isinstance(models, dict):
+            continue
+        provider_models: dict[str, dict[str, bool]] = {}
+        for model_id, features in models.items():
+            model_key = _normalize_string(model_id).lower()
+            if not model_key or not isinstance(features, dict):
+                continue
+            provider_models[model_key] = {
+                _normalize_string(feature_key).lower(): bool(enabled)
+                for feature_key, enabled in features.items()
+                if _normalize_string(feature_key)
+            }
+        normalized[provider_key] = provider_models
+    return normalized
+
+
+def _required_capability_features(governance: dict) -> list[str]:
+    requirements = governance.get("model_capability_requirements")
+    if not isinstance(requirements, dict):
+        requirements = governance.get("capability_requirements")
+    if not isinstance(requirements, dict):
+        return []
+    return [item.lower() for item in _normalize_string_list(requirements.get("required_features"))]
+
+
 def _normalize_routing_mode(value: object) -> str | None:
     mode = _normalize_string(value).lower()
     if mode in {"local_only", "local_preferred", "cloud_only", "cloud_fallback"}:
@@ -62,6 +93,7 @@ class ProviderSelectionPolicyInput:
     requested_model: str | None = None
     provider_health: dict[str, dict] = field(default_factory=dict)
     usable_models_by_provider: dict[str, list[str]] = field(default_factory=dict)
+    model_features_by_provider: dict[str, dict[str, dict[str, bool]]] = field(default_factory=dict)
     provider_retry_count: dict[str, int] = field(default_factory=dict)
     provider_budget_limits: dict[str, dict] = field(default_factory=dict)
     request_timeout_s: int = 60
@@ -111,7 +143,9 @@ def build_provider_selection_policy(policy: ProviderSelectionPolicyInput) -> Pro
     }
     provider_budget_limits = _normalize_provider_budget_limits(policy.provider_budget_limits)
     usable_models_by_provider = _normalize_provider_models(policy.usable_models_by_provider)
+    model_features_by_provider = _normalize_provider_model_features(policy.model_features_by_provider)
     approved_models_by_provider = _normalize_provider_models(governance.get("approved_models"))
+    required_features = _required_capability_features(governance)
     routing_policy = governance.get("routing_policy_constraints") if isinstance(governance.get("routing_policy_constraints"), dict) else {}
     max_timeout = routing_policy.get("max_timeout_s")
     governance_max_retries = routing_policy.get("max_retry_count")
@@ -200,10 +234,24 @@ def build_provider_selection_policy(policy: ProviderSelectionPolicyInput) -> Pro
             allowed_models = list(approved_models)
         else:
             allowed_models = []
+        if required_features:
+            feature_map = model_features_by_provider.get(provider_id, {})
+            if allowed_models:
+                allowed_models = [
+                    model_id
+                    for model_id in allowed_models
+                    if all(bool((feature_map.get(model_id) or {}).get(feature)) for feature in required_features)
+                ]
+            else:
+                allowed_models = [
+                    model_id
+                    for model_id, features in feature_map.items()
+                    if all(bool(features.get(feature)) for feature in required_features)
+                ]
         if requested_model:
             if allowed_models and requested_model in set(allowed_models):
                 allowed_models = [requested_model]
-            elif not allowed_models:
+            elif not allowed_models and not required_features:
                 allowed_models = [requested_model]
         model_allowlist_by_provider[provider_id] = allowed_models
 

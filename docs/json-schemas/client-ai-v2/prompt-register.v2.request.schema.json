@@ -162,6 +162,9 @@
         },
         "importance": {
           "$ref": "#/$defs/promptImportancePolicy"
+        },
+        "capability_requirements": {
+          "$ref": "#/$defs/promptCapabilityRequirements"
         }
       }
     },
@@ -206,6 +209,25 @@
             "critical"
           ],
           "description": "V3 prompt-owned importance level. The prompt owner controls the effective execution priority; critical maps to high execution priority in the current API."
+        }
+      }
+    },
+    "promptCapabilityRequirements": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "required_features": {
+          "type": "array",
+          "description": "V3 prompt-owned model feature requirements. Provider/model selection must choose a model with every listed feature.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "uniqueItems": true
         }
       }
     },

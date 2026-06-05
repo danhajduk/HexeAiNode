@@ -271,6 +271,44 @@ class ProviderResolverTests(unittest.TestCase):
             self.assertEqual(result.model_id, "mock-model-v1")
             self.assertIn("openai", result.fallback_provider_ids)
 
+    def test_resolve_uses_model_capability_requirements_from_governance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-resolver-test"),
+                provider_selection_store=_SelectionStore(enabled=["openai"]),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                provider_model_features_path=str(Path(tmp) / "provider_model_features.json"),
+                provider_enabled_models_path=str(Path(tmp) / "provider_enabled_models.json"),
+            )
+            runtime._registry.set_provider_health(provider_id="openai", payload={"availability": "available"})  # noqa: SLF001
+            runtime._registry.set_models_for_provider(  # noqa: SLF001
+                provider_id="openai",
+                models=[
+                    ModelCapability(model_id="gpt-5-nano", display_name="gpt-5-nano", status="available"),
+                    ModelCapability(model_id="gpt-5-mini", display_name="gpt-5-mini", status="available"),
+                ],
+            )
+            runtime._provider_enabled_models_store.save_enabled_model_ids(model_ids=["gpt-5-nano", "gpt-5-mini"])  # noqa: SLF001
+            runtime._provider_model_feature_catalog_store.save_entries(  # noqa: SLF001
+                provider="openai",
+                classification_model="test",
+                entries=[
+                    {"model_id": "gpt-5-nano", "features": {"reasoning": False}},
+                    {"model_id": "gpt-5-mini", "features": {"reasoning": True}},
+                ],
+            )
+            resolver = ProviderResolver(runtime_manager=runtime, logger=logging.getLogger("provider-resolver-test"))
+
+            result = resolver.resolve(
+                request=ProviderResolutionRequest(task_family="task.classification", timeout_s=30),
+                governance_constraints={"model_capability_requirements": {"required_features": ["reasoning"]}},
+            )
+
+            self.assertTrue(result.allowed)
+            self.assertEqual(result.model_id, "gpt-5-mini")
+            self.assertEqual(result.model_allowlist_by_provider["openai"], ["gpt-5-mini"])
+
 
 if __name__ == "__main__":
     unittest.main()

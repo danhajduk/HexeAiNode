@@ -178,6 +178,53 @@ class ProviderSelectionPolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.provider_order, ["local"])
 
+    def test_capability_requirements_filter_model_allowlists(self):
+        decision = build_provider_selection_policy(
+            ProviderSelectionPolicyInput(
+                enabled_providers=["openai", "local"],
+                default_provider="openai",
+                provider_health={
+                    "openai": {"availability": "available"},
+                    "local": {"availability": "available"},
+                },
+                usable_models_by_provider={
+                    "openai": ["gpt-5-nano", "gpt-5-mini"],
+                    "local": ["qwen3-8b-q4_k_m"],
+                },
+                model_features_by_provider={
+                    "openai": {
+                        "gpt-5-nano": {"reasoning": False},
+                        "gpt-5-mini": {"reasoning": True},
+                    },
+                    "local": {"qwen3-8b-q4_k_m": {"reasoning": True}},
+                },
+                governance_constraints={"model_capability_requirements": {"required_features": ["reasoning"]}},
+            )
+        )
+
+        self.assertEqual(decision.model_allowlist_by_provider["openai"], ["gpt-5-mini"])
+        self.assertEqual(decision.model_allowlist_by_provider["local"], ["qwen3-8b-q4_k_m"])
+
+    def test_requested_model_cannot_bypass_capability_requirements(self):
+        decision = build_provider_selection_policy(
+            ProviderSelectionPolicyInput(
+                enabled_providers=["openai"],
+                default_provider="openai",
+                requested_model="gpt-5-nano",
+                provider_health={"openai": {"availability": "available"}},
+                usable_models_by_provider={"openai": ["gpt-5-nano", "gpt-5-mini"]},
+                model_features_by_provider={
+                    "openai": {
+                        "gpt-5-nano": {"reasoning": False},
+                        "gpt-5-mini": {"reasoning": True},
+                    }
+                },
+                governance_constraints={"model_capability_requirements": {"required_features": ["reasoning"]}},
+            )
+        )
+
+        self.assertEqual(decision.model_allowlist_by_provider["openai"], ["gpt-5-mini"])
+
 
 if __name__ == "__main__":
     unittest.main()
