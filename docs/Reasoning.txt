@@ -726,3 +726,9 @@ Chosen fix: Let queued direct execution consult provider task capability maps so
 What changed: Added capability-aware queue selection and routing rewrite logic, routing decision reasons for task-capability choices, regression coverage for local and cloud capability-map paths, and client communication docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_node_control_api.py tests/test_execution_queue.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
 ###########
+Task #958
+Step objective: Add task-to-model discovery endpoint for local and cloud providers.
+Chosen fix: Added a provider/model discovery payload keyed by task family, using resolved provider capability maps plus enabled usable/available model context.
+What changed: Added `GET /api/providers/models/by-task/{task_family}`, state payload builder, direct and FastAPI tests, and client communication docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_node_control_api.py tests/test_node_control_fastapi.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
+###########

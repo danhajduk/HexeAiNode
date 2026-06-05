@@ -1659,6 +1659,47 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(payload["declaration"]["reason"], "enabled_models_no_task_change")
             self.assertEqual(len(capability_runner.redeclare_calls), 0)
 
+    def test_models_for_task_uses_provider_capability_maps(self):
+        class _CapabilityMappedRuntimeManager(self._FakeProviderRuntimeManager):
+            def provider_selection_context_payload(self):
+                payload = super().provider_selection_context_payload()
+                payload["enabled_providers"] = ["openai", "local"]
+                payload["default_model_by_provider"]["local"] = "qwen3-8b-q4_k_m"
+                payload["available_models_by_provider"]["local"] = ["qwen3-8b-q4_k_m"]
+                payload["usable_models_by_provider"]["local"] = ["qwen3-8b-q4_k_m"]
+                return payload
+
+            def node_capabilities_payload(self):
+                payload = super().node_capabilities_payload()
+                payload["provider_capabilities"] = {
+                    "openai": {
+                        "enabled_models": ["gpt-5-mini"],
+                        "resolved_tasks": ["task.reasoning"],
+                    },
+                    "local": {
+                        "enabled_models": ["qwen3-8b-q4_k_m"],
+                        "resolved_tasks": ["task.classification"],
+                    },
+                }
+                return payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_runtime_manager=_CapabilityMappedRuntimeManager(),
+            )
+
+            classification = state.models_for_task_payload(task_family="task.classification")
+            reasoning = state.models_for_task_payload(task_family="task.reasoning")
+
+            self.assertEqual(classification["task_family"], "task.classification")
+            self.assertEqual(classification["providers"][0]["provider_id"], "local")
+            self.assertEqual(classification["providers"][0]["models"][0]["model_id"], "qwen3-8b-q4_k_m")
+            self.assertEqual(reasoning["providers"][0]["provider_id"], "openai")
+            self.assertEqual(reasoning["providers"][0]["models"][0]["model_id"], "gpt-5-mini")
+
     def test_prompt_service_registration_probation_and_execution_authorization(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))

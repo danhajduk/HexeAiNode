@@ -20,6 +20,7 @@ Implemented client-facing routes in this repository:
 | `GET /api/execution/jobs/{job_id}` | Implemented | Poll an async queued execution job. |
 | `GET /api/execution/queues` | Implemented | Read local/cloud execution queue diagnostics. |
 | `GET /api/providers/local/capability-resolution` | Implemented | Inspect deterministic local model feature and task mapping. |
+| `GET /api/providers/models/by-task/{task_family}` | Implemented | Discover enabled local/cloud providers and models mapped to a task family. |
 | `POST /api/benchmarks/execution/v2` | Implemented | Execution-only multi-target benchmark run. The client owns scoring. |
 | `GET /api/schemas/client-ai/v2` | Implemented | Schema catalog discovery. |
 | `GET /api/schemas/client-ai/v2/{schema_name}` | Implemented | Fetch one schema document. |
@@ -453,6 +454,15 @@ enabled, the request should fail as provider unavailable or not governance-appro
 Local llama.cpp models contribute to node task capability resolution through deterministic feature mapping. Inspect
 that provider-specific mapping with `GET /api/providers/local/capability-resolution`; inspect the merged local + cloud
 task surface with `GET /api/capabilities/node/resolved`.
+
+To discover enabled providers and models for one task family:
+
+```text
+GET /api/providers/models/by-task/task.classification
+```
+
+The response includes `providers[]` with `provider_id`, `queue`, `resolved_tasks`, and `models[]` entries containing
+`model_id`, `default`, and `usable`.
 
 ## Execution Admission And Backpressure
 

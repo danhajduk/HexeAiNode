@@ -528,3 +528,4 @@ Task 954: Add budget and cost guardrails for local-preferred cloud spillover - C
 Task 955: Add V3 privacy-aware routing constraints for local and cloud execution - Completed on 06/04/2026 18:02
 Task 956: Add queue ETA estimates to queued execution responses - Completed on 06/04/2026 18:04
 Task 957: Use provider task capability maps when choosing local or cloud queues - Completed on 06/04/2026 18:07
+Task 958: Add task-to-model discovery endpoint for local and cloud providers - Completed on 06/04/2026 18:11

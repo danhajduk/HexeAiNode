@@ -23,6 +23,7 @@ from ai_node.providers.models import UnifiedExecutionRequest
 from ai_node.providers.openai_model_catalog import select_representative_openai_model_ids
 from ai_node.prompts import PromptRegistry
 from ai_node.config.task_capability_selection_config import DECLARABLE_TASK_FAMILIES, create_task_capability_selection_config
+from ai_node.capabilities.task_families import canonicalize_task_family
 from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.provider_resolver import ProviderResolver
@@ -2978,6 +2979,93 @@ class NodeControlState:
         payload = self._provider_runtime_manager.local_resolved_capabilities_payload()
         return {"provider_id": "local", **(payload if isinstance(payload, dict) else {})}
 
+    def models_for_task_payload(self, *, task_family: str) -> dict:
+        canonical_task = canonicalize_task_family(str(task_family or "").strip())
+        if not canonical_task:
+            raise ValueError("invalid_task_family")
+        if canonical_task not in set(DECLARABLE_TASK_FAMILIES):
+            raise ValueError(f"unsupported_task_family:{canonical_task}")
+        node_capabilities = self.node_capabilities_payload()
+        provider_capabilities = (
+            node_capabilities.get("provider_capabilities")
+            if isinstance(node_capabilities.get("provider_capabilities"), dict)
+            else {}
+        )
+        selection_context = (
+            self._provider_runtime_manager.provider_selection_context_payload()
+            if self._provider_runtime_manager is not None
+            and hasattr(self._provider_runtime_manager, "provider_selection_context_payload")
+            else {}
+        )
+        enabled_providers = [
+            str(item or "").strip().lower()
+            for item in list(selection_context.get("enabled_providers") or provider_capabilities.keys())
+            if str(item or "").strip()
+        ]
+        default_model_by_provider = (
+            selection_context.get("default_model_by_provider")
+            if isinstance(selection_context.get("default_model_by_provider"), dict)
+            else {}
+        )
+        usable_models_by_provider = (
+            selection_context.get("usable_models_by_provider")
+            if isinstance(selection_context.get("usable_models_by_provider"), dict)
+            else {}
+        )
+        available_models_by_provider = (
+            selection_context.get("available_models_by_provider")
+            if isinstance(selection_context.get("available_models_by_provider"), dict)
+            else {}
+        )
+        providers = []
+        for provider_id in enabled_providers:
+            capability_payload = provider_capabilities.get(provider_id)
+            if not isinstance(capability_payload, dict):
+                continue
+            resolved_tasks = self._resolved_task_families_from_capability_payload(capability_payload)
+            if canonical_task not in set(resolved_tasks):
+                continue
+            usable_models = [
+                str(item or "").strip()
+                for item in list(usable_models_by_provider.get(provider_id) or [])
+                if str(item or "").strip()
+            ]
+            available_models = [
+                str(item or "").strip()
+                for item in list(available_models_by_provider.get(provider_id) or [])
+                if str(item or "").strip()
+            ]
+            capability_models = [
+                str(item or "").strip()
+                for item in list(capability_payload.get("enabled_models") or [])
+                if str(item or "").strip()
+            ]
+            model_ids = usable_models or available_models or capability_models
+            default_model = str(default_model_by_provider.get(provider_id) or "").strip() or None
+            providers.append(
+                {
+                    "provider_id": provider_id,
+                    "queue": "local" if provider_id == "local" else "cloud",
+                    "resolved_tasks": resolved_tasks,
+                    "models": [
+                        {
+                            "model_id": model_id,
+                            "default": bool(default_model and model_id == default_model),
+                            "usable": model_id in set(usable_models) if usable_models else True,
+                        }
+                        for model_id in model_ids
+                    ],
+                }
+            )
+        return {
+            "task_family": canonical_task,
+            "providers": providers,
+            "provider_count": len(providers),
+            "model_count": sum(len(provider.get("models") or []) for provider in providers),
+            "generated_at": local_now_iso(),
+            "source": "provider_task_capability_maps",
+        }
+
     @staticmethod
     def _extract_report_models(report: dict | None, provider_id: str) -> list[dict]:
         if not isinstance(report, dict):
@@ -4196,6 +4284,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/providers/openai/pricing/manual",
                 "/api/providers/openai/pricing/refresh",
                 "/api/providers/local/capability-resolution",
+                "/api/providers/models/by-task/{task_family}",
                 "/api/capabilities/config",
                 "/api/capabilities/declare",
                 "/api/governance/status",
@@ -4368,6 +4457,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/providers/local/capability-resolution")
     def get_local_capability_resolution():
         return state.local_resolved_capabilities_payload()
+
+    @app.get("/api/providers/models/by-task/{task_family}")
+    def get_provider_models_by_task(task_family: str):
+        try:
+            return state.models_for_task_payload(task_family=task_family)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/capabilities/node/resolved")
     def get_node_capabilities():

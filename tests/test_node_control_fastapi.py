@@ -571,6 +571,33 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertNotIn("winner", payload)
             self.assertNotIn("scores", payload)
 
+    def test_provider_models_by_task_endpoint_returns_matching_models(self):
+        class _CapabilityMappedRuntimeManager(self._FakeProviderRuntimeManager):
+            def node_capabilities_payload(self):
+                payload = super().node_capabilities_payload()
+                payload["provider_capabilities"] = {
+                    "openai": {"enabled_models": ["gpt-5-mini"], "resolved_tasks": ["task.reasoning"]},
+                    "local": {"enabled_models": ["qwen3-8b-q4_k_m"], "resolved_tasks": ["task.classification"]},
+                }
+                return payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                provider_runtime_manager=_CapabilityMappedRuntimeManager(),
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            response = client.get("/api/providers/models/by-task/task.reasoning")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["task_family"], "task.reasoning")
+            self.assertEqual(response.json()["providers"][0]["provider_id"], "openai")
+            self.assertEqual(response.json()["providers"][0]["models"][0]["model_id"], "gpt-5-mini")
+
     def test_status_and_onboarding_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
