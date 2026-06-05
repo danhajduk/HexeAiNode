@@ -1,0 +1,40 @@
+version: "2.3"
+
+services:
+  llamacpp-vision:
+    image: ${LLAMACPP_VISION_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda-b7869}
+    container_name: ${LLAMACPP_VISION_CONTAINER_NAME:-hexe-ai-node-llamacpp-vision}
+    restart: unless-stopped
+    runtime: nvidia
+    user: ${LLAMACPP_VISION_UID:-1000}:${LLAMACPP_VISION_GID:-1000}
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+      LD_PRELOAD: ${LLAMACPP_VISION_LD_PRELOAD:-/usr/lib/x86_64-linux-gnu/nvidia/current/libcuda.so.1}
+      HOME: /cache
+      XDG_CACHE_HOME: /cache
+    volumes:
+      - ${LLAMACPP_VISION_MODEL_DIR:-./runtime/models/llamacpp-vision}:/models:ro
+      - ${LLAMACPP_VISION_CACHE_DIR:-./runtime/cache/llamacpp-vision}:/cache
+      - ${LLAMACPP_VISION_SOCKET_DIR:-/run/hexe/ai-node}:/run/hexe/ai-node
+    command:
+      - --hf-repo
+      - ${LLAMACPP_VISION_MODEL_HF:-ggml-org/Qwen2.5-VL-3B-Instruct-GGUF:Q4_K_M}
+      - --alias
+      - ${LLAMACPP_VISION_MODEL_ALIAS:-qwen2.5-vl-3b-instruct-q4_k_m}
+      - --host
+      - ${LLAMACPP_VISION_SOCKET_PATH:-/run/hexe/ai-node/llamacpp-vision.sock}
+      - --ctx-size
+      - ${LLAMACPP_VISION_CTX_SIZE:-8192}
+      - --n-gpu-layers
+      - ${LLAMACPP_VISION_N_GPU_LAYERS:-99}
+      - --parallel
+      - ${LLAMACPP_VISION_PARALLEL:-1}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -S ${LLAMACPP_VISION_SOCKET_PATH:-/run/hexe/ai-node/llamacpp-vision.sock}
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s

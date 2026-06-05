@@ -28,6 +28,32 @@ scripts/llamacpp-control.sh logs
 scripts/llamacpp-control.sh stop
 ```
 
+## Experimental Vision Runtime
+
+The node also includes a sibling llama.cpp vision runtime for local image analysis experiments. It uses a separate
+container, socket, cache, and health wrapper so the default text LLM can remain unchanged while vision support is tested.
+
+Default vision target:
+
+- model: `ggml-org/Qwen2.5-VL-3B-Instruct-GGUF:Q4_K_M`
+- alias: `qwen2.5-vl-3b-instruct-q4_k_m`
+- socket: `/run/hexe/ai-node/llamacpp-vision.sock`
+- health socket: `/run/hexe/ai-node/llamacpp-vision-health.sock`
+- container: `hexe-ai-node-llamacpp-vision`
+
+```bash
+scripts/llamacpp-vision-control.sh build
+scripts/llamacpp-vision-control.sh create
+scripts/llamacpp-vision-control.sh start
+scripts/llamacpp-vision-control.sh ready
+scripts/llamacpp-vision-control.sh status
+scripts/llamacpp-vision-control.sh logs
+scripts/llamacpp-vision-control.sh stop
+```
+
+Do not run the vision runtime concurrently with image generation on the 12 GB GPU unless an operator has verified
+available VRAM. The first-pass vision runtime keeps `--parallel 1` and an 8192 context by default.
+
 Validate the currently loaded model:
 
 ```bash
