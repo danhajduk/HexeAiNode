@@ -546,6 +546,47 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(observability["provider_usage"]["openai"]["total_requests"], 20)
             self.assertEqual(observability["model_usage"]["openai:gpt-5-mini"]["success_rate"], 0.95)
 
+    def test_preview_direct_execution_route_does_not_execute_provider(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+            runtime_manager = self._FakeProviderRuntimeManager()
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_runtime_manager=runtime_manager,
+                capability_runner=self._FakeCapabilityRunner(),
+                task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
+                prompt_service_state_store=self._FakePromptServiceStateStore(),
+            )
+
+            preview = asyncio.run(
+                state.preview_direct_execution_route(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-preview-001",
+                            "task_family": "task.classification",
+                            "requested_by": "service.alpha",
+                            "requested_provider": "openai",
+                            "requested_model": "gpt-5-mini",
+                            "inputs": {"text": "hello"},
+                            "response_mode": "async_if_queued",
+                            "trace_id": "trace-preview-001",
+                        }
+                    )
+                )
+            )
+
+            self.assertEqual(preview["status"], "preview")
+            self.assertTrue(preview["dry_run"])
+            self.assertTrue(preview["would_execute"])
+            self.assertTrue(preview["would_queue"])
+            self.assertEqual(preview["queue"], "cloud")
+            self.assertEqual(preview["routing_decision"]["reason"], "explicit_provider")
+            self.assertEqual(preview["provider_resolution"]["selected_provider"], "openai")
+            self.assertEqual(preview["provider_resolution"]["selected_model"], "gpt-5-mini")
+            self.assertEqual(runtime_manager.execution_requests, [])
+
     def test_execute_direct_can_queue_async_job(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:

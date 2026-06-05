@@ -26,7 +26,7 @@ from ai_node.config.task_capability_selection_config import DECLARABLE_TASK_FAMI
 from ai_node.capabilities.task_families import canonicalize_task_family
 from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
-from ai_node.runtime.provider_resolver import ProviderResolver
+from ai_node.runtime.provider_resolver import ProviderResolutionRequest, ProviderResolver
 from ai_node.runtime.internal_scheduler import InternalScheduler
 from ai_node.runtime.service_manager import NullServiceManager
 from ai_node.runtime.capability_resolver import load_task_graph
@@ -1715,6 +1715,98 @@ class NodeControlState:
         if request.response_mode == "async_if_queued":
             return await self._enqueue_direct_execution(request=request)
         return await self._execute_direct_now(request=request)
+
+    async def preview_direct_execution_route(self, *, request: TaskExecutionRequest) -> dict:
+        request_copy = request.model_copy(deep=True)
+        authorization = self._direct_execution_authorization_snapshot(request=request_copy)
+        authorization_payload = None
+        if authorization is not None:
+            authorization_payload = {
+                "allowed": bool(authorization.allowed),
+                "reason": authorization.reason,
+                "prompt_id": authorization.prompt_id,
+                "prompt_version": authorization.prompt_version,
+                "privacy_class": authorization.privacy_class,
+            }
+            if not authorization.allowed:
+                return {
+                    "status": "preview",
+                    "dry_run": True,
+                    "would_execute": False,
+                    "would_queue": False,
+                    "task_id": request_copy.task_id,
+                    "authorization": authorization_payload,
+                    "rejection_reason": authorization.reason,
+                    "provider_resolution": None,
+                }
+
+        queue_context = await self._direct_execution_queue_context(request=request_copy)
+        execution_request = self._execution_request_for_queue_context(request=request_copy, queue_context=queue_context)
+        resolution_preview = self._direct_execution_provider_resolution_preview(
+            request=execution_request,
+            authorization=authorization,
+        )
+        return {
+            "status": "preview",
+            "dry_run": True,
+            "would_execute": bool(resolution_preview.get("allowed")),
+            "would_queue": request_copy.response_mode == "async_if_queued",
+            "task_id": request_copy.task_id,
+            "response_mode": request_copy.response_mode,
+            "queue": queue_context["queue"],
+            "importance": queue_context["importance"],
+            "routing_decision": queue_context["routing_decision"],
+            "effective_request": {
+                "requested_provider": execution_request.requested_provider,
+                "requested_model": execution_request.requested_model,
+                "constraints": execution_request.constraints,
+                "timeout_s": execution_request.timeout_s,
+            },
+            "authorization": authorization_payload,
+            "provider_resolution": resolution_preview,
+        }
+
+    def _direct_execution_provider_resolution_preview(self, *, request: TaskExecutionRequest, authorization) -> dict:
+        service = self._get_task_execution_service()
+        governance_status = service._safe_governance_status()  # noqa: SLF001
+        if str(governance_status.get("state") or "").strip().lower() == "stale":
+            return {"allowed": False, "rejection_reason": "governance_stale", "resolution_metadata": None}
+        governance_constraints = service._safe_governance_constraints(request=request)  # noqa: SLF001
+        if authorization is not None:
+            governance_constraints = service._merge_prompt_governance_constraints(  # noqa: SLF001
+                governance_constraints=governance_constraints,
+                authorization=authorization,
+            )
+        effective_timeout_s = service._effective_timeout_s(request=request, authorization=authorization)  # noqa: SLF001
+        resolution = service._provider_resolver.resolve(  # noqa: SLF001
+            request=ProviderResolutionRequest(
+                task_family=request.task_family,
+                requested_provider=service._effective_requested_provider(request=request, authorization=authorization),  # noqa: SLF001
+                requested_model=service._effective_requested_model(request=request, authorization=authorization),  # noqa: SLF001
+                timeout_s=effective_timeout_s,
+                max_cost_cents=service._request_max_cost_cents(request=request),  # noqa: SLF001
+            ),
+            governance_constraints=governance_constraints,
+        )
+        metadata = service._resolution_metadata(  # noqa: SLF001
+            request=request,
+            authorization=authorization,
+            resolution=resolution,
+            governance_constraints=governance_constraints,
+            rejection_reason=resolution.rejection_reason,
+        )
+        return {
+            "allowed": bool(resolution.allowed),
+            "selected_provider": resolution.provider_id,
+            "selected_model": resolution.model_id,
+            "provider_order": list(resolution.provider_order),
+            "fallback_provider_ids": list(resolution.fallback_provider_ids),
+            "model_allowlist_by_provider": dict(resolution.model_allowlist_by_provider),
+            "timeout_s": resolution.timeout_s,
+            "retry_count": resolution.retry_count,
+            "rejection_reason": resolution.rejection_reason,
+            "resolution_metadata": metadata,
+        }
 
     async def _execute_direct_now(self, *, request: TaskExecutionRequest) -> dict:
         self._acquire_execution_admission(route="direct")
@@ -4304,6 +4396,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/schemas/client-ai/v2/{schema_name}",
                 "/api/execution/authorize",
                 "/api/execution/admission",
+                "/api/execution/route-preview",
                 "/api/execution/jobs/{job_id}",
                 "/api/execution/queues",
                 "/api/execution/compare",
@@ -4781,6 +4874,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 detail=exc.payload,
                 headers={"Retry-After": str(exc.retry_after_seconds)},
             ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/execution/route-preview")
+    async def post_execution_route_preview(payload: TaskExecutionRequest):
+        try:
+            return await state.preview_direct_execution_route(request=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

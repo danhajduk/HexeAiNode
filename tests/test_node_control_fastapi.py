@@ -1181,6 +1181,47 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(budget_state_response.status_code, 200)
             self.assertEqual(budget_state_response.json()["grant_count"], 1)
 
+    def test_execution_route_preview_endpoint_does_not_execute_supported_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
+            runtime_manager = self._FakeProviderRuntimeManager()
+            state = NodeControlState(
+                lifecycle=lifecycle,
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                provider_selection_store=self._FakeProviderSelectionStore(),
+                task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
+                capability_runner=self._FakeCapabilityRunner(),
+                provider_runtime_manager=runtime_manager,
+                prompt_service_state_store=self._FakePromptServiceStateStore(),
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            response = client.post(
+                "/api/execution/route-preview",
+                json={
+                    "task_id": "task-preview-fastapi",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "requested_provider": "openai",
+                    "requested_model": "gpt-5-mini",
+                    "inputs": {"text": "hello preview"},
+                    "response_mode": "async_if_queued",
+                    "timeout_s": 45,
+                    "trace_id": "trace-preview-fastapi",
+                },
+            )
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["status"], "preview")
+            self.assertTrue(payload["dry_run"])
+            self.assertTrue(payload["would_queue"])
+            self.assertEqual(payload["routing_decision"]["reason"], "explicit_provider")
+            self.assertEqual(payload["provider_resolution"]["selected_model"], "gpt-5-mini")
+            self.assertIsNone(runtime_manager.last_execution_request)
+
     def test_direct_execution_endpoint_returns_structured_busy_response(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))

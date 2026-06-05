@@ -16,6 +16,7 @@ Implemented client-facing routes in this repository:
 | --- | --- | --- |
 | `POST /api/execution/authorize` | Implemented | Lightweight prompt authorization and access check. |
 | `GET /api/execution/admission` | Implemented | Read the AI Node's direct execution admission state and `max_in_flight` limit. |
+| `POST /api/execution/route-preview` | Implemented | Dry-run provider/model and queue routing for a direct execution request. |
 | `POST /api/execution/direct` | Implemented | Production task execution through provider/model routing. |
 | `GET /api/execution/jobs/{job_id}` | Implemented | Poll an async queued execution job. |
 | `GET /api/execution/queues` | Implemented | Read local/cloud execution queue diagnostics. |
@@ -171,6 +172,68 @@ Example:
 ```
 
 The AI Node returns the normal execution result.
+
+### Route Preview
+
+Use `POST /api/execution/route-preview` with the same `TaskExecutionRequest` payload to dry-run routing before deciding
+whether to execute or queue a job. The preview does not acquire direct execution admission, does not enqueue a job, and
+does not call a model provider.
+
+Example response:
+
+```json
+{
+  "status": "preview",
+  "dry_run": true,
+  "would_execute": true,
+  "would_queue": true,
+  "task_id": "task-queued-123",
+  "response_mode": "async_if_queued",
+  "queue": "local",
+  "importance": "normal",
+  "routing_decision": {
+    "original_routing_mode": "local_preferred",
+    "execution_routing_mode": "local_preferred",
+    "selected_queue": "local",
+    "original_queue": "local",
+    "spillover": false,
+    "reason": "routing_policy_local_preferred"
+  },
+  "effective_request": {
+    "requested_provider": null,
+    "requested_model": null,
+    "constraints": {
+      "routing_policy": {
+        "mode": "local_preferred"
+      }
+    },
+    "timeout_s": 60
+  },
+  "authorization": {
+    "allowed": true,
+    "reason": "authorized",
+    "prompt_id": "mail.classifier",
+    "prompt_version": "v3.0",
+    "privacy_class": "internal"
+  },
+  "provider_resolution": {
+    "allowed": true,
+    "selected_provider": "local",
+    "selected_model": "qwen3-8b-q4_k_m",
+    "provider_order": ["local", "openai"],
+    "fallback_provider_ids": ["openai"],
+    "model_allowlist_by_provider": {
+      "local": ["qwen3-8b-q4_k_m"]
+    },
+    "timeout_s": 60,
+    "retry_count": 0,
+    "rejection_reason": null
+  }
+}
+```
+
+If prompt authorization fails, the preview returns `would_execute = false`, `would_queue = false`, and the
+authorization rejection reason without performing provider resolution.
 
 ### Async Queued Execution
 

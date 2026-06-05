@@ -756,3 +756,9 @@ Chosen fix: Added prompt-owned `constraints.capability_requirements.required_fea
 What changed: Added schema support, provider selection feature filtering, runtime model feature context, execution metadata, resolver/service/policy tests, and Client AI communication docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_provider_selection_policy.py tests/test_provider_resolver.py tests/test_task_execution_service.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/execution/provider_selection_policy.py src/ai_node/runtime/provider_resolver.py src/ai_node/providers/runtime_manager.py src/ai_node/runtime/task_execution_service.py`, `.venv/bin/python -m json.tool docs/json-schemas/client-ai-v2/prompt-register.v2.request.schema.json >/dev/null`, and `git diff --check` passed.
 ###########
+Task #963
+Step objective: Add dry-run execution route preview endpoint.
+Chosen fix: Added a route-preview API that reuses direct execution queue/routing and provider resolution logic without admission acquisition, queue enqueue, or provider execution.
+What changed: Added `preview_direct_execution_route`, `POST /api/execution/route-preview`, state/FastAPI tests, and Client AI communication docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_node_control_api.py tests/test_node_control_fastapi.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
+###########
