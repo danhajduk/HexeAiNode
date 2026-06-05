@@ -62,8 +62,35 @@ When an explicit local model override switches llama.cpp away from the default m
 model's idle time. `HEXE_LOCAL_LLM_DEFAULT_REVERT_IDLE_SECONDS` controls how long a non-default model may sit idle
 before the node returns to `qwen3-8b-q4_k_m`; the default is 900 seconds, and `0` disables automatic reversion.
 `HEXE_LOCAL_LLM_DEFAULT_REVERT_CHECK_INTERVAL_SECONDS` controls the background check interval and defaults to 60
-seconds. Reversion waits while local model switching or direct execution is in flight, and the future local execution
-queue will also pass queued model requirements into the same reversion gate.
+seconds. Reversion waits while local model switching or direct execution is in flight, and the local execution queue can
+pass queued model requirements into the same reversion gate.
+
+## Local Capability Mapping
+
+Local llama.cpp models participate in the same node capability graph used for OpenAI model task resolution. The local
+mapping is deterministic and conservative:
+
+- enabled: chat, classification, summarization, reasoning, information extraction, structured extraction, translation,
+  sentiment analysis, task planning, workflow reasoning, and streaming response
+- enabled for code-named local models such as `coder`, `code`, `codestral`, or `deepseek-coder`: code generation,
+  review, debugging, and explanation
+- not enabled by the local mapping: tool calling, environment control, vision, OCR, image generation/editing/variation,
+  audio, realtime voice, embeddings/search/indexing, moderation, and policy checks
+
+Inspect the local mapping with:
+
+```text
+GET /api/providers/local/capability-resolution
+```
+
+Rebuild the node-wide resolved task surface with:
+
+```text
+POST /api/capabilities/rebuild
+```
+
+The node-wide payload at `GET /api/capabilities/node/resolved` includes a `provider_capabilities.local` section so local
+and OpenAI task contributions can be compared directly.
 
 ## Model Download And Load Tests
 

@@ -9,6 +9,10 @@ from ai_node.providers.adapters.openai_adapter import OpenAIProviderAdapter
 from ai_node.providers.config_loader import ProviderConfigLoader
 from ai_node.providers.execution_router import ProviderExecutionRouter
 from ai_node.providers.capability_resolution import resolve_enabled_model_capabilities
+from ai_node.providers.local_model_features import (
+    LOCAL_MODEL_FEATURE_CLASSIFIER,
+    build_local_model_feature_entries,
+)
 from ai_node.providers.model_capability_catalog import (
     DEFAULT_PROVIDER_MODEL_CAPABILITIES_PATH,
     OpenAIModelCapabilityClassifier,
@@ -546,6 +550,39 @@ class ProviderRuntimeManager:
         payload["task_families"] = derive_declared_task_families(resolved_capabilities=payload)
         return payload
 
+    def local_resolved_capabilities_payload(self) -> dict:
+        task_graph = load_task_graph(path=self._task_graph_path)
+        enabled_model_ids = self._local_enabled_model_ids()
+        entries = build_local_model_feature_entries(model_ids=enabled_model_ids)
+        resolved = resolve_node_capabilities(
+            enabled_models=enabled_model_ids,
+            model_feature_catalog={"entries": entries},
+            task_graph=task_graph,
+        )
+        return {
+            "provider_id": "local",
+            "enabled_model_ids": enabled_model_ids,
+            "classification_model": LOCAL_MODEL_FEATURE_CLASSIFIER if enabled_model_ids else None,
+            "capabilities": {
+                "text_generation": bool(resolved.get("feature_union", {}).get("chat")),
+                "reasoning": bool(resolved.get("feature_union", {}).get("reasoning")),
+                "structured_output": bool(resolved.get("feature_union", {}).get("structured_output")),
+                "json_output": bool(resolved.get("feature_union", {}).get("json_output")),
+                "schema_output": bool(resolved.get("feature_union", {}).get("schema_output")),
+                "streaming": bool(resolved.get("feature_union", {}).get("streaming_output")),
+                "tool_calling": False,
+                "vision": False,
+                "image_generation": False,
+                "audio_input": False,
+                "audio_output": False,
+                "embeddings": False,
+            },
+            "feature_union": dict(resolved.get("feature_union") or {}),
+            "resolved_tasks": list(resolved.get("resolved_tasks") or []),
+            "enabled_models": entries,
+            "source": "local_model_features",
+        }
+
     def node_capabilities_payload(self) -> dict:
         if not self._node_capabilities_path.exists():
             return {
@@ -746,16 +783,39 @@ class ProviderRuntimeManager:
     def _resolve_and_persist_node_capabilities(self) -> None:
         try:
             usable_payload = self.openai_usable_models_payload()
-            enabled_models = list(usable_payload.get("usable_model_ids") or [])
+            openai_enabled_models = list(usable_payload.get("usable_model_ids") or [])
+            local_enabled_models = self._local_enabled_model_ids()
+            enabled_models = [*openai_enabled_models, *local_enabled_models]
             task_graph = load_task_graph(path=self._task_graph_path)
+            openai_feature_entries = list(self._provider_model_feature_catalog_store.payload().get("entries") or [])
+            openai_resolution_entries = openai_feature_entries if openai_enabled_models else []
+            local_feature_entries = build_local_model_feature_entries(model_ids=local_enabled_models)
+            combined_feature_catalog = {
+                "entries": [
+                    *[entry for entry in openai_resolution_entries if isinstance(entry, dict)],
+                    *local_feature_entries,
+                ]
+            }
             payload = resolve_node_capabilities(
                 enabled_models=enabled_models,
-                model_feature_catalog=self._provider_model_feature_catalog_store.payload(),
+                model_feature_catalog=combined_feature_catalog,
                 task_graph=task_graph,
             )
             payload["selected_models"] = list(usable_payload.get("selected_model_ids") or [])
             payload["blocked_models"] = list(usable_payload.get("blocked_models") or [])
             payload["enabled_task_capabilities"] = list(payload.get("resolved_tasks") or [])
+            payload["provider_capabilities"] = {
+                "openai": resolve_node_capabilities(
+                    enabled_models=openai_enabled_models,
+                    model_feature_catalog={"entries": openai_resolution_entries},
+                    task_graph=task_graph,
+                ),
+                "local": resolve_node_capabilities(
+                    enabled_models=local_enabled_models,
+                    model_feature_catalog={"entries": local_feature_entries},
+                    task_graph=task_graph,
+                ),
+            }
             payload["generated_at"] = _iso_now()
             payload["source"] = "node_capabilities"
             self._node_capabilities_path.parent.mkdir(parents=True, exist_ok=True)
@@ -763,6 +823,25 @@ class ProviderRuntimeManager:
         except Exception as exc:
             if hasattr(self._logger, "warning"):
                 self._logger.warning("[node-capabilities-resolve-failed] %s", {"error": str(exc).strip() or type(exc).__name__})
+
+    def _local_enabled_model_ids(self) -> list[str]:
+        context = self.provider_selection_context_payload()
+        enabled_providers = {str(item or "").strip().lower() for item in list(context.get("enabled_providers") or [])}
+        if "local" not in enabled_providers:
+            return []
+        usable_by_provider = context.get("usable_models_by_provider") if isinstance(context.get("usable_models_by_provider"), dict) else {}
+        available_by_provider = context.get("available_models_by_provider") if isinstance(context.get("available_models_by_provider"), dict) else {}
+        default_by_provider = context.get("default_model_by_provider") if isinstance(context.get("default_model_by_provider"), dict) else {}
+        candidates = list(usable_by_provider.get("local") or available_by_provider.get("local") or [])
+        default_model = str(default_by_provider.get("local") or "").strip().lower()
+        if not candidates and default_model:
+            candidates = [default_model]
+        normalized: list[str] = []
+        for model_id in candidates:
+            value = str(model_id or "").strip().lower()
+            if value and value not in normalized:
+                normalized.append(value)
+        return normalized
 
     def providers_snapshot(self) -> dict:
         return self._registry.snapshot()

@@ -19,6 +19,7 @@ Implemented client-facing routes in this repository:
 | `POST /api/execution/direct` | Implemented | Production task execution through provider/model routing. |
 | `GET /api/execution/jobs/{job_id}` | Implemented | Poll an async queued execution job. |
 | `GET /api/execution/queues` | Implemented | Read local/cloud execution queue diagnostics. |
+| `GET /api/providers/local/capability-resolution` | Implemented | Inspect deterministic local model feature and task mapping. |
 | `POST /api/benchmarks/execution/v2` | Implemented | Execution-only multi-target benchmark run. The client owns scoring. |
 | `GET /api/schemas/client-ai/v2` | Implemented | Schema catalog discovery. |
 | `GET /api/schemas/client-ai/v2/{schema_name}` | Implemented | Fetch one schema document. |
@@ -415,6 +416,10 @@ For V1/V2 clients that do not have prompt-level routing policy, local-only behav
 
 Local-only execution requires the AI Node provider configuration to include an enabled local provider. If local is not
 enabled, the request should fail as provider unavailable or not governance-approved instead of falling back to OpenAI.
+
+Local llama.cpp models contribute to node task capability resolution through deterministic feature mapping. Inspect
+that provider-specific mapping with `GET /api/providers/local/capability-resolution`; inspect the merged local + cloud
+task surface with `GET /api/capabilities/node/resolved`.
 
 ## Execution Admission And Backpressure
 

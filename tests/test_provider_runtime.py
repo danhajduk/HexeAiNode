@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from ai_node.providers.model_capability_catalog import ProviderModelCapabilityEntry
 from ai_node.providers.model_feature_schema import create_default_feature_flags
+from ai_node.providers.local_model_features import build_local_model_feature_entries, local_model_feature_flags
 from ai_node.providers.adapters.mock_adapter import MockProviderAdapter
 from ai_node.providers.execution_router import ProviderExecutionRouter
 from ai_node.providers.metrics import ProviderMetricsCollector
@@ -138,6 +139,27 @@ class _RouterReturningOpenAI:
 
 
 class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_local_model_feature_mapping_marks_text_tasks_without_non_text_capabilities(self):
+        features = local_model_feature_flags(model_id="qwen3-8b-q4_k_m")
+
+        self.assertTrue(features["chat"])
+        self.assertTrue(features["classification"])
+        self.assertTrue(features["summarization"])
+        self.assertTrue(features["information_extraction"])
+        self.assertTrue(features["structured_output"])
+        self.assertTrue(features["json_output"])
+        self.assertFalse(features["image_generation"])
+        self.assertFalse(features["vision_input"])
+        self.assertFalse(features["tool_calling"])
+        self.assertFalse(features["embeddings"])
+
+    async def test_local_code_named_model_maps_to_code_tasks(self):
+        entries = build_local_model_feature_entries(model_ids=["deepseek-coder-6.7b-q4_k_m"])
+
+        self.assertEqual(entries[0]["provider"], "local")
+        self.assertTrue(entries[0]["features"]["code_generation"])
+        self.assertTrue(entries[0]["features"]["code_review"])
+
     async def test_runtime_builds_openai_adapter_with_debug_aopenai_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
             runtime = ProviderRuntimeManager(
@@ -464,6 +486,51 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             payload = runtime.node_capabilities_payload()
             self.assertEqual(payload["enabled_models"], ["gpt-5-mini"])
             self.assertEqual(payload["enabled_task_capabilities"], ["task.chat", "task.reasoning"])
+
+    async def test_rebuild_node_capabilities_includes_local_model_task_mapping(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph_path = Path(tmp) / "task_graph.json"
+            graph_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "capability_graph_version": "1.0",
+                        "tasks": {
+                            "task.chat": {"all_of": ["chat"]},
+                            "task.classification": {"all_of": ["classification"]},
+                            "task.summarization": {"all_of": ["summarization"]},
+                            "task.structured_extraction": {"all_of": ["structured_output", "information_extraction"]},
+                            "task.image_generation": {"all_of": ["image_generation"]},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            node_capabilities_path = Path(tmp) / "runtime" / "node_capabilities.json"
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["local"]),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                node_capabilities_path=str(node_capabilities_path),
+                task_graph_path=str(graph_path),
+            )
+
+            payload = runtime.rebuild_node_capabilities()["node_capabilities"]
+
+            self.assertIn("qwen3-8b-q4_k_m", payload["enabled_models"])
+            self.assertIn("task.chat", payload["enabled_task_capabilities"])
+            self.assertIn("task.classification", payload["enabled_task_capabilities"])
+            self.assertIn("task.summarization", payload["enabled_task_capabilities"])
+            self.assertIn("task.structured_extraction", payload["enabled_task_capabilities"])
+            self.assertNotIn("task.image_generation", payload["enabled_task_capabilities"])
+            self.assertEqual(payload["provider_capabilities"]["openai"]["resolved_tasks"], [])
+            self.assertIn("task.chat", payload["provider_capabilities"]["local"]["resolved_tasks"])
+
+            local_payload = runtime.local_resolved_capabilities_payload()
+            self.assertEqual(local_payload["provider_id"], "local")
+            self.assertTrue(local_payload["capabilities"]["structured_output"])
+            self.assertFalse(local_payload["capabilities"]["image_generation"])
 
     async def test_usable_models_exclude_unavailable_selected_models(self):
         with tempfile.TemporaryDirectory() as tmp:

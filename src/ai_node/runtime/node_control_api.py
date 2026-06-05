@@ -2688,6 +2688,21 @@ class NodeControlState:
         payload = self._provider_runtime_manager.openai_resolved_capabilities_payload()
         return {"provider_id": "openai", **(payload if isinstance(payload, dict) else {})}
 
+    def local_resolved_capabilities_payload(self) -> dict:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "local_resolved_capabilities_payload"):
+            return {
+                "provider_id": "local",
+                "enabled_model_ids": [],
+                "classification_model": None,
+                "capabilities": {},
+                "feature_union": {},
+                "resolved_tasks": [],
+                "enabled_models": [],
+                "source": "local_model_features",
+            }
+        payload = self._provider_runtime_manager.local_resolved_capabilities_payload()
+        return {"provider_id": "local", **(payload if isinstance(payload, dict) else {})}
+
     @staticmethod
     def _extract_report_models(report: dict | None, provider_id: str) -> list[dict]:
         if not isinstance(report, dict):
@@ -3905,6 +3920,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/providers/openai/pricing/diagnostics",
                 "/api/providers/openai/pricing/manual",
                 "/api/providers/openai/pricing/refresh",
+                "/api/providers/local/capability-resolution",
                 "/api/capabilities/config",
                 "/api/capabilities/declare",
                 "/api/governance/status",
@@ -4073,6 +4089,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/providers/openai/capability-resolution")
     def get_openai_capability_resolution():
         return state.openai_resolved_capabilities_payload()
+
+    @app.get("/api/providers/local/capability-resolution")
+    def get_local_capability_resolution():
+        return state.local_resolved_capabilities_payload()
 
     @app.get("/api/capabilities/node/resolved")
     def get_node_capabilities():

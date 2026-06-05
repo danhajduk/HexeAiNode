@@ -80,6 +80,7 @@ Canonical routes:
 - `GET /api/providers/openai/models/enabled`
 - `POST /api/providers/openai/models/enabled`
 - `GET /api/providers/openai/capability-resolution`
+- `GET /api/providers/local/capability-resolution`
 - `GET /api/providers/openai/pricing/diagnostics`
 - `POST /api/providers/openai/pricing/refresh`
 - `POST /api/providers/openai/models/classification/refresh`
@@ -87,7 +88,7 @@ Canonical routes:
 
 Notes:
 
-- This repo currently has one implemented provider route family: `openai`.
+- This repo currently has the OpenAI provider route family and a local capability-resolution route for llama.cpp models.
 - Provider credentials, catalog inspection, model selection, pricing refresh, and provider capability refresh all remain clearly under the provider namespace.
 - `POST /api/providers/openai/models/classification/refresh` is admin-protected and still depends on the legacy compatibility header alias.
 
