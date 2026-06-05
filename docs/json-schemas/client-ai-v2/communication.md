@@ -19,6 +19,7 @@ Implemented client-facing routes in this repository:
 | `POST /api/execution/route-preview` | Implemented | Dry-run provider/model and queue routing for a direct execution request. |
 | `POST /api/execution/direct` | Implemented | Production task execution through provider/model routing. |
 | `GET /api/execution/jobs/{job_id}` | Implemented | Poll an async queued execution job. |
+| `DELETE /api/execution/jobs/{job_id}` | Implemented | Cancel a queued execution job before it starts running. |
 | `GET /api/execution/queues` | Implemented | Read local/cloud execution queue diagnostics. |
 | `GET /api/providers/local/capability-resolution` | Implemented | Inspect deterministic local model feature and task mapping. |
 | `GET /api/providers/models/by-task/{task_family}` | Implemented | Discover enabled local/cloud providers and models mapped to a task family. |
@@ -301,6 +302,24 @@ queued response and the polled job status include `routing_decision` and `eta`. 
 estimate based on current queue position, active jobs, queue concurrency, and `check_after_seconds`; clients should poll
 using `check_after_seconds` rather than treating the estimate as a guarantee. Queue records are process-local and
 intended for short client polling, not durable storage across API restarts.
+
+Cancel a queued job before it starts with:
+
+```text
+DELETE /api/execution/jobs/{job_id}
+```
+
+Optional body:
+
+```json
+{
+  "reason": "client_cancelled"
+}
+```
+
+Cancellation returns the job payload with `status = "cancelled"` and `error.code = "cancelled"`. Running or already
+terminal jobs cannot be cancelled; the API returns HTTP `409` with `cancel_rejected_reason`. Missing jobs return HTTP
+`404`.
 
 Queue selection:
 

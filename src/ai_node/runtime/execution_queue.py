@@ -104,6 +104,36 @@ class ExecutionQueueService:
                 return {"status": "not_found", "job_id": job_id}
             return self._public_job_payload(job)
 
+    async def cancel_job(self, *, job_id: str, reason: str | None = None) -> dict:
+        normalized_job_id = str(job_id or "").strip()
+        async with self._lock:
+            job = self._jobs.get(normalized_job_id)
+            if not isinstance(job, dict):
+                return {"status": "not_found", "job_id": job_id}
+            current_status = str(job.get("status") or "").strip().lower()
+            if current_status == "queued":
+                queue_key = str(job.get("queue") or "")
+                self._queues[queue_key] = [
+                    item for item in list(self._queues.get(queue_key) or []) if item[2] != normalized_job_id
+                ]
+                heapq.heapify(self._queues[queue_key])
+                cancelled_at = local_now_iso()
+                cancel_reason = str(reason or "cancelled_by_client").strip() or "cancelled_by_client"
+                job["status"] = "cancelled"
+                job["completed_at"] = cancelled_at
+                job["error"] = {"code": "cancelled", "message": cancel_reason}
+                job["_runner"] = None
+                return self._public_job_payload(job)
+            if current_status in {"running"}:
+                payload = self._public_job_payload(job)
+                payload["cancellable"] = False
+                payload["cancel_rejected_reason"] = "job_already_running"
+                return payload
+            payload = self._public_job_payload(job)
+            payload["cancellable"] = False
+            payload["cancel_rejected_reason"] = f"job_already_{current_status or 'terminal'}"
+            return payload
+
     async def diagnostics(self) -> dict:
         async with self._lock:
             queues = {}

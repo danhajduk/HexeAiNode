@@ -762,3 +762,9 @@ Chosen fix: Added a route-preview API that reuses direct execution queue/routing
 What changed: Added `preview_direct_execution_route`, `POST /api/execution/route-preview`, state/FastAPI tests, and Client AI communication docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_node_control_api.py tests/test_node_control_fastapi.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
 ###########
+Task #964
+Step objective: Add queued execution job cancellation.
+Chosen fix: Added queued-only cancellation to the internal execution queue and exposed it as `DELETE /api/execution/jobs/{job_id}` with conflict responses for running or terminal jobs.
+What changed: Added queue cancellation state transitions, NodeControl cancellation method, FastAPI route, queue/state/API tests, and Client AI communication docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py tests/test_node_control_fastapi.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
+###########

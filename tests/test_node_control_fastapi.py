@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import tempfile
@@ -17,6 +18,7 @@ from ai_node.runtime.node_control_api import (
     NodeControlState,
     create_node_control_app,
 )
+from ai_node.runtime.execution_queue import ExecutionQueueService
 
 
 class NodeControlFastApiTests(unittest.TestCase):
@@ -1221,6 +1223,78 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(payload["routing_decision"]["reason"], "explicit_provider")
             self.assertEqual(payload["provider_resolution"]["selected_model"], "gpt-5-mini")
             self.assertIsNone(runtime_manager.last_execution_request)
+
+    def test_execution_job_delete_cancels_queued_job(self):
+        async def run_scenario():
+            async def blocking_job():
+                await release_local.wait()
+                return {"ok": True}
+
+            async def wait_for_status(job_id: str, status: str) -> dict:
+                for _ in range(50):
+                    payload = await execution_queue.job_status(job_id=job_id)
+                    if payload.get("status") == status:
+                        return payload
+                    await asyncio.sleep(0.01)
+                raise AssertionError(f"job {job_id} did not reach {status}")
+
+            with tempfile.TemporaryDirectory() as tmp:
+                release_local = asyncio.Event()
+                execution_queue = ExecutionQueueService(
+                    logger=logging.getLogger("node-control-fastapi-test"),
+                    local_concurrency=1,
+                    cloud_concurrency=1,
+                )
+                blocker = await execution_queue.enqueue(
+                    queue="local",
+                    importance="normal",
+                    job_name="local blocker",
+                    request_payload={"task_id": "local-blocker"},
+                    runner=blocking_job,
+                )
+                await wait_for_status(blocker["job_id"], "running")
+                runtime_manager = self._FakeProviderRuntimeManager()
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-fastapi-test"),
+                    provider_selection_store=self._FakeProviderSelectionStore(),
+                    task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
+                    capability_runner=self._FakeCapabilityRunner(),
+                    provider_runtime_manager=runtime_manager,
+                    execution_queue=execution_queue,
+                )
+                app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+                client = TestClient(app)
+
+                queued = client.post(
+                    "/api/execution/direct",
+                    json={
+                        "task_id": "task-cancel-fastapi",
+                        "task_family": "task.classification",
+                        "requested_by": "service.alpha",
+                        "requested_provider": "local",
+                        "inputs": {"text": "hello"},
+                        "response_mode": "async_if_queued",
+                        "trace_id": "trace-cancel-fastapi",
+                    },
+                )
+                self.assertEqual(queued.status_code, 200)
+
+                cancelled = client.request(
+                    "DELETE",
+                    f"/api/execution/jobs/{queued.json()['job_id']}",
+                    json={"reason": "client_cancelled"},
+                )
+
+                self.assertEqual(cancelled.status_code, 200)
+                self.assertEqual(cancelled.json()["status"], "cancelled")
+                self.assertEqual(cancelled.json()["error"]["message"], "client_cancelled")
+                self.assertIsNone(runtime_manager.last_execution_request)
+                release_local.set()
+                await wait_for_status(blocker["job_id"], "completed")
+
+        asyncio.run(run_scenario())
 
     def test_direct_execution_endpoint_returns_structured_busy_response(self):
         with tempfile.TemporaryDirectory() as tmp:

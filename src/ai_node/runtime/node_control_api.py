@@ -1837,6 +1837,9 @@ class NodeControlState:
     async def execution_job_status(self, *, job_id: str) -> dict:
         return await self._execution_queue.job_status(job_id=job_id)
 
+    async def cancel_execution_job(self, *, job_id: str, reason: str | None = None) -> dict:
+        return await self._execution_queue.cancel_job(job_id=job_id, reason=reason)
+
     async def execution_queue_diagnostics(self) -> dict:
         return await self._execution_queue.diagnostics()
 
@@ -4264,6 +4267,12 @@ class ExecutionAuthorizeRequest(BaseModel):
     inputs: dict | None = None
 
 
+class ExecutionJobCancelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = None
+
+
 class ExecutionCompareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -4398,6 +4407,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/execution/admission",
                 "/api/execution/route-preview",
                 "/api/execution/jobs/{job_id}",
+                "DELETE /api/execution/jobs/{job_id}",
                 "/api/execution/queues",
                 "/api/execution/compare",
                 "/api/benchmarks/execution/v2",
@@ -4890,6 +4900,18 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         if payload.get("status") == "not_found":
             raise HTTPException(status_code=404, detail="job_not_found")
         return payload
+
+    @app.delete("/api/execution/jobs/{job_id}")
+    async def delete_execution_job(job_id: str, payload: ExecutionJobCancelRequest | None = None):
+        response = await state.cancel_execution_job(
+            job_id=job_id,
+            reason=payload.reason if payload is not None else None,
+        )
+        if response.get("status") == "not_found":
+            raise HTTPException(status_code=404, detail="job_not_found")
+        if response.get("cancel_rejected_reason"):
+            raise HTTPException(status_code=409, detail=response)
+        return response
 
     @app.get("/api/execution/queues")
     async def get_execution_queues():

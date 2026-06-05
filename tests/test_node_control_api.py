@@ -639,6 +639,60 @@ class NodeControlApiTests(unittest.TestCase):
 
         asyncio.run(run_scenario())
 
+    def test_cancel_queued_execution_job(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                release_local = asyncio.Event()
+                execution_queue = ExecutionQueueService(
+                    logger=logging.getLogger("node-control-test"),
+                    local_concurrency=1,
+                    cloud_concurrency=1,
+                )
+                blocker = await execution_queue.enqueue(
+                    queue="local",
+                    importance="normal",
+                    job_name="local blocker",
+                    request_payload={"task_id": "local-blocker"},
+                    runner=lambda: self._blocking_queue_job(release=release_local),
+                )
+                await self._wait_for_queue_status(execution_queue, blocker["job_id"], "running")
+                runtime_manager = self._FakeProviderRuntimeManager()
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=runtime_manager,
+                    execution_queue=execution_queue,
+                )
+
+                queued = await state.execute_direct(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-cancel-queued-001",
+                            "task_family": "task.classification",
+                            "requested_by": "service.alpha",
+                            "requested_provider": "local",
+                            "inputs": {"text": "hello"},
+                            "response_mode": "async_if_queued",
+                            "trace_id": "trace-cancel-queued-001",
+                        }
+                    )
+                )
+                cancelled = await state.cancel_execution_job(
+                    job_id=queued["job_id"],
+                    reason="client_cancelled",
+                )
+                status = await state.execution_job_status(job_id=queued["job_id"])
+
+                self.assertEqual(cancelled["status"], "cancelled")
+                self.assertEqual(status["status"], "cancelled")
+                self.assertEqual(status["error"]["message"], "client_cancelled")
+                self.assertEqual(len(runtime_manager.execution_requests), 0)
+                release_local.set()
+                await self._wait_for_queue_status(execution_queue, blocker["job_id"], "completed")
+
+        asyncio.run(run_scenario())
+
     def test_execute_direct_queues_sensitive_v3_prompt_on_local_queue(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:

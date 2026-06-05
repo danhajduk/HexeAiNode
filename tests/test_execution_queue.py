@@ -147,6 +147,58 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         release_first.set()
         await _wait_for_status(queue, job_id=second["job_id"], status="completed")
 
+    async def test_cancel_queued_job_removes_it_from_queue(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
+        release_first = asyncio.Event()
+        first = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="first",
+            request_payload={"task_id": "first"},
+            runner=lambda: _blocking_job(name="first", order=[], release=release_first),
+        )
+        await _wait_for_status(queue, job_id=first["job_id"], status="running")
+        second = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="second",
+            request_payload={"task_id": "second"},
+            runner=lambda: _completed({"should_not_run": True}),
+        )
+
+        cancelled = await queue.cancel_job(job_id=second["job_id"], reason="client_cancelled")
+        status = await queue.job_status(job_id=second["job_id"])
+        pressure = await queue.queue_pressure(queue="local")
+
+        self.assertEqual(cancelled["status"], "cancelled")
+        self.assertEqual(cancelled["error"]["code"], "cancelled")
+        self.assertEqual(cancelled["error"]["message"], "client_cancelled")
+        self.assertEqual(status["status"], "cancelled")
+        self.assertEqual(status["queue_position"], None)
+        self.assertEqual(pressure["queued_count"], 0)
+        release_first.set()
+        await _wait_for_status(queue, job_id=first["job_id"], status="completed")
+
+    async def test_cancel_running_job_is_rejected(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
+        release_first = asyncio.Event()
+        first = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="first",
+            request_payload={"task_id": "first"},
+            runner=lambda: _blocking_job(name="first", order=[], release=release_first),
+        )
+        await _wait_for_status(queue, job_id=first["job_id"], status="running")
+
+        response = await queue.cancel_job(job_id=first["job_id"], reason="too_late")
+
+        self.assertEqual(response["status"], "running")
+        self.assertFalse(response["cancellable"])
+        self.assertEqual(response["cancel_rejected_reason"], "job_already_running")
+        release_first.set()
+        await _wait_for_status(queue, job_id=first["job_id"], status="completed")
+
 
 async def _completed(payload: dict) -> dict:
     return payload
