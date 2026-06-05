@@ -188,6 +188,14 @@ Queued responses use HTTP `200` and this shape:
   "queue": "local",
   "queue_position": 1,
   "importance": "normal",
+  "routing_decision": {
+    "original_routing_mode": "local_preferred",
+    "execution_routing_mode": "local_preferred",
+    "selected_queue": "local",
+    "original_queue": "local",
+    "spillover": false,
+    "reason": "routing_policy_local_preferred"
+  },
   "expires_at": "2026-06-04T17:30:00-07:00"
 }
 ```
@@ -199,8 +207,9 @@ GET /api/execution/jobs/{job_id}
 ```
 
 The job status payload includes `status` as `queued`, `running`, `completed`, `failed`, or `not_found`. Completed jobs
-place the normal `TaskExecutionResult` under `result`; failed jobs return a short `error` object. Queue records are
-process-local and intended for short client polling, not durable storage across API restarts.
+place the normal `TaskExecutionResult` under `result`; failed jobs return a short `error` object. Both the initial
+queued response and the polled job status include `routing_decision`. Queue records are process-local and intended for
+short client polling, not durable storage across API restarts.
 
 Queue selection:
 

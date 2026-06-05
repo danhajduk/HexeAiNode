@@ -1734,6 +1734,7 @@ class NodeControlState:
             job_name=request_copy.job_name or request_copy.task_id,
             request_payload=execution_request.model_dump(mode="json"),
             runner=lambda: self._execute_direct_now(request=execution_request),
+            routing_decision=queue_context.get("routing_decision") if isinstance(queue_context.get("routing_decision"), dict) else None,
         )
         return {
             **response,
@@ -1755,6 +1756,7 @@ class NodeControlState:
             authorization=authorization,
             routing_mode=routing_mode,
         )
+        original_queue = queue_key
         if await self._should_spill_local_preferred_to_cloud(
             request=request,
             importance=importance,
@@ -1763,13 +1765,29 @@ class NodeControlState:
         ):
             queue_key = "cloud"
             spillover = True
+            reason = "local_preferred_spillover"
         else:
             spillover = False
+            reason = self._direct_execution_queue_reason(
+                request=request,
+                routing_mode=routing_mode,
+                queue_key=queue_key,
+            )
+        execution_routing_mode = "cloud_only" if spillover else routing_mode
         return {
             "queue": queue_key,
             "importance": importance,
             "routing_mode": routing_mode,
             "spillover": spillover,
+            "execution_routing_mode": execution_routing_mode,
+            "routing_decision": {
+                "original_routing_mode": routing_mode,
+                "execution_routing_mode": execution_routing_mode,
+                "selected_queue": queue_key,
+                "original_queue": original_queue,
+                "spillover": spillover,
+                "reason": reason,
+            },
         }
 
     @staticmethod
@@ -1844,6 +1862,15 @@ class NodeControlState:
             return prompt_level
         priority = str(request.priority or "normal").strip().lower()
         return priority if priority in {"background", "low", "normal", "high"} else "normal"
+
+    @staticmethod
+    def _direct_execution_queue_reason(*, request: TaskExecutionRequest, routing_mode: str | None, queue_key: str) -> str:
+        requested_provider = str(request.requested_provider or "").strip().lower()
+        if requested_provider:
+            return "explicit_provider"
+        if routing_mode:
+            return f"routing_policy_{routing_mode}"
+        return "provider_default_local" if queue_key == "local" else "provider_default_cloud"
 
     @staticmethod
     def _direct_execution_effective_routing_mode(*, request: TaskExecutionRequest, authorization) -> str | None:

@@ -582,11 +582,14 @@ class NodeControlApiTests(unittest.TestCase):
                 self.assertEqual(queued["job_name"], "queued classification")
                 self.assertEqual(queued["queue"], "local")
                 self.assertEqual(queued["importance"], "high")
+                self.assertEqual(queued["routing_decision"]["reason"], "explicit_provider")
+                self.assertEqual(queued["routing_decision"]["selected_queue"], "local")
                 self.assertIn("job queued - check in", queued["message"])
 
                 result = await self._wait_for_execution_job(state, queued["job_id"], "completed")
                 self.assertEqual(result["result"]["status"], "completed")
                 self.assertEqual(result["queue"], "local")
+                self.assertEqual(result["routing_decision"]["reason"], "explicit_provider")
                 self.assertEqual(len(runtime_manager.execution_requests), 1)
 
                 diagnostics = await state.execution_queue_diagnostics()
@@ -638,8 +641,13 @@ class NodeControlApiTests(unittest.TestCase):
                 )
 
                 self.assertEqual(queued["queue"], "cloud")
+                self.assertEqual(queued["routing_decision"]["reason"], "local_preferred_spillover")
+                self.assertEqual(queued["routing_decision"]["original_queue"], "local")
+                self.assertEqual(queued["routing_decision"]["selected_queue"], "cloud")
+                self.assertEqual(queued["routing_decision"]["execution_routing_mode"], "cloud_only")
                 completed = await self._wait_for_execution_job(state, queued["job_id"], "completed")
                 self.assertEqual(completed["result"]["provider_used"], "openai")
+                self.assertTrue(completed["routing_decision"]["spillover"])
                 self.assertEqual(runtime_manager.last_execution_request.requested_provider, "openai")
                 release_local.set()
                 await self._wait_for_queue_status(execution_queue, blocker["job_id"], "completed")
@@ -689,6 +697,8 @@ class NodeControlApiTests(unittest.TestCase):
                 )
 
                 self.assertEqual(queued["queue"], "local")
+                self.assertEqual(queued["routing_decision"]["reason"], "routing_policy_local_only")
+                self.assertFalse(queued["routing_decision"]["spillover"])
                 release_local.set()
                 await self._wait_for_execution_job(state, queued["job_id"], "completed")
                 await self._wait_for_queue_status(execution_queue, blocker["job_id"], "completed")

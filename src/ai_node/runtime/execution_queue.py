@@ -51,6 +51,7 @@ class ExecutionQueueService:
             "queue": job.get("queue"),
             "queue_position": self._queue_position(job_id=job_id),
             "importance": job.get("importance"),
+            "routing_decision": deepcopy(job.get("routing_decision")) if isinstance(job.get("routing_decision"), dict) else None,
             "expires_at": job.get("expires_at"),
         }
 
@@ -62,6 +63,7 @@ class ExecutionQueueService:
         job_name: str,
         request_payload: dict,
         runner: Callable[[], Awaitable[dict]],
+        routing_decision: dict | None = None,
     ) -> dict:
         queue_key = "local" if str(queue or "").strip().lower() == "local" else "cloud"
         importance_key = str(importance or "normal").strip().lower()
@@ -74,6 +76,7 @@ class ExecutionQueueService:
             "job_name": str(job_name or job_id).strip() or job_id,
             "queue": queue_key,
             "importance": importance_key if importance_key in IMPORTANCE_RANK else "normal",
+            "routing_decision": deepcopy(routing_decision) if isinstance(routing_decision, dict) else None,
             "status": "queued",
             "request": deepcopy(request_payload) if isinstance(request_payload, dict) else {},
             "result": None,
@@ -216,6 +219,7 @@ class ExecutionQueueService:
                 "job_name",
                 "queue",
                 "importance",
+                "routing_decision",
                 "status",
                 "created_at",
                 "queued_at",

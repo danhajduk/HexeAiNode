@@ -15,15 +15,18 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
             job_name="smoke-job",
             request_payload={"task_id": "task-001"},
             runner=lambda: _completed({"ok": True}),
+            routing_decision={"selected_queue": "local", "reason": "test"},
         )
 
         self.assertEqual(response["status"], "queued")
         self.assertEqual(response["job_name"], "smoke-job")
         self.assertEqual(response["queue"], "local")
+        self.assertEqual(response["routing_decision"]["reason"], "test")
         self.assertIn("/api/execution/jobs/", response["status_url"])
 
         status = await _wait_for_status(queue, job_id=response["job_id"], status="completed")
         self.assertEqual(status["result"], {"ok": True})
+        self.assertEqual(status["routing_decision"]["selected_queue"], "local")
         self.assertIsNone(status["queue_position"])
 
     async def test_local_queue_prioritizes_importance_after_active_slot(self):

@@ -696,3 +696,9 @@ Chosen fix: Added local queue pressure tracking and a conservative spillover gat
 What changed: Added queue pressure diagnostics, configurable spillover thresholds, queued request cloud-only execution rewrite for spillover, tests for spillover and local-only protection, and client/config documentation.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
 ###########
+Task #953
+Step objective: Add routing decision metadata to queued execution responses.
+Chosen fix: Stored routing decision metadata on queued jobs so the initial queued response and later job status agree.
+What changed: Added `routing_decision` to queue storage/public payloads, direct execution queue context, spillover metadata, tests, and client documentation.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
+###########
