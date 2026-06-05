@@ -5,7 +5,7 @@ Status: Partially implemented.
 This guide explains how a client node should communicate with the AI Node using the V2 client AI contract.
 
 Important implementation note: the schema catalog includes proposed V2+ schemas as well as implemented contracts.
-`execution-request.v2.schema.json` is a proposed contract and is not the request model currently used by
+`execution-request.v2.schema.json` tracks the implemented direct execution request model for fields used by
 `POST /api/execution/direct`.
 
 ## Implemented Route Summary
@@ -17,6 +17,8 @@ Implemented client-facing routes in this repository:
 | `POST /api/execution/authorize` | Implemented | Lightweight prompt authorization and access check. |
 | `GET /api/execution/admission` | Implemented | Read the AI Node's direct execution admission state and `max_in_flight` limit. |
 | `POST /api/execution/direct` | Implemented | Production task execution through provider/model routing. |
+| `GET /api/execution/jobs/{job_id}` | Implemented | Poll an async queued execution job. |
+| `GET /api/execution/queues` | Implemented | Read local/cloud execution queue diagnostics. |
 | `POST /api/benchmarks/execution/v2` | Implemented | Execution-only multi-target benchmark run. The client owns scoring. |
 | `GET /api/schemas/client-ai/v2` | Implemented | Schema catalog discovery. |
 | `GET /api/schemas/client-ai/v2/{schema_name}` | Implemented | Fetch one schema document. |
@@ -58,7 +60,7 @@ contract version that can declare routing intent directly in the prompt policy.
 
 Status: V3 routing policy is implemented for prompt registration and direct execution routing. V3 importance policy is
 implemented for prompt registration and direct execution priority mapping. Local/cloud execution queues and async
-queued-job responses are documented in the task plan but are not developed in this API yet.
+queued-job responses are implemented for direct execution.
 
 | Version | Use | Routing behavior |
 | --- | --- | --- |
@@ -120,6 +122,8 @@ The request is task-family based. Do not use separate classify or summarize rout
 - `inputs`
 - `constraints`
 - `priority`
+- `response_mode`
+- `job_name`
 - `timeout_s`
 - `trace_id`
 - `lease_id`
@@ -146,6 +150,105 @@ Example:
 ```
 
 The AI Node returns the normal execution result.
+
+### Async Queued Execution
+
+Set `response_mode` to `async_if_queued` when the client wants the AI Node to accept the request into an internal queue
+instead of blocking the HTTP call until model execution finishes.
+
+```json
+{
+  "task_id": "task-queued-123",
+  "job_name": "mail classification 123",
+  "prompt_id": "mail.classifier",
+  "prompt_version": "v3.0",
+  "task_family": "task.classification",
+  "requested_by": "mail-node",
+  "service_id": "mail-node",
+  "trace_id": "trace-queued-123",
+  "response_mode": "async_if_queued",
+  "inputs": {
+    "subject": "Package update",
+    "body": "Your package has shipped."
+  }
+}
+```
+
+Queued responses use HTTP `200` and this shape:
+
+```json
+{
+  "status": "queued",
+  "job_id": "job-0123456789abcdef",
+  "job_name": "mail classification 123",
+  "message": "job queued - check in 5 secs",
+  "check_after_seconds": 5,
+  "status_url": "/api/execution/jobs/job-0123456789abcdef",
+  "queue": "local",
+  "queue_position": 1,
+  "importance": "normal",
+  "expires_at": "2026-06-04T17:30:00-07:00"
+}
+```
+
+Poll the job status with:
+
+```text
+GET /api/execution/jobs/{job_id}
+```
+
+The job status payload includes `status` as `queued`, `running`, `completed`, `failed`, or `not_found`. Completed jobs
+place the normal `TaskExecutionResult` under `result`; failed jobs return a short `error` object. Queue records are
+process-local and intended for short client polling, not durable storage across API restarts.
+
+Queue selection:
+
+- Local queue: explicit `requested_provider = "local"`, request `constraints.routing_policy.mode = "local_only"`, or
+  a V3 prompt policy that is `local_only` or `local_preferred`.
+- Cloud queue: explicit cloud provider, request `cloud_only`, or a V3 prompt policy that is `cloud_only` or
+  `cloud_fallback`.
+- If neither side declares a route, the queued request defaults to the cloud queue and normal provider resolution still
+  runs at execution time.
+
+Importance selection:
+
+- V3 prompt `constraints.importance.level` controls queue priority when a prompt is present.
+- Without prompt-owned importance, `TaskExecutionRequest.priority` controls queue priority.
+- V1 and V2 prompts, and V3 prompts without explicit importance, are treated as `normal`.
+
+Local queue capacity is configured as `LLAMACPP_PARALLEL + 1` by default. This intentionally keeps only a small number
+of local jobs in or near llama.cpp while the AI Node queue decides which job enters next by importance and FIFO order
+within the same importance. Requests that need a local model swap remain queued until they can enter local execution;
+the existing local runtime switch path handles the swap, then the idle reversion policy returns to
+`qwen3-8b-q4_k_m` when the alternate model is idle long enough.
+
+Use `GET /api/execution/queues` for operational diagnostics:
+
+```json
+{
+  "configured": true,
+  "queues": {
+    "local": {
+      "queued_count": 1,
+      "active_count": 1,
+      "concurrency": 2,
+      "oldest_queued_at": "2026-06-04T17:00:00-07:00",
+      "per_importance": {
+        "high": 1
+      }
+    },
+    "cloud": {
+      "queued_count": 0,
+      "active_count": 0,
+      "concurrency": 4,
+      "oldest_queued_at": null,
+      "per_importance": {}
+    }
+  },
+  "job_count": 2,
+  "generated_at": "2026-06-04T17:00:05-07:00"
+}
+```
 
 ### Direct Execution Response
 

@@ -21,6 +21,7 @@ from ai_node.execution.task_models import (
     TaskExecutionMetrics,
     TaskExecutionPriority,
     TaskExecutionRequest,
+    TaskExecutionResponseMode,
     TaskExecutionResult,
     TaskExecutionStatus,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "TaskExecutionMetrics",
     "TaskExecutionPriority",
     "TaskExecutionRequest",
+    "TaskExecutionResponseMode",
     "TaskExecutionResult",
     "TaskExecutionStatus",
     "TaskFamilyValidationResult",

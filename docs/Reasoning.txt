@@ -684,3 +684,9 @@ Chosen fix: Extended declaration runner tests with an integration-style path tha
 What changed: Updated `tests/test_capability_declaration_runner.py`.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_capability_declaration_runner tests.test_capability_manifest_schema tests.test_provider_runtime` passed.
 ###########
+Task #951
+Step objective: Add local and cloud execution queues with async queued-job response contract.
+Chosen fix: Added an internal execution queue service with local/cloud lanes, importance ordering, async queued responses, job polling, and direct execution integration that preserves the existing synchronous default path.
+What changed: Added queue runtime code, direct execution `response_mode` and `job_name` fields, job/queue API routes, request schema and communication docs, and targeted tests.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_task_execution_request.py tests/test_node_control_api.py tests/test_task_execution_service.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py src/ai_node/runtime/node_control_api.py src/ai_node/runtime/task_execution_service.py src/ai_node/execution/task_models.py src/ai_node/execution/__init__.py`, and `.venv/bin/python -m json.tool docs/json-schemas/client-ai-v2/execution-request.v2.schema.json >/dev/null` passed.
+###########

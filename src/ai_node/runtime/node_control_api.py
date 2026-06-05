@@ -30,6 +30,7 @@ from ai_node.runtime.internal_scheduler import InternalScheduler
 from ai_node.runtime.service_manager import NullServiceManager
 from ai_node.runtime.capability_resolver import load_task_graph
 from ai_node.runtime.execution_telemetry import ExecutionTelemetryPublisher
+from ai_node.runtime.execution_queue import ExecutionQueueService
 from ai_node.runtime.prompt_construction import render_prompt_template
 from ai_node.runtime.task_execution_service import TaskExecutionService
 from ai_node.runtime.capability_declaration_runner import (
@@ -641,6 +642,7 @@ class NodeControlState:
         trusted_runtime_context: dict | None = None,
         direct_execution_admission_guard: DirectExecutionAdmissionGuard | None = None,
         direct_execution_admission_config: DirectExecutionAdmissionConfig | None = None,
+        execution_queue: ExecutionQueueService | None = None,
     ) -> None:
         self._lifecycle = lifecycle
         self._config_path = Path(config_path)
@@ -690,6 +692,17 @@ class NodeControlState:
         self._direct_execution_admission_guard = direct_execution_admission_guard or DirectExecutionAdmissionGuard(
             config=direct_execution_admission_config,
             logger=logger,
+        )
+        local_queue_concurrency = max(
+            _env_int("HEXE_EXECUTION_QUEUE_LOCAL_CONCURRENCY", _env_int("LLAMACPP_PARALLEL", 1) + 1),
+            1,
+        )
+        self._execution_queue = execution_queue or ExecutionQueueService(
+            logger=logger,
+            local_concurrency=local_queue_concurrency,
+            cloud_concurrency=max(_env_int("HEXE_EXECUTION_QUEUE_CLOUD_CONCURRENCY", 4), 1),
+            check_after_seconds=max(_env_int("HEXE_EXECUTION_QUEUE_CHECK_AFTER_SECONDS", 5), 1),
+            job_ttl_seconds=max(_env_int("HEXE_EXECUTION_QUEUE_JOB_TTL_SECONDS", 3600), 60),
         )
         self._operational_mqtt_fast_until = local_now() + timedelta(
             seconds=self._operational_mqtt_health_fast_window_seconds
@@ -1689,6 +1702,11 @@ class NodeControlState:
         return self._task_execution_service
 
     async def execute_direct(self, *, request: TaskExecutionRequest) -> dict:
+        if request.response_mode == "async_if_queued":
+            return await self._enqueue_direct_execution(request=request)
+        return await self._execute_direct_now(request=request)
+
+    async def _execute_direct_now(self, *, request: TaskExecutionRequest) -> dict:
         self._acquire_execution_admission(route="direct")
         try:
             service = self._get_task_execution_service()
@@ -1696,6 +1714,93 @@ class NodeControlState:
             return result.model_dump(mode="json")
         finally:
             self._release_execution_admission(route="direct")
+
+    async def _enqueue_direct_execution(self, *, request: TaskExecutionRequest) -> dict:
+        request_copy = request.model_copy(deep=True)
+        queue_context = self._direct_execution_queue_context(request=request_copy)
+        response = await self._execution_queue.enqueue(
+            queue=queue_context["queue"],
+            importance=queue_context["importance"],
+            job_name=request_copy.job_name or request_copy.task_id,
+            request_payload=request_copy.model_dump(mode="json"),
+            runner=lambda: self._execute_direct_now(request=request_copy),
+        )
+        return {
+            **response,
+            "message": f"job queued - check in {response['check_after_seconds']} secs",
+        }
+
+    async def execution_job_status(self, *, job_id: str) -> dict:
+        return await self._execution_queue.job_status(job_id=job_id)
+
+    async def execution_queue_diagnostics(self) -> dict:
+        return await self._execution_queue.diagnostics()
+
+    def _direct_execution_queue_context(self, *, request: TaskExecutionRequest) -> dict:
+        authorization = self._direct_execution_authorization_snapshot(request=request)
+        return {
+            "queue": self._direct_execution_queue_kind(request=request, authorization=authorization),
+            "importance": self._direct_execution_importance(request=request, authorization=authorization),
+        }
+
+    def _direct_execution_authorization_snapshot(self, *, request: TaskExecutionRequest):
+        if not request.prompt_id:
+            return None
+        try:
+            return self._execution_gateway.authorize(
+                prompt_id=request.prompt_id,
+                task_family=request.task_family,
+                prompt_services_state=self._prompt_registry.snapshot() if self._prompt_registry is not None else {},
+                prompt_version=request.prompt_version,
+                requested_by=request.requested_by,
+                service_id=request.service_id,
+                customer_id=request.customer_id,
+                requested_provider=request.requested_provider,
+                requested_model=request.requested_model,
+                inputs=request.inputs,
+            )
+        except Exception:
+            return None
+
+    @staticmethod
+    def _direct_execution_queue_kind(*, request: TaskExecutionRequest, authorization) -> str:
+        requested_provider = str(request.requested_provider or "").strip().lower()
+        if requested_provider == "local":
+            return "local"
+        if requested_provider and requested_provider != "local":
+            return "cloud"
+
+        request_constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        request_routing = request_constraints.get("routing_policy") if isinstance(request_constraints.get("routing_policy"), dict) else {}
+        request_mode = TaskExecutionService._normalize_routing_policy_mode(
+            request_routing.get("mode") if isinstance(request_routing, dict) else None
+        )
+        if request_mode in {"local_only", "local_preferred"}:
+            return "local"
+        if request_mode in {"cloud_only", "cloud_fallback"}:
+            return "cloud"
+
+        prompt_constraints = authorization.prompt_constraints if authorization is not None and isinstance(authorization.prompt_constraints, dict) else {}
+        prompt_routing = prompt_constraints.get("routing_policy") if isinstance(prompt_constraints.get("routing_policy"), dict) else {}
+        prompt_mode = TaskExecutionService._normalize_routing_policy_mode(
+            prompt_routing.get("mode") if isinstance(prompt_routing, dict) else None
+        )
+        if prompt_mode in {"local_only", "local_preferred"}:
+            return "local"
+        if prompt_mode in {"cloud_only", "cloud_fallback"}:
+            return "cloud"
+
+        provider_preferences = authorization.provider_preferences if authorization is not None and isinstance(authorization.provider_preferences, dict) else {}
+        default_provider = str(provider_preferences.get("default_provider") or "").strip().lower()
+        return "local" if default_provider == "local" else "cloud"
+
+    @staticmethod
+    def _direct_execution_importance(*, request: TaskExecutionRequest, authorization) -> str:
+        prompt_level = TaskExecutionService._prompt_importance_level(authorization=authorization)
+        if prompt_level:
+            return prompt_level
+        priority = str(request.priority or "normal").strip().lower()
+        return priority if priority in {"background", "low", "normal", "high"} else "normal"
 
     @staticmethod
     def _client_ai_v2_schema_dir() -> Path:
@@ -3819,6 +3924,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/schemas/client-ai/v2/{schema_name}",
                 "/api/execution/authorize",
                 "/api/execution/admission",
+                "/api/execution/jobs/{job_id}",
+                "/api/execution/queues",
                 "/api/execution/compare",
                 "/api/benchmarks/execution/v2",
                 "/api/services/status",
@@ -4285,6 +4392,17 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/execution/jobs/{job_id}")
+    async def get_execution_job(job_id: str):
+        payload = await state.execution_job_status(job_id=job_id)
+        if payload.get("status") == "not_found":
+            raise HTTPException(status_code=404, detail="job_not_found")
+        return payload
+
+    @app.get("/api/execution/queues")
+    async def get_execution_queues():
+        return await state.execution_queue_diagnostics()
 
     @app.post("/api/execution/compare")
     async def post_execution_compare(payload: ExecutionCompareRequest):

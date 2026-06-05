@@ -100,6 +100,24 @@
       ],
       "default": "normal"
     },
+    "response_mode": {
+      "type": "string",
+      "enum": [
+        "sync",
+        "async_if_queued"
+      ],
+      "default": "sync",
+      "description": "Use sync for inline execution. Use async_if_queued to return a queued job response and poll /api/execution/jobs/{job_id}."
+    },
+    "job_name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Optional human-readable queued job label. Defaults to task_id."
+    },
     "timeout_s": {
       "type": "integer",
       "minimum": 1,
@@ -108,6 +126,14 @@
     },
     "trace_id": {
       "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "lease_id": {
+      "type": [
+        "string",
+        "null"
+      ],
       "minLength": 1,
       "maxLength": 128
     }

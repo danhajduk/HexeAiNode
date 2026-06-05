@@ -502,13 +502,15 @@ class TaskExecutionService:
 
     @staticmethod
     def _prompt_importance_level(*, authorization) -> str | None:
-        if authorization is None or not isinstance(authorization.prompt_constraints, dict):
+        if authorization is None:
             return None
+        if not isinstance(authorization.prompt_constraints, dict):
+            return "normal"
         importance = authorization.prompt_constraints.get("importance")
         if not isinstance(importance, dict):
-            return None
+            return "normal"
         level = str(importance.get("level") or "").strip().lower()
-        return level if level in IMPORTANCE_TO_EXECUTION_PRIORITY else None
+        return level if level in IMPORTANCE_TO_EXECUTION_PRIORITY else "normal"
 
     @staticmethod
     def _effective_priority(*, request: TaskExecutionRequest, authorization) -> str:

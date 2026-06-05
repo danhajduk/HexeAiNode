@@ -1,0 +1,111 @@
+import asyncio
+import logging
+import unittest
+
+from ai_node.runtime.execution_queue import ExecutionQueueService
+
+
+class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_enqueue_returns_queued_response_and_completes_job(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
+
+        response = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="smoke-job",
+            request_payload={"task_id": "task-001"},
+            runner=lambda: _completed({"ok": True}),
+        )
+
+        self.assertEqual(response["status"], "queued")
+        self.assertEqual(response["job_name"], "smoke-job")
+        self.assertEqual(response["queue"], "local")
+        self.assertIn("/api/execution/jobs/", response["status_url"])
+
+        status = await _wait_for_status(queue, job_id=response["job_id"], status="completed")
+        self.assertEqual(status["result"], {"ok": True})
+        self.assertIsNone(status["queue_position"])
+
+    async def test_local_queue_prioritizes_importance_after_active_slot(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
+        release_first = asyncio.Event()
+        execution_order: list[str] = []
+
+        first = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="first",
+            request_payload={"task_id": "first"},
+            runner=lambda: _blocking_job(name="first", order=execution_order, release=release_first),
+        )
+        await _wait_for_status(queue, job_id=first["job_id"], status="running")
+
+        background = await queue.enqueue(
+            queue="local",
+            importance="background",
+            job_name="background",
+            request_payload={"task_id": "background"},
+            runner=lambda: _ordered_job(name="background", order=execution_order),
+        )
+        critical = await queue.enqueue(
+            queue="local",
+            importance="critical",
+            job_name="critical",
+            request_payload={"task_id": "critical"},
+            runner=lambda: _ordered_job(name="critical", order=execution_order),
+        )
+
+        self.assertEqual((await queue.job_status(job_id=critical["job_id"]))["queue_position"], 1)
+        self.assertEqual((await queue.job_status(job_id=background["job_id"]))["queue_position"], 2)
+
+        release_first.set()
+        await _wait_for_status(queue, job_id=background["job_id"], status="completed")
+        await _wait_for_status(queue, job_id=critical["job_id"], status="completed")
+
+        self.assertEqual(execution_order, ["first", "critical", "background"])
+
+    async def test_failure_payload_does_not_expose_traceback(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
+        response = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="failure",
+            request_payload={"task_id": "failure"},
+            runner=_failing_job,
+        )
+
+        status = await _wait_for_status(queue, job_id=response["job_id"], status="failed")
+        self.assertEqual(status["error"]["code"], "boom")
+        self.assertNotIn("traceback", status["error"])
+
+
+async def _completed(payload: dict) -> dict:
+    return payload
+
+
+async def _ordered_job(*, name: str, order: list[str]) -> dict:
+    order.append(name)
+    return {"name": name}
+
+
+async def _blocking_job(*, name: str, order: list[str], release: asyncio.Event) -> dict:
+    order.append(name)
+    await release.wait()
+    return {"name": name}
+
+
+async def _failing_job() -> dict:
+    raise RuntimeError("boom")
+
+
+async def _wait_for_status(queue: ExecutionQueueService, *, job_id: str, status: str) -> dict:
+    for _ in range(50):
+        payload = await queue.job_status(job_id=job_id)
+        if payload.get("status") == status:
+            return payload
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"job {job_id} did not reach {status}")
+
+
+if __name__ == "__main__":
+    unittest.main()

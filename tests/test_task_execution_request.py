@@ -43,6 +43,37 @@ class TaskExecutionRequestTests(unittest.TestCase):
 
         self.assertEqual(payload.lease_id, "lease-123")
 
+    def test_accepts_async_queue_response_mode_and_job_name(self):
+        payload = TaskExecutionRequest.model_validate(
+            {
+                "task_id": "task-queued-001",
+                "job_name": "daily summary",
+                "task_family": "task.summarization.text",
+                "requested_by": "scheduler.core",
+                "inputs": {"text": "meeting notes"},
+                "response_mode": "async_if_queued",
+                "trace_id": "trace-queued-001",
+            }
+        )
+
+        self.assertEqual(payload.response_mode, "async_if_queued")
+        self.assertEqual(payload.job_name, "daily summary")
+
+    def test_rejects_invalid_async_queue_response_mode(self):
+        with self.assertRaises(ValidationError) as context:
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-queued-002",
+                    "task_family": "task.summarization.text",
+                    "requested_by": "scheduler.core",
+                    "inputs": {"text": "meeting notes"},
+                    "response_mode": "later",
+                    "trace_id": "trace-queued-002",
+                }
+            )
+
+        self.assertIn("response_mode", str(context.exception))
+
     def test_canonicalizes_legacy_classification_family(self):
         payload = TaskExecutionRequest.model_validate(
             {

@@ -7,6 +7,7 @@ from ai_node.capabilities.task_families import canonicalize_task_family, validat
 
 
 TaskExecutionPriority = Literal["background", "low", "normal", "high"]
+TaskExecutionResponseMode = Literal["sync", "async_if_queued"]
 TaskExecutionStatus = Literal["accepted", "completed", "failed", "rejected", "degraded", "unsupported"]
 
 
@@ -34,6 +35,8 @@ class TaskExecutionRequest(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
     constraints: dict[str, Any] = Field(default_factory=dict)
     priority: TaskExecutionPriority = "normal"
+    response_mode: TaskExecutionResponseMode = "sync"
+    job_name: str | None = None
     timeout_s: int = 60
     trace_id: str
     lease_id: str | None = None
@@ -106,6 +109,13 @@ class TaskExecutionRequest(BaseModel):
         if value is None:
             return None
         return _normalized_non_empty_string(value, field_name="lease_id")
+
+    @field_validator("job_name")
+    @classmethod
+    def _validate_job_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _normalized_non_empty_string(value, field_name="job_name", max_length=255)
 
     @model_validator(mode="after")
     def _normalize_identity_fields(self) -> "TaskExecutionRequest":
