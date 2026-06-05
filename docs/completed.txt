@@ -78,6 +78,7 @@ Task 067 (Phase 2): Implement capability declaration API client - Completed on 0
 Task 068 (Phase 2): Implement capability declaration submission state handling - Completed on 03/11/2026 16:55
 Task 069 (Phase 2): Implement Core response processing for accepted capability profile - Completed on 03/11/2026 16:59
 Task 070 (Phase 2): Implement baseline governance sync after capability acceptance - Completed on 03/11/2026 17:05
+Task 940: Preserve V3 prompt constraint fields during prompt registration sync - Completed on 06/04/2026 20:40
 Task 071 (Phase 2): Implement governance versioning and freshness tracking - Completed on 03/11/2026 17:09
 Task 072 (Phase 2): Implement trusted operational MQTT connection readiness - Completed on 03/11/2026 17:12
 Task 073 (Phase 2): Implement baseline trusted status telemetry - Completed on 03/11/2026 17:14

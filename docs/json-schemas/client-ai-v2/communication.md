@@ -882,6 +882,10 @@ Prompt registration continues to use the existing route:
 POST /api/prompts/services
 ```
 
+V3 prompts should include prompt-owned `constraints.routing_policy`, `constraints.importance`, and
+`constraints.capability_requirements` in this registration payload so the AI Node persists and applies them during
+later direct executions.
+
 V2-compatible prompts can include `output_contract` and `benchmark` metadata.
 This metadata describes the prompt contract, but it is not a valid top-level field for `/api/execution/direct`.
 
@@ -893,6 +897,17 @@ Example:
   "service_id": "mail-node",
   "task_family": "task.classification",
   "version": "v2.0",
+  "constraints": {
+    "routing_policy": {
+      "mode": "local_preferred"
+    },
+    "importance": {
+      "level": "normal"
+    },
+    "capability_requirements": {
+      "required_features": ["structured_output"]
+    }
+  },
   "definition": {
     "system_prompt": "Return JSON only.",
     "prompt_template": "Classify this email: {{body}}",

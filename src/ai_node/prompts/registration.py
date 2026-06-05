@@ -94,6 +94,16 @@ def normalize_prompt_importance_policy(value: object) -> dict:
     return {"level": level}
 
 
+def normalize_prompt_capability_requirements(value: object) -> dict | None:
+    if value is None:
+        return None
+    payload = _normalize_mapping(value)
+    required_features = _normalize_string_list(payload.get("required_features"))
+    if not required_features:
+        return None
+    return {"required_features": required_features}
+
+
 def normalize_prompt_constraints(value: object) -> dict:
     payload = _normalize_mapping(value)
     max_timeout_s = payload.get("max_timeout_s")
@@ -104,6 +114,7 @@ def normalize_prompt_constraints(value: object) -> dict:
         "allowed_model_overrides": allowed_model_overrides,
         "routing_policy": normalize_prompt_routing_policy(payload.get("routing_policy")),
         "importance": normalize_prompt_importance_policy(payload.get("importance")),
+        "capability_requirements": normalize_prompt_capability_requirements(payload.get("capability_requirements")),
     }
 
 

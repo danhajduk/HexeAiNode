@@ -34,6 +34,102 @@
         "additionalProperties": true,
         "properties": {
           "constraints": {
+            "additionalProperties": false,
+            "properties": {
+              "allowed_model_overrides": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "capability_requirements": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "required_features": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array",
+                        "uniqueItems": true
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              },
+              "importance": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "level": {
+                        "enum": [
+                          "background",
+                          "normal",
+                          "high",
+                          "critical"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "level"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "max_timeout_s": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "routing_policy": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "mode": {
+                        "enum": [
+                          "local_only",
+                          "local_preferred",
+                          "cloud_only",
+                          "cloud_fallback"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "structured_output_required": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "max_timeout_s",
+              "structured_output_required",
+              "allowed_model_overrides",
+              "routing_policy",
+              "importance",
+              "capability_requirements"
+            ],
             "type": "object"
           },
           "current_version": {

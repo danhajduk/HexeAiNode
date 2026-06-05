@@ -49,6 +49,7 @@ class PromptServiceStateStoreTests(unittest.TestCase):
                         "allowed_model_overrides": [],
                         "routing_policy": None,
                         "importance": {"level": "normal"},
+                        "capability_requirements": {"required_features": ["structured_output"]},
                     },
                     "metadata": {},
                     "current_version": "v1",
@@ -76,6 +77,10 @@ class PromptServiceStateStoreTests(unittest.TestCase):
             self.assertEqual(loaded["prompt_services"][0]["current_version"], "v1")
             self.assertEqual(loaded["prompt_services"][0]["status"], "active")
             self.assertEqual(loaded["prompt_services"][0]["versions"][0]["definition"]["system_prompt"], "You are a classifier.")
+            self.assertEqual(
+                loaded["prompt_services"][0]["constraints"]["capability_requirements"],
+                {"required_features": ["structured_output"]},
+            )
 
     def test_normalize_legacy_state_migrates_registered_prompt(self):
         payload = normalize_prompt_service_state(
@@ -131,6 +136,65 @@ class PromptServiceStateStoreTests(unittest.TestCase):
     def test_normalize_constraints_rejects_unknown_v3_importance_policy(self):
         with self.assertRaisesRegex(ValueError, "invalid_prompt_importance_level"):
             normalize_prompt_constraints({"importance": {"level": "urgent"}})
+
+    def test_normalize_constraints_accepts_v3_capability_requirements(self):
+        payload = normalize_prompt_constraints(
+            {
+                "capability_requirements": {
+                    "required_features": ["structured_output", "reasoning", "structured_output"],
+                }
+            }
+        )
+
+        self.assertEqual(
+            payload["capability_requirements"],
+            {"required_features": ["structured_output", "reasoning"]},
+        )
+
+    def test_normalize_v3_email_prompt_constraints_survive_state_normalization(self):
+        payload = normalize_prompt_service_state(
+            {
+                "schema_version": "2.0",
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.email.classifier",
+                        "prompt_name": "Email Classifier",
+                        "service_id": "node-email",
+                        "owner_service": "node-email",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "privacy_class": "internal",
+                        "access_scope": "service",
+                        "execution_policy": {"allow_direct_execution": True, "allow_version_pinning": True},
+                        "provider_preferences": {"default_provider": "openai", "default_model": "gpt-5.4-nano"},
+                        "constraints": {
+                            "max_timeout_s": 120,
+                            "structured_output_required": True,
+                            "routing_policy": {"mode": "local_preferred"},
+                            "importance": {"level": "normal"},
+                            "capability_requirements": {"required_features": ["structured_output"]},
+                        },
+                        "metadata": {},
+                        "current_version": "v3.0.0",
+                        "versions": [{"version": "v3.0.0", "definition": {}, "metadata": {}, "created_at": "2026-06-04T00:00:00Z"}],
+                        "lifecycle_history": [{"state": "active", "reason": "created", "changed_at": "2026-06-04T00:00:00Z"}],
+                        "usage": {"execution_count": 0, "success_count": 0, "failure_count": 0, "denial_count": 0},
+                        "registered_at": "2026-06-04T00:00:00Z",
+                        "updated_at": "2026-06-04T00:00:00Z",
+                        "last_reviewed_at": "2026-06-04T00:00:00Z",
+                        "reviewed_by": None,
+                        "review_reason": "created",
+                    }
+                ],
+                "probation": {"active_prompt_ids": [], "reasons": {}, "updated_at": "2026-06-04T00:00:00Z"},
+                "updated_at": "2026-06-04T00:00:00Z",
+            }
+        )
+
+        constraints = payload["prompt_services"][0]["constraints"]
+        self.assertEqual(constraints["routing_policy"], {"mode": "local_preferred"})
+        self.assertEqual(constraints["importance"], {"level": "normal"})
+        self.assertEqual(constraints["capability_requirements"], {"required_features": ["structured_output"]})
 
     def test_normalize_preserves_review_due_and_access_policy(self):
         payload = normalize_prompt_service_state(

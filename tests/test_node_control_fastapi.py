@@ -865,7 +865,13 @@ class NodeControlFastApiTests(unittest.TestCase):
                     "prompt_name": "Prompt Alpha",
                     "owner_client_id": "service.alpha",
                     "definition": {"system_prompt": "Classify the text."},
-                    "constraints": {"max_timeout_s": 30},
+                    "constraints": {
+                        "max_timeout_s": 30,
+                        "structured_output_required": True,
+                        "routing_policy": {"mode": "local_preferred"},
+                        "importance": {"level": "normal"},
+                        "capability_requirements": {"required_features": ["structured_output"]},
+                    },
                     "metadata": {"owner": "ops"},
                 },
             )
@@ -873,6 +879,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             prompt_get_response = client.get("/api/prompts/services")
             self.assertEqual(prompt_get_response.status_code, 200)
             self.assertEqual(len(prompt_get_response.json()["state"]["prompt_services"]), 1)
+            prompt_constraints = prompt_get_response.json()["state"]["prompt_services"][0]["constraints"]
+            self.assertEqual(prompt_constraints["routing_policy"], {"mode": "local_preferred"})
+            self.assertEqual(prompt_constraints["importance"], {"level": "normal"})
+            self.assertEqual(prompt_constraints["capability_requirements"], {"required_features": ["structured_output"]})
 
             prompt_update_response = client.put(
                 "/api/prompts/services/prompt.alpha",
@@ -892,6 +902,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                     "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "service_id": "service.alpha",
+                    "inputs": {"json_schema": {"type": "object"}},
                 },
             )
             self.assertEqual(exec_authorize_response.status_code, 200)
@@ -910,6 +921,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                     "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "service_id": "service.alpha",
+                    "inputs": {"json_schema": {"type": "object"}},
                 },
             )
             self.assertEqual(restricted_authorize_response.status_code, 200)
@@ -971,6 +983,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                     "task_family": "task.classification",
                     "requested_by": "service.alpha",
                     "service_id": "service.alpha",
+                    "inputs": {"json_schema": {"type": "object"}},
                 },
             )
             self.assertEqual(exec_review_due_response.status_code, 200)

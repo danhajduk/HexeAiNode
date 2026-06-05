@@ -1,5 +1,14 @@
 # Task Details
 
+## Task 940
+Original task source: ad hoc operator request on 2026-06-04.
+
+Summary of preserved scope:
+- Email Node prompt JSON includes V3 prompt constraints such as `constraints.routing_policy`, `constraints.importance`, and `constraints.capability_requirements`.
+- AI Node registered prompt state for `prompt.email.classifier` did not include those V3 fields, causing local/cloud routing to fall back to OpenAI defaults.
+- Preserve V3 prompt constraint fields when client nodes register or update prompts, persist them in `.run/prompt_service_state.json`, and keep the public/local schema documentation aligned.
+- Add regression coverage using an Email Node-style V3 prompt registration payload.
+
 ## Task 932-935
 Original task source: ad hoc operator request on 2026-05-28.
 
