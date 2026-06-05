@@ -47,3 +47,17 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
+[TODO] Task 953: Add routing decision metadata to queued execution responses
+[TODO] Task 954: Add budget and cost guardrails for local-preferred cloud spillover
+[TODO] Task 955: Add V3 privacy-aware routing constraints for local and cloud execution
+[TODO] Task 956: Add queue ETA estimates to queued execution responses
+[TODO] Task 957: Use provider task capability maps when choosing local or cloud queues
+[TODO] Task 958: Add task-to-model discovery endpoint for local and cloud providers
+[TODO] Task 959: Add local model health and warmth state for loaded, warm, cold, and swap-required models
+[TODO] Task 960: Add provider and model resolution reason metadata to execution results
+[TODO] Task 961: Add retry and fallback rules by execution error class
+[TODO] Task 962: Add V3 prompt capability requirements for provider and model selection
+[TODO] Task 963: Add dry-run execution route preview endpoint
+[TODO] Task 964: Add queued execution job cancellation
+[TODO] Task 965: Add persisted queued job state for async execution recovery
+[TODO] Task 966: Add per-client queue fairness limits

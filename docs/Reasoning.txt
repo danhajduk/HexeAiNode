@@ -690,3 +690,9 @@ Chosen fix: Added an internal execution queue service with local/cloud lanes, im
 What changed: Added queue runtime code, direct execution `response_mode` and `job_name` fields, job/queue API routes, request schema and communication docs, and targeted tests.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_task_execution_request.py tests/test_node_control_api.py tests/test_task_execution_service.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py src/ai_node/runtime/node_control_api.py src/ai_node/runtime/task_execution_service.py src/ai_node/execution/task_models.py src/ai_node/execution/__init__.py`, and `.venv/bin/python -m json.tool docs/json-schemas/client-ai-v2/execution-request.v2.schema.json >/dev/null` passed.
 ###########
+Task #952
+Step objective: Add local-preferred cloud spillover policy for high-importance queued execution.
+Chosen fix: Added local queue pressure tracking and a conservative spillover gate that only moves high or critical `local_preferred` queued requests to cloud when local is backed up and cloud has an eligible model.
+What changed: Added queue pressure diagnostics, configurable spillover thresholds, queued request cloud-only execution rewrite for spillover, tests for spillover and local-only protection, and client/config documentation.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
+###########

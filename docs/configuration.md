@@ -65,6 +65,13 @@ Backend runtime:
 - `HEXE_DIRECT_EXECUTION_WARM_LOAD_PER_CPU` default `0.8`; dynamic capacity enters warm tier at or above this load-per-CPU value
 - `HEXE_DIRECT_EXECUTION_HOT_LOAD_PER_CPU` default `1.5`; dynamic capacity enters hot tier at or above this load-per-CPU value
 - `HEXE_DIRECT_EXECUTION_RETRY_AFTER_SECONDS` default `30`; retry hint returned with direct execution busy responses
+- `HEXE_EXECUTION_QUEUE_LOCAL_CONCURRENCY` optional override; defaults to `LLAMACPP_PARALLEL + 1`
+- `HEXE_EXECUTION_QUEUE_CLOUD_CONCURRENCY` default `4`; max cloud queued jobs dispatched concurrently
+- `HEXE_EXECUTION_QUEUE_CHECK_AFTER_SECONDS` default `5`; queued response polling hint in seconds
+- `HEXE_EXECUTION_QUEUE_JOB_TTL_SECONDS` default `3600`; in-memory queued job retention hint in seconds
+- `HEXE_LOCAL_PREFERRED_SPILLOVER_ENABLED` default `true`; allows high-importance `local_preferred` queued jobs to use cloud when local is backed up and cloud is eligible
+- `HEXE_LOCAL_PREFERRED_SPILLOVER_CRITICAL_PENDING` default `2`; critical spillover threshold for active + queued local jobs
+- `HEXE_LOCAL_PREFERRED_SPILLOVER_HIGH_PENDING` default `5`; high-priority spillover threshold for active + queued local jobs
 
 Provider-specific:
 

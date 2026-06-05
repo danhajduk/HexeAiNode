@@ -127,6 +127,19 @@ class ExecutionQueueService:
                 "generated_at": local_now_iso(),
             }
 
+    async def queue_pressure(self, *, queue: str) -> dict:
+        queue_key = "local" if str(queue or "").strip().lower() == "local" else "cloud"
+        async with self._lock:
+            queued_count = len(self._queues.get(queue_key) or [])
+            active_count = self._active_counts.get(queue_key, 0)
+            return {
+                "queue": queue_key,
+                "queued_count": queued_count,
+                "active_count": active_count,
+                "concurrency": self._concurrency(queue_key),
+                "pending_count": queued_count + active_count,
+            }
+
     def _ensure_dispatcher_locked(self, queue_key: str) -> None:
         task = self._dispatcher_tasks.get(queue_key)
         if task is not None and not task.done():

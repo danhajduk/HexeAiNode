@@ -78,6 +78,32 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["error"]["code"], "boom")
         self.assertNotIn("traceback", status["error"])
 
+    async def test_queue_pressure_counts_active_and_queued_jobs(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
+        release_first = asyncio.Event()
+        first = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="first",
+            request_payload={"task_id": "first"},
+            runner=lambda: _blocking_job(name="first", order=[], release=release_first),
+        )
+        await _wait_for_status(queue, job_id=first["job_id"], status="running")
+        await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="second",
+            request_payload={"task_id": "second"},
+            runner=lambda: _completed({"ok": True}),
+        )
+
+        pressure = await queue.queue_pressure(queue="local")
+
+        self.assertEqual(pressure["active_count"], 1)
+        self.assertEqual(pressure["queued_count"], 1)
+        self.assertEqual(pressure["pending_count"], 2)
+        release_first.set()
+
 
 async def _completed(payload: dict) -> dict:
     return payload

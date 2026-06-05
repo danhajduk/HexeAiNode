@@ -704,6 +704,15 @@ class NodeControlState:
             check_after_seconds=max(_env_int("HEXE_EXECUTION_QUEUE_CHECK_AFTER_SECONDS", 5), 1),
             job_ttl_seconds=max(_env_int("HEXE_EXECUTION_QUEUE_JOB_TTL_SECONDS", 3600), 60),
         )
+        self._local_preferred_spillover_enabled = _env_bool("HEXE_LOCAL_PREFERRED_SPILLOVER_ENABLED", True)
+        self._local_preferred_spillover_critical_pending = max(
+            _env_int("HEXE_LOCAL_PREFERRED_SPILLOVER_CRITICAL_PENDING", 2),
+            0,
+        )
+        self._local_preferred_spillover_high_pending = max(
+            _env_int("HEXE_LOCAL_PREFERRED_SPILLOVER_HIGH_PENDING", 5),
+            0,
+        )
         self._operational_mqtt_fast_until = local_now() + timedelta(
             seconds=self._operational_mqtt_health_fast_window_seconds
         )
@@ -1717,13 +1726,14 @@ class NodeControlState:
 
     async def _enqueue_direct_execution(self, *, request: TaskExecutionRequest) -> dict:
         request_copy = request.model_copy(deep=True)
-        queue_context = self._direct_execution_queue_context(request=request_copy)
+        queue_context = await self._direct_execution_queue_context(request=request_copy)
+        execution_request = self._execution_request_for_queue_context(request=request_copy, queue_context=queue_context)
         response = await self._execution_queue.enqueue(
             queue=queue_context["queue"],
             importance=queue_context["importance"],
             job_name=request_copy.job_name or request_copy.task_id,
-            request_payload=request_copy.model_dump(mode="json"),
-            runner=lambda: self._execute_direct_now(request=request_copy),
+            request_payload=execution_request.model_dump(mode="json"),
+            runner=lambda: self._execute_direct_now(request=execution_request),
         )
         return {
             **response,
@@ -1736,12 +1746,41 @@ class NodeControlState:
     async def execution_queue_diagnostics(self) -> dict:
         return await self._execution_queue.diagnostics()
 
-    def _direct_execution_queue_context(self, *, request: TaskExecutionRequest) -> dict:
+    async def _direct_execution_queue_context(self, *, request: TaskExecutionRequest) -> dict:
         authorization = self._direct_execution_authorization_snapshot(request=request)
+        importance = self._direct_execution_importance(request=request, authorization=authorization)
+        routing_mode = self._direct_execution_effective_routing_mode(request=request, authorization=authorization)
+        queue_key = self._direct_execution_queue_kind(
+            request=request,
+            authorization=authorization,
+            routing_mode=routing_mode,
+        )
+        if await self._should_spill_local_preferred_to_cloud(
+            request=request,
+            importance=importance,
+            routing_mode=routing_mode,
+            queue_key=queue_key,
+        ):
+            queue_key = "cloud"
+            spillover = True
+        else:
+            spillover = False
         return {
-            "queue": self._direct_execution_queue_kind(request=request, authorization=authorization),
-            "importance": self._direct_execution_importance(request=request, authorization=authorization),
+            "queue": queue_key,
+            "importance": importance,
+            "routing_mode": routing_mode,
+            "spillover": spillover,
         }
+
+    @staticmethod
+    def _execution_request_for_queue_context(*, request: TaskExecutionRequest, queue_context: dict) -> TaskExecutionRequest:
+        if not bool(queue_context.get("spillover")):
+            return request
+        constraints = dict(request.constraints or {})
+        routing_policy = dict(constraints.get("routing_policy") or {})
+        routing_policy["mode"] = "cloud_only"
+        constraints["routing_policy"] = routing_policy
+        return request.model_copy(update={"constraints": constraints}, deep=True)
 
     def _direct_execution_authorization_snapshot(self, *, request: TaskExecutionRequest):
         if not request.prompt_id:
@@ -1763,11 +1802,16 @@ class NodeControlState:
             return None
 
     @staticmethod
-    def _direct_execution_queue_kind(*, request: TaskExecutionRequest, authorization) -> str:
+    def _direct_execution_queue_kind(*, request: TaskExecutionRequest, authorization, routing_mode: str | None = None) -> str:
         requested_provider = str(request.requested_provider or "").strip().lower()
         if requested_provider == "local":
             return "local"
         if requested_provider and requested_provider != "local":
+            return "cloud"
+
+        if routing_mode in {"local_only", "local_preferred"}:
+            return "local"
+        if routing_mode in {"cloud_only", "cloud_fallback"}:
             return "cloud"
 
         request_constraints = request.constraints if isinstance(request.constraints, dict) else {}
@@ -1779,7 +1823,6 @@ class NodeControlState:
             return "local"
         if request_mode in {"cloud_only", "cloud_fallback"}:
             return "cloud"
-
         prompt_constraints = authorization.prompt_constraints if authorization is not None and isinstance(authorization.prompt_constraints, dict) else {}
         prompt_routing = prompt_constraints.get("routing_policy") if isinstance(prompt_constraints.get("routing_policy"), dict) else {}
         prompt_mode = TaskExecutionService._normalize_routing_policy_mode(
@@ -1801,6 +1844,75 @@ class NodeControlState:
             return prompt_level
         priority = str(request.priority or "normal").strip().lower()
         return priority if priority in {"background", "low", "normal", "high"} else "normal"
+
+    @staticmethod
+    def _direct_execution_effective_routing_mode(*, request: TaskExecutionRequest, authorization) -> str | None:
+        request_constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        request_routing = request_constraints.get("routing_policy") if isinstance(request_constraints.get("routing_policy"), dict) else {}
+        request_mode = TaskExecutionService._normalize_routing_policy_mode(
+            request_routing.get("mode") if isinstance(request_routing, dict) else None
+        )
+        prompt_constraints = authorization.prompt_constraints if authorization is not None and isinstance(authorization.prompt_constraints, dict) else {}
+        prompt_routing = prompt_constraints.get("routing_policy") if isinstance(prompt_constraints.get("routing_policy"), dict) else {}
+        prompt_mode = TaskExecutionService._normalize_routing_policy_mode(
+            prompt_routing.get("mode") if isinstance(prompt_routing, dict) else None
+        )
+        effective_mode, conflict = TaskExecutionService._merge_routing_policy_modes(
+            prompt_mode=prompt_mode,
+            request_mode=request_mode,
+        )
+        if conflict:
+            return None
+        return effective_mode
+
+    async def _should_spill_local_preferred_to_cloud(
+        self,
+        *,
+        request: TaskExecutionRequest,
+        importance: str,
+        routing_mode: str | None,
+        queue_key: str,
+    ) -> bool:
+        if not self._local_preferred_spillover_enabled:
+            return False
+        if queue_key != "local" or routing_mode != "local_preferred":
+            return False
+        if str(request.requested_provider or "").strip():
+            return False
+        importance_key = str(importance or "normal").strip().lower()
+        if importance_key not in {"critical", "high"}:
+            return False
+        pressure = await self._execution_queue.queue_pressure(queue="local")
+        threshold = (
+            self._local_preferred_spillover_critical_pending
+            if importance_key == "critical"
+            else self._local_preferred_spillover_high_pending
+        )
+        if int(pressure.get("pending_count") or 0) < threshold:
+            return False
+        return self._cloud_execution_queue_available()
+
+    def _cloud_execution_queue_available(self) -> bool:
+        if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "provider_selection_context_payload"):
+            return False
+        try:
+            context = self._provider_runtime_manager.provider_selection_context_payload()
+        except Exception:
+            return False
+        enabled = {str(item or "").strip().lower() for item in list(context.get("enabled_providers") or [])}
+        usable_by_provider = context.get("usable_models_by_provider") if isinstance(context.get("usable_models_by_provider"), dict) else {}
+        available_by_provider = context.get("available_models_by_provider") if isinstance(context.get("available_models_by_provider"), dict) else {}
+        health_by_provider = context.get("provider_health") if isinstance(context.get("provider_health"), dict) else {}
+        for provider_id in enabled:
+            if not provider_id or provider_id == "local":
+                continue
+            availability = str((health_by_provider.get(provider_id) or {}).get("availability") or "").strip().lower()
+            if availability and availability not in {"available", "degraded"}:
+                continue
+            models = list(usable_by_provider.get(provider_id) or available_by_provider.get(provider_id) or [])
+            if any(str(model_id or "").strip() for model_id in models):
+                return True
+        return False
 
     @staticmethod
     def _client_ai_v2_schema_dir() -> Path:

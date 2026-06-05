@@ -16,6 +16,7 @@ from ai_node.runtime.node_control_api import (
     DirectExecutionBusyError,
     NodeControlState,
 )
+from ai_node.runtime.execution_queue import ExecutionQueueService
 from ai_node.runtime.operational_mqtt_recovery_store import OperationalMqttRecoveryStore
 
 
@@ -594,6 +595,106 @@ class NodeControlApiTests(unittest.TestCase):
 
         asyncio.run(run_scenario())
 
+    def test_execute_direct_spills_high_local_preferred_job_to_cloud_when_local_queue_is_busy(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                release_local = asyncio.Event()
+                execution_queue = ExecutionQueueService(
+                    logger=logging.getLogger("node-control-test"),
+                    local_concurrency=1,
+                    cloud_concurrency=1,
+                )
+                blocker = await execution_queue.enqueue(
+                    queue="local",
+                    importance="normal",
+                    job_name="local blocker",
+                    request_payload={"task_id": "local-blocker"},
+                    runner=lambda: self._blocking_queue_job(release=release_local),
+                )
+                await self._wait_for_queue_status(execution_queue, blocker["job_id"], "running")
+
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=(runtime_manager := self._FakeProviderRuntimeManager()),
+                    execution_queue=execution_queue,
+                )
+                state._local_preferred_spillover_high_pending = 1  # noqa: SLF001
+
+                queued = await state.execute_direct(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-spillover-001",
+                            "task_family": "task.classification",
+                            "requested_by": "service.alpha",
+                            "inputs": {"text": "hello"},
+                            "constraints": {"routing_policy": {"mode": "local_preferred"}},
+                            "response_mode": "async_if_queued",
+                            "priority": "high",
+                            "trace_id": "trace-spillover-001",
+                        }
+                    )
+                )
+
+                self.assertEqual(queued["queue"], "cloud")
+                completed = await self._wait_for_execution_job(state, queued["job_id"], "completed")
+                self.assertEqual(completed["result"]["provider_used"], "openai")
+                self.assertEqual(runtime_manager.last_execution_request.requested_provider, "openai")
+                release_local.set()
+                await self._wait_for_queue_status(execution_queue, blocker["job_id"], "completed")
+
+        asyncio.run(run_scenario())
+
+    def test_execute_direct_does_not_spill_local_only_job_to_cloud(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                release_local = asyncio.Event()
+                execution_queue = ExecutionQueueService(
+                    logger=logging.getLogger("node-control-test"),
+                    local_concurrency=1,
+                    cloud_concurrency=1,
+                )
+                blocker = await execution_queue.enqueue(
+                    queue="local",
+                    importance="normal",
+                    job_name="local blocker",
+                    request_payload={"task_id": "local-blocker"},
+                    runner=lambda: self._blocking_queue_job(release=release_local),
+                )
+                await self._wait_for_queue_status(execution_queue, blocker["job_id"], "running")
+
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                    execution_queue=execution_queue,
+                )
+                state._local_preferred_spillover_high_pending = 1  # noqa: SLF001
+
+                queued = await state.execute_direct(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-local-only-001",
+                            "task_family": "task.classification",
+                            "requested_by": "service.alpha",
+                            "inputs": {"text": "hello"},
+                            "constraints": {"routing_policy": {"mode": "local_only"}},
+                            "response_mode": "async_if_queued",
+                            "priority": "high",
+                            "trace_id": "trace-local-only-001",
+                        }
+                    )
+                )
+
+                self.assertEqual(queued["queue"], "local")
+                release_local.set()
+                await self._wait_for_execution_job(state, queued["job_id"], "completed")
+                await self._wait_for_queue_status(execution_queue, blocker["job_id"], "completed")
+
+        asyncio.run(run_scenario())
+
     def test_execute_direct_requires_runtime_manager(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
@@ -670,6 +771,18 @@ class NodeControlApiTests(unittest.TestCase):
                 return payload
             await asyncio.sleep(0.01)
         raise AssertionError(f"job {job_id} did not reach {status}")
+
+    async def _wait_for_queue_status(self, queue, job_id: str, status: str) -> dict:
+        for _ in range(50):
+            payload = await queue.job_status(job_id=job_id)
+            if payload.get("status") == status:
+                return payload
+            await asyncio.sleep(0.01)
+        raise AssertionError(f"job {job_id} did not reach {status}")
+
+    async def _blocking_queue_job(self, *, release: asyncio.Event) -> dict:
+        await release.wait()
+        return {"status": "released"}
 
     def test_execute_direct_rejects_when_memory_or_swap_threshold_is_exceeded(self):
         with tempfile.TemporaryDirectory() as tmp:
