@@ -732,3 +732,9 @@ Chosen fix: Added a provider/model discovery payload keyed by task family, using
 What changed: Added `GET /api/providers/models/by-task/{task_family}`, state payload builder, direct and FastAPI tests, and client communication docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_node_control_api.py tests/test_node_control_fastapi.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
 ###########
+Task #959
+Step objective: Add local model health and warmth state for loaded, warm, cold, and swap-required models.
+Chosen fix: Added a structured local model state payload to local LLM service status, using configured local model metadata, active model ids, runtime socket readiness, and default-model state.
+What changed: Added `services.local_llm.model_states` with per-model `health_state`, `warmth_state`, `loaded`, and `swap_required`; covered loaded/warm/cold/swap-required classifications; updated Client AI communication docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_service_manager.py tests/test_node_control_api.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/service_manager.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
+###########

@@ -255,6 +255,38 @@ within the same importance. Requests that need a local model swap remain queued 
 the existing local runtime switch path handles the swap, then the idle reversion policy returns to
 `qwen3-8b-q4_k_m` when the alternate model is idle long enough.
 
+Local model state is exposed through `GET /api/node/status` under `services.local_llm.model_states`:
+
+```json
+{
+  "configured": true,
+  "runtime_ready": true,
+  "active_model_ids": ["qwen3-8b-q4_k_m"],
+  "default_model_id": "qwen3-8b-q4_k_m",
+  "models": [
+    {
+      "model_id": "qwen3-8b-q4_k_m",
+      "default": true,
+      "health_state": "available",
+      "warmth_state": "loaded",
+      "loaded": true,
+      "swap_required": false,
+      "repo": "Qwen/Qwen3-8B-GGUF",
+      "quantization": "Q4_K_M",
+      "ctx_size": 4096
+    }
+  ]
+}
+```
+
+`warmth_state` values:
+
+- `loaded`: the model is currently active in the local llama.cpp runtime.
+- `warm`: the default model is expected to be ready because the local runtime sockets are healthy, but no active model
+  id was reported.
+- `cold`: the model is configured but not currently active or warmed by a healthy local runtime.
+- `swap_required`: another local model is active, so this model requires a local runtime switch before execution.
+
 Use `GET /api/execution/queues` for operational diagnostics:
 
 ```json

@@ -1872,6 +1872,19 @@ class NodeControlApiTests(unittest.TestCase):
                         "pid": 4242,
                         "cpu_percent": 12.34,
                         "mem_percent": 56.78,
+                        "model_states": {
+                            "configured": True,
+                            "runtime_ready": True,
+                            "active_model_ids": ["qwen3-8b-q4_k_m"],
+                            "default_model_id": "qwen3-8b-q4_k_m",
+                            "models": [
+                                {
+                                    "model_id": "qwen3-8b-q4_k_m",
+                                    "warmth_state": "loaded",
+                                    "health_state": "available",
+                                }
+                            ],
+                        },
                     },
                     "node": "running",
                 }
@@ -1897,6 +1910,7 @@ class NodeControlApiTests(unittest.TestCase):
         self.assertEqual(local_llm["pid"], 4242)
         self.assertEqual(local_llm["cpu_percent"], 12.34)
         self.assertEqual(local_llm["mem_percent"], 56.78)
+        self.assertEqual(local_llm["model_states"]["models"][0]["warmth_state"], "loaded")
 
 
 class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):

@@ -132,7 +132,33 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(first_payload["default_model_id"], "qwen3-8b-q4_k_m")
         self.assertIn("default_revert", first_payload)
         self.assertEqual(first_payload["default_revert"]["default_model_id"], "qwen3-8b-q4_k_m")
+        self.assertIn("model_states", first_payload)
         self.assertEqual(second_payload["cpu_percent"], 25.0)
+
+    def test_local_llm_model_states_reports_loaded_warm_cold_and_swap_required(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._local_llm_models_config = str(self._write_local_model_config(tmp))
+
+            with patch("os.path.exists", return_value=True):
+                warm_payload = manager.local_llm_model_states_payload(active_model_ids=[])
+            warm_by_id = {item["model_id"]: item for item in warm_payload["models"]}
+            self.assertEqual(warm_by_id["qwen3-8b-q4_k_m"]["warmth_state"], "warm")
+            self.assertEqual(warm_by_id["gemma-3-12b-it-q4_k_m"]["warmth_state"], "cold")
+
+            with patch("os.path.exists", return_value=True):
+                loaded_payload = manager.local_llm_model_states_payload(active_model_ids=["gemma-3-12b-it-q4_k_m"])
+            loaded_by_id = {item["model_id"]: item for item in loaded_payload["models"]}
+            self.assertEqual(loaded_by_id["gemma-3-12b-it-q4_k_m"]["warmth_state"], "loaded")
+            self.assertTrue(loaded_by_id["gemma-3-12b-it-q4_k_m"]["loaded"])
+            self.assertEqual(loaded_by_id["qwen3-8b-q4_k_m"]["warmth_state"], "swap_required")
+            self.assertTrue(loaded_by_id["qwen3-8b-q4_k_m"]["swap_required"])
+
+            with patch("os.path.exists", return_value=False):
+                cold_payload = manager.local_llm_model_states_payload(active_model_ids=[])
+            cold_by_id = {item["model_id"]: item for item in cold_payload["models"]}
+            self.assertEqual(cold_by_id["qwen3-8b-q4_k_m"]["warmth_state"], "cold")
+            self.assertEqual(cold_by_id["qwen3-8b-q4_k_m"]["health_state"], "cold")
 
     def test_ensure_local_llm_model_restarts_with_configured_model_env(self):
         with tempfile.TemporaryDirectory() as tmp:

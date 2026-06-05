@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 959: Add local model health and warmth state for loaded, warm, cold, and swap-required models
 [TODO] Task 960: Add provider and model resolution reason metadata to execution results
 [TODO] Task 961: Add retry and fallback rules by execution error class
 [TODO] Task 962: Add V3 prompt capability requirements for provider and model selection

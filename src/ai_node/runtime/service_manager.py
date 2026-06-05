@@ -259,6 +259,59 @@ class UserSystemdServiceManager:
             "reason": reason,
         }
 
+    def local_llm_model_states_payload(
+        self,
+        *,
+        active_model_ids: list[str] | None = None,
+    ) -> dict:
+        configured_models = self._local_llm_model_map()
+        active_models = [
+            str(item or "").strip()
+            for item in (list(active_model_ids) if isinstance(active_model_ids, list) else self._active_local_llm_model_ids())
+            if str(item or "").strip()
+        ]
+        active_set = set(active_models)
+        runtime_ready = bool(
+            self._local_llm_socket
+            and self._local_llm_health_socket
+            and os.path.exists(self._local_llm_socket)
+            and os.path.exists(self._local_llm_health_socket)
+        )
+        models = []
+        for model_id, model in configured_models.items():
+            is_loaded = model_id in active_set
+            if is_loaded:
+                warmth_state = "loaded"
+            elif active_set:
+                warmth_state = "swap_required"
+            elif runtime_ready and model_id == self._local_llm_default_model_id:
+                warmth_state = "warm"
+            else:
+                warmth_state = "cold"
+            health_state = "available" if model else "unavailable"
+            if not runtime_ready and not is_loaded:
+                health_state = "cold"
+            models.append(
+                {
+                    "model_id": model_id,
+                    "default": model_id == self._local_llm_default_model_id,
+                    "health_state": health_state,
+                    "warmth_state": warmth_state,
+                    "loaded": is_loaded,
+                    "swap_required": warmth_state == "swap_required",
+                    "repo": model.get("repo"),
+                    "quantization": model.get("quantization"),
+                    "ctx_size": model.get("ctx_size"),
+                }
+            )
+        return {
+            "configured": bool(configured_models),
+            "runtime_ready": runtime_ready,
+            "active_model_ids": active_models,
+            "default_model_id": self._local_llm_default_model_id,
+            "models": models,
+        }
+
     def revert_local_llm_to_default_if_idle(
         self,
         *,
@@ -289,6 +342,7 @@ class UserSystemdServiceManager:
         pid = self._query_local_llm_pid() if script_exists else 0
         cpu_percent = self._process_cpu_percent(service_id, pid)
         mem_percent = self._process_mem_percent(pid)
+        active_model_ids = self._active_local_llm_model_ids()
         return {
             "service_id": service_id,
             "service_name": service_id,
@@ -303,7 +357,8 @@ class UserSystemdServiceManager:
             "socket_path": self._local_llm_socket or None,
             "health_socket_path": self._local_llm_health_socket or None,
             "default_model_id": self._local_llm_default_model_id,
-            "default_revert": self.local_llm_default_revert_status(),
+            "default_revert": self.local_llm_default_revert_status(active_model_ids=active_model_ids),
+            "model_states": self.local_llm_model_states_payload(active_model_ids=active_model_ids),
         }
 
     def _query_local_llm_pid(self) -> int:
@@ -633,6 +688,19 @@ class NullServiceManager:
             "local_in_flight": max(int(local_in_flight), 0),
             "queued_model_ids": list(queued_model_ids or []),
             "reason": "service_manager_unconfigured",
+        }
+
+    def local_llm_model_states_payload(
+        self,
+        *,
+        active_model_ids: list[str] | None = None,
+    ) -> dict:
+        return {
+            "configured": False,
+            "runtime_ready": False,
+            "active_model_ids": list(active_model_ids or []),
+            "default_model_id": LOCAL_LLM_BUILTIN_DEFAULT_MODEL_ID,
+            "models": [],
         }
 
     def revert_local_llm_to_default_if_idle(
