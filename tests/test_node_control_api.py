@@ -644,6 +644,110 @@ class NodeControlApiTests(unittest.TestCase):
 
         asyncio.run(run_scenario())
 
+    def test_execute_direct_uses_task_capability_map_for_local_queue_selection(self):
+        class _CapabilityMappedRuntimeManager(self._FakeProviderRuntimeManager):
+            def node_capabilities_payload(self):
+                payload = super().node_capabilities_payload()
+                payload["provider_capabilities"] = {
+                    "openai": {"resolved_tasks": []},
+                    "local": {"resolved_tasks": ["task.classification"]},
+                }
+                payload["enabled_task_capabilities"] = ["task.classification"]
+                payload["resolved_tasks"] = ["task.classification"]
+                return payload
+
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                release_local = asyncio.Event()
+                execution_queue = ExecutionQueueService(
+                    logger=logging.getLogger("node-control-test"),
+                    local_concurrency=1,
+                    cloud_concurrency=1,
+                )
+                blocker = await execution_queue.enqueue(
+                    queue="local",
+                    importance="normal",
+                    job_name="local blocker",
+                    request_payload={"task_id": "local-blocker"},
+                    runner=lambda: self._blocking_queue_job(release=release_local),
+                )
+                await self._wait_for_queue_status(execution_queue, blocker["job_id"], "running")
+
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=_CapabilityMappedRuntimeManager(),
+                    execution_queue=execution_queue,
+                )
+
+                queued = await state.execute_direct(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-capability-local-001",
+                            "task_family": "task.classification",
+                            "requested_by": "service.alpha",
+                            "inputs": {"text": "hello"},
+                            "response_mode": "async_if_queued",
+                            "trace_id": "trace-capability-local-001",
+                        }
+                    )
+                )
+                status = await state.execution_job_status(job_id=queued["job_id"])
+
+                self.assertEqual(queued["queue"], "local")
+                self.assertEqual(queued["routing_decision"]["reason"], "task_capability_local")
+                self.assertEqual(queued["routing_decision"]["execution_routing_mode"], "local_only")
+                self.assertEqual(status["request"]["constraints"]["routing_policy"]["mode"], "local_only")
+                release_local.set()
+                await self._wait_for_queue_status(execution_queue, blocker["job_id"], "completed")
+                await self._wait_for_execution_job(state, queued["job_id"], "completed")
+
+        asyncio.run(run_scenario())
+
+    def test_execute_direct_uses_task_capability_map_to_bypass_local_preferred_queue(self):
+        class _CapabilityMappedRuntimeManager(self._FakeProviderRuntimeManager):
+            def node_capabilities_payload(self):
+                payload = super().node_capabilities_payload()
+                payload["provider_capabilities"] = {
+                    "openai": {"resolved_tasks": ["task.classification"]},
+                    "local": {"resolved_tasks": []},
+                }
+                payload["enabled_task_capabilities"] = ["task.classification"]
+                payload["resolved_tasks"] = ["task.classification"]
+                return payload
+
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=_CapabilityMappedRuntimeManager(),
+                )
+
+                queued = await state.execute_direct(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-capability-cloud-001",
+                            "task_family": "task.classification",
+                            "requested_by": "service.alpha",
+                            "inputs": {"text": "hello"},
+                            "constraints": {"routing_policy": {"mode": "local_preferred"}},
+                            "response_mode": "async_if_queued",
+                            "trace_id": "trace-capability-cloud-001",
+                        }
+                    )
+                )
+
+                self.assertEqual(queued["queue"], "cloud")
+                self.assertEqual(queued["routing_decision"]["reason"], "task_capability_cloud")
+                self.assertEqual(queued["routing_decision"]["execution_routing_mode"], "cloud_only")
+                completed = await self._wait_for_execution_job(state, queued["job_id"], "completed")
+                self.assertEqual(completed["request"]["constraints"]["routing_policy"]["mode"], "cloud_only")
+
+        asyncio.run(run_scenario())
+
     def test_execute_direct_spills_high_local_preferred_job_to_cloud_when_local_queue_is_busy(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:

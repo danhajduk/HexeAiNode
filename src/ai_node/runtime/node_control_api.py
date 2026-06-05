@@ -1773,7 +1773,12 @@ class NodeControlState:
                 routing_mode=routing_mode,
                 queue_key=queue_key,
             )
-        execution_routing_mode = "cloud_only" if spillover else routing_mode
+        execution_routing_mode = self._direct_execution_execution_routing_mode(
+            request=request,
+            routing_mode=routing_mode,
+            queue_key=queue_key,
+            spillover=spillover,
+        )
         return {
             "queue": queue_key,
             "importance": importance,
@@ -1790,13 +1795,13 @@ class NodeControlState:
             },
         }
 
-    @staticmethod
-    def _execution_request_for_queue_context(*, request: TaskExecutionRequest, queue_context: dict) -> TaskExecutionRequest:
-        if not bool(queue_context.get("spillover")):
+    def _execution_request_for_queue_context(self, *, request: TaskExecutionRequest, queue_context: dict) -> TaskExecutionRequest:
+        execution_routing_mode = TaskExecutionService._normalize_routing_policy_mode(queue_context.get("execution_routing_mode"))
+        if not execution_routing_mode or execution_routing_mode == queue_context.get("routing_mode"):
             return request
         constraints = dict(request.constraints or {})
         routing_policy = dict(constraints.get("routing_policy") or {})
-        routing_policy["mode"] = "cloud_only"
+        routing_policy["mode"] = execution_routing_mode
         constraints["routing_policy"] = routing_policy
         return request.model_copy(update={"constraints": constraints}, deep=True)
 
@@ -1819,17 +1824,21 @@ class NodeControlState:
         except Exception:
             return None
 
-    @staticmethod
-    def _direct_execution_queue_kind(*, request: TaskExecutionRequest, authorization, routing_mode: str | None = None) -> str:
+    def _direct_execution_queue_kind(self, *, request: TaskExecutionRequest, authorization, routing_mode: str | None = None) -> str:
         requested_provider = str(request.requested_provider or "").strip().lower()
         if requested_provider == "local":
             return "local"
         if requested_provider and requested_provider != "local":
             return "cloud"
 
+        capability_queue = self._direct_execution_task_capability_queue(request=request)
         if routing_mode in {"local_only", "local_preferred"}:
+            if routing_mode == "local_preferred" and capability_queue == "cloud":
+                return "cloud"
             return "local"
         if routing_mode in {"cloud_only", "cloud_fallback"}:
+            if routing_mode == "cloud_fallback" and capability_queue == "local":
+                return "local"
             return "cloud"
 
         request_constraints = request.constraints if isinstance(request.constraints, dict) else {}
@@ -1838,8 +1847,12 @@ class NodeControlState:
             request_routing.get("mode") if isinstance(request_routing, dict) else None
         )
         if request_mode in {"local_only", "local_preferred"}:
+            if request_mode == "local_preferred" and capability_queue == "cloud":
+                return "cloud"
             return "local"
         if request_mode in {"cloud_only", "cloud_fallback"}:
+            if request_mode == "cloud_fallback" and capability_queue == "local":
+                return "local"
             return "cloud"
         prompt_constraints = authorization.prompt_constraints if authorization is not None and isinstance(authorization.prompt_constraints, dict) else {}
         prompt_routing = prompt_constraints.get("routing_policy") if isinstance(prompt_constraints.get("routing_policy"), dict) else {}
@@ -1847,13 +1860,83 @@ class NodeControlState:
             prompt_routing.get("mode") if isinstance(prompt_routing, dict) else None
         )
         if prompt_mode in {"local_only", "local_preferred"}:
+            if prompt_mode == "local_preferred" and capability_queue == "cloud":
+                return "cloud"
             return "local"
         if prompt_mode in {"cloud_only", "cloud_fallback"}:
+            if prompt_mode == "cloud_fallback" and capability_queue == "local":
+                return "local"
             return "cloud"
+
+        if capability_queue:
+            return capability_queue
 
         provider_preferences = authorization.provider_preferences if authorization is not None and isinstance(authorization.provider_preferences, dict) else {}
         default_provider = str(provider_preferences.get("default_provider") or "").strip().lower()
         return "local" if default_provider == "local" else "cloud"
+
+    def _direct_execution_execution_routing_mode(
+        self,
+        *,
+        request: TaskExecutionRequest,
+        routing_mode: str | None,
+        queue_key: str,
+        spillover: bool,
+    ) -> str | None:
+        if spillover:
+            return "cloud_only"
+        capability_queue = self._direct_execution_task_capability_queue(request=request)
+        if capability_queue == "local" and queue_key == "local" and routing_mode in {None, "cloud_fallback"}:
+            return "local_only"
+        if capability_queue == "cloud" and queue_key == "cloud" and routing_mode in {None, "local_preferred"}:
+            return "cloud_only"
+        return routing_mode
+
+    def _direct_execution_task_capability_queue(self, *, request: TaskExecutionRequest) -> str | None:
+        task_family = str(request.task_family or "").strip()
+        if not task_family:
+            return None
+        node_capabilities = self.node_capabilities_payload()
+        provider_capabilities = (
+            node_capabilities.get("provider_capabilities")
+            if isinstance(node_capabilities.get("provider_capabilities"), dict)
+            else {}
+        )
+        if not provider_capabilities:
+            return None
+        local_has_task = self._provider_capability_has_task(
+            provider_capabilities=provider_capabilities,
+            provider_id="local",
+            task_family=task_family,
+        )
+        cloud_has_task = any(
+            self._provider_capability_has_task(
+                provider_capabilities=provider_capabilities,
+                provider_id=str(provider_id or ""),
+                task_family=task_family,
+            )
+            for provider_id in provider_capabilities.keys()
+            if str(provider_id or "").strip().lower() != "local"
+        )
+        if local_has_task and not cloud_has_task:
+            return "local"
+        if cloud_has_task and not local_has_task:
+            return "cloud"
+        return None
+
+    @staticmethod
+    def _provider_capability_has_task(*, provider_capabilities: dict, provider_id: str, task_family: str) -> bool:
+        provider_key = str(provider_id or "").strip().lower()
+        task_key = str(task_family or "").strip()
+        if not provider_key or not task_key:
+            return False
+        payload = provider_capabilities.get(provider_key)
+        if not isinstance(payload, dict):
+            return False
+        resolved = payload.get("enabled_task_capabilities") or payload.get("resolved_tasks") or []
+        if not isinstance(resolved, list):
+            return False
+        return task_key in {str(item or "").strip() for item in resolved if str(item or "").strip()}
 
     @staticmethod
     def _direct_execution_importance(*, request: TaskExecutionRequest, authorization) -> str:
@@ -1863,11 +1946,13 @@ class NodeControlState:
         priority = str(request.priority or "normal").strip().lower()
         return priority if priority in {"background", "low", "normal", "high"} else "normal"
 
-    @staticmethod
-    def _direct_execution_queue_reason(*, request: TaskExecutionRequest, routing_mode: str | None, queue_key: str) -> str:
+    def _direct_execution_queue_reason(self, *, request: TaskExecutionRequest, routing_mode: str | None, queue_key: str) -> str:
         requested_provider = str(request.requested_provider or "").strip().lower()
         if requested_provider:
             return "explicit_provider"
+        capability_queue = self._direct_execution_task_capability_queue(request=request)
+        if capability_queue == queue_key and routing_mode in {None, "local_preferred", "cloud_fallback"}:
+            return f"task_capability_{queue_key}"
         if routing_mode:
             return f"routing_policy_{routing_mode}"
         return "provider_default_local" if queue_key == "local" else "provider_default_cloud"

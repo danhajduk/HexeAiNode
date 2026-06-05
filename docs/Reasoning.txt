@@ -720,3 +720,9 @@ Chosen fix: Added a rough queue-position ETA to queued responses and job status 
 What changed: Added `eta` payload generation in the execution queue service, regression coverage for queued/running/completed ETA states, and client communication docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py`, and `git diff --check` passed.
 ###########
+Task #957
+Step objective: Use provider task capability maps when choosing local or cloud queues.
+Chosen fix: Let queued direct execution consult provider task capability maps so flexible or unspecified routes choose the side that can actually serve the task, then narrow execution routing to match that queue choice.
+What changed: Added capability-aware queue selection and routing rewrite logic, routing decision reasons for task-capability choices, regression coverage for local and cloud capability-map paths, and client communication docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_node_control_api.py tests/test_execution_queue.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
+###########

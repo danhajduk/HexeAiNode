@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 957: Use provider task capability maps when choosing local or cloud queues
 [TODO] Task 958: Add task-to-model discovery endpoint for local and cloud providers
 [TODO] Task 959: Add local model health and warmth state for loaded, warm, cold, and swap-required models
 [TODO] Task 960: Add provider and model resolution reason metadata to execution results

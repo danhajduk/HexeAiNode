@@ -233,6 +233,9 @@ Queue selection:
   a V3 prompt policy that is `local_only` or `local_preferred`.
 - Cloud queue: explicit cloud provider, request `cloud_only`, or a V3 prompt policy that is `cloud_only` or
   `cloud_fallback`.
+- Capability-aware queue selection: when no hard route is declared, or when a flexible route such as
+  `local_preferred`/`cloud_fallback` can only be served by one side, the node uses provider task capability maps to
+  choose the local or cloud queue and narrows execution routing to match that choice.
 - Spillover: `local_preferred` high-importance or critical queued requests may enter the cloud queue when the local
   queue is already backed up, an eligible cloud model is available, and the request passes configured cloud budget and
   max-cost guardrails. This does not apply to `local_only` or explicit `requested_provider = "local"` requests.
