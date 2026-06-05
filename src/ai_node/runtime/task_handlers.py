@@ -34,6 +34,13 @@ STRUCTURED_EXTRACTION_SYSTEM_PROMPT_SUFFIX = (
 )
 
 
+def _prompt_importance_level(authorization) -> str | None:
+    prompt_constraints = authorization.prompt_constraints if authorization is not None and isinstance(authorization.prompt_constraints, dict) else {}
+    importance = prompt_constraints.get("importance") if isinstance(prompt_constraints.get("importance"), dict) else {}
+    level = str(importance.get("level") or "").strip().lower()
+    return level if level in {"background", "normal", "high", "critical"} else None
+
+
 def _build_unified_execution_request(*, request, resolution, normalized_inputs) -> UnifiedExecutionRequest:
     resolution_plan = resolution.get("plan") if isinstance(resolution, dict) else resolution
     authorization = resolution.get("authorization") if isinstance(resolution, dict) else None
@@ -66,6 +73,8 @@ def _build_unified_execution_request(*, request, resolution, normalized_inputs) 
             "trace_id": request.trace_id,
             "prompt_id": getattr(request, "prompt_id", None),
             "prompt_version": getattr(request, "prompt_version", None),
+            "execution_priority": getattr(request, "priority", None),
+            "prompt_importance": _prompt_importance_level(authorization),
             "lease_id": getattr(request, "lease_id", None),
             "structured_output_schema": structured_output_schema if isinstance(structured_output_schema, dict) else None,
             **(normalized_inputs.metadata if isinstance(normalized_inputs.metadata, dict) else {}),

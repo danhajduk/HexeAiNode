@@ -505,6 +505,172 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "completed")
         self.assertEqual(resolver.last_governance["routing_policy_constraints"]["mode"], "local_only")
 
+    async def test_execute_applies_prompt_importance_to_execution_priority(self):
+        runtime_manager = _FakeProviderRuntimeManager()
+        resolver = _FakeProviderResolver(
+            ProviderResolutionResult(
+                allowed=True,
+                provider_id="openai",
+                model_id="gpt-5-mini",
+                provider_order=["openai"],
+                fallback_provider_ids=[],
+                model_allowlist_by_provider={"openai": ["gpt-5-mini"]},
+                timeout_s=45,
+                retry_count=0,
+                rejection_reason=None,
+            )
+        )
+        service = TaskExecutionService(
+            provider_runtime_manager=runtime_manager,
+            provider_resolver=resolver,
+            logger=logging.getLogger("task-execution-service-test"),
+            prompt_services_state_provider=lambda: {
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.important",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "current_version": "v3.0",
+                        "versions": [{"version": "v3.0", "definition": {"system_prompt": "important"}}],
+                        "constraints": {"importance": {"level": "high"}},
+                    }
+                ]
+            },
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-important",
+                    "prompt_id": "prompt.important",
+                    "prompt_version": "v3.0",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "priority": "background",
+                    "inputs": {"text": "hello"},
+                    "trace_id": "trace-important",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(runtime_manager.last_request.metadata["execution_priority"], "high")
+        self.assertEqual(runtime_manager.last_request.metadata["prompt_importance"], "high")
+
+    async def test_execute_caps_caller_priority_to_prompt_importance(self):
+        runtime_manager = _FakeProviderRuntimeManager()
+        resolver = _FakeProviderResolver(
+            ProviderResolutionResult(
+                allowed=True,
+                provider_id="openai",
+                model_id="gpt-5-mini",
+                provider_order=["openai"],
+                fallback_provider_ids=[],
+                model_allowlist_by_provider={"openai": ["gpt-5-mini"]},
+                timeout_s=45,
+                retry_count=0,
+                rejection_reason=None,
+            )
+        )
+        service = TaskExecutionService(
+            provider_runtime_manager=runtime_manager,
+            provider_resolver=resolver,
+            logger=logging.getLogger("task-execution-service-test"),
+            prompt_services_state_provider=lambda: {
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.normal",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "current_version": "v3.0",
+                        "versions": [{"version": "v3.0", "definition": {"system_prompt": "normal"}}],
+                        "constraints": {"importance": {"level": "normal"}},
+                    }
+                ]
+            },
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-normal",
+                    "prompt_id": "prompt.normal",
+                    "prompt_version": "v3.0",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "priority": "high",
+                    "inputs": {"text": "hello"},
+                    "trace_id": "trace-normal",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(runtime_manager.last_request.metadata["execution_priority"], "normal")
+        self.assertEqual(runtime_manager.last_request.metadata["prompt_importance"], "normal")
+
+    async def test_execute_maps_critical_prompt_importance_to_high_priority(self):
+        runtime_manager = _FakeProviderRuntimeManager()
+        resolver = _FakeProviderResolver(
+            ProviderResolutionResult(
+                allowed=True,
+                provider_id="local",
+                model_id="qwen3-8b-q4_k_m",
+                provider_order=["local"],
+                fallback_provider_ids=[],
+                model_allowlist_by_provider={"local": ["qwen3-8b-q4_k_m"]},
+                timeout_s=45,
+                retry_count=0,
+                rejection_reason=None,
+            )
+        )
+        service = TaskExecutionService(
+            provider_runtime_manager=runtime_manager,
+            provider_resolver=resolver,
+            logger=logging.getLogger("task-execution-service-test"),
+            prompt_services_state_provider=lambda: {
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.critical-local",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "current_version": "v3.0",
+                        "versions": [{"version": "v3.0", "definition": {"system_prompt": "critical local"}}],
+                        "constraints": {
+                            "routing_policy": {"mode": "local_only"},
+                            "importance": {"level": "critical"},
+                        },
+                    }
+                ]
+            },
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-critical-local",
+                    "prompt_id": "prompt.critical-local",
+                    "prompt_version": "v3.0",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "priority": "background",
+                    "inputs": {"text": "hello"},
+                    "trace_id": "trace-critical-local",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(runtime_manager.last_request.metadata["execution_priority"], "high")
+        self.assertEqual(runtime_manager.last_request.metadata["prompt_importance"], "critical")
+        self.assertEqual(resolver.last_governance["routing_policy_constraints"]["mode"], "local_only")
+
     async def test_execute_allows_request_to_narrow_prompt_local_preferred_to_local_only(self):
         runtime_manager = _FakeProviderRuntimeManager()
         resolver = _FakeProviderResolver(

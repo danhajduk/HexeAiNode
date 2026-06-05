@@ -159,6 +159,9 @@
         },
         "routing_policy": {
           "$ref": "#/$defs/promptRoutingPolicy"
+        },
+        "importance": {
+          "$ref": "#/$defs/promptImportancePolicy"
         }
       }
     },
@@ -181,6 +184,28 @@
             "cloud_fallback"
           ],
           "description": "V3 routing policy mode. The prompt policy is the maximum allowed routing boundary; API requests may only narrow it."
+        }
+      }
+    },
+    "promptImportancePolicy": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ],
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": [
+            "background",
+            "normal",
+            "high",
+            "critical"
+          ],
+          "description": "V3 prompt-owned importance level. The prompt owner controls the effective execution priority; critical maps to high execution priority in the current API."
         }
       }
     },

@@ -22,6 +22,14 @@ from ai_node.runtime.task_router import TaskRouter
 from ai_node.time_utils import local_now_iso
 
 
+IMPORTANCE_TO_EXECUTION_PRIORITY = {
+    "background": "background",
+    "normal": "normal",
+    "high": "high",
+    "critical": "high",
+}
+
+
 def _iso_now() -> str:
     return local_now_iso()
 
@@ -148,6 +156,7 @@ class TaskExecutionService:
             )
         if authorization is not None:
             self._record_prompt_authorization(request=request, allowed=True, reason=authorization.reason)
+            request.priority = self._effective_priority(request=request, authorization=authorization)
 
         governance_status = self._safe_governance_status()
         if str(governance_status.get("state") or "").strip().lower() == "stale":
@@ -492,6 +501,23 @@ class TaskExecutionService:
         return min(timeout_s, max(int(max_timeout_s), 1))
 
     @staticmethod
+    def _prompt_importance_level(*, authorization) -> str | None:
+        if authorization is None or not isinstance(authorization.prompt_constraints, dict):
+            return None
+        importance = authorization.prompt_constraints.get("importance")
+        if not isinstance(importance, dict):
+            return None
+        level = str(importance.get("level") or "").strip().lower()
+        return level if level in IMPORTANCE_TO_EXECUTION_PRIORITY else None
+
+    @staticmethod
+    def _effective_priority(*, request: TaskExecutionRequest, authorization) -> str:
+        level = TaskExecutionService._prompt_importance_level(authorization=authorization)
+        if level is None:
+            return request.priority
+        return IMPORTANCE_TO_EXECUTION_PRIORITY[level]
+
+    @staticmethod
     def _normalize_routing_policy_mode(value: object) -> str | None:
         mode = str(value or "").strip().lower()
         return mode if mode in {"local_only", "local_preferred", "cloud_only", "cloud_fallback"} else None
@@ -617,6 +643,8 @@ class TaskExecutionService:
                 "trace_id": request.trace_id,
                 "prompt_id": request.prompt_id,
                 "prompt_version": request.prompt_version,
+                "execution_priority": request.priority,
+                "prompt_importance": TaskExecutionService._prompt_importance_level(authorization=authorization),
                 "lease_id": request.lease_id,
                 "structured_output_schema": structured_output_schema if isinstance(structured_output_schema, dict) else None,
                 **image_generation_options,

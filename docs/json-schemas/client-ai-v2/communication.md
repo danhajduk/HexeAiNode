@@ -56,15 +56,15 @@ The AI Node does not judge benchmark correctness and does not pick a winner.
 The AI Node accepts legacy and V2+ prompt registrations. Prefer V3 for new prompt contracts because it is the first
 contract version that can declare routing intent directly in the prompt policy.
 
-Status: V3 routing policy is implemented for prompt registration and direct execution routing. V3 importance policy,
-local/cloud execution queues, and async queued-job responses are documented in the task plan but are not developed in
-this API yet.
+Status: V3 routing policy is implemented for prompt registration and direct execution routing. V3 importance policy is
+implemented for prompt registration and direct execution priority mapping. Local/cloud execution queues and async
+queued-job responses are documented in the task plan but are not developed in this API yet.
 
 | Version | Use | Routing behavior |
 | --- | --- | --- |
 | V1 | Legacy prompt records and older clients. | No prompt-level routing policy; requests use legacy provider selection. |
 | V2 | Benchmark-capable prompt contracts with output and evaluation metadata. | No prompt-level routing policy; requests may still narrow routing with provider/governance fields. |
-| V3 | Preferred contract for new clients. | Adds `constraints.routing_policy.mode` as the prompt-level routing boundary. |
+| V3 | Preferred contract for new clients. | Adds `constraints.routing_policy.mode` as the prompt-level routing boundary and `constraints.importance.level` as prompt-owned urgency. |
 
 V3 prompt routing modes:
 
@@ -84,6 +84,18 @@ Examples:
 - Prompt `local_preferred` plus API `local_only`: allowed because the request is stricter.
 - Prompt V1 or V2 without routing policy: use legacy provider selection unless the request narrows it.
 - Governance that disables OpenAI: cloud routes are unavailable even when the prompt or request allows cloud.
+
+V3 prompt importance levels:
+
+- `background`: low urgency and batchable work.
+- `normal`: default behavior. V1, V2, and V3 prompts without an explicit importance policy normalize to this level.
+- `high`: user-visible or time-sensitive work.
+- `critical`: rare user-blocking or operations-sensitive work. In the current direct execution API this maps to `high`
+  execution priority because `TaskExecutionRequest.priority` supports `background`, `low`, `normal`, and `high`.
+
+Importance does not weaken routing or privacy. A `critical` prompt with `routing_policy.mode = local_only` still remains
+local-only. When a prompt is used, the prompt owner's importance policy determines the effective execution priority;
+caller `priority` cannot inflate or reduce that prompt-owned importance.
 
 ## Production Execution
 

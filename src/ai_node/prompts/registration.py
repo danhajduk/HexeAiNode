@@ -9,6 +9,7 @@ LEGACY_PROMPT_STATES = {"registered": "active", "probation": "probation"}
 VALID_PROMPT_PRIVACY_CLASSES = {"public", "internal", "restricted", "sensitive"}
 VALID_PROMPT_ACCESS_SCOPES = {"private", "service", "shared", "public"}
 VALID_PROMPT_ROUTING_POLICY_MODES = {"local_only", "local_preferred", "cloud_only", "cloud_fallback"}
+VALID_PROMPT_IMPORTANCE_LEVELS = {"background", "normal", "high", "critical"}
 
 
 def _now_iso() -> str:
@@ -85,6 +86,14 @@ def normalize_prompt_routing_policy(value: object) -> dict | None:
     return {"mode": mode}
 
 
+def normalize_prompt_importance_policy(value: object) -> dict:
+    payload = _normalize_mapping(value)
+    level = str(payload.get("level") or "normal").strip().lower()
+    if level not in VALID_PROMPT_IMPORTANCE_LEVELS:
+        raise ValueError("invalid_prompt_importance_level")
+    return {"level": level}
+
+
 def normalize_prompt_constraints(value: object) -> dict:
     payload = _normalize_mapping(value)
     max_timeout_s = payload.get("max_timeout_s")
@@ -94,6 +103,7 @@ def normalize_prompt_constraints(value: object) -> dict:
         "structured_output_required": bool(payload.get("structured_output_required", False)),
         "allowed_model_overrides": allowed_model_overrides,
         "routing_policy": normalize_prompt_routing_policy(payload.get("routing_policy")),
+        "importance": normalize_prompt_importance_policy(payload.get("importance")),
     }
 
 

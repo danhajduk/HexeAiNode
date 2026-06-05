@@ -43,7 +43,13 @@ class PromptServiceStateStoreTests(unittest.TestCase):
                     "allowed_customers": [],
                     "execution_policy": {"allow_direct_execution": True, "allow_version_pinning": True},
                     "provider_preferences": {"preferred_providers": ["openai"], "preferred_models": ["gpt-5-mini"]},
-                    "constraints": {"max_timeout_s": 30, "structured_output_required": False, "allowed_model_overrides": [], "routing_policy": None},
+                    "constraints": {
+                        "max_timeout_s": 30,
+                        "structured_output_required": False,
+                        "allowed_model_overrides": [],
+                        "routing_policy": None,
+                        "importance": {"level": "normal"},
+                    },
                     "metadata": {},
                     "current_version": "v1",
                     "versions": [
@@ -116,6 +122,15 @@ class PromptServiceStateStoreTests(unittest.TestCase):
     def test_normalize_constraints_rejects_unknown_v3_routing_policy(self):
         with self.assertRaisesRegex(ValueError, "invalid_prompt_routing_policy_mode"):
             normalize_prompt_constraints({"routing_policy": {"mode": "edge_only"}})
+
+    def test_normalize_constraints_accepts_v3_importance_policy(self):
+        payload = normalize_prompt_constraints({"importance": {"level": "CRITICAL"}})
+
+        self.assertEqual(payload["importance"], {"level": "critical"})
+
+    def test_normalize_constraints_rejects_unknown_v3_importance_policy(self):
+        with self.assertRaisesRegex(ValueError, "invalid_prompt_importance_level"):
+            normalize_prompt_constraints({"importance": {"level": "urgent"}})
 
     def test_normalize_preserves_review_due_and_access_policy(self):
         payload = normalize_prompt_service_state(

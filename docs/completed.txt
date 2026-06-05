@@ -520,3 +520,4 @@ Task 946: Apply qwen3-8b-q4_k_m when local execution omits an explicit model - C
 Task 947: Preserve explicit local model overrides across direct benchmark and compare execution - Completed on 06/04/2026 16:44
 Task 948: Add idle reversion from explicit local model overrides back to qwen3-8b-q4_k_m - Completed on 06/04/2026 16:55
 Task 949: Add tests and documentation for local LLM default model behavior - Completed on 06/04/2026 16:56
+Task 950: Add V3 prompt importance policy for execution priority and latency preference - Completed on 06/04/2026 17:00
