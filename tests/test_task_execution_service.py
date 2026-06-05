@@ -505,6 +505,111 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "completed")
         self.assertEqual(resolver.last_governance["routing_policy_constraints"]["mode"], "local_only")
 
+    async def test_execute_treats_sensitive_prompt_privacy_as_local_only(self):
+        runtime_manager = _FakeProviderRuntimeManager()
+        resolver = _FakeProviderResolver(
+            ProviderResolutionResult(
+                allowed=True,
+                provider_id="local",
+                model_id="qwen3-8b-q4_k_m",
+                provider_order=["local"],
+                fallback_provider_ids=[],
+                model_allowlist_by_provider={"local": ["qwen3-8b-q4_k_m"]},
+                timeout_s=45,
+                retry_count=0,
+                rejection_reason=None,
+            )
+        )
+        service = TaskExecutionService(
+            provider_runtime_manager=runtime_manager,
+            provider_resolver=resolver,
+            logger=logging.getLogger("task-execution-service-test"),
+            prompt_services_state_provider=lambda: {
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.sensitive",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "privacy_class": "sensitive",
+                        "current_version": "v3.0",
+                        "versions": [{"version": "v3.0", "definition": {"system_prompt": "sensitive"}}],
+                    }
+                ]
+            },
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-sensitive-local",
+                    "prompt_id": "prompt.sensitive",
+                    "prompt_version": "v3.0",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "inputs": {"text": "private text"},
+                    "trace_id": "trace-sensitive-local",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(resolver.last_governance["routing_policy_constraints"]["mode"], "local_only")
+
+    async def test_execute_rejects_sensitive_prompt_with_cloud_only_routing(self):
+        resolver = _FakeProviderResolver(
+            ProviderResolutionResult(
+                allowed=True,
+                provider_id="openai",
+                model_id="gpt-5-mini",
+                provider_order=["openai"],
+                fallback_provider_ids=[],
+                model_allowlist_by_provider={"openai": ["gpt-5-mini"]},
+                timeout_s=45,
+                retry_count=0,
+                rejection_reason=None,
+            )
+        )
+        service = TaskExecutionService(
+            provider_runtime_manager=_FakeProviderRuntimeManager(),
+            provider_resolver=resolver,
+            logger=logging.getLogger("task-execution-service-test"),
+            prompt_services_state_provider=lambda: {
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.sensitive-cloud",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "privacy_class": "sensitive",
+                        "current_version": "v3.0",
+                        "versions": [{"version": "v3.0", "definition": {"system_prompt": "sensitive cloud"}}],
+                        "constraints": {"routing_policy": {"mode": "cloud_only"}},
+                    }
+                ]
+            },
+            declared_task_families_provider=lambda: ["task.classification"],
+            accepted_capability_profile_provider=lambda: {"declared_task_families": ["task.classification"]},
+        )
+
+        result = await service.execute(
+            TaskExecutionRequest.model_validate(
+                {
+                    "task_id": "task-sensitive-cloud-conflict",
+                    "prompt_id": "prompt.sensitive-cloud",
+                    "prompt_version": "v3.0",
+                    "task_family": "task.classification",
+                    "requested_by": "service.alpha",
+                    "inputs": {"text": "private text"},
+                    "trace_id": "trace-sensitive-cloud-conflict",
+                }
+            )
+        )
+
+        self.assertEqual(result.status, "rejected")
+        self.assertEqual(result.error_code, "prompt_routing_policy_conflict")
+        self.assertIsNone(resolver.last_request)
+
     async def test_execute_applies_prompt_importance_to_execution_priority(self):
         runtime_manager = _FakeProviderRuntimeManager()
         resolver = _FakeProviderResolver(

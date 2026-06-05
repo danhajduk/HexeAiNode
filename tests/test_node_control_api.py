@@ -598,6 +598,52 @@ class NodeControlApiTests(unittest.TestCase):
 
         asyncio.run(run_scenario())
 
+    def test_execute_direct_queues_sensitive_v3_prompt_on_local_queue(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
+                state = NodeControlState(
+                    lifecycle=lifecycle,
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                    capability_runner=self._FakeCapabilityRunner(),
+                    task_capability_selection_store=self._FakeTaskCapabilitySelectionStore(),
+                    prompt_service_state_store=self._FakePromptServiceStateStore(),
+                )
+                state.register_prompt_service(
+                    prompt_id="prompt.sensitive",
+                    service_id="service.alpha",
+                    task_family="task.classification",
+                    privacy_class="sensitive",
+                    version="v3.0",
+                    definition={"system_prompt": "Classify private text locally."},
+                )
+
+                queued = await state.execute_direct(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-sensitive-queued-001",
+                            "prompt_id": "prompt.sensitive",
+                            "prompt_version": "v3.0",
+                            "task_family": "task.classification",
+                            "requested_by": "service.alpha",
+                            "inputs": {"text": "private"},
+                            "response_mode": "async_if_queued",
+                            "priority": "high",
+                            "trace_id": "trace-sensitive-queued-001",
+                        }
+                    )
+                )
+
+                self.assertEqual(queued["status"], "queued")
+                self.assertEqual(queued["queue"], "local")
+                self.assertEqual(queued["routing_decision"]["reason"], "routing_policy_local_only")
+                self.assertEqual(queued["routing_decision"]["execution_routing_mode"], "local_only")
+                await self._wait_for_execution_job(state, queued["job_id"], "completed")
+
+        asyncio.run(run_scenario())
+
     def test_execute_direct_spills_high_local_preferred_job_to_cloud_when_local_queue_is_busy(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:

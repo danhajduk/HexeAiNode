@@ -708,3 +708,9 @@ Chosen fix: Extended the spillover eligibility check so a backed-up local-prefer
 What changed: Added spillover budget checks, malformed-budget tolerance, regression coverage for budget-blocked spillover, and client/config documentation.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
 ###########
+Task #955
+Step objective: Add V3 privacy-aware routing constraints for local and cloud execution.
+Chosen fix: Treated sensitive and restricted V3 prompt privacy classes as local-only routing boundaries that cannot be broadened by prompt routing, request routing, or explicit cloud provider requests.
+What changed: Added privacy class propagation in execution authorization, privacy-aware routing merge logic for execution and queued route selection, regression coverage, and client communication docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_gateway.py tests/test_task_execution_service.py tests/test_node_control_api.py tests/test_execution_queue.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/execution/gateway.py src/ai_node/runtime/task_execution_service.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
+###########

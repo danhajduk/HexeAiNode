@@ -548,6 +548,11 @@ class TaskExecutionService:
         return request_mode or prompt_mode, False
 
     @staticmethod
+    def _authorization_privacy_routing_mode(*, authorization) -> str | None:
+        privacy_class = str(getattr(authorization, "privacy_class", "") or "").strip().lower()
+        return "local_only" if privacy_class in {"restricted", "sensitive"} else None
+
+    @staticmethod
     def _merge_prompt_governance_constraints(*, governance_constraints: dict, authorization) -> dict:
         merged = dict(governance_constraints or {})
         provider_preferences = authorization.provider_preferences if isinstance(authorization.provider_preferences, dict) else {}
@@ -577,13 +582,18 @@ class TaskExecutionService:
         prompt_mode = TaskExecutionService._normalize_routing_policy_mode(
             prompt_routing_policy.get("mode") if isinstance(prompt_routing_policy, dict) else None
         )
+        privacy_mode = TaskExecutionService._authorization_privacy_routing_mode(authorization=authorization)
+        effective_prompt_mode, prompt_privacy_conflict = TaskExecutionService._merge_routing_policy_modes(
+            prompt_mode=privacy_mode,
+            request_mode=prompt_mode,
+        )
         routing = merged.get("routing_policy_constraints") if isinstance(merged.get("routing_policy_constraints"), dict) else {}
         request_mode = TaskExecutionService._normalize_routing_policy_mode(routing.get("mode"))
         effective_mode, conflict = TaskExecutionService._merge_routing_policy_modes(
-            prompt_mode=prompt_mode,
+            prompt_mode=effective_prompt_mode,
             request_mode=request_mode,
         )
-        if conflict:
+        if prompt_privacy_conflict or conflict:
             routing["routing_policy_conflict"] = True
         elif effective_mode:
             routing["mode"] = effective_mode

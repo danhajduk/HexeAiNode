@@ -525,3 +525,4 @@ Task 951: Add local and cloud execution queues with async queued-job response co
 Task 952: Add local-preferred cloud spillover policy for high-importance queued execution - Completed on 06/04/2026 17:52
 Task 953: Add routing decision metadata to queued execution responses - Completed on 06/04/2026 17:55
 Task 954: Add budget and cost guardrails for local-preferred cloud spillover - Completed on 06/04/2026 17:58
+Task 955: Add V3 privacy-aware routing constraints for local and cloud execution - Completed on 06/04/2026 18:02

@@ -1884,11 +1884,16 @@ class NodeControlState:
         prompt_mode = TaskExecutionService._normalize_routing_policy_mode(
             prompt_routing.get("mode") if isinstance(prompt_routing, dict) else None
         )
+        privacy_mode = TaskExecutionService._authorization_privacy_routing_mode(authorization=authorization)
+        effective_prompt_mode, prompt_privacy_conflict = TaskExecutionService._merge_routing_policy_modes(
+            prompt_mode=privacy_mode,
+            request_mode=prompt_mode,
+        )
         effective_mode, conflict = TaskExecutionService._merge_routing_policy_modes(
-            prompt_mode=prompt_mode,
+            prompt_mode=effective_prompt_mode,
             request_mode=request_mode,
         )
-        if conflict:
+        if prompt_privacy_conflict or conflict:
             return None
         return effective_mode
 

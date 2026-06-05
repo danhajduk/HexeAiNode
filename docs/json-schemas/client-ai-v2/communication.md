@@ -67,7 +67,7 @@ queued-job responses are implemented for direct execution.
 | --- | --- | --- |
 | V1 | Legacy prompt records and older clients. | No prompt-level routing policy; requests use legacy provider selection. |
 | V2 | Benchmark-capable prompt contracts with output and evaluation metadata. | No prompt-level routing policy; requests may still narrow routing with provider/governance fields. |
-| V3 | Preferred contract for new clients. | Adds `constraints.routing_policy.mode` as the prompt-level routing boundary and `constraints.importance.level` as prompt-owned urgency. |
+| V3 | Preferred contract for new clients. | Adds `constraints.routing_policy.mode` as the prompt-level routing boundary, privacy-aware local/cloud constraints, and `constraints.importance.level` as prompt-owned urgency. |
 
 V3 prompt routing modes:
 
@@ -87,6 +87,14 @@ Examples:
 - Prompt `local_preferred` plus API `local_only`: allowed because the request is stricter.
 - Prompt V1 or V2 without routing policy: use legacy provider selection unless the request narrows it.
 - Governance that disables OpenAI: cloud routes are unavailable even when the prompt or request allows cloud.
+
+V3 prompt privacy routing:
+
+- `privacy_class = "restricted"` or `"sensitive"` is treated as a local-only routing boundary even when
+  `constraints.routing_policy.mode` is omitted.
+- Sensitive/restricted prompts cannot be broadened by request-side `cloud_only`, `cloud_fallback`, or an explicit cloud
+  `requested_provider`.
+- `privacy_class = "public"` or `"internal"` keeps the normal prompt/request routing behavior.
 
 V3 prompt importance levels:
 
@@ -357,7 +365,8 @@ Use `requested_provider` only when the client needs to prefer a provider. Use `r
 override. If the requested provider is not enabled or does not have an eligible model, the resolver may use another
 eligible provider unless governance constraints prohibit fallback.
 
-For V3 prompts, local-only execution should be declared on the prompt contract:
+For V3 prompts, local-only execution should be declared on the prompt contract. Sensitive or restricted prompts also
+become local-only through `privacy_class`:
 
 ```json
 {
@@ -365,6 +374,7 @@ For V3 prompts, local-only execution should be declared on the prompt contract:
   "service_id": "mail-node",
   "task_family": "task.classification",
   "version": "v3.0",
+  "privacy_class": "sensitive",
   "constraints": {
     "routing_policy": {
       "mode": "local_only"

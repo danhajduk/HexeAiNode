@@ -46,6 +46,11 @@ def _routing_mode_allows_provider(*, mode: str | None, provider_id: object) -> b
     return True
 
 
+def _privacy_routing_mode(privacy_class: object) -> str | None:
+    privacy = _normalize_string(privacy_class).lower()
+    return "local_only" if privacy in {"restricted", "sensitive"} else None
+
+
 @dataclass(frozen=True)
 class ExecutionAuthorizationResult:
     allowed: bool
@@ -54,6 +59,7 @@ class ExecutionAuthorizationResult:
     task_family: str
     prompt_version: str | None = None
     prompt_state: str | None = None
+    privacy_class: str | None = None
     provider_preferences: dict | None = None
     prompt_constraints: dict | None = None
     execution_policy: dict | None = None
@@ -169,7 +175,10 @@ class ExecutionGateway:
 
         routing_policy = prompt_constraints.get("routing_policy") if isinstance(prompt_constraints.get("routing_policy"), dict) else {}
         routing_mode = _normalize_routing_mode(routing_policy.get("mode") if isinstance(routing_policy, dict) else None)
-        if requested_provider_value and not _routing_mode_allows_provider(mode=routing_mode, provider_id=requested_provider_value):
+        privacy_class = _normalize_string(matched.get("privacy_class") or "internal").lower() or "internal"
+        privacy_mode = _privacy_routing_mode(privacy_class)
+        effective_routing_mode = privacy_mode or routing_mode
+        if requested_provider_value and not _routing_mode_allows_provider(mode=effective_routing_mode, provider_id=requested_provider_value):
             return ExecutionAuthorizationResult(False, "prompt_routing_policy_conflict", prompt, task, prompt_state=prompt_state)
 
         inputs_payload = inputs if isinstance(inputs, dict) else {}
@@ -186,6 +195,7 @@ class ExecutionGateway:
             task_family=task,
             prompt_version=str(version_entry.get("version") or "").strip() or None,
             prompt_state=prompt_state,
+            privacy_class=privacy_class,
             provider_preferences=provider_preferences,
             prompt_constraints=prompt_constraints,
             execution_policy=execution_policy,

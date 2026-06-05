@@ -157,6 +157,51 @@ class ExecutionGatewayTests(unittest.TestCase):
         self.assertFalse(result.allowed)
         self.assertEqual(result.reason, "prompt_structured_output_required")
 
+    def test_sensitive_prompt_privacy_rejects_explicit_cloud_provider(self):
+        gateway = ExecutionGateway()
+        result = gateway.authorize(
+            prompt_id="prompt.sensitive",
+            task_family="task.classification",
+            requested_provider="openai",
+            prompt_services_state={
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.sensitive",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "privacy_class": "sensitive",
+                        "current_version": "v3.0",
+                        "versions": [{"version": "v3.0", "definition": {}}],
+                    }
+                ]
+            },
+        )
+
+        self.assertFalse(result.allowed)
+        self.assertEqual(result.reason, "prompt_routing_policy_conflict")
+
+    def test_sensitive_prompt_privacy_is_exposed_on_authorization(self):
+        gateway = ExecutionGateway()
+        result = gateway.authorize(
+            prompt_id="prompt.sensitive",
+            task_family="task.classification",
+            prompt_services_state={
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.sensitive",
+                        "task_family": "task.classification",
+                        "status": "active",
+                        "privacy_class": "sensitive",
+                        "current_version": "v3.0",
+                        "versions": [{"version": "v3.0", "definition": {}}],
+                    }
+                ]
+            },
+        )
+
+        self.assertTrue(result.allowed)
+        self.assertEqual(result.privacy_class, "sensitive")
+
 
 if __name__ == "__main__":
     unittest.main()
