@@ -169,6 +169,12 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.metrics.provider_success_rate, 0.95)
         self.assertEqual(result.metrics.provider_total_requests, 20)
         self.assertEqual(result.metrics.provider_failed_requests, 1)
+        self.assertEqual(result.resolution_metadata["selected_provider"], "openai")
+        self.assertEqual(result.resolution_metadata["selected_model"], "gpt-5-mini")
+        self.assertEqual(result.resolution_metadata["provider_selection_reason"], "requested_provider")
+        self.assertEqual(result.resolution_metadata["model_selection_reason"], "requested_model")
+        self.assertEqual(result.resolution_metadata["provider_order"], ["openai"])
+        self.assertEqual(result.resolution_metadata["model_allowlist_by_provider"], {"openai": ["gpt-5-mini"]})
         self.assertEqual(
             [item["event_type"] for item in telemetry.calls],
             ["task_received", "provider_selected", "task_started", "task_completed"],
@@ -1092,6 +1098,8 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.status, "degraded")
         self.assertEqual(result.error_code, "no_eligible_provider_available")
+        self.assertEqual(result.resolution_metadata["rejection_reason"], "no_eligible_provider_available")
+        self.assertEqual(result.resolution_metadata["provider_order"], [])
 
     async def test_execute_degrades_when_provider_resolution_reports_provider_unavailable(self):
         service = TaskExecutionService(

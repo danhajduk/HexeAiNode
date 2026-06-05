@@ -738,3 +738,9 @@ Chosen fix: Added a structured local model state payload to local LLM service st
 What changed: Added `services.local_llm.model_states` with per-model `health_state`, `warmth_state`, `loaded`, and `swap_required`; covered loaded/warm/cold/swap-required classifications; updated Client AI communication docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_service_manager.py tests/test_node_control_api.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/service_manager.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
 ###########
+Task #960
+Step objective: Add provider and model resolution reason metadata to execution results.
+Chosen fix: Added `resolution_metadata` to `TaskExecutionResult` and populated it from provider resolution for completed, degraded, rejected, and failed execution paths after resolution.
+What changed: Added result model support, metadata construction for selected provider/model, selection reasons, routing mode, provider order, fallback providers, allowlists, timeout/retry data, tests, and Client AI communication docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_task_execution_request.py tests/test_task_execution_service.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/execution/task_models.py src/ai_node/runtime/task_execution_service.py`, and `git diff --check` passed.
+###########

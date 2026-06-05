@@ -202,6 +202,12 @@ class TaskExecutionResultTests(unittest.TestCase):
                 },
                 "provider_used": "openai",
                 "model_used": "gpt-5-mini",
+                "resolution_metadata": {
+                    "selected_provider": "openai",
+                    "selected_model": "gpt-5-mini",
+                    "provider_selection_reason": "requested_provider",
+                    "model_selection_reason": "requested_model",
+                },
                 "completed_at": "2026-03-19T17:00:00Z",
             }
         )
@@ -209,6 +215,7 @@ class TaskExecutionResultTests(unittest.TestCase):
         self.assertEqual(payload.status, "completed")
         self.assertEqual(payload.output, {"label": "important"})
         self.assertEqual(payload.provider_used, "openai")
+        self.assertEqual(payload.resolution_metadata["provider_selection_reason"], "requested_provider")
         self.assertEqual(payload.metrics.total_tokens, 17)
         self.assertEqual(payload.metrics.provider_success_rate, 0.97)
 

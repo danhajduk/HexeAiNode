@@ -214,6 +214,13 @@ class TaskExecutionService:
                 model_id=resolution.model_id,
                 retries=resolution.retry_count,
                 fallback_used=bool(resolution.fallback_provider_ids),
+                resolution_metadata=self._resolution_metadata(
+                    request=request,
+                    authorization=authorization,
+                    resolution=resolution,
+                    governance_constraints=governance_constraints,
+                    rejection_reason=rejection_reason,
+                ),
             )
 
         await self._emit_execution_event(
@@ -250,6 +257,15 @@ class TaskExecutionService:
                 error_message=post_resolution_governance.reason,
                 provider_id=resolution.provider_id,
                 model_id=resolution.model_id,
+                retries=resolution.retry_count,
+                fallback_used=bool(resolution.fallback_provider_ids),
+                resolution_metadata=self._resolution_metadata(
+                    request=request,
+                    authorization=authorization,
+                    resolution=resolution,
+                    governance_constraints=governance_constraints,
+                    rejection_reason=post_resolution_governance.reason,
+                ),
             )
 
         budget_reservation = None
@@ -277,6 +293,15 @@ class TaskExecutionService:
                     error_message=str(budget_reservation.reason or "missing_budget_grant"),
                     provider_id=resolution.provider_id,
                     model_id=resolution.model_id,
+                    retries=resolution.retry_count,
+                    fallback_used=bool(resolution.fallback_provider_ids),
+                    resolution_metadata=self._resolution_metadata(
+                        request=request,
+                        authorization=authorization,
+                        resolution=resolution,
+                        governance_constraints=governance_constraints,
+                        rejection_reason=str(budget_reservation.reason or "missing_budget_grant"),
+                    ),
                 )
             await self._emit_execution_event(
                 event_type="budget_reservation",
@@ -334,6 +359,13 @@ class TaskExecutionService:
                 model_id=resolution.model_id,
                 retries=resolution.retry_count,
                 fallback_used=bool(resolution.fallback_provider_ids),
+                resolution_metadata=self._resolution_metadata(
+                    request=request,
+                    authorization=authorization,
+                    resolution=resolution,
+                    governance_constraints=governance_constraints,
+                    rejection_reason=failure_reason,
+                ),
             )
         except Exception as exc:
             failure_reason = _safe_error_message(exc)
@@ -350,6 +382,13 @@ class TaskExecutionService:
                 model_id=resolution.model_id,
                 retries=resolution.retry_count,
                 fallback_used=bool(resolution.fallback_provider_ids),
+                resolution_metadata=self._resolution_metadata(
+                    request=request,
+                    authorization=authorization,
+                    resolution=resolution,
+                    governance_constraints=governance_constraints,
+                    rejection_reason=failure_reason,
+                ),
             )
 
         completed_at = _iso_now()
@@ -398,6 +437,12 @@ class TaskExecutionService:
                 },
                 "provider_used": response.provider_id,
                 "model_used": response.model_id,
+                "resolution_metadata": self._resolution_metadata(
+                    request=request,
+                    authorization=authorization,
+                    resolution=resolution,
+                    governance_constraints=governance_constraints,
+                ),
                 "completed_at": completed_at,
             }
         )
@@ -663,6 +708,56 @@ class TaskExecutionService:
             },
         )
 
+    @staticmethod
+    def _resolution_metadata(
+        *,
+        request: TaskExecutionRequest,
+        authorization,
+        resolution,
+        governance_constraints: dict | None,
+        rejection_reason: str | None = None,
+    ) -> dict:
+        routing = (
+            governance_constraints.get("routing_policy_constraints")
+            if isinstance(governance_constraints, dict) and isinstance(governance_constraints.get("routing_policy_constraints"), dict)
+            else {}
+        )
+        effective_provider = TaskExecutionService._effective_requested_provider(request=request, authorization=authorization)
+        effective_model = TaskExecutionService._effective_requested_model(request=request, authorization=authorization)
+        provider_reason = "provider_selection_policy"
+        if request.requested_provider:
+            provider_reason = "requested_provider"
+        elif authorization is not None and isinstance(getattr(authorization, "provider_preferences", None), dict):
+            if authorization.provider_preferences.get("default_provider"):
+                provider_reason = "prompt_default_provider"
+        if not request.requested_provider and routing.get("mode"):
+            provider_reason = f"routing_policy_{routing.get('mode')}"
+
+        model_reason = "provider_default_or_first_allowed"
+        if request.requested_model:
+            model_reason = "requested_model"
+        elif authorization is not None and isinstance(getattr(authorization, "provider_preferences", None), dict):
+            if authorization.provider_preferences.get("default_model"):
+                model_reason = "prompt_default_model"
+
+        return {
+            "selected_provider": getattr(resolution, "provider_id", None),
+            "selected_model": getattr(resolution, "model_id", None),
+            "provider_selection_reason": provider_reason,
+            "model_selection_reason": model_reason,
+            "requested_provider": request.requested_provider,
+            "requested_model": request.requested_model,
+            "effective_requested_provider": effective_provider,
+            "effective_requested_model": effective_model,
+            "routing_policy_mode": routing.get("mode"),
+            "provider_order": list(getattr(resolution, "provider_order", []) or []),
+            "fallback_provider_ids": list(getattr(resolution, "fallback_provider_ids", []) or []),
+            "model_allowlist_by_provider": dict(getattr(resolution, "model_allowlist_by_provider", {}) or {}),
+            "timeout_s": getattr(resolution, "timeout_s", None),
+            "retry_count": getattr(resolution, "retry_count", 0),
+            "rejection_reason": rejection_reason,
+        }
+
     def _terminal_result(
         self,
         *,
@@ -675,6 +770,7 @@ class TaskExecutionService:
         model_id: str | None = None,
         retries: int = 0,
         fallback_used: bool = False,
+        resolution_metadata: dict | None = None,
     ) -> TaskExecutionResult:
         lifecycle_state = "rejected" if state == "unsupported" else state
         self._lifecycle_tracker.update(
@@ -742,6 +838,7 @@ class TaskExecutionService:
                 "error_message": _safe_error_message(error_message),
                 "provider_used": provider_id,
                 "model_used": model_id,
+                "resolution_metadata": resolution_metadata,
                 "completed_at": _iso_now(),
             }
         )

@@ -179,6 +179,7 @@ class TaskExecutionResult(BaseModel):
     error_message: str | None = None
     provider_used: str | None = None
     model_used: str | None = None
+    resolution_metadata: dict[str, Any] | None = None
     completed_at: datetime | None = None
 
     @field_validator("task_id")
@@ -209,6 +210,15 @@ class TaskExecutionResult(BaseModel):
             return None
         max_length = 4096 if str(info.field_name) == "error_message" else 128
         return _normalized_non_empty_string(value, field_name=str(info.field_name), max_length=max_length)
+
+    @field_validator("resolution_metadata")
+    @classmethod
+    def _validate_resolution_metadata(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("resolution_metadata_must_be_object")
+        return value
 
     @model_validator(mode="after")
     def _validate_status_consistency(self) -> "TaskExecutionResult":

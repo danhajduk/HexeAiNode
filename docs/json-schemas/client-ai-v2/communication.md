@@ -346,13 +346,33 @@ Successful direct execution returns a `TaskExecutionResult` shape:
   "error_message": null,
   "provider_used": "openai",
   "model_used": "gpt-5-mini",
+  "resolution_metadata": {
+    "selected_provider": "openai",
+    "selected_model": "gpt-5-mini",
+    "provider_selection_reason": "requested_provider",
+    "model_selection_reason": "requested_model",
+    "requested_provider": "openai",
+    "requested_model": "gpt-5-mini",
+    "effective_requested_provider": "openai",
+    "effective_requested_model": "gpt-5-mini",
+    "routing_policy_mode": null,
+    "provider_order": ["openai"],
+    "fallback_provider_ids": [],
+    "model_allowlist_by_provider": {
+      "openai": ["gpt-5-mini"]
+    },
+    "timeout_s": 60,
+    "retry_count": 0,
+    "rejection_reason": null
+  },
   "completed_at": "2026-05-28T00:00:00-07:00"
 }
 ```
 
 Non-success task results still use HTTP `200` when the request reached the execution service and the task itself was
 rejected, unsupported, degraded, or failed under the execution contract. In those cases `status`, `error_code`, and
-`error_message` describe the task outcome.
+`error_message` describe the task outcome. When provider resolution ran, `resolution_metadata` is included on both
+successful and non-success task results so clients can inspect why a provider/model was chosen or why resolution failed.
 
 HTTP errors mean the request did not execute normally. Examples:
 
