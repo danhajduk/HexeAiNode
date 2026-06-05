@@ -54,6 +54,39 @@ scripts/llamacpp-vision-control.sh stop
 Do not run the vision runtime concurrently with image generation on the 12 GB GPU unless an operator has verified
 available VRAM. The first-pass vision runtime keeps `--parallel 1` and an 8192 context by default.
 
+## Experimental Image Generation Runtime
+
+The node includes a sibling ComfyUI runtime for local image generation experiments. It is intentionally separate from
+the text and vision llama.cpp runtimes because diffusion models place different pressure on VRAM and model storage.
+
+Default ComfyUI target:
+
+- image: `hexe-ai-node-comfyui:local`
+- container: `hexe-ai-node-comfyui`
+- URL: `http://127.0.0.1:8188`
+- runtime base: CUDA 12.1 / PyTorch cu121 for compatibility with the NVIDIA 535 driver
+- models: `runtime/models/comfyui`
+- input: `runtime/input/comfyui`
+- output: `runtime/output/comfyui`
+
+```bash
+scripts/comfyui-control.sh build
+scripts/comfyui-control.sh create
+scripts/comfyui-control.sh start
+scripts/comfyui-control.sh ready
+scripts/comfyui-control.sh status
+scripts/comfyui-control.sh logs
+scripts/comfyui-control.sh stop
+```
+
+On the RTX 3060 12 GB node, ComfyUI should be treated as exclusive GPU work for real generation. With both llama.cpp
+runtimes loaded, only about 2.5 GB VRAM remains, which is not enough for typical SDXL, FLUX, or Stable Diffusion 3.5
+workflows. Stop `hexe-ai-node-llamacpp-vision` before lightweight generation, and stop both llama.cpp containers before
+testing heavier workflows.
+
+Measured with both llama.cpp runtimes loaded, an idle ComfyUI service adds about 102 MiB VRAM and reports healthy, but
+that is only the UI/runtime process before a diffusion checkpoint is loaded.
+
 Validate the currently loaded model:
 
 ```bash
