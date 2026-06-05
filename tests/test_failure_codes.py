@@ -1,6 +1,6 @@
 import unittest
 
-from ai_node.execution.failure_codes import FAILURE_CODE_TAXONOMY, classify_failure_code
+from ai_node.execution.failure_codes import FAILURE_CODE_TAXONOMY, classify_failure_code, recovery_policy_for_failure_code
 
 
 class FailureCodesTests(unittest.TestCase):
@@ -29,6 +29,18 @@ class FailureCodesTests(unittest.TestCase):
         self.assertEqual(classify_failure_code("prompt_access_denied"), "governance_violation")
         self.assertEqual(classify_failure_code("governance_violation_timeout"), "governance_violation")
         self.assertEqual(classify_failure_code("invalid_input"), "invalid_input")
+
+    def test_recovery_policy_maps_retry_and_fallback_by_failure_category(self):
+        provider_policy = recovery_policy_for_failure_code("no_eligible_provider_available")
+        self.assertEqual(provider_policy["failure_category"], "provider_unavailable")
+        self.assertTrue(provider_policy["retryable"])
+        self.assertTrue(provider_policy["fallback_allowed"])
+        self.assertEqual(provider_policy["action"], "retry_or_fallback")
+
+        governance_policy = recovery_policy_for_failure_code("prompt_access_denied")
+        self.assertFalse(governance_policy["retryable"])
+        self.assertFalse(governance_policy["fallback_allowed"])
+        self.assertEqual(governance_policy["action"], "fix_request_or_policy")
 
 
 if __name__ == "__main__":

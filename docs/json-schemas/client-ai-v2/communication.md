@@ -373,6 +373,19 @@ Non-success task results still use HTTP `200` when the request reached the execu
 rejected, unsupported, degraded, or failed under the execution contract. In those cases `status`, `error_code`, and
 `error_message` describe the task outcome. When provider resolution ran, `resolution_metadata` is included on both
 successful and non-success task results so clients can inspect why a provider/model was chosen or why resolution failed.
+For non-success results after resolution, `resolution_metadata.error_policy` describes whether the failure class is
+retryable and whether fallback to another provider/model is allowed.
+
+Execution retry/fallback policy:
+
+| Failure category | Retryable | Fallback allowed | Client action |
+| --- | --- | --- | --- |
+| `provider_unavailable` | yes | yes | Retry later or use another allowed provider. |
+| `model_unavailable` | no | yes | Choose another allowed model/provider. |
+| `execution_timeout` | yes | yes | Retry with a smaller request or another provider. |
+| `lease_expired` | yes | no | Renew the lease, then retry. |
+| `governance_violation`, `budget_violation`, `invalid_input`, `unsupported_task_family` | no | no | Fix request, policy, budget, or declared capability. |
+| `internal_execution_error` | no | no | Inspect node/provider logs before retrying. |
 
 HTTP errors mean the request did not execute normally. Examples:
 

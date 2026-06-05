@@ -1100,6 +1100,9 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.error_code, "no_eligible_provider_available")
         self.assertEqual(result.resolution_metadata["rejection_reason"], "no_eligible_provider_available")
         self.assertEqual(result.resolution_metadata["provider_order"], [])
+        self.assertEqual(result.resolution_metadata["error_policy"]["failure_category"], "provider_unavailable")
+        self.assertTrue(result.resolution_metadata["error_policy"]["retryable"])
+        self.assertTrue(result.resolution_metadata["error_policy"]["fallback_allowed"])
 
     async def test_execute_degrades_when_provider_resolution_reports_provider_unavailable(self):
         service = TaskExecutionService(

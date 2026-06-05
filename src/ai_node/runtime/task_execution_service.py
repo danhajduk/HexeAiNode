@@ -2,7 +2,7 @@ import json
 import time
 
 from ai_node.execution.gateway import ExecutionGateway
-from ai_node.execution.failure_codes import classify_failure_code
+from ai_node.execution.failure_codes import classify_failure_code, recovery_policy_for_failure_code
 from ai_node.execution.governance import evaluate_execution_governance
 from ai_node.execution.lifecycle import ExecutionLifecycleTracker
 from ai_node.execution.task_families import validate_execution_task_family
@@ -740,7 +740,7 @@ class TaskExecutionService:
             if authorization.provider_preferences.get("default_model"):
                 model_reason = "prompt_default_model"
 
-        return {
+        payload = {
             "selected_provider": getattr(resolution, "provider_id", None),
             "selected_model": getattr(resolution, "model_id", None),
             "provider_selection_reason": provider_reason,
@@ -757,6 +757,9 @@ class TaskExecutionService:
             "retry_count": getattr(resolution, "retry_count", 0),
             "rejection_reason": rejection_reason,
         }
+        if rejection_reason:
+            payload["error_policy"] = recovery_policy_for_failure_code(rejection_reason)
+        return payload
 
     def _terminal_result(
         self,

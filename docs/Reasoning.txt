@@ -744,3 +744,9 @@ Chosen fix: Added `resolution_metadata` to `TaskExecutionResult` and populated i
 What changed: Added result model support, metadata construction for selected provider/model, selection reasons, routing mode, provider order, fallback providers, allowlists, timeout/retry data, tests, and Client AI communication docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_task_execution_request.py tests/test_task_execution_service.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/execution/task_models.py src/ai_node/runtime/task_execution_service.py`, and `git diff --check` passed.
 ###########
+Task #961
+Step objective: Add retry and fallback rules by execution error class.
+Chosen fix: Added a recovery-policy table keyed by existing failure taxonomy and exposed it in execution result resolution metadata for non-success outcomes after provider resolution.
+What changed: Added `recovery_policy_for_failure_code`, metadata attachment in task execution results, focused tests, and Client AI communication docs.
+Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_failure_codes.py tests/test_task_execution_service.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/execution/failure_codes.py src/ai_node/runtime/task_execution_service.py`, and `git diff --check` passed.
+###########

@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 961: Add retry and fallback rules by execution error class
 [TODO] Task 962: Add V3 prompt capability requirements for provider and model selection
 [TODO] Task 963: Add dry-run execution route preview endpoint
 [TODO] Task 964: Add queued execution job cancellation

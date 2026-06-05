@@ -70,6 +70,18 @@ FAILURE_CODE_TAXONOMY = {
     },
 }
 
+FAILURE_RECOVERY_POLICY = {
+    "unsupported_task_family": {"retryable": False, "fallback_allowed": False, "action": "do_not_retry"},
+    "provider_unavailable": {"retryable": True, "fallback_allowed": True, "action": "retry_or_fallback"},
+    "model_unavailable": {"retryable": False, "fallback_allowed": True, "action": "fallback_if_allowed"},
+    "governance_violation": {"retryable": False, "fallback_allowed": False, "action": "fix_request_or_policy"},
+    "budget_violation": {"retryable": False, "fallback_allowed": False, "action": "refresh_or_increase_budget"},
+    "invalid_input": {"retryable": False, "fallback_allowed": False, "action": "fix_request"},
+    "execution_timeout": {"retryable": True, "fallback_allowed": True, "action": "retry_or_fallback"},
+    "lease_expired": {"retryable": True, "fallback_allowed": False, "action": "renew_lease_then_retry"},
+    "internal_execution_error": {"retryable": False, "fallback_allowed": False, "action": "inspect_error"},
+}
+
 
 def classify_failure_code(code: str | None) -> str | None:
     normalized = str(code or "").strip()
@@ -86,3 +98,14 @@ def classify_failure_code(code: str | None) -> str | None:
     if normalized.startswith("invalid_input"):
         return "invalid_input"
     return None
+
+
+def recovery_policy_for_failure_code(code: str | None) -> dict:
+    category = classify_failure_code(code) or "internal_execution_error"
+    policy = FAILURE_RECOVERY_POLICY.get(category) or FAILURE_RECOVERY_POLICY["internal_execution_error"]
+    return {
+        "failure_category": category,
+        "retryable": bool(policy.get("retryable")),
+        "fallback_allowed": bool(policy.get("fallback_allowed")),
+        "action": str(policy.get("action") or "inspect_error"),
+    }
