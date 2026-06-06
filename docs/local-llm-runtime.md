@@ -78,7 +78,8 @@ GPU ComfyUI target:
 
 - image: `hexe-ai-node-comfyui:local`
 - container: `hexe-ai-node-comfyui`
-- URL: `http://127.0.0.1:8188`
+- API socket: `/run/hexe/ai-node/comfyui-gpu.sock`
+- health socket: `/run/hexe/ai-node/comfyui-gpu-health.sock`
 - runtime base: CUDA 12.1 / PyTorch cu121 for compatibility with the NVIDIA 535 driver
 - models: `runtime/models/comfyui-gpu`
 - input: `runtime/input/comfyui-gpu`
@@ -90,7 +91,8 @@ CPU ComfyUI target:
 
 - image: `hexe-ai-node-comfyui:local`
 - container: `hexe-ai-node-comfyui`
-- URL: `http://127.0.0.1:8189`
+- API socket: `/run/hexe/ai-node/comfyui-cpu.sock`
+- health socket: `/run/hexe/ai-node/comfyui-cpu-health.sock`
 - runtime mode: `--cpu`
 - models: `runtime/models/comfyui-cpu`
 - input: `runtime/input/comfyui-cpu`
@@ -120,6 +122,16 @@ container starts both runtime processes together. Both processes start with `--d
 startup checkpoint argument; checkpoints and LoRAs should be loaded by the request workflow unless a future explicit
 keep-warm policy is enabled. During directory preparation, the control script creates per-runtime model folders and
 symlinks the expected checkpoint/LoRA from the legacy `runtime/models/comfyui` folder when the file is already present.
+ComfyUI no longer publishes host HTTP ports by default. The container keeps HTTP bound internally for ComfyUI itself,
+then exposes API and health access through Unix sockets under `/run/hexe/ai-node`. The health sockets serve `/health`;
+the API sockets forward regular ComfyUI HTTP API calls such as `/system_stats`, `/prompt`, and `/history`.
+
+Example socket probes:
+
+```bash
+curl --unix-socket /run/hexe/ai-node/comfyui-gpu-health.sock http://comfyui/health
+curl --unix-socket /run/hexe/ai-node/comfyui-cpu.sock http://comfyui/system_stats
+```
 
 GPU ComfyUI startup is gated on vision VRAM release by default. Before `scripts/comfyui-control.sh gpu start` or
 `ready` recreates the GPU container, the control script checks the vision socket/container, calls

@@ -77,6 +77,25 @@ class UserSystemdServiceManager:
         self._vision_llm_container_name = str(
             os.environ.get("LLAMACPP_VISION_CONTAINER_NAME") or "hexe-ai-node-llamacpp-vision"
         ).strip()
+        self._comfyui_control_script = str(
+            os.environ.get("HEXE_COMFYUI_CONTROL_SCRIPT") or "scripts/comfyui-control.sh"
+        ).strip()
+        self._comfyui_container_name = str(
+            os.environ.get("COMFYUI_CONTAINER_NAME") or "hexe-ai-node-comfyui"
+        ).strip()
+        comfyui_socket_dir = str(os.environ.get("COMFYUI_SOCKET_DIR") or "/run/hexe/ai-node").strip()
+        self._comfyui_gpu_socket = str(
+            os.environ.get("COMFYUI_GPU_SOCKET_PATH") or f"{comfyui_socket_dir}/comfyui-gpu.sock"
+        ).strip()
+        self._comfyui_gpu_health_socket = str(
+            os.environ.get("COMFYUI_GPU_HEALTH_SOCKET") or f"{comfyui_socket_dir}/comfyui-gpu-health.sock"
+        ).strip()
+        self._comfyui_cpu_socket = str(
+            os.environ.get("COMFYUI_CPU_SOCKET_PATH") or f"{comfyui_socket_dir}/comfyui-cpu.sock"
+        ).strip()
+        self._comfyui_cpu_health_socket = str(
+            os.environ.get("COMFYUI_CPU_HEALTH_SOCKET") or f"{comfyui_socket_dir}/comfyui-cpu-health.sock"
+        ).strip()
         self._vision_llm_default_model_id = (
             str(
                 os.environ.get("HEXE_PROVIDER_VISION_DEFAULT_MODEL_ID")
@@ -109,6 +128,8 @@ class UserSystemdServiceManager:
             "frontend": frontend,
             "local_llm": self._local_llm_status(),
             "vision_llm": self._vision_llm_status(),
+            "comfyui_gpu": self._comfyui_runtime_status(runtime="gpu"),
+            "comfyui_cpu": self._comfyui_runtime_status(runtime="cpu"),
             "node": node,
         }
 
@@ -603,6 +624,37 @@ class UserSystemdServiceManager:
             "residency": residency,
         }
 
+    def _comfyui_runtime_status(self, *, runtime: str) -> dict:
+        runtime_key = "cpu" if str(runtime or "").strip().lower() == "cpu" else "gpu"
+        service_id = f"comfyui_{runtime_key}"
+        script_exists = os.path.exists(self._comfyui_control_script)
+        socket_path = self._comfyui_cpu_socket if runtime_key == "cpu" else self._comfyui_gpu_socket
+        health_socket_path = self._comfyui_cpu_health_socket if runtime_key == "cpu" else self._comfyui_gpu_health_socket
+        socket_ready = bool(socket_path and os.path.exists(socket_path))
+        health_socket_ready = bool(health_socket_path and os.path.exists(health_socket_path))
+        pid = self._query_container_pid(self._comfyui_container_name) if script_exists else 0
+        state = "running" if pid and socket_ready and health_socket_ready else "stopped"
+        if pid and not (socket_ready and health_socket_ready):
+            state = "starting"
+        if not script_exists:
+            state = "unknown"
+        return {
+            "service_id": service_id,
+            "service_name": service_id,
+            "state": state,
+            "pid": pid or None,
+            "boot_order": 40 if runtime_key == "gpu" else 45,
+            "managed_by": "comfyui-control",
+            "control_script": self._comfyui_control_script,
+            "container_name": self._comfyui_container_name or None,
+            "socket_path": socket_path or None,
+            "health_socket_path": health_socket_path or None,
+            "socket_ready": socket_ready,
+            "health_socket_ready": health_socket_ready,
+            "api_transport": "unix_socket",
+            "model_residency": "on_demand",
+        }
+
     def _query_container_pid(self, container_name: str) -> int:
         if not container_name:
             return 0
@@ -902,7 +954,15 @@ class UserSystemdServiceManager:
 
 class NullServiceManager:
     def get_status(self) -> dict:
-        return {"backend": "unknown", "frontend": "unknown", "local_llm": "unknown", "vision_llm": "unknown", "node": "unknown"}
+        return {
+            "backend": "unknown",
+            "frontend": "unknown",
+            "local_llm": "unknown",
+            "vision_llm": "unknown",
+            "comfyui_gpu": "unknown",
+            "comfyui_cpu": "unknown",
+            "node": "unknown",
+        }
 
     def restart(self, *, target: str) -> dict:
         raise ValueError("service manager is not configured")

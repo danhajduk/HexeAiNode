@@ -59,6 +59,8 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(payload["backend"]["state"], "running")
         self.assertEqual(payload["frontend"]["state"], "failed")
         self.assertEqual(payload["local_llm"]["service_id"], "local_llm")
+        self.assertEqual(payload["comfyui_gpu"]["service_id"], "comfyui_gpu")
+        self.assertEqual(payload["comfyui_cpu"]["service_id"], "comfyui_cpu")
         self.assertEqual(payload["node"], "degraded")
 
     def test_restart_node_restarts_both_units(self):
@@ -137,6 +139,36 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(first_payload["always_on"]["reason"], "default_model_ready")
         self.assertIn("model_states", first_payload)
         self.assertEqual(second_payload["cpu_percent"], 25.0)
+
+    def test_comfyui_status_reports_socket_runtime_contract(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+        def _fake_exists(path):
+            value = str(path)
+            return value in {
+                "scripts/comfyui-control.sh",
+                manager._comfyui_gpu_socket,
+                manager._comfyui_gpu_health_socket,
+                manager._comfyui_cpu_socket,
+                manager._comfyui_cpu_health_socket,
+            }
+
+        def _fake_run(cmd, check, capture_output, text, env=None):
+            self.assertEqual(cmd[:3], ["docker", "inspect", "--format"])
+            self.assertEqual(cmd[-1], "hexe-ai-node-comfyui")
+            return _Completed("5151\n")
+
+        with patch("os.path.exists", side_effect=_fake_exists), patch("subprocess.run", side_effect=_fake_run):
+            gpu_payload = manager._comfyui_runtime_status(runtime="gpu")
+            cpu_payload = manager._comfyui_runtime_status(runtime="cpu")
+
+        self.assertEqual(gpu_payload["state"], "running")
+        self.assertEqual(gpu_payload["pid"], 5151)
+        self.assertEqual(gpu_payload["api_transport"], "unix_socket")
+        self.assertTrue(gpu_payload["socket_ready"])
+        self.assertTrue(gpu_payload["health_socket_ready"])
+        self.assertEqual(cpu_payload["state"], "running")
+        self.assertEqual(cpu_payload["socket_path"], manager._comfyui_cpu_socket)
 
     def test_local_llm_always_on_starts_default_when_runtime_is_not_ready(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(

@@ -40,8 +40,11 @@ Backend runtime:
 - `HEXE_VISION_LLM_RESIDENCY_CHECK_INTERVAL_SECONDS` default `60`; interval for the vision runtime residency check
 - `HEXE_VISION_LLM_CONTROL_SCRIPT` default `scripts/llamacpp-vision-control.sh`
 - `COMFYUI_CONTAINER_NAME` default `hexe-ai-node-comfyui`; single container that runs both GPU and CPU ComfyUI processes
-- `COMFYUI_GPU_PORT` default `8188`; local host port for the GPU ComfyUI runtime
-- `COMFYUI_CPU_PORT` default `8189`; local host port for the CPU-only ComfyUI runtime
+- `COMFYUI_SOCKET_DIR` default `/run/hexe/ai-node`; host-mounted Unix socket directory for ComfyUI APIs
+- `COMFYUI_GPU_SOCKET_PATH` default `/run/hexe/ai-node/comfyui-gpu.sock`
+- `COMFYUI_GPU_HEALTH_SOCKET` default `/run/hexe/ai-node/comfyui-gpu-health.sock`
+- `COMFYUI_CPU_SOCKET_PATH` default `/run/hexe/ai-node/comfyui-cpu.sock`
+- `COMFYUI_CPU_HEALTH_SOCKET` default `/run/hexe/ai-node/comfyui-cpu-health.sock`
 - `COMFYUI_GPU_CHECKPOINT` default `RealVisXL_V5.0_fp16.safetensors`
 - `COMFYUI_GPU_LORA` default `sdxl_lightning_4step_lora.safetensors`
 - `HEXE_COMFYUI_GPU_PRESETS_CONFIG` default `config/comfyui-gpu-presets.json`; discoverable GPU preset catalog for RealVisXL + SDXL-Lightning workflows

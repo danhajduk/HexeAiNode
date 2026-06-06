@@ -18,9 +18,14 @@ export COMFYUI_REF="${COMFYUI_REF:-master}"
 export COMFYUI_HOST="${COMFYUI_HOST:-127.0.0.1}"
 export COMFYUI_CONTAINER_NAME="${COMFYUI_CONTAINER_NAME:-hexe-ai-node-comfyui}"
 export COMFYUI_READY_TIMEOUT_S="${COMFYUI_READY_TIMEOUT_S_OVERRIDE:-${COMFYUI_READY_TIMEOUT_S:-240}}"
+export COMFYUI_UID="${COMFYUI_UID:-$(id -u)}"
+export COMFYUI_GID="${COMFYUI_GID:-$(id -g)}"
+export COMFYUI_SOCKET_DIR="${COMFYUI_SOCKET_DIR:-/run/hexe/ai-node}"
 
 export COMFYUI_GPU_HOST="${COMFYUI_GPU_HOST:-$COMFYUI_HOST}"
 export COMFYUI_GPU_PORT="${COMFYUI_GPU_PORT:-8188}"
+export COMFYUI_GPU_SOCKET_PATH="${COMFYUI_GPU_SOCKET_PATH:-$COMFYUI_SOCKET_DIR/comfyui-gpu.sock}"
+export COMFYUI_GPU_HEALTH_SOCKET="${COMFYUI_GPU_HEALTH_SOCKET:-$COMFYUI_SOCKET_DIR/comfyui-gpu-health.sock}"
 export COMFYUI_GPU_MODEL_DIR="${COMFYUI_GPU_MODEL_DIR:-$ROOT_DIR/runtime/models/comfyui-gpu}"
 export COMFYUI_GPU_INPUT_DIR="${COMFYUI_GPU_INPUT_DIR:-$ROOT_DIR/runtime/input/comfyui-gpu}"
 export COMFYUI_GPU_OUTPUT_DIR="${COMFYUI_GPU_OUTPUT_DIR:-$ROOT_DIR/runtime/output/comfyui-gpu}"
@@ -30,6 +35,8 @@ export COMFYUI_GPU_LORA="${COMFYUI_GPU_LORA:-sdxl_lightning_4step_lora.safetenso
 
 export COMFYUI_CPU_HOST="${COMFYUI_CPU_HOST:-$COMFYUI_HOST}"
 export COMFYUI_CPU_PORT="${COMFYUI_CPU_PORT:-8189}"
+export COMFYUI_CPU_SOCKET_PATH="${COMFYUI_CPU_SOCKET_PATH:-$COMFYUI_SOCKET_DIR/comfyui-cpu.sock}"
+export COMFYUI_CPU_HEALTH_SOCKET="${COMFYUI_CPU_HEALTH_SOCKET:-$COMFYUI_SOCKET_DIR/comfyui-cpu-health.sock}"
 export COMFYUI_CPU_MODEL_DIR="${COMFYUI_CPU_MODEL_DIR:-$ROOT_DIR/runtime/models/comfyui-cpu}"
 export COMFYUI_CPU_INPUT_DIR="${COMFYUI_CPU_INPUT_DIR:-$ROOT_DIR/runtime/input/comfyui-cpu}"
 export COMFYUI_CPU_OUTPUT_DIR="${COMFYUI_CPU_OUTPUT_DIR:-$ROOT_DIR/runtime/output/comfyui-cpu}"
@@ -79,6 +86,20 @@ target_port() {
   case "$1" in
     gpu) printf '%s' "$COMFYUI_GPU_PORT" ;;
     cpu) printf '%s' "$COMFYUI_CPU_PORT" ;;
+  esac
+}
+
+target_socket() {
+  case "$1" in
+    gpu) printf '%s' "$COMFYUI_GPU_SOCKET_PATH" ;;
+    cpu) printf '%s' "$COMFYUI_CPU_SOCKET_PATH" ;;
+  esac
+}
+
+target_health_socket() {
+  case "$1" in
+    gpu) printf '%s' "$COMFYUI_GPU_HEALTH_SOCKET" ;;
+    cpu) printf '%s' "$COMFYUI_CPU_HEALTH_SOCKET" ;;
   esac
 }
 
@@ -254,14 +275,14 @@ link_model_file() {
 
 prepare_gpu_runtime_dirs() {
   mkdir -p "$COMFYUI_GPU_MODEL_DIR/checkpoints" "$COMFYUI_GPU_MODEL_DIR/loras"
-  mkdir -p "$COMFYUI_GPU_INPUT_DIR" "$COMFYUI_GPU_OUTPUT_DIR" "$COMFYUI_GPU_USER_DIR" "$COMFYUI_CACHE_DIR"
+  mkdir -p "$COMFYUI_GPU_INPUT_DIR" "$COMFYUI_GPU_OUTPUT_DIR" "$COMFYUI_GPU_USER_DIR" "$COMFYUI_CACHE_DIR" "$COMFYUI_SOCKET_DIR"
   link_model_file "$COMFYUI_LEGACY_MODEL_DIR/checkpoints" "$COMFYUI_GPU_MODEL_DIR/checkpoints" "$COMFYUI_GPU_CHECKPOINT"
   link_model_file "$COMFYUI_LEGACY_MODEL_DIR/loras" "$COMFYUI_GPU_MODEL_DIR/loras" "$COMFYUI_GPU_LORA"
 }
 
 prepare_cpu_runtime_dirs() {
   mkdir -p "$COMFYUI_CPU_MODEL_DIR/checkpoints" "$COMFYUI_CPU_MODEL_DIR/loras"
-  mkdir -p "$COMFYUI_CPU_INPUT_DIR" "$COMFYUI_CPU_OUTPUT_DIR" "$COMFYUI_CPU_USER_DIR" "$COMFYUI_CACHE_DIR"
+  mkdir -p "$COMFYUI_CPU_INPUT_DIR" "$COMFYUI_CPU_OUTPUT_DIR" "$COMFYUI_CPU_USER_DIR" "$COMFYUI_CACHE_DIR" "$COMFYUI_SOCKET_DIR"
   link_model_file "$COMFYUI_LEGACY_MODEL_DIR/checkpoints" "$COMFYUI_CPU_MODEL_DIR/checkpoints" "$COMFYUI_CPU_CHECKPOINT"
 }
 
@@ -302,7 +323,7 @@ select_runtime() {
 
 health_probe() {
   local runtime="$1"
-  curl -fsS "http://$(target_host "$runtime"):$(target_port "$runtime")/system_stats"
+  curl -fsS --unix-socket "$(target_health_socket "$runtime")" "http://comfyui/health"
 }
 
 wait_ready() {
@@ -360,6 +381,7 @@ case "$command" in
   stop)
     compose stop comfyui
     compose rm -f comfyui
+    rm -f "$COMFYUI_GPU_SOCKET_PATH" "$COMFYUI_GPU_HEALTH_SOCKET" "$COMFYUI_CPU_SOCKET_PATH" "$COMFYUI_CPU_HEALTH_SOCKET"
     ;;
   restart)
     "$0" "$target" stop

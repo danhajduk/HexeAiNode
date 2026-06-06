@@ -26,7 +26,8 @@ RUN python3 -m pip install torch torchvision torchaudio --index-url https://down
     && python3 -m pip install -r requirements.txt
 
 COPY docker/comfyui/run-dual.sh /opt/hexe/run-comfyui-dual.sh
-RUN chmod +x /opt/hexe/run-comfyui-dual.sh
+COPY docker/comfyui/socket-proxy.py /opt/hexe/comfyui-socket-proxy.py
+RUN chmod +x /opt/hexe/run-comfyui-dual.sh /opt/hexe/comfyui-socket-proxy.py
 
 EXPOSE 8188 8189
 

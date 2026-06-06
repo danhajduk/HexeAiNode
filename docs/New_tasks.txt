@@ -47,4 +47,3 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 974: Move local model runtime APIs behind health heartbeat and Linux sockets

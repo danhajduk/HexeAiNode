@@ -22,13 +22,17 @@ services:
       COMFYUI_CPU_INTERNAL_PORT: 8189
       COMFYUI_GPU_BASE_DIR: /runtime/gpu
       COMFYUI_CPU_BASE_DIR: /runtime/cpu
+      COMFYUI_SOCKET_DIR: /run/hexe/ai-node
+      COMFYUI_GPU_SOCKET_PATH: ${COMFYUI_GPU_SOCKET_PATH:-/run/hexe/ai-node/comfyui-gpu.sock}
+      COMFYUI_GPU_HEALTH_SOCKET: ${COMFYUI_GPU_HEALTH_SOCKET:-/run/hexe/ai-node/comfyui-gpu-health.sock}
+      COMFYUI_CPU_SOCKET_PATH: ${COMFYUI_CPU_SOCKET_PATH:-/run/hexe/ai-node/comfyui-cpu.sock}
+      COMFYUI_CPU_HEALTH_SOCKET: ${COMFYUI_CPU_HEALTH_SOCKET:-/run/hexe/ai-node/comfyui-cpu-health.sock}
+      COMFYUI_SOCKET_UID: ${COMFYUI_UID:-1000}
+      COMFYUI_SOCKET_GID: ${COMFYUI_GID:-1000}
       HEXE_COMFYUI_RUNTIME_MODE: dual
       HEXE_COMFYUI_GPU_TARGET_CHECKPOINT: ${COMFYUI_GPU_CHECKPOINT:-RealVisXL_V5.0_fp16.safetensors}
       HEXE_COMFYUI_GPU_TARGET_LORA: ${COMFYUI_GPU_LORA:-sdxl_lightning_4step_lora.safetensors}
       HEXE_COMFYUI_CPU_TARGET_CHECKPOINT: ${COMFYUI_CPU_CHECKPOINT:-DreamShaper8_LCM.safetensors}
-    ports:
-      - "${COMFYUI_GPU_HOST:-127.0.0.1}:${COMFYUI_GPU_PORT:-8188}:8188"
-      - "${COMFYUI_CPU_HOST:-127.0.0.1}:${COMFYUI_CPU_PORT:-8189}:8189"
     volumes:
       - ${COMFYUI_GPU_MODEL_DIR:-./runtime/models/comfyui-gpu}:/runtime/gpu/models
       - ${COMFYUI_GPU_INPUT_DIR:-./runtime/input/comfyui-gpu}:/runtime/gpu/input
@@ -39,10 +43,11 @@ services:
       - ${COMFYUI_CPU_OUTPUT_DIR:-./runtime/output/comfyui-cpu}:/runtime/cpu/output
       - ${COMFYUI_CPU_USER_DIR:-./runtime/user/comfyui-cpu}:/runtime/cpu/user
       - ${COMFYUI_CACHE_DIR:-./runtime/cache/comfyui}:/cache
+      - ${COMFYUI_SOCKET_DIR:-/run/hexe/ai-node}:/run/hexe/ai-node
     healthcheck:
       test:
         - CMD-SHELL
-        - curl -fsS http://127.0.0.1:8188/system_stats >/dev/null && curl -fsS http://127.0.0.1:8189/system_stats >/dev/null
+        - curl -fsS --unix-socket ${COMFYUI_GPU_HEALTH_SOCKET:-/run/hexe/ai-node/comfyui-gpu-health.sock} http://comfyui/health >/dev/null && curl -fsS --unix-socket ${COMFYUI_CPU_HEALTH_SOCKET:-/run/hexe/ai-node/comfyui-cpu-health.sock} http://comfyui/health >/dev/null
       interval: 10s
       timeout: 5s
       retries: 12

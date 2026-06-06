@@ -5,12 +5,39 @@ GPU_PORT="${COMFYUI_GPU_INTERNAL_PORT:-8188}"
 CPU_PORT="${COMFYUI_CPU_INTERNAL_PORT:-8189}"
 GPU_BASE_DIR="${COMFYUI_GPU_BASE_DIR:-/runtime/gpu}"
 CPU_BASE_DIR="${COMFYUI_CPU_BASE_DIR:-/runtime/cpu}"
+SOCKET_DIR="${COMFYUI_SOCKET_DIR:-/run/hexe/ai-node}"
+GPU_SOCKET="${COMFYUI_GPU_SOCKET_PATH:-$SOCKET_DIR/comfyui-gpu.sock}"
+GPU_HEALTH_SOCKET="${COMFYUI_GPU_HEALTH_SOCKET:-$SOCKET_DIR/comfyui-gpu-health.sock}"
+CPU_SOCKET="${COMFYUI_CPU_SOCKET_PATH:-$SOCKET_DIR/comfyui-cpu.sock}"
+CPU_HEALTH_SOCKET="${COMFYUI_CPU_HEALTH_SOCKET:-$SOCKET_DIR/comfyui-cpu-health.sock}"
 
 mkdir -p \
   "$GPU_BASE_DIR/models" "$GPU_BASE_DIR/input" "$GPU_BASE_DIR/output" "$GPU_BASE_DIR/user" \
   "$GPU_BASE_DIR/temp" "$GPU_BASE_DIR/custom_nodes" \
   "$CPU_BASE_DIR/models" "$CPU_BASE_DIR/input" "$CPU_BASE_DIR/output" "$CPU_BASE_DIR/user" \
-  "$CPU_BASE_DIR/temp" "$CPU_BASE_DIR/custom_nodes"
+  "$CPU_BASE_DIR/temp" "$CPU_BASE_DIR/custom_nodes" \
+  "$SOCKET_DIR"
+
+rm -f "$GPU_SOCKET" "$GPU_HEALTH_SOCKET" "$CPU_SOCKET" "$CPU_HEALTH_SOCKET"
+
+start_proxy() {
+  local socket_path="$1"
+  local port="$2"
+  local runtime_id="$3"
+  local runtime_label="$4"
+  local checkpoint="$5"
+  local lora="$6"
+  local mode="$7"
+  python3 /opt/hexe/comfyui-socket-proxy.py \
+    --socket-path "$socket_path" \
+    --upstream-port "$port" \
+    --runtime-id "$runtime_id" \
+    --runtime-label "$runtime_label" \
+    --target-checkpoint "$checkpoint" \
+    --target-lora "$lora" \
+    --mode "$mode" &
+  proxy_pid="$!"
+}
 
 cd /opt/ComfyUI
 
@@ -26,6 +53,11 @@ python3 main.py \
   ${COMFYUI_GPU_EXTRA_ARGS:-} &
 gpu_pid="$!"
 
+start_proxy "$GPU_SOCKET" "$GPU_PORT" "comfyui_gpu" "GPU ComfyUI" "${HEXE_COMFYUI_GPU_TARGET_CHECKPOINT:-}" "${HEXE_COMFYUI_GPU_TARGET_LORA:-}" "api"
+gpu_proxy_pid="$proxy_pid"
+start_proxy "$GPU_HEALTH_SOCKET" "$GPU_PORT" "comfyui_gpu" "GPU ComfyUI" "${HEXE_COMFYUI_GPU_TARGET_CHECKPOINT:-}" "${HEXE_COMFYUI_GPU_TARGET_LORA:-}" "health"
+gpu_health_pid="$proxy_pid"
+
 CUDA_VISIBLE_DEVICES="" python3 main.py \
   --cpu \
   --listen 0.0.0.0 \
@@ -39,9 +71,15 @@ CUDA_VISIBLE_DEVICES="" python3 main.py \
   ${COMFYUI_CPU_EXTRA_ARGS:-} &
 cpu_pid="$!"
 
+start_proxy "$CPU_SOCKET" "$CPU_PORT" "comfyui_cpu" "CPU ComfyUI" "${HEXE_COMFYUI_CPU_TARGET_CHECKPOINT:-}" "" "api"
+cpu_proxy_pid="$proxy_pid"
+start_proxy "$CPU_HEALTH_SOCKET" "$CPU_PORT" "comfyui_cpu" "CPU ComfyUI" "${HEXE_COMFYUI_CPU_TARGET_CHECKPOINT:-}" "" "health"
+cpu_health_pid="$proxy_pid"
+
 terminate() {
-  kill "$gpu_pid" "$cpu_pid" >/dev/null 2>&1 || true
-  wait "$gpu_pid" "$cpu_pid" >/dev/null 2>&1 || true
+  kill "$gpu_pid" "$cpu_pid" "$gpu_proxy_pid" "$gpu_health_pid" "$cpu_proxy_pid" "$cpu_health_pid" >/dev/null 2>&1 || true
+  wait "$gpu_pid" "$cpu_pid" "$gpu_proxy_pid" "$gpu_health_pid" "$cpu_proxy_pid" "$cpu_health_pid" >/dev/null 2>&1 || true
+  rm -f "$GPU_SOCKET" "$GPU_HEALTH_SOCKET" "$CPU_SOCKET" "$CPU_HEALTH_SOCKET"
 }
 
 trap terminate INT TERM
