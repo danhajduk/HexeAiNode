@@ -134,6 +134,17 @@ with concurrency `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` defaulting to 1. Only `tas
 and high-priority image work stays off the CPU ComfyUI queue. Queue diagnostics include `queues.cpu_comfyui` with
 queued depth, active job, and oldest queued age.
 
+GPU presets live in `config/comfyui-gpu-presets.json` and are exposed through:
+
+```text
+GET /api/comfyui/gpu/presets
+GET /api/comfyui/gpu/presets/{preset_id}
+```
+
+The preset catalog is based on the RealVisXL checkpoint plus `sdxl_lightning_4step_lora.safetensors`. Each preset
+declares seed behavior, steps, CFG, sampler, scheduler, resolution, batch size, and denoise settings. Presets are
+general GPU ComfyUI generation configs; prompt text is supplied by the request workflow.
+
 On the RTX 3060 12 GB node, ComfyUI should be treated as exclusive GPU work for real generation. With both llama.cpp
 runtimes loaded, only about 2.5 GB VRAM remains, which is not enough for typical SDXL, FLUX, or Stable Diffusion 3.5
 workflows. Stop `hexe-ai-node-llamacpp-vision` before lightweight generation, and stop both llama.cpp containers before

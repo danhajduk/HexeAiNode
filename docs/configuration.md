@@ -44,6 +44,7 @@ Backend runtime:
 - `COMFYUI_CPU_PORT` default `8189`; local host port for the CPU-only ComfyUI runtime
 - `COMFYUI_GPU_CHECKPOINT` default `RealVisXL_V5.0_fp16.safetensors`
 - `COMFYUI_GPU_LORA` default `sdxl_lightning_4step_lora.safetensors`
+- `HEXE_COMFYUI_GPU_PRESETS_CONFIG` default `config/comfyui-gpu-presets.json`; discoverable GPU preset catalog for RealVisXL + SDXL-Lightning workflows
 - `COMFYUI_CPU_CHECKPOINT` default `DreamShaper8_LCM.safetensors`
 - `COMFYUI_GPU_VISION_GATE_ENABLED` default `true`; unloads the vision runtime before GPU ComfyUI startup/model work
 - `COMFYUI_GPU_VISION_GATE_TIMEOUT_S` default `90`; maximum wait for vision sockets/container to disappear before rejecting GPU ComfyUI work

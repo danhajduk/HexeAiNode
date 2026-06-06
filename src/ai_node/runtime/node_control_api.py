@@ -747,6 +747,9 @@ class NodeControlState:
             _env_int("HEXE_LOCAL_LLM_ALWAYS_ON_CHECK_INTERVAL_SECONDS", 60),
             1,
         )
+        self._comfyui_gpu_presets_config_path = str(
+            os.environ.get("HEXE_COMFYUI_GPU_PRESETS_CONFIG") or "config/comfyui-gpu-presets.json"
+        ).strip()
         self._vision_runtime_residency_check_interval_seconds = max(
             _env_int("HEXE_VISION_LLM_RESIDENCY_CHECK_INTERVAL_SECONDS", 60),
             1,
@@ -1874,6 +1877,90 @@ class NodeControlState:
             }
         return payload
 
+    def comfyui_gpu_presets_payload(self) -> dict:
+        path = Path(self._comfyui_gpu_presets_config_path)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return {
+                "configured": False,
+                "runtime_id": "comfyui_gpu",
+                "path": str(path),
+                "preset_count": 0,
+                "presets": [],
+                "error": str(exc).strip() or type(exc).__name__,
+            }
+        normalized = self._normalize_comfyui_gpu_presets(payload=payload, path=path)
+        return normalized
+
+    def comfyui_gpu_preset_payload(self, *, preset_id: str) -> dict:
+        normalized_id = str(preset_id or "").strip()
+        payload = self.comfyui_gpu_presets_payload()
+        for preset in list(payload.get("presets") or []):
+            if isinstance(preset, dict) and preset.get("id") == normalized_id:
+                return {"status": "found", "preset": preset, "catalog": {key: payload.get(key) for key in ("runtime_id", "schema_version", "path")}}
+        return {"status": "not_found", "preset_id": normalized_id, "runtime_id": payload.get("runtime_id"), "path": payload.get("path")}
+
+    @staticmethod
+    def _normalize_comfyui_gpu_presets(*, payload: dict, path: Path) -> dict:
+        presets = []
+        base_workflow = payload.get("base_workflow") if isinstance(payload.get("base_workflow"), dict) else {}
+        seen_ids: set[str] = set()
+        for item in list(payload.get("presets") or []) if isinstance(payload, dict) else []:
+            if not isinstance(item, dict):
+                continue
+            preset_id = str(item.get("id") or "").strip()
+            if not preset_id or preset_id in seen_ids:
+                continue
+            seed_mode = str(item.get("seed_mode") or ("random" if item.get("random_seed") else "fixed")).strip().lower()
+            if seed_mode not in {"fixed", "random"}:
+                seed_mode = "fixed"
+            width = NodeControlState._optional_positive_int(item.get("width"))
+            height = NodeControlState._optional_positive_int(item.get("height"))
+            steps = NodeControlState._optional_positive_int(item.get("steps"))
+            batch_size = NodeControlState._optional_positive_int(item.get("batch_size")) or 1
+            if width is None or height is None or steps is None:
+                continue
+            seed = NodeControlState._optional_positive_int(item.get("seed"))
+            random_seed = bool(item.get("random_seed")) or seed_mode == "random"
+            presets.append(
+                {
+                    "id": preset_id,
+                    "display_name": str(item.get("display_name") or preset_id).strip(),
+                    "description": str(item.get("description") or "").strip() or None,
+                    "runtime_id": "comfyui_gpu",
+                    "checkpoint": str(item.get("checkpoint") or base_workflow.get("checkpoint") or "").strip() or None,
+                    "lora": str(item.get("lora") or base_workflow.get("lora") or "").strip() or None,
+                    "lora_strength_model": float(item.get("lora_strength_model", base_workflow.get("lora_strength_model", 1.0))),
+                    "lora_strength_clip": float(item.get("lora_strength_clip", base_workflow.get("lora_strength_clip", 1.0))),
+                    "seed_mode": seed_mode,
+                    "seed": None if random_seed else seed,
+                    "random_seed": random_seed,
+                    "steps": steps,
+                    "cfg": float(item.get("cfg", 1.6)),
+                    "sampler_name": str(item.get("sampler_name") or "euler").strip(),
+                    "scheduler": str(item.get("scheduler") or "sgm_uniform").strip(),
+                    "width": width,
+                    "height": height,
+                    "batch_size": batch_size,
+                    "denoise": float(item.get("denoise", 1.0)),
+                }
+            )
+            seen_ids.add(preset_id)
+        default_preset_id = str(payload.get("default_preset_id") or "").strip()
+        if default_preset_id not in seen_ids and presets:
+            default_preset_id = str(presets[0].get("id") or "")
+        return {
+            "configured": True,
+            "schema_version": str(payload.get("schema_version") or "1.0"),
+            "runtime_id": str(payload.get("runtime_id") or "comfyui_gpu"),
+            "path": str(path),
+            "default_preset_id": default_preset_id or None,
+            "base_workflow": base_workflow,
+            "preset_count": len(presets),
+            "presets": presets,
+        }
+
     async def _direct_execution_queue_context(self, *, request: TaskExecutionRequest) -> dict:
         authorization = self._direct_execution_authorization_snapshot(request=request)
         importance = self._direct_execution_importance(request=request, authorization=authorization)
@@ -2249,6 +2336,13 @@ class NodeControlState:
             return int(value)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _optional_positive_int(value) -> int | None:
+        parsed = NodeControlState._optional_int(value)
+        if parsed is None or parsed <= 0:
+            return None
+        return parsed
 
     @staticmethod
     def _client_ai_v2_schema_dir() -> Path:
@@ -4540,6 +4634,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/execution/jobs/{job_id}",
                 "DELETE /api/execution/jobs/{job_id}",
                 "/api/execution/queues",
+                "/api/comfyui/gpu/presets",
+                "/api/comfyui/gpu/presets/{preset_id}",
                 "/api/execution/compare",
                 "/api/benchmarks/execution/v2",
                 "/api/services/status",
@@ -5047,6 +5143,17 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/execution/queues")
     async def get_execution_queues():
         return await state.execution_queue_diagnostics()
+
+    @app.get("/api/comfyui/gpu/presets")
+    def get_comfyui_gpu_presets():
+        return state.comfyui_gpu_presets_payload()
+
+    @app.get("/api/comfyui/gpu/presets/{preset_id}")
+    def get_comfyui_gpu_preset(preset_id: str):
+        payload = state.comfyui_gpu_preset_payload(preset_id=preset_id)
+        if payload.get("status") == "not_found":
+            raise HTTPException(status_code=404, detail=payload)
+        return payload
 
     @app.post("/api/execution/compare")
     async def post_execution_compare(payload: ExecutionCompareRequest):

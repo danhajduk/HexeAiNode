@@ -5,6 +5,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from ai_node.config.task_capability_selection_config import TaskCapabilitySelectionConfigStore
 from ai_node.execution.task_models import TaskExecutionRequest
@@ -811,6 +812,67 @@ class NodeControlApiTests(unittest.TestCase):
                 self.assertEqual(preview["routing_decision"]["reason"], "explicit_provider")
 
         asyncio.run(run_scenario())
+
+    def test_comfyui_gpu_presets_payload_loads_config_catalog(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            preset_path = Path(tmp) / "presets.json"
+            preset_path.write_text(
+                """
+                {
+                  "schema_version": "1.0",
+                  "runtime_id": "comfyui_gpu",
+                  "default_preset_id": "wide",
+                  "base_workflow": {
+                    "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+                    "lora": "sdxl_lightning_4step_lora.safetensors"
+                  },
+                  "presets": [
+                    {
+                      "id": "wide",
+                      "display_name": "Wide",
+                      "seed_mode": "fixed",
+                      "seed": 123,
+                      "steps": 4,
+                      "cfg": 1.6,
+                      "sampler_name": "euler",
+                      "scheduler": "sgm_uniform",
+                      "width": 1344,
+                      "height": 768,
+                      "batch_size": 1,
+                      "denoise": 1.0
+                    },
+                    {
+                      "id": "random",
+                      "display_name": "Random",
+                      "seed_mode": "random",
+                      "seed": null,
+                      "random_seed": true,
+                      "steps": 4,
+                      "width": 1024,
+                      "height": 1024
+                    }
+                  ]
+                }
+                """,
+                encoding="utf-8",
+            )
+            with patch.dict("os.environ", {"HEXE_COMFYUI_GPU_PRESETS_CONFIG": str(preset_path)}, clear=False):
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    capability_runner=self._FakeCapabilityRunner(),
+                )
+
+            payload = state.comfyui_gpu_presets_payload()
+            random_preset = state.comfyui_gpu_preset_payload(preset_id="random")
+
+            self.assertTrue(payload["configured"])
+            self.assertEqual(payload["preset_count"], 2)
+            self.assertEqual(payload["default_preset_id"], "wide")
+            self.assertEqual(payload["presets"][0]["checkpoint"], "RealVisXL_V5.0_fp16.safetensors")
+            self.assertTrue(random_preset["preset"]["random_seed"])
+            self.assertIsNone(random_preset["preset"]["seed"])
 
     def test_execute_direct_queues_sensitive_v3_prompt_on_local_queue(self):
         async def run_scenario():

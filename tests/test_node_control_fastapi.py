@@ -600,6 +600,50 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(response.json()["providers"][0]["provider_id"], "openai")
             self.assertEqual(response.json()["providers"][0]["models"][0]["model_id"], "gpt-5-mini")
 
+    def test_comfyui_gpu_preset_endpoints_return_catalog_and_preset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            preset_path = Path(tmp) / "presets.json"
+            preset_path.write_text(
+                """
+                {
+                  "schema_version": "1.0",
+                  "runtime_id": "comfyui_gpu",
+                  "default_preset_id": "wide",
+                  "base_workflow": {"checkpoint": "RealVisXL_V5.0_fp16.safetensors"},
+                  "presets": [
+                    {
+                      "id": "wide",
+                      "display_name": "Wide",
+                      "seed_mode": "fixed",
+                      "seed": 123,
+                      "steps": 4,
+                      "width": 1344,
+                      "height": 768
+                    }
+                  ]
+                }
+                """,
+                encoding="utf-8",
+            )
+            with patch.dict("os.environ", {"HEXE_COMFYUI_GPU_PRESETS_CONFIG": str(preset_path)}, clear=False):
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-fastapi-test"),
+                )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            catalog_response = client.get("/api/comfyui/gpu/presets")
+            preset_response = client.get("/api/comfyui/gpu/presets/wide")
+            missing_response = client.get("/api/comfyui/gpu/presets/missing")
+
+            self.assertEqual(catalog_response.status_code, 200)
+            self.assertEqual(catalog_response.json()["preset_count"], 1)
+            self.assertEqual(preset_response.status_code, 200)
+            self.assertEqual(preset_response.json()["preset"]["id"], "wide")
+            self.assertEqual(missing_response.status_code, 404)
+
     def test_status_and_onboarding_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))
