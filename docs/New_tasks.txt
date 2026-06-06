@@ -47,5 +47,4 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 973: Assign image, vision, and text tasks to the new local model runtimes
 [TODO] Task 974: Move local model runtime APIs behind health heartbeat and Linux sockets

@@ -644,6 +644,30 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(preset_response.json()["preset"]["id"], "wide")
             self.assertEqual(missing_response.status_code, 404)
 
+    def test_local_runtime_assignment_endpoints_return_catalog_and_task_assignment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            catalog_response = client.get("/api/local-runtimes/assignments")
+            gpu_response = client.get("/api/local-runtimes/assignments/task.image_generation?priority=normal")
+            cpu_response = client.get("/api/local-runtimes/assignments/task.image_generation?priority=background")
+            vision_response = client.get("/api/local-runtimes/assignments/task.vision_analysis")
+
+            self.assertEqual(catalog_response.status_code, 200)
+            self.assertGreaterEqual(len(catalog_response.json()["assignments"]), 10)
+            self.assertEqual(gpu_response.status_code, 200)
+            self.assertEqual(gpu_response.json()["runtime_id"], "comfyui_gpu")
+            self.assertEqual(cpu_response.status_code, 200)
+            self.assertEqual(cpu_response.json()["runtime_id"], "comfyui_cpu")
+            self.assertEqual(vision_response.status_code, 200)
+            self.assertEqual(vision_response.json()["runtime_id"], "local_vision_llm")
+
     def test_status_and_onboarding_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test"))

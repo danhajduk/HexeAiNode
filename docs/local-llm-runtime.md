@@ -145,6 +145,19 @@ The preset catalog is based on the RealVisXL checkpoint plus `sdxl_lightning_4st
 declares seed behavior, steps, CFG, sampler, scheduler, resolution, batch size, and denoise settings. Presets are
 general GPU ComfyUI generation configs; prompt text is supplied by the request workflow.
 
+Local task-to-runtime assignments are exposed through:
+
+```text
+GET /api/local-runtimes/assignments
+GET /api/local-runtimes/assignments/{task_family}?priority=normal
+```
+
+Text tasks map to the always-on local llama.cpp text runtime and default to `qwen3-8b-q4_k_m`. Vision tasks map to
+the resident vision llama.cpp runtime and default to `qwen2.5-vl-3b-instruct-q4_k_m`. Interactive image generation
+maps to GPU ComfyUI with RealVisXL plus SDXL-Lightning presets; low-priority and background image generation maps to
+CPU ComfyUI with DreamShaper. Direct execution route previews include `local_runtime_assignment` so operators can
+confirm the selected runtime, model/checkpoint, queue, and policy before queuing work.
+
 On the RTX 3060 12 GB node, ComfyUI should be treated as exclusive GPU work for real generation. With both llama.cpp
 runtimes loaded, only about 2.5 GB VRAM remains, which is not enough for typical SDXL, FLUX, or Stable Diffusion 3.5
 workflows. Stop `hexe-ai-node-llamacpp-vision` before lightweight generation, and stop both llama.cpp containers before

@@ -774,6 +774,8 @@ class NodeControlApiTests(unittest.TestCase):
                 self.assertEqual(preview["routing_decision"]["reason"], "cpu_comfyui_background_image_policy")
                 self.assertTrue(preview["routing_decision"]["cpu_comfyui_policy"]["selected"])
                 self.assertEqual(preview["routing_decision"]["execution_routing_mode"], "local_only")
+                self.assertEqual(preview["local_runtime_assignment"]["runtime_id"], "comfyui_cpu")
+                self.assertEqual(preview["local_runtime_assignment"]["checkpoint"], "DreamShaper8_LCM.safetensors")
 
                 diagnostics = await state.execution_queue_diagnostics()
                 self.assertIn("cpu_comfyui", diagnostics["queues"])
@@ -810,6 +812,67 @@ class NodeControlApiTests(unittest.TestCase):
                 self.assertEqual(preview["queue"], "local")
                 self.assertNotEqual(preview["routing_decision"]["selected_queue"], "cpu_comfyui")
                 self.assertEqual(preview["routing_decision"]["reason"], "explicit_provider")
+                self.assertEqual(preview["local_runtime_assignment"]["runtime_id"], "comfyui_gpu")
+                self.assertEqual(preview["local_runtime_assignment"]["checkpoint"], "RealVisXL_V5.0_fp16.safetensors")
+                self.assertEqual(preview["local_runtime_assignment"]["lora"], "sdxl_lightning_4step_lora.safetensors")
+
+        asyncio.run(run_scenario())
+
+    def test_local_runtime_assignment_payload_maps_text_vision_and_image_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                capability_runner=self._FakeCapabilityRunner(),
+            )
+
+            text = state.local_runtime_assignment_payload(task_family="task.classification")
+            vision = state.local_runtime_assignment_payload(task_family="task.vision_analysis")
+            gpu_image = state.local_runtime_assignment_payload(task_family="task.image_generation", priority="high")
+            cpu_image = state.local_runtime_assignment_payload(task_family="task.image_generation", priority="low")
+            catalog = state.local_runtime_assignments_payload()
+
+            self.assertEqual(text["runtime_id"], "local_text_llm")
+            self.assertEqual(text["model_id"], "qwen3-8b-q4_k_m")
+            self.assertEqual(vision["runtime_id"], "local_vision_llm")
+            self.assertEqual(vision["model_id"], "qwen2.5-vl-3b-instruct-q4_k_m")
+            self.assertEqual(gpu_image["runtime_id"], "comfyui_gpu")
+            self.assertEqual(gpu_image["queue"], "local")
+            self.assertEqual(cpu_image["runtime_id"], "comfyui_cpu")
+            self.assertEqual(cpu_image["queue"], "cpu_comfyui")
+            self.assertGreaterEqual(len(catalog["assignments"]), 10)
+
+    def test_vision_route_preview_includes_local_vision_runtime_assignment(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                    capability_runner=self._FakeCapabilityRunner(),
+                )
+
+                preview = await state.preview_direct_execution_route(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-vision-001",
+                            "task_family": "task.vision_analysis",
+                            "requested_by": "service.alpha",
+                            "requested_provider": "local",
+                            "inputs": {"image": "sample.jpg", "prompt": "describe it"},
+                            "response_mode": "async_if_queued",
+                            "priority": "normal",
+                            "trace_id": "trace-vision-001",
+                        }
+                    )
+                )
+
+                self.assertEqual(preview["local_runtime_assignment"]["runtime_id"], "local_vision_llm")
+                self.assertEqual(preview["local_runtime_assignment"]["model_id"], "qwen2.5-vl-3b-instruct-q4_k_m")
+                self.assertEqual(preview["local_runtime_assignment"]["queue"], "local")
 
         asyncio.run(run_scenario())
 

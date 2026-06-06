@@ -28,7 +28,11 @@ from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.provider_resolver import ProviderResolutionRequest, ProviderResolver
 from ai_node.runtime.internal_scheduler import InternalScheduler
-from ai_node.runtime.service_manager import NullServiceManager
+from ai_node.runtime.service_manager import (
+    LOCAL_LLM_BUILTIN_DEFAULT_MODEL_ID,
+    NullServiceManager,
+    VISION_LLM_BUILTIN_DEFAULT_MODEL_ID,
+)
 from ai_node.runtime.capability_resolver import load_task_graph
 from ai_node.runtime.execution_telemetry import ExecutionTelemetryPublisher
 from ai_node.runtime.execution_queue import ExecutionQueueService
@@ -1762,6 +1766,12 @@ class NodeControlState:
                 }
 
         queue_context = await self._direct_execution_queue_context(request=request_copy)
+        runtime_assignment = self.local_runtime_assignment_payload(
+            task_family=request_copy.task_family,
+            priority=queue_context["importance"],
+            requested_provider=request_copy.requested_provider,
+            requested_model=request_copy.requested_model,
+        )
         execution_request = self._execution_request_for_queue_context(request=request_copy, queue_context=queue_context)
         resolution_preview = self._direct_execution_provider_resolution_preview(
             request=execution_request,
@@ -1777,6 +1787,7 @@ class NodeControlState:
             "queue": queue_context["queue"],
             "importance": queue_context["importance"],
             "routing_decision": queue_context["routing_decision"],
+            "local_runtime_assignment": runtime_assignment,
             "effective_request": {
                 "requested_provider": execution_request.requested_provider,
                 "requested_model": execution_request.requested_model,
@@ -1876,6 +1887,188 @@ class NodeControlState:
                 "rejected_importance": ["normal", "high", "critical"],
             }
         return payload
+
+    def local_runtime_assignments_payload(self) -> dict:
+        default_gpu_preset_id = self.comfyui_gpu_presets_payload().get("default_preset_id")
+        assignments = [
+            self._local_text_runtime_assignment(task_family=task_family)
+            for task_family in (
+                "task.chat",
+                "task.classification",
+                "task.information_extraction",
+                "task.reasoning",
+                "task.structured_extraction",
+                "task.summarization",
+                "task.summarization.text",
+                "task.translation",
+            )
+        ]
+        assignments.extend(
+            self._local_vision_runtime_assignment(task_family=task_family)
+            for task_family in (
+                "task.document_ocr",
+                "task.image_description",
+                "task.object_detection",
+                "task.vision_analysis",
+            )
+        )
+        assignments.extend(
+            [
+                self._local_gpu_comfyui_assignment(
+                    task_family="task.image_generation",
+                    importance="normal",
+                    default_preset_id=default_gpu_preset_id,
+                ),
+                self._local_cpu_comfyui_assignment(task_family="task.image_generation", importance="background"),
+                self._local_gpu_comfyui_assignment(
+                    task_family="task.generation.image",
+                    importance="normal",
+                    default_preset_id=default_gpu_preset_id,
+                ),
+                self._local_cpu_comfyui_assignment(task_family="task.generation.image", importance="background"),
+            ]
+        )
+        return {
+            "schema_version": "1.0",
+            "status": "configured",
+            "generated_at": local_now_iso(),
+            "default_text_model_id": self._local_text_default_model_id(),
+            "default_vision_model_id": self._vision_default_model_id(),
+            "assignments": assignments,
+        }
+
+    def local_runtime_assignment_payload(
+        self,
+        *,
+        task_family: str,
+        priority: str | None = None,
+        requested_provider: str | None = None,
+        requested_model: str | None = None,
+    ) -> dict:
+        task_key = str(task_family or "").strip().lower()
+        importance = str(priority or "normal").strip().lower()
+        if importance not in {"background", "low", "normal", "high", "critical"}:
+            importance = "normal"
+        provider_key = str(requested_provider or "").strip().lower()
+        if provider_key not in {"", "local", "comfyui", "comfyui_gpu", "comfyui_cpu", "local_vision"}:
+            return {
+                "status": "not_selected",
+                "task_family": task_key or None,
+                "importance": importance,
+                "requested_provider": provider_key or None,
+                "reason": "explicit_nonlocal_provider",
+            }
+        if task_key in {"task.image_generation", "task.generation.image"}:
+            if provider_key == "comfyui_cpu" or (importance in {"background", "low"} and provider_key != "comfyui_gpu"):
+                return self._local_cpu_comfyui_assignment(task_family=task_key, importance=importance)
+            return self._local_gpu_comfyui_assignment(
+                task_family=task_key,
+                importance=importance,
+                default_preset_id=self.comfyui_gpu_presets_payload().get("default_preset_id"),
+            )
+        if task_key in {"task.document_ocr", "task.image_description", "task.object_detection", "task.vision_analysis"}:
+            return self._local_vision_runtime_assignment(task_family=task_key, requested_model=requested_model)
+        if task_key in {
+            "task.chat",
+            "task.classification",
+            "task.information_extraction",
+            "task.reasoning",
+            "task.structured_extraction",
+            "task.summarization",
+            "task.summarization.text",
+            "task.translation",
+        }:
+            return self._local_text_runtime_assignment(task_family=task_key, requested_model=requested_model)
+        return {
+            "status": "unassigned",
+            "task_family": task_key or None,
+            "importance": importance,
+            "requested_provider": provider_key or None,
+            "reason": "no_local_runtime_assignment",
+        }
+
+    def _local_text_runtime_assignment(self, *, task_family: str, requested_model: str | None = None) -> dict:
+        model_id = str(requested_model or "").strip() or self._local_text_default_model_id()
+        return {
+            "status": "selected",
+            "task_family": str(task_family or "").strip() or None,
+            "runtime_id": "local_text_llm",
+            "runtime_kind": "llamacpp_text",
+            "provider_id": "local",
+            "model_id": model_id,
+            "queue": "local",
+            "policy": "always_on_text_llm",
+            "reason": "text_task_family",
+        }
+
+    def _local_vision_runtime_assignment(self, *, task_family: str, requested_model: str | None = None) -> dict:
+        model_id = str(requested_model or "").strip() or self._vision_default_model_id()
+        return {
+            "status": "selected",
+            "task_family": str(task_family or "").strip() or None,
+            "runtime_id": "local_vision_llm",
+            "runtime_kind": "llamacpp_vision",
+            "provider_id": "local_vision",
+            "model_id": model_id,
+            "queue": "local",
+            "policy": "vision_runtime_residency",
+            "reason": "vision_task_family",
+        }
+
+    @staticmethod
+    def _local_gpu_comfyui_assignment(*, task_family: str, importance: str, default_preset_id: str | None = None) -> dict:
+        return {
+            "status": "selected",
+            "task_family": str(task_family or "").strip() or None,
+            "runtime_id": "comfyui_gpu",
+            "runtime_kind": "comfyui_gpu",
+            "provider_id": "local_image",
+            "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+            "lora": "sdxl_lightning_4step_lora.safetensors",
+            "queue": "local",
+            "importance": str(importance or "normal").strip().lower() or "normal",
+            "default_preset_id": default_preset_id,
+            "policy": "interactive_image_gpu",
+            "reason": "image_generation_interactive_or_explicit_gpu",
+        }
+
+    @staticmethod
+    def _local_cpu_comfyui_assignment(*, task_family: str, importance: str) -> dict:
+        return {
+            "status": "selected",
+            "task_family": str(task_family or "").strip() or None,
+            "runtime_id": "comfyui_cpu",
+            "runtime_kind": "comfyui_cpu",
+            "provider_id": "local_image",
+            "checkpoint": "DreamShaper8_LCM.safetensors",
+            "queue": "cpu_comfyui",
+            "importance": str(importance or "background").strip().lower() or "background",
+            "policy": "background_image_cpu",
+            "reason": "low_priority_background_image",
+        }
+
+    @staticmethod
+    def _local_text_default_model_id() -> str:
+        return (
+            str(
+                os.environ.get("HEXE_PROVIDER_LOCAL_DEFAULT_MODEL_ID")
+                or os.environ.get("HEXE_LOCAL_LLM_DEFAULT_MODEL_ID")
+                or os.environ.get("LLAMACPP_MODEL_ALIAS")
+                or LOCAL_LLM_BUILTIN_DEFAULT_MODEL_ID
+            ).strip()
+            or LOCAL_LLM_BUILTIN_DEFAULT_MODEL_ID
+        )
+
+    @staticmethod
+    def _vision_default_model_id() -> str:
+        return (
+            str(
+                os.environ.get("HEXE_PROVIDER_VISION_DEFAULT_MODEL_ID")
+                or os.environ.get("LLAMACPP_VISION_MODEL_ALIAS")
+                or VISION_LLM_BUILTIN_DEFAULT_MODEL_ID
+            ).strip()
+            or VISION_LLM_BUILTIN_DEFAULT_MODEL_ID
+        )
 
     def comfyui_gpu_presets_payload(self) -> dict:
         path = Path(self._comfyui_gpu_presets_config_path)
@@ -4634,6 +4827,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/execution/jobs/{job_id}",
                 "DELETE /api/execution/jobs/{job_id}",
                 "/api/execution/queues",
+                "/api/local-runtimes/assignments",
+                "/api/local-runtimes/assignments/{task_family}",
                 "/api/comfyui/gpu/presets",
                 "/api/comfyui/gpu/presets/{preset_id}",
                 "/api/execution/compare",
@@ -5143,6 +5338,24 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/execution/queues")
     async def get_execution_queues():
         return await state.execution_queue_diagnostics()
+
+    @app.get("/api/local-runtimes/assignments")
+    def get_local_runtime_assignments():
+        return state.local_runtime_assignments_payload()
+
+    @app.get("/api/local-runtimes/assignments/{task_family}")
+    def get_local_runtime_assignment(
+        task_family: str,
+        priority: str | None = None,
+        requested_provider: str | None = None,
+        requested_model: str | None = None,
+    ):
+        return state.local_runtime_assignment_payload(
+            task_family=task_family,
+            priority=priority,
+            requested_provider=requested_provider,
+            requested_model=requested_model,
+        )
 
     @app.get("/api/comfyui/gpu/presets")
     def get_comfyui_gpu_presets():

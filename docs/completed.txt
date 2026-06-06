@@ -544,3 +544,4 @@ Task 969: Split ComfyUI into GPU and CPU-only container runtimes - Completed on 
 Task 970: Gate GPU ComfyUI model loads on vision VRAM unload - Completed on 06/05/2026 18:30
 Task 971: Restrict CPU ComfyUI to low-priority background jobs - Completed on 06/05/2026 19:03
 Task 972: Add GPU ComfyUI preset configs - Completed on 06/05/2026 19:08
+Task 973: Assign image, vision, and text tasks to the new local model runtimes - Completed on 06/05/2026 19:13
