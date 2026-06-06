@@ -70,14 +70,14 @@ primitive is available.
 
 ## Experimental Image Generation Runtimes
 
-The node includes two sibling ComfyUI runtimes for local image generation experiments. They are intentionally separate
-from the text and vision llama.cpp runtimes because diffusion models place different pressure on VRAM and model
-storage.
+The node includes one ComfyUI container with two ComfyUI server processes for local image generation experiments. The
+container is intentionally separate from the text and vision llama.cpp runtimes because diffusion models place different
+pressure on VRAM and model storage.
 
 GPU ComfyUI target:
 
 - image: `hexe-ai-node-comfyui:local`
-- container: `hexe-ai-node-comfyui-gpu`
+- container: `hexe-ai-node-comfyui`
 - URL: `http://127.0.0.1:8188`
 - runtime base: CUDA 12.1 / PyTorch cu121 for compatibility with the NVIDIA 535 driver
 - models: `runtime/models/comfyui-gpu`
@@ -89,7 +89,7 @@ GPU ComfyUI target:
 CPU ComfyUI target:
 
 - image: `hexe-ai-node-comfyui:local`
-- container: `hexe-ai-node-comfyui-cpu`
+- container: `hexe-ai-node-comfyui`
 - URL: `http://127.0.0.1:8189`
 - runtime mode: `--cpu`
 - models: `runtime/models/comfyui-cpu`
@@ -115,11 +115,11 @@ scripts/comfyui-control.sh cpu stop
 scripts/comfyui-control.sh all status
 ```
 
-For compatibility, `scripts/comfyui-control.sh ready` still defaults to the GPU runtime. Both containers start with
-`--disable-auto-launch` and without a startup checkpoint argument; checkpoints and LoRAs should be loaded by the request
-workflow unless a future explicit keep-warm policy is enabled. During directory preparation, the control script creates
-per-runtime model folders and symlinks the expected checkpoint/LoRA from the legacy `runtime/models/comfyui` folder
-when the file is already present.
+For compatibility, `scripts/comfyui-control.sh ready` still defaults to the GPU readiness check, but the managed
+container starts both runtime processes together. Both processes start with `--disable-auto-launch` and without a
+startup checkpoint argument; checkpoints and LoRAs should be loaded by the request workflow unless a future explicit
+keep-warm policy is enabled. During directory preparation, the control script creates per-runtime model folders and
+symlinks the expected checkpoint/LoRA from the legacy `runtime/models/comfyui` folder when the file is already present.
 
 GPU ComfyUI startup is gated on vision VRAM release by default. Before `scripts/comfyui-control.sh gpu start` or
 `ready` recreates the GPU container, the control script checks the vision socket/container, calls

@@ -16,30 +16,26 @@ fi
 export COMFYUI_IMAGE="${COMFYUI_IMAGE:-hexe-ai-node-comfyui:local}"
 export COMFYUI_REF="${COMFYUI_REF:-master}"
 export COMFYUI_HOST="${COMFYUI_HOST:-127.0.0.1}"
+export COMFYUI_CONTAINER_NAME="${COMFYUI_CONTAINER_NAME:-hexe-ai-node-comfyui}"
 export COMFYUI_READY_TIMEOUT_S="${COMFYUI_READY_TIMEOUT_S_OVERRIDE:-${COMFYUI_READY_TIMEOUT_S:-240}}"
 
-export COMFYUI_GPU_CONTAINER_NAME="${COMFYUI_GPU_CONTAINER_NAME:-hexe-ai-node-comfyui-gpu}"
 export COMFYUI_GPU_HOST="${COMFYUI_GPU_HOST:-$COMFYUI_HOST}"
 export COMFYUI_GPU_PORT="${COMFYUI_GPU_PORT:-8188}"
 export COMFYUI_GPU_MODEL_DIR="${COMFYUI_GPU_MODEL_DIR:-$ROOT_DIR/runtime/models/comfyui-gpu}"
 export COMFYUI_GPU_INPUT_DIR="${COMFYUI_GPU_INPUT_DIR:-$ROOT_DIR/runtime/input/comfyui-gpu}"
 export COMFYUI_GPU_OUTPUT_DIR="${COMFYUI_GPU_OUTPUT_DIR:-$ROOT_DIR/runtime/output/comfyui-gpu}"
 export COMFYUI_GPU_USER_DIR="${COMFYUI_GPU_USER_DIR:-$ROOT_DIR/runtime/user/comfyui-gpu}"
-export COMFYUI_GPU_CACHE_DIR="${COMFYUI_GPU_CACHE_DIR:-$ROOT_DIR/runtime/cache/comfyui-gpu}"
 export COMFYUI_GPU_CHECKPOINT="${COMFYUI_GPU_CHECKPOINT:-RealVisXL_V5.0_fp16.safetensors}"
 export COMFYUI_GPU_LORA="${COMFYUI_GPU_LORA:-sdxl_lightning_4step_lora.safetensors}"
-export COMFYUI_GPU_ARGS="${COMFYUI_GPU_ARGS:---listen 0.0.0.0 --port 8188 --disable-auto-launch}"
 
-export COMFYUI_CPU_CONTAINER_NAME="${COMFYUI_CPU_CONTAINER_NAME:-hexe-ai-node-comfyui-cpu}"
 export COMFYUI_CPU_HOST="${COMFYUI_CPU_HOST:-$COMFYUI_HOST}"
 export COMFYUI_CPU_PORT="${COMFYUI_CPU_PORT:-8189}"
 export COMFYUI_CPU_MODEL_DIR="${COMFYUI_CPU_MODEL_DIR:-$ROOT_DIR/runtime/models/comfyui-cpu}"
 export COMFYUI_CPU_INPUT_DIR="${COMFYUI_CPU_INPUT_DIR:-$ROOT_DIR/runtime/input/comfyui-cpu}"
 export COMFYUI_CPU_OUTPUT_DIR="${COMFYUI_CPU_OUTPUT_DIR:-$ROOT_DIR/runtime/output/comfyui-cpu}"
 export COMFYUI_CPU_USER_DIR="${COMFYUI_CPU_USER_DIR:-$ROOT_DIR/runtime/user/comfyui-cpu}"
-export COMFYUI_CPU_CACHE_DIR="${COMFYUI_CPU_CACHE_DIR:-$ROOT_DIR/runtime/cache/comfyui-cpu}"
 export COMFYUI_CPU_CHECKPOINT="${COMFYUI_CPU_CHECKPOINT:-DreamShaper8_LCM.safetensors}"
-export COMFYUI_CPU_ARGS="${COMFYUI_CPU_ARGS:---cpu --listen 0.0.0.0 --port 8188 --disable-auto-launch}"
+export COMFYUI_CACHE_DIR="${COMFYUI_CACHE_DIR:-$ROOT_DIR/runtime/cache/comfyui}"
 
 COMFYUI_LEGACY_MODEL_DIR="${COMFYUI_LEGACY_MODEL_DIR:-$ROOT_DIR/runtime/models/comfyui}"
 COMFYUI_CUDA_MODE="${COMFYUI_CUDA_MODE:-auto}"
@@ -69,10 +65,7 @@ case "$target" in
 esac
 
 service_name() {
-  case "$1" in
-    gpu) printf 'comfyui-gpu' ;;
-    cpu) printf 'comfyui-cpu' ;;
-  esac
+  printf 'comfyui'
 }
 
 target_host() {
@@ -99,6 +92,14 @@ compose() {
     return
   fi
   "$DOCKER_BIN" compose -f "$COMPOSE_FILE" "$@"
+}
+
+remove_legacy_split_containers() {
+  for legacy_name in hexe-ai-node-comfyui-gpu hexe-ai-node-comfyui-cpu; do
+    if [[ "$legacy_name" != "$COMFYUI_CONTAINER_NAME" ]]; then
+      "$DOCKER_BIN" rm -f "$legacy_name" >/dev/null 2>&1 || true
+    fi
+  done
 }
 
 truthy() {
@@ -253,14 +254,14 @@ link_model_file() {
 
 prepare_gpu_runtime_dirs() {
   mkdir -p "$COMFYUI_GPU_MODEL_DIR/checkpoints" "$COMFYUI_GPU_MODEL_DIR/loras"
-  mkdir -p "$COMFYUI_GPU_INPUT_DIR" "$COMFYUI_GPU_OUTPUT_DIR" "$COMFYUI_GPU_USER_DIR" "$COMFYUI_GPU_CACHE_DIR"
+  mkdir -p "$COMFYUI_GPU_INPUT_DIR" "$COMFYUI_GPU_OUTPUT_DIR" "$COMFYUI_GPU_USER_DIR" "$COMFYUI_CACHE_DIR"
   link_model_file "$COMFYUI_LEGACY_MODEL_DIR/checkpoints" "$COMFYUI_GPU_MODEL_DIR/checkpoints" "$COMFYUI_GPU_CHECKPOINT"
   link_model_file "$COMFYUI_LEGACY_MODEL_DIR/loras" "$COMFYUI_GPU_MODEL_DIR/loras" "$COMFYUI_GPU_LORA"
 }
 
 prepare_cpu_runtime_dirs() {
   mkdir -p "$COMFYUI_CPU_MODEL_DIR/checkpoints" "$COMFYUI_CPU_MODEL_DIR/loras"
-  mkdir -p "$COMFYUI_CPU_INPUT_DIR" "$COMFYUI_CPU_OUTPUT_DIR" "$COMFYUI_CPU_USER_DIR" "$COMFYUI_CPU_CACHE_DIR"
+  mkdir -p "$COMFYUI_CPU_INPUT_DIR" "$COMFYUI_CPU_OUTPUT_DIR" "$COMFYUI_CPU_USER_DIR" "$COMFYUI_CACHE_DIR"
   link_model_file "$COMFYUI_LEGACY_MODEL_DIR/checkpoints" "$COMFYUI_CPU_MODEL_DIR/checkpoints" "$COMFYUI_CPU_CHECKPOINT"
 }
 
@@ -339,61 +340,39 @@ case "$command" in
     fi
     ;;
   build)
-    prepare_runtime_dirs "$target"
-    for runtime in $(each_target); do
-      select_runtime "$runtime"
-    done
-    if [[ "$target" == "all" ]]; then
-      compose build
-    else
-      compose build "$(service_name "$target")"
-    fi
+    prepare_runtime_dirs all
+    select_runtime gpu
+    compose build comfyui
     ;;
   create)
-    prepare_runtime_dirs "$target"
-    for runtime in $(each_target); do
-      select_runtime "$runtime"
-      compose up --no-start "$(service_name "$runtime")"
-    done
+    prepare_runtime_dirs all
+    select_runtime gpu
+    remove_legacy_split_containers
+    compose up --no-start comfyui
     ;;
   start)
-    prepare_runtime_dirs "$target"
-    for runtime in $(each_target); do
-      select_runtime "$runtime"
-      if [[ "$runtime" == "gpu" ]]; then
-        gate_gpu_on_vision_unload
-      fi
-      compose up -d --force-recreate "$(service_name "$runtime")"
-    done
+    prepare_runtime_dirs all
+    select_runtime gpu
+    gate_gpu_on_vision_unload
+    remove_legacy_split_containers
+    compose up -d --force-recreate comfyui
     ;;
   stop)
-    if [[ "$target" == "all" ]]; then
-      compose down
-    else
-      compose stop "$(service_name "$target")"
-      compose rm -f "$(service_name "$target")"
-    fi
+    compose stop comfyui
+    compose rm -f comfyui
     ;;
   restart)
     "$0" "$target" stop
     "$0" "$target" start
     ;;
   status)
-    if [[ "$target" == "all" ]]; then
-      compose ps
-      health_probe gpu || true
-      health_probe cpu || true
-    else
-      compose ps "$(service_name "$target")"
-      health_probe "$target" || true
-    fi
+    compose ps comfyui
+    for runtime in $(each_target); do
+      health_probe "$runtime" || true
+    done
     ;;
   logs)
-    if [[ "$target" == "all" ]]; then
-      compose logs --tail "${COMFYUI_LOG_TAIL:-100}" comfyui-gpu comfyui-cpu
-    else
-      compose logs --tail "${COMFYUI_LOG_TAIL:-100}" "$(service_name "$target")"
-    fi
+    compose logs --tail "${COMFYUI_LOG_TAIL:-100}" comfyui
     ;;
   ready)
     "$0" "$target" start

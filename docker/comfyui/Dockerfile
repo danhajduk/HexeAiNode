@@ -25,7 +25,10 @@ WORKDIR /opt/ComfyUI
 RUN python3 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 \
     && python3 -m pip install -r requirements.txt
 
-EXPOSE 8188
+COPY docker/comfyui/run-dual.sh /opt/hexe/run-comfyui-dual.sh
+RUN chmod +x /opt/hexe/run-comfyui-dual.sh
+
+EXPOSE 8188 8189
 
 ENTRYPOINT ["python3", "main.py"]
 CMD ["--listen", "0.0.0.0", "--port", "8188", "--disable-auto-launch"]

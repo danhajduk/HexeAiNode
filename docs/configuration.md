@@ -39,8 +39,7 @@ Backend runtime:
 - `HEXE_VISION_LLM_ALWAYS_ON_ENABLED` default `true`; keeps the local vision runtime resident when no local work is in flight
 - `HEXE_VISION_LLM_RESIDENCY_CHECK_INTERVAL_SECONDS` default `60`; interval for the vision runtime residency check
 - `HEXE_VISION_LLM_CONTROL_SCRIPT` default `scripts/llamacpp-vision-control.sh`
-- `COMFYUI_GPU_CONTAINER_NAME` default `hexe-ai-node-comfyui-gpu`
-- `COMFYUI_CPU_CONTAINER_NAME` default `hexe-ai-node-comfyui-cpu`
+- `COMFYUI_CONTAINER_NAME` default `hexe-ai-node-comfyui`; single container that runs both GPU and CPU ComfyUI processes
 - `COMFYUI_GPU_PORT` default `8188`; local host port for the GPU ComfyUI runtime
 - `COMFYUI_CPU_PORT` default `8189`; local host port for the CPU-only ComfyUI runtime
 - `COMFYUI_GPU_CHECKPOINT` default `RealVisXL_V5.0_fp16.safetensors`

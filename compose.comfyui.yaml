@@ -1,71 +1,48 @@
 version: "2.3"
 
 services:
-  comfyui-gpu:
+  comfyui:
     build:
       context: .
       dockerfile: docker/comfyui/Dockerfile
       args:
         COMFYUI_REF: ${COMFYUI_REF:-master}
     image: ${COMFYUI_IMAGE:-hexe-ai-node-comfyui:local}
-    container_name: ${COMFYUI_GPU_CONTAINER_NAME:-hexe-ai-node-comfyui-gpu}
+    container_name: ${COMFYUI_CONTAINER_NAME:-hexe-ai-node-comfyui}
     restart: unless-stopped
     runtime: nvidia
+    entrypoint:
+      - /opt/hexe/run-comfyui-dual.sh
     environment:
       NVIDIA_VISIBLE_DEVICES: ${COMFYUI_GPU_NVIDIA_VISIBLE_DEVICES:-all}
       NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
       HF_HOME: /cache/huggingface
       XDG_CACHE_HOME: /cache
-      HEXE_COMFYUI_RUNTIME: gpu
-      HEXE_COMFYUI_TARGET_CHECKPOINT: ${COMFYUI_GPU_CHECKPOINT:-RealVisXL_V5.0_fp16.safetensors}
-      HEXE_COMFYUI_TARGET_LORA: ${COMFYUI_GPU_LORA:-sdxl_lightning_4step_lora.safetensors}
-    command: ${COMFYUI_GPU_ARGS:---listen 0.0.0.0 --port 8188 --disable-auto-launch}
+      COMFYUI_GPU_INTERNAL_PORT: 8188
+      COMFYUI_CPU_INTERNAL_PORT: 8189
+      COMFYUI_GPU_BASE_DIR: /runtime/gpu
+      COMFYUI_CPU_BASE_DIR: /runtime/cpu
+      HEXE_COMFYUI_RUNTIME_MODE: dual
+      HEXE_COMFYUI_GPU_TARGET_CHECKPOINT: ${COMFYUI_GPU_CHECKPOINT:-RealVisXL_V5.0_fp16.safetensors}
+      HEXE_COMFYUI_GPU_TARGET_LORA: ${COMFYUI_GPU_LORA:-sdxl_lightning_4step_lora.safetensors}
+      HEXE_COMFYUI_CPU_TARGET_CHECKPOINT: ${COMFYUI_CPU_CHECKPOINT:-DreamShaper8_LCM.safetensors}
     ports:
       - "${COMFYUI_GPU_HOST:-127.0.0.1}:${COMFYUI_GPU_PORT:-8188}:8188"
+      - "${COMFYUI_CPU_HOST:-127.0.0.1}:${COMFYUI_CPU_PORT:-8189}:8189"
     volumes:
-      - ${COMFYUI_GPU_MODEL_DIR:-./runtime/models/comfyui-gpu}:/opt/ComfyUI/models
-      - ${COMFYUI_GPU_INPUT_DIR:-./runtime/input/comfyui-gpu}:/opt/ComfyUI/input
-      - ${COMFYUI_GPU_OUTPUT_DIR:-./runtime/output/comfyui-gpu}:/opt/ComfyUI/output
-      - ${COMFYUI_GPU_USER_DIR:-./runtime/user/comfyui-gpu}:/opt/ComfyUI/user
-      - ${COMFYUI_GPU_CACHE_DIR:-./runtime/cache/comfyui-gpu}:/cache
+      - ${COMFYUI_GPU_MODEL_DIR:-./runtime/models/comfyui-gpu}:/runtime/gpu/models
+      - ${COMFYUI_GPU_INPUT_DIR:-./runtime/input/comfyui-gpu}:/runtime/gpu/input
+      - ${COMFYUI_GPU_OUTPUT_DIR:-./runtime/output/comfyui-gpu}:/runtime/gpu/output
+      - ${COMFYUI_GPU_USER_DIR:-./runtime/user/comfyui-gpu}:/runtime/gpu/user
+      - ${COMFYUI_CPU_MODEL_DIR:-./runtime/models/comfyui-cpu}:/runtime/cpu/models
+      - ${COMFYUI_CPU_INPUT_DIR:-./runtime/input/comfyui-cpu}:/runtime/cpu/input
+      - ${COMFYUI_CPU_OUTPUT_DIR:-./runtime/output/comfyui-cpu}:/runtime/cpu/output
+      - ${COMFYUI_CPU_USER_DIR:-./runtime/user/comfyui-cpu}:/runtime/cpu/user
+      - ${COMFYUI_CACHE_DIR:-./runtime/cache/comfyui}:/cache
     healthcheck:
       test:
         - CMD-SHELL
-        - curl -fsS http://127.0.0.1:8188/system_stats >/dev/null
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 45s
-
-  comfyui-cpu:
-    build:
-      context: .
-      dockerfile: docker/comfyui/Dockerfile
-      args:
-        COMFYUI_REF: ${COMFYUI_REF:-master}
-    image: ${COMFYUI_IMAGE:-hexe-ai-node-comfyui:local}
-    container_name: ${COMFYUI_CPU_CONTAINER_NAME:-hexe-ai-node-comfyui-cpu}
-    restart: unless-stopped
-    environment:
-      CUDA_VISIBLE_DEVICES: ""
-      NVIDIA_VISIBLE_DEVICES: void
-      HF_HOME: /cache/huggingface
-      XDG_CACHE_HOME: /cache
-      HEXE_COMFYUI_RUNTIME: cpu
-      HEXE_COMFYUI_TARGET_CHECKPOINT: ${COMFYUI_CPU_CHECKPOINT:-DreamShaper8_LCM.safetensors}
-    command: ${COMFYUI_CPU_ARGS:---cpu --listen 0.0.0.0 --port 8188 --disable-auto-launch}
-    ports:
-      - "${COMFYUI_CPU_HOST:-127.0.0.1}:${COMFYUI_CPU_PORT:-8189}:8188"
-    volumes:
-      - ${COMFYUI_CPU_MODEL_DIR:-./runtime/models/comfyui-cpu}:/opt/ComfyUI/models
-      - ${COMFYUI_CPU_INPUT_DIR:-./runtime/input/comfyui-cpu}:/opt/ComfyUI/input
-      - ${COMFYUI_CPU_OUTPUT_DIR:-./runtime/output/comfyui-cpu}:/opt/ComfyUI/output
-      - ${COMFYUI_CPU_USER_DIR:-./runtime/user/comfyui-cpu}:/opt/ComfyUI/user
-      - ${COMFYUI_CPU_CACHE_DIR:-./runtime/cache/comfyui-cpu}:/cache
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - curl -fsS http://127.0.0.1:8188/system_stats >/dev/null
+        - curl -fsS http://127.0.0.1:8188/system_stats >/dev/null && curl -fsS http://127.0.0.1:8189/system_stats >/dev/null
       interval: 10s
       timeout: 5s
       retries: 12

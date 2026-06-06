@@ -942,13 +942,13 @@ Implementation notes:
 
 ## Task 969
 Original task details:
-- Create a ComfyUI deployment with two ComfyUI runtimes.
+- Create a ComfyUI deployment with one container that runs two ComfyUI runtimes on two ports.
 - No default model should be loaded at container startup.
 - One ComfyUI runtime should be GPU-enabled and targeted at RealVisXL + SDXL-Lightning LoRA.
 - One ComfyUI runtime should be CPU-only and targeted at DreamShaper.
 
 Implementation notes:
-- Use separate container names, model/cache/user/output dirs, socket paths, and health surfaces.
+- Use one container name with separate GPU/CPU ports, model/user/output dirs, and health surfaces.
 - GPU ComfyUI should support RealVisXL + `sdxl_lightning_4step_lora.safetensors`.
 - CPU ComfyUI should support `DreamShaper8_LCM.safetensors`.
 - Both should start without preloading a checkpoint; model load should be request-scoped unless an explicit keep-warm policy is enabled.
