@@ -4,7 +4,7 @@ import itertools
 import json
 import uuid
 from copy import deepcopy
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -31,6 +31,7 @@ class ExecutionQueueService:
         job_ttl_seconds: int = 3600,
         state_path: str | None = None,
         max_pending_per_client: int = 20,
+        extra_queue_concurrency: dict[str, int] | None = None,
     ) -> None:
         self._logger = logger
         self._local_concurrency = max(int(local_concurrency), 1)
@@ -41,8 +42,17 @@ class ExecutionQueueService:
         self._sequence = itertools.count(1)
         self._lock = asyncio.Lock()
         self._jobs: dict[str, dict] = {}
-        self._queues: dict[str, list[tuple[int, int, str]]] = {"local": [], "cloud": []}
-        self._active_counts: dict[str, int] = {"local": 0, "cloud": 0}
+        self._queue_concurrency: dict[str, int] = {
+            "local": self._local_concurrency,
+            "cloud": self._cloud_concurrency,
+            "cpu_comfyui": 1,
+        }
+        for queue_name, concurrency in (extra_queue_concurrency or {}).items():
+            normalized = self._normalize_queue_key(queue_name)
+            if normalized not in {"local", "cloud"}:
+                self._queue_concurrency[normalized] = max(int(concurrency), 1)
+        self._queues: dict[str, list[tuple[int, int, str]]] = {queue_key: [] for queue_key in self._queue_concurrency}
+        self._active_counts: dict[str, int] = {queue_key: 0 for queue_key in self._queue_concurrency}
         self._dispatcher_tasks: dict[str, asyncio.Task] = {}
         self._state_path = Path(state_path) if str(state_path or "").strip() else None
         self._recovered_unfinished_count = 0
@@ -76,7 +86,7 @@ class ExecutionQueueService:
         routing_decision: dict | None = None,
         client_id: str | None = None,
     ) -> dict:
-        queue_key = "local" if str(queue or "").strip().lower() == "local" else "cloud"
+        queue_key = self._normalize_queue_key(queue)
         importance_key = str(importance or "normal").strip().lower()
         rank = IMPORTANCE_RANK.get(importance_key, IMPORTANCE_RANK["normal"])
         sequence = next(self._sequence)
@@ -168,6 +178,7 @@ class ExecutionQueueService:
                 per_importance: dict[str, int] = {}
                 per_client_pending: dict[str, int] = {}
                 oldest_queued_at = None
+                active_job = None
                 for job_id in queued_ids:
                     job = self._jobs.get(job_id) or {}
                     importance = str(job.get("importance") or "normal")
@@ -181,14 +192,28 @@ class ExecutionQueueService:
                 for job in self._jobs.values():
                     if str(job.get("queue") or "") != queue_key or str(job.get("status") or "") != "running":
                         continue
+                    if active_job is None:
+                        active_job = {
+                            "job_id": job.get("job_id"),
+                            "job_name": job.get("job_name"),
+                            "task_id": (job.get("request") or {}).get("task_id") if isinstance(job.get("request"), dict) else None,
+                            "importance": job.get("importance"),
+                            "started_at": job.get("started_at"),
+                            "client_id": job.get("client_id"),
+                        }
                     client_id = str(job.get("client_id") or "").strip()
                     if client_id:
                         per_client_pending[client_id] = per_client_pending.get(client_id, 0) + 1
+                oldest_queued_age_seconds = None
+                if oldest_queued_at:
+                    oldest_queued_age_seconds = self._age_seconds(iso_value=str(oldest_queued_at))
                 queues[queue_key] = {
                     "queued_count": len(queued_ids),
                     "active_count": self._active_counts.get(queue_key, 0),
                     "concurrency": self._concurrency(queue_key),
                     "oldest_queued_at": oldest_queued_at,
+                    "oldest_queued_age_seconds": oldest_queued_age_seconds,
+                    "active_job": active_job,
                     "per_importance": per_importance,
                     "per_client_pending": per_client_pending,
                 }
@@ -209,7 +234,7 @@ class ExecutionQueueService:
             }
 
     async def queue_pressure(self, *, queue: str) -> dict:
-        queue_key = "local" if str(queue or "").strip().lower() == "local" else "cloud"
+        queue_key = self._normalize_queue_key(queue)
         async with self._lock:
             queued_count = len(self._queues.get(queue_key) or [])
             active_count = self._active_counts.get(queue_key, 0)
@@ -322,7 +347,7 @@ class ExecutionQueueService:
         }
 
     def _concurrency(self, queue_key: str) -> int:
-        return self._local_concurrency if queue_key == "local" else self._cloud_concurrency
+        return max(int(self._queue_concurrency.get(queue_key) or self._cloud_concurrency), 1)
 
     def _public_job_payload(self, job: dict) -> dict:
         payload = {
@@ -372,7 +397,7 @@ class ExecutionQueueService:
             if not job_id:
                 continue
             job = deepcopy(item)
-            queue_key = "local" if str(job.get("queue") or "").strip().lower() == "local" else "cloud"
+            queue_key = self._normalize_queue_key(job.get("queue"))
             importance = str(job.get("importance") or "normal").strip().lower()
             sequence = max(int(job.get("sequence") or 0), 0)
             max_sequence = max(max_sequence, sequence)
@@ -426,3 +451,24 @@ class ExecutionQueueService:
             if str(job.get("client_id") or "").strip() == client_key
             and str(job.get("status") or "").strip().lower() in {"queued", "running"}
         )
+
+    def _normalize_queue_key(self, value: object) -> str:
+        normalized = str(value or "").strip().lower().replace("-", "_")
+        if normalized == "local":
+            return "local"
+        if normalized in self._queue_concurrency or normalized == "cpu_comfyui":
+            return normalized
+        return "cloud"
+
+    @staticmethod
+    def _age_seconds(*, iso_value: str) -> float | None:
+        try:
+            parsed = datetime.fromisoformat(iso_value)
+        except Exception:
+            return None
+        try:
+            age = local_now() - parsed
+        except TypeError:
+            parsed = parsed.replace(tzinfo=local_now().tzinfo)
+            age = local_now() - parsed
+        return round(max(age.total_seconds(), 0.0), 3)

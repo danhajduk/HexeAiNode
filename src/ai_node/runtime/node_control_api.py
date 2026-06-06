@@ -704,6 +704,9 @@ class NodeControlState:
             cloud_concurrency=max(_env_int("HEXE_EXECUTION_QUEUE_CLOUD_CONCURRENCY", 4), 1),
             check_after_seconds=max(_env_int("HEXE_EXECUTION_QUEUE_CHECK_AFTER_SECONDS", 5), 1),
             job_ttl_seconds=max(_env_int("HEXE_EXECUTION_QUEUE_JOB_TTL_SECONDS", 3600), 60),
+            extra_queue_concurrency={
+                "cpu_comfyui": max(_env_int("HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY", 1), 1),
+            },
             state_path=str(
                 Path(
                     os.environ.get("HEXE_EXECUTION_QUEUE_STATE_PATH")
@@ -1859,12 +1862,40 @@ class NodeControlState:
         return await self._execution_queue.cancel_job(job_id=job_id, reason=reason)
 
     async def execution_queue_diagnostics(self) -> dict:
-        return await self._execution_queue.diagnostics()
+        payload = await self._execution_queue.diagnostics()
+        if isinstance(payload, dict):
+            payload["cpu_comfyui_policy"] = {
+                "enabled": True,
+                "queue": "cpu_comfyui",
+                "runtime_id": "comfyui_cpu",
+                "allowed_task_families": ["task.image_generation", "task.generation.image"],
+                "allowed_importance": ["background", "low"],
+                "rejected_importance": ["normal", "high", "critical"],
+            }
+        return payload
 
     async def _direct_execution_queue_context(self, *, request: TaskExecutionRequest) -> dict:
         authorization = self._direct_execution_authorization_snapshot(request=request)
         importance = self._direct_execution_importance(request=request, authorization=authorization)
         routing_mode = self._direct_execution_effective_routing_mode(request=request, authorization=authorization)
+        cpu_comfyui_policy = self._cpu_comfyui_queue_policy(request=request, importance=importance)
+        if cpu_comfyui_policy.get("selected"):
+            return {
+                "queue": "cpu_comfyui",
+                "importance": importance,
+                "routing_mode": routing_mode,
+                "spillover": False,
+                "execution_routing_mode": "local_only",
+                "routing_decision": {
+                    "original_routing_mode": routing_mode,
+                    "execution_routing_mode": "local_only",
+                    "selected_queue": "cpu_comfyui",
+                    "original_queue": "local",
+                    "spillover": False,
+                    "reason": "cpu_comfyui_background_image_policy",
+                    "cpu_comfyui_policy": cpu_comfyui_policy,
+                },
+            }
         queue_key = self._direct_execution_queue_kind(
             request=request,
             authorization=authorization,
@@ -1999,6 +2030,8 @@ class NodeControlState:
     ) -> str | None:
         if spillover:
             return "cloud_only"
+        if queue_key == "cpu_comfyui":
+            return "local_only"
         capability_queue = self._direct_execution_task_capability_queue(request=request)
         if capability_queue == "local" and queue_key == "local" and routing_mode in {None, "cloud_fallback"}:
             return "local_only"
@@ -2070,6 +2103,32 @@ class NodeControlState:
         if routing_mode:
             return f"routing_policy_{routing_mode}"
         return "provider_default_local" if queue_key == "local" else "provider_default_cloud"
+
+    @staticmethod
+    def _cpu_comfyui_queue_policy(*, request: TaskExecutionRequest, importance: str) -> dict:
+        task_family = str(request.task_family or "").strip().lower()
+        is_image_generation = task_family in {"task.image_generation", "task.generation.image"}
+        importance_key = str(importance or "normal").strip().lower()
+        priority_allowed = importance_key in {"background", "low"}
+        requested_provider = str(request.requested_provider or "").strip().lower()
+        provider_allowed = requested_provider in {"", "local", "comfyui", "comfyui_cpu"}
+        selected = bool(is_image_generation and priority_allowed and provider_allowed)
+        reason = "eligible"
+        if not is_image_generation:
+            reason = "not_image_generation"
+        elif not priority_allowed:
+            reason = "priority_not_low_or_background"
+        elif not provider_allowed:
+            reason = "explicit_nonlocal_provider"
+        return {
+            "selected": selected,
+            "runtime_id": "comfyui_cpu",
+            "queue": "cpu_comfyui",
+            "task_family": task_family or None,
+            "importance": importance_key,
+            "allowed_importance": ["background", "low"],
+            "reason": reason,
+        }
 
     @staticmethod
     def _direct_execution_effective_routing_mode(*, request: TaskExecutionRequest, authorization) -> str | None:

@@ -542,3 +542,4 @@ Task 967: Add always-on local text LLM runtime policy - Completed on 06/05/2026 
 Task 968: Add vision runtime residency and unload-only model control - Completed on 06/05/2026 18:22
 Task 969: Split ComfyUI into GPU and CPU-only container runtimes - Completed on 06/05/2026 18:28
 Task 970: Gate GPU ComfyUI model loads on vision VRAM unload - Completed on 06/05/2026 18:30
+Task 971: Restrict CPU ComfyUI to low-priority background jobs - Completed on 06/05/2026 19:03

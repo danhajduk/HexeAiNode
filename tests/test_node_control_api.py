@@ -742,6 +742,76 @@ class NodeControlApiTests(unittest.TestCase):
 
         asyncio.run(run_scenario())
 
+    def test_low_priority_image_generation_routes_to_cpu_comfyui_queue(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                    capability_runner=self._FakeCapabilityRunner(),
+                )
+
+                preview = await state.preview_direct_execution_route(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-cpu-image-001",
+                            "task_family": "task.image_generation",
+                            "requested_by": "service.alpha",
+                            "requested_provider": "local",
+                            "inputs": {"prompt": "low priority render"},
+                            "response_mode": "async_if_queued",
+                            "priority": "background",
+                            "trace_id": "trace-cpu-image-001",
+                        }
+                    )
+                )
+
+                self.assertEqual(preview["queue"], "cpu_comfyui")
+                self.assertEqual(preview["importance"], "background")
+                self.assertEqual(preview["routing_decision"]["reason"], "cpu_comfyui_background_image_policy")
+                self.assertTrue(preview["routing_decision"]["cpu_comfyui_policy"]["selected"])
+                self.assertEqual(preview["routing_decision"]["execution_routing_mode"], "local_only")
+
+                diagnostics = await state.execution_queue_diagnostics()
+                self.assertIn("cpu_comfyui", diagnostics["queues"])
+                self.assertEqual(diagnostics["cpu_comfyui_policy"]["allowed_importance"], ["background", "low"])
+
+        asyncio.run(run_scenario())
+
+    def test_normal_priority_image_generation_does_not_route_to_cpu_comfyui_queue(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                    capability_runner=self._FakeCapabilityRunner(),
+                )
+
+                preview = await state.preview_direct_execution_route(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-gpu-image-001",
+                            "task_family": "task.image_generation",
+                            "requested_by": "service.alpha",
+                            "requested_provider": "local",
+                            "inputs": {"prompt": "interactive render"},
+                            "response_mode": "async_if_queued",
+                            "priority": "normal",
+                            "trace_id": "trace-gpu-image-001",
+                        }
+                    )
+                )
+
+                self.assertEqual(preview["queue"], "local")
+                self.assertNotEqual(preview["routing_decision"]["selected_queue"], "cpu_comfyui")
+                self.assertEqual(preview["routing_decision"]["reason"], "explicit_provider")
+
+        asyncio.run(run_scenario())
+
     def test_execute_direct_queues_sensitive_v3_prompt_on_local_queue(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:

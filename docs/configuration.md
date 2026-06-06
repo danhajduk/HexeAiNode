@@ -82,6 +82,7 @@ Backend runtime:
 - `HEXE_DIRECT_EXECUTION_RETRY_AFTER_SECONDS` default `30`; retry hint returned with direct execution busy responses
 - `HEXE_EXECUTION_QUEUE_LOCAL_CONCURRENCY` optional override; defaults to `LLAMACPP_PARALLEL + 1`
 - `HEXE_EXECUTION_QUEUE_CLOUD_CONCURRENCY` default `4`; max cloud queued jobs dispatched concurrently
+- `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` default `1`; max CPU ComfyUI background image jobs dispatched concurrently
 - `HEXE_EXECUTION_QUEUE_CHECK_AFTER_SECONDS` default `5`; queued response polling hint in seconds
 - `HEXE_EXECUTION_QUEUE_JOB_TTL_SECONDS` default `3600`; in-memory queued job retention hint in seconds
 - `HEXE_EXECUTION_QUEUE_STATE_PATH` optional override; defaults to `execution_queue_jobs.json` next to the node config and persists async job status for restart-aware polling

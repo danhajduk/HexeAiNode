@@ -111,6 +111,36 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(pressure["pending_count"], 2)
         release_first.set()
 
+    async def test_cpu_comfyui_queue_diagnostics_reports_active_and_oldest_queued_age(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
+        release_first = asyncio.Event()
+        first = await queue.enqueue(
+            queue="cpu_comfyui",
+            importance="background",
+            job_name="cpu image first",
+            request_payload={"task_id": "cpu-image-first"},
+            runner=lambda: _blocking_job(name="first", order=[], release=release_first),
+        )
+        await _wait_for_status(queue, job_id=first["job_id"], status="running")
+        await queue.enqueue(
+            queue="cpu_comfyui",
+            importance="background",
+            job_name="cpu image queued",
+            request_payload={"task_id": "cpu-image-queued"},
+            runner=lambda: _completed({"ok": True}),
+        )
+
+        diagnostics = await queue.diagnostics()
+        cpu_queue = diagnostics["queues"]["cpu_comfyui"]
+
+        self.assertEqual(cpu_queue["active_count"], 1)
+        self.assertEqual(cpu_queue["queued_count"], 1)
+        self.assertEqual(cpu_queue["concurrency"], 1)
+        self.assertEqual(cpu_queue["active_job"]["task_id"], "cpu-image-first")
+        self.assertIsNotNone(cpu_queue["oldest_queued_at"])
+        self.assertIsNotNone(cpu_queue["oldest_queued_age_seconds"])
+        release_first.set()
+
     async def test_queue_eta_estimates_start_time_from_position_and_active_jobs(self):
         queue = ExecutionQueueService(
             logger=logging.getLogger("execution-queue-test"),

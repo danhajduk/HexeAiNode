@@ -128,6 +128,12 @@ are gone. Gate latency is written to `.run/comfyui-gpu-vision-gate.json` as `vis
 tracked separately by the vision residency scheduler, so the artifact keeps `vision_reload_pending: true` after an
 unload. Set `COMFYUI_GPU_VISION_GATE_ENABLED=false` only for manual maintenance.
 
+CPU ComfyUI is reserved for low-priority background image work. The direct execution queue exposes a `cpu_comfyui` lane
+with concurrency `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` defaulting to 1. Only `task.image_generation` or
+`task.generation.image` requests with `priority: "background"` or `priority: "low"` are eligible for that lane; normal
+and high-priority image work stays off the CPU ComfyUI queue. Queue diagnostics include `queues.cpu_comfyui` with
+queued depth, active job, and oldest queued age.
+
 On the RTX 3060 12 GB node, ComfyUI should be treated as exclusive GPU work for real generation. With both llama.cpp
 runtimes loaded, only about 2.5 GB VRAM remains, which is not enough for typical SDXL, FLUX, or Stable Diffusion 3.5
 workflows. Stop `hexe-ai-node-llamacpp-vision` before lightweight generation, and stop both llama.cpp containers before
