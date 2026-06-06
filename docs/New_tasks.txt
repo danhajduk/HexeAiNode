@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 969: Split ComfyUI into GPU and CPU-only container runtimes
 [TODO] Task 970: Gate GPU ComfyUI model loads on vision VRAM unload
 [TODO] Task 971: Restrict CPU ComfyUI to low-priority background jobs
 [TODO] Task 972: Add GPU ComfyUI weather preset catalog

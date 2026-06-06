@@ -68,30 +68,57 @@ currently uses a `container_stop_fallback` that frees VRAM by stopping the visio
 node reports `unload_model_supported: false` and `unload_model_mode: container_stop_fallback` until a true model unload
 primitive is available.
 
-## Experimental Image Generation Runtime
+## Experimental Image Generation Runtimes
 
-The node includes a sibling ComfyUI runtime for local image generation experiments. It is intentionally separate from
-the text and vision llama.cpp runtimes because diffusion models place different pressure on VRAM and model storage.
+The node includes two sibling ComfyUI runtimes for local image generation experiments. They are intentionally separate
+from the text and vision llama.cpp runtimes because diffusion models place different pressure on VRAM and model
+storage.
 
-Default ComfyUI target:
+GPU ComfyUI target:
 
 - image: `hexe-ai-node-comfyui:local`
-- container: `hexe-ai-node-comfyui`
+- container: `hexe-ai-node-comfyui-gpu`
 - URL: `http://127.0.0.1:8188`
 - runtime base: CUDA 12.1 / PyTorch cu121 for compatibility with the NVIDIA 535 driver
-- models: `runtime/models/comfyui`
-- input: `runtime/input/comfyui`
-- output: `runtime/output/comfyui`
+- models: `runtime/models/comfyui-gpu`
+- input: `runtime/input/comfyui-gpu`
+- output: `runtime/output/comfyui-gpu`
+- checkpoint target: `RealVisXL_V5.0_fp16.safetensors`
+- LoRA target: `sdxl_lightning_4step_lora.safetensors`
+
+CPU ComfyUI target:
+
+- image: `hexe-ai-node-comfyui:local`
+- container: `hexe-ai-node-comfyui-cpu`
+- URL: `http://127.0.0.1:8189`
+- runtime mode: `--cpu`
+- models: `runtime/models/comfyui-cpu`
+- input: `runtime/input/comfyui-cpu`
+- output: `runtime/output/comfyui-cpu`
+- checkpoint target: `DreamShaper8_LCM.safetensors`
 
 ```bash
-scripts/comfyui-control.sh build
-scripts/comfyui-control.sh create
-scripts/comfyui-control.sh start
-scripts/comfyui-control.sh ready
-scripts/comfyui-control.sh status
-scripts/comfyui-control.sh logs
-scripts/comfyui-control.sh stop
+scripts/comfyui-control.sh gpu prepare
+scripts/comfyui-control.sh gpu build
+scripts/comfyui-control.sh gpu ready
+scripts/comfyui-control.sh gpu status
+scripts/comfyui-control.sh gpu logs
+scripts/comfyui-control.sh gpu stop
+
+scripts/comfyui-control.sh cpu prepare
+scripts/comfyui-control.sh cpu ready
+scripts/comfyui-control.sh cpu status
+scripts/comfyui-control.sh cpu logs
+scripts/comfyui-control.sh cpu stop
+
+scripts/comfyui-control.sh all status
 ```
+
+For compatibility, `scripts/comfyui-control.sh ready` still defaults to the GPU runtime. Both containers start with
+`--disable-auto-launch` and without a startup checkpoint argument; checkpoints and LoRAs should be loaded by the request
+workflow unless a future explicit keep-warm policy is enabled. During directory preparation, the control script creates
+per-runtime model folders and symlinks the expected checkpoint/LoRA from the legacy `runtime/models/comfyui` folder
+when the file is already present.
 
 On the RTX 3060 12 GB node, ComfyUI should be treated as exclusive GPU work for real generation. With both llama.cpp
 runtimes loaded, only about 2.5 GB VRAM remains, which is not enough for typical SDXL, FLUX, or Stable Diffusion 3.5

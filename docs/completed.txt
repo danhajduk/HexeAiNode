@@ -540,3 +540,4 @@ Task 965: Add persisted queued job state for async execution recovery - Complete
 Task 966: Add per-client queue fairness limits - Completed on 06/04/2026 19:26
 Task 967: Add always-on local text LLM runtime policy - Completed on 06/05/2026 18:15
 Task 968: Add vision runtime residency and unload-only model control - Completed on 06/05/2026 18:22
+Task 969: Split ComfyUI into GPU and CPU-only container runtimes - Completed on 06/05/2026 18:28
