@@ -9,6 +9,7 @@ import time
 LOCAL_LLM_BUILTIN_DEFAULT_MODEL_ID = "qwen3-8b-q4_k_m"
 LOCAL_LLM_DEFAULT_REVERT_IDLE_SECONDS = 900
 LOCAL_LLM_ALWAYS_ON_CHECK_INTERVAL_SECONDS = 60
+VISION_LLM_BUILTIN_DEFAULT_MODEL_ID = "qwen2.5-vl-3b-instruct-q4_k_m"
 
 
 def _env_int(name: str, *, default: int) -> int:
@@ -62,6 +63,30 @@ class UserSystemdServiceManager:
             0,
         )
         self._local_llm_always_on_enabled = _env_bool("HEXE_LOCAL_LLM_ALWAYS_ON_ENABLED", default=True)
+        self._vision_llm_control_script = str(
+            os.environ.get("HEXE_VISION_LLM_CONTROL_SCRIPT") or "scripts/llamacpp-vision-control.sh"
+        ).strip()
+        self._vision_llm_socket = str(
+            os.environ.get("HEXE_PROVIDER_VISION_SOCKET")
+            or os.environ.get("LLAMACPP_VISION_SOCKET_PATH")
+            or "/run/hexe/ai-node/llamacpp-vision.sock"
+        ).strip()
+        self._vision_llm_health_socket = str(
+            os.environ.get("LLAMACPP_VISION_HEALTH_SOCKET") or "/run/hexe/ai-node/llamacpp-vision-health.sock"
+        ).strip()
+        self._vision_llm_container_name = str(
+            os.environ.get("LLAMACPP_VISION_CONTAINER_NAME") or "hexe-ai-node-llamacpp-vision"
+        ).strip()
+        self._vision_llm_default_model_id = (
+            str(
+                os.environ.get("HEXE_PROVIDER_VISION_DEFAULT_MODEL_ID")
+                or os.environ.get("LLAMACPP_VISION_MODEL_ALIAS")
+                or VISION_LLM_BUILTIN_DEFAULT_MODEL_ID
+            ).strip()
+            or VISION_LLM_BUILTIN_DEFAULT_MODEL_ID
+        )
+        self._vision_llm_always_on_enabled = _env_bool("HEXE_VISION_LLM_ALWAYS_ON_ENABLED", default=True)
+        self._vision_llm_residency_in_progress = False
         self._local_llm_last_non_default_model_id: str | None = None
         self._local_llm_last_non_default_used_at: float | None = None
         self._local_llm_revert_in_progress = False
@@ -83,6 +108,7 @@ class UserSystemdServiceManager:
             "backend": backend,
             "frontend": frontend,
             "local_llm": self._local_llm_status(),
+            "vision_llm": self._vision_llm_status(),
             "node": node,
         }
 
@@ -101,6 +127,9 @@ class UserSystemdServiceManager:
         if value == "local_llm":
             self._run_local_llm_control("restart")
             return {"target": "local_llm", "result": "restarted"}
+        if value == "vision_llm":
+            self._run_vision_llm_control("restart")
+            return {"target": "vision_llm", "result": "restarted"}
         raise ValueError("unsupported restart target")
 
     def start(self, *, target: str) -> dict:
@@ -118,6 +147,9 @@ class UserSystemdServiceManager:
         if value == "local_llm":
             self._run_local_llm_control("start")
             return {"target": "local_llm", "result": "started"}
+        if value == "vision_llm":
+            self._run_vision_llm_control("start")
+            return {"target": "vision_llm", "result": "started"}
         raise ValueError("unsupported start target")
 
     def stop(self, *, target: str) -> dict:
@@ -135,6 +167,8 @@ class UserSystemdServiceManager:
         if value == "local_llm":
             self._run_local_llm_control("stop")
             return {"target": "local_llm", "result": "stopped"}
+        if value == "vision_llm":
+            return self.unload_vision_model()
         raise ValueError("unsupported stop target")
 
     def schedule_restart(self, *, target: str, delay_seconds: int) -> dict:
@@ -413,6 +447,102 @@ class UserSystemdServiceManager:
             **self.local_llm_always_on_status(),
         }
 
+    def vision_runtime_status(
+        self,
+        *,
+        active_model_ids: list[str] | None = None,
+        local_in_flight: int = 0,
+    ) -> dict:
+        active_models = (
+            list(active_model_ids)
+            if isinstance(active_model_ids, list)
+            else self._active_model_ids_for_socket(self._vision_llm_socket)
+        )
+        container_pid = self._query_container_pid(self._vision_llm_container_name)
+        container_running = container_pid > 0
+        socket_ready = bool(self._vision_llm_socket and os.path.exists(self._vision_llm_socket))
+        health_socket_ready = bool(self._vision_llm_health_socket and os.path.exists(self._vision_llm_health_socket))
+        runtime_ready = socket_ready and health_socket_ready
+        model_loaded = self._vision_llm_default_model_id in set(active_models) if active_models else runtime_ready
+        if container_running and model_loaded:
+            residency_state = "model_loaded"
+        elif container_running and not runtime_ready:
+            residency_state = "model_loading"
+        elif container_running:
+            residency_state = "container_running_model_unloaded"
+        else:
+            residency_state = "container_stopped"
+        start_due = bool(
+            self._vision_llm_always_on_enabled
+            and not self._vision_llm_residency_in_progress
+            and max(int(local_in_flight), 0) == 0
+            and not model_loaded
+        )
+        reason = None
+        if not self._vision_llm_always_on_enabled:
+            reason = "disabled"
+        elif self._vision_llm_residency_in_progress:
+            reason = "vision_start_in_progress"
+        elif max(int(local_in_flight), 0) > 0:
+            reason = "local_work_in_flight"
+        elif model_loaded:
+            reason = "vision_model_ready"
+        elif container_running and not runtime_ready:
+            reason = "vision_model_loading"
+        elif container_running:
+            reason = "vision_container_running_model_unloaded"
+        else:
+            reason = "vision_container_stopped"
+        return {
+            "enabled": self._vision_llm_always_on_enabled,
+            "default_model_id": self._vision_llm_default_model_id,
+            "active_model_ids": active_models,
+            "container_running": container_running,
+            "runtime_ready": runtime_ready,
+            "model_loaded": model_loaded,
+            "residency_state": residency_state,
+            "start_due": start_due,
+            "start_in_progress": self._vision_llm_residency_in_progress,
+            "local_in_flight": max(int(local_in_flight), 0),
+            "unload_model_supported": False,
+            "unload_model_mode": "container_stop_fallback",
+            "reason": reason,
+        }
+
+    def ensure_vision_runtime_resident(self, *, local_in_flight: int = 0) -> dict:
+        status = self.vision_runtime_status(local_in_flight=local_in_flight)
+        if not status.get("enabled"):
+            return {"started": False, **status}
+        if max(int(local_in_flight), 0) > 0:
+            return {"started": False, **status}
+        if status.get("model_loaded"):
+            return {"started": False, **status}
+        if self._vision_llm_residency_in_progress:
+            return {"started": False, **status}
+        self._vision_llm_residency_in_progress = True
+        try:
+            started = time.perf_counter()
+            self._run_vision_llm_control("ready")
+            load_seconds = round(time.perf_counter() - started, 3)
+        finally:
+            self._vision_llm_residency_in_progress = False
+        return {"started": True, "load_seconds": load_seconds, **self.vision_runtime_status()}
+
+    def unload_vision_model(self) -> dict:
+        started = time.perf_counter()
+        self._run_vision_llm_control("unload-model")
+        unload_seconds = round(time.perf_counter() - started, 3)
+        status = self.vision_runtime_status()
+        return {
+            "target": "vision_llm",
+            "result": "model_unloaded",
+            "unload_seconds": unload_seconds,
+            "unload_model_supported": False,
+            "unload_model_mode": "container_stop_fallback",
+            "reason": "llamacpp_server_model_unload_not_available",
+            **status,
+        }
+
     def _local_llm_status(self) -> dict:
         service_id = "local_llm"
         script_exists = os.path.exists(self._local_llm_control_script)
@@ -421,7 +551,7 @@ class UserSystemdServiceManager:
         state = "running" if llama_socket_ready and health_socket_ready else "stopped"
         if not script_exists:
             state = "unknown"
-        pid = self._query_local_llm_pid() if script_exists else 0
+        pid = self._query_container_pid(self._local_llm_container_name) if script_exists else 0
         cpu_percent = self._process_cpu_percent(service_id, pid)
         mem_percent = self._process_mem_percent(pid)
         active_model_ids = self._active_local_llm_model_ids()
@@ -444,12 +574,41 @@ class UserSystemdServiceManager:
             "model_states": self.local_llm_model_states_payload(active_model_ids=active_model_ids),
         }
 
-    def _query_local_llm_pid(self) -> int:
-        if not self._local_llm_container_name:
+    def _vision_llm_status(self) -> dict:
+        service_id = "vision_llm"
+        script_exists = os.path.exists(self._vision_llm_control_script)
+        residency = self.vision_runtime_status()
+        pid = self._query_container_pid(self._vision_llm_container_name) if script_exists else 0
+        cpu_percent = self._process_cpu_percent(service_id, pid)
+        mem_percent = self._process_mem_percent(pid)
+        state = "running" if residency["runtime_ready"] else "stopped"
+        if residency["residency_state"] == "model_loading":
+            state = "loading"
+        if not script_exists:
+            state = "unknown"
+        return {
+            "service_id": service_id,
+            "service_name": service_id,
+            "state": state,
+            "cpu_percent": cpu_percent,
+            "mem_percent": mem_percent,
+            "pid": pid or None,
+            "boot_order": 35,
+            "managed_by": "llamacpp-vision-control",
+            "control_script": self._vision_llm_control_script,
+            "container_name": self._vision_llm_container_name or None,
+            "socket_path": self._vision_llm_socket or None,
+            "health_socket_path": self._vision_llm_health_socket or None,
+            "default_model_id": self._vision_llm_default_model_id,
+            "residency": residency,
+        }
+
+    def _query_container_pid(self, container_name: str) -> int:
+        if not container_name:
             return 0
         try:
             result = subprocess.run(
-                [self._docker_bin, "inspect", "--format", "{{.State.Pid}}", self._local_llm_container_name],
+                [self._docker_bin, "inspect", "--format", "{{.State.Pid}}", container_name],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -483,13 +642,16 @@ class UserSystemdServiceManager:
         return out
 
     def _active_local_llm_model_ids(self) -> list[str]:
-        if not self._local_llm_socket:
+        return self._active_model_ids_for_socket(self._local_llm_socket)
+
+    def _active_model_ids_for_socket(self, socket_path: str) -> list[str]:
+        if not socket_path:
             return []
         try:
             request = b"GET /v1/models HTTP/1.1\r\nHost: llamacpp\r\nConnection: close\r\n\r\n"
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
                 client.settimeout(5)
-                client.connect(self._local_llm_socket)
+                client.connect(socket_path)
                 client.sendall(request)
                 chunks: list[bytes] = []
                 while True:
@@ -520,6 +682,17 @@ class UserSystemdServiceManager:
             raise ValueError("local llm control script is not configured")
         subprocess.run(
             [self._local_llm_control_script, command],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def _run_vision_llm_control(self, command: str, *, env: dict | None = None) -> None:
+        if not os.path.exists(self._vision_llm_control_script):
+            raise ValueError("vision llm control script is not configured")
+        subprocess.run(
+            [self._vision_llm_control_script, command],
             check=True,
             capture_output=True,
             text=True,
@@ -729,7 +902,7 @@ class UserSystemdServiceManager:
 
 class NullServiceManager:
     def get_status(self) -> dict:
-        return {"backend": "unknown", "frontend": "unknown", "local_llm": "unknown", "node": "unknown"}
+        return {"backend": "unknown", "frontend": "unknown", "local_llm": "unknown", "vision_llm": "unknown", "node": "unknown"}
 
     def restart(self, *, target: str) -> dict:
         raise ValueError("service manager is not configured")
@@ -814,3 +987,37 @@ class NullServiceManager:
 
     def ensure_local_llm_always_on(self, *, local_in_flight: int = 0) -> dict:
         return {"started": False, **self.local_llm_always_on_status(local_in_flight=local_in_flight)}
+
+    def vision_runtime_status(
+        self,
+        *,
+        active_model_ids: list[str] | None = None,
+        local_in_flight: int = 0,
+    ) -> dict:
+        return {
+            "enabled": False,
+            "default_model_id": VISION_LLM_BUILTIN_DEFAULT_MODEL_ID,
+            "active_model_ids": list(active_model_ids or []),
+            "container_running": False,
+            "runtime_ready": False,
+            "model_loaded": False,
+            "residency_state": "container_stopped",
+            "start_due": False,
+            "start_in_progress": False,
+            "local_in_flight": max(int(local_in_flight), 0),
+            "unload_model_supported": False,
+            "unload_model_mode": "container_stop_fallback",
+            "reason": "service_manager_unconfigured",
+        }
+
+    def ensure_vision_runtime_resident(self, *, local_in_flight: int = 0) -> dict:
+        return {"started": False, **self.vision_runtime_status(local_in_flight=local_in_flight)}
+
+    def unload_vision_model(self) -> dict:
+        return {
+            "target": "vision_llm",
+            "result": "skipped",
+            "unload_model_supported": False,
+            "unload_model_mode": "container_stop_fallback",
+            **self.vision_runtime_status(),
+        }

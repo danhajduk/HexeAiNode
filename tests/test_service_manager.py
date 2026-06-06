@@ -211,6 +211,85 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(result["reason"], "local_work_in_flight")
         fake_run.assert_not_called()
 
+    def test_vision_runtime_residency_starts_when_model_is_not_loaded(self):
+        with patch.dict("os.environ", {"HEXE_VISION_LLM_ALWAYS_ON_ENABLED": "true"}, clear=False):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._vision_llm_control_script = "scripts/llamacpp-vision-control.sh"
+            runtime_ready = {"value": False}
+            invoked = []
+
+            def _fake_exists(path):
+                value = str(path)
+                if value == "scripts/llamacpp-vision-control.sh":
+                    return True
+                if value in {manager._vision_llm_socket, manager._vision_llm_health_socket}:
+                    return runtime_ready["value"]
+                return True
+
+            def _fake_run(cmd, check, capture_output, text, env=None):
+                invoked.append(cmd)
+                if cmd[:2] == ["docker", "inspect"]:
+                    return _Completed("4243\n" if runtime_ready["value"] else "0\n")
+                runtime_ready["value"] = True
+                return _Completed("{}")
+
+            with (
+                patch("os.path.exists", side_effect=_fake_exists),
+                patch.object(
+                    manager,
+                    "_active_model_ids_for_socket",
+                    side_effect=[[], ["qwen2.5-vl-3b-instruct-q4_k_m"]],
+                ),
+                patch("subprocess.run", side_effect=_fake_run),
+            ):
+                result = manager.ensure_vision_runtime_resident()
+
+        self.assertTrue(result["started"])
+        self.assertEqual(result["residency_state"], "model_loaded")
+        self.assertIn(["scripts/llamacpp-vision-control.sh", "ready"], invoked)
+
+    def test_vision_runtime_residency_waits_for_local_work(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+        with (
+            patch("os.path.exists", return_value=False),
+            patch.object(manager, "_active_model_ids_for_socket", return_value=[]),
+            patch("subprocess.run") as fake_run,
+        ):
+            result = manager.ensure_vision_runtime_resident(local_in_flight=1)
+
+        self.assertFalse(result["started"])
+        self.assertEqual(result["reason"], "local_work_in_flight")
+        control_calls = [
+            call.args[0]
+            for call in fake_run.call_args_list
+            if call.args and call.args[0][:1] == ["scripts/llamacpp-vision-control.sh"]
+        ]
+        self.assertEqual(control_calls, [])
+
+    def test_unload_vision_model_uses_container_stop_fallback(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+        manager._vision_llm_control_script = "scripts/llamacpp-vision-control.sh"
+        invoked = []
+
+        def _fake_run(cmd, check, capture_output, text, env=None):
+            invoked.append(cmd)
+            if cmd[:2] == ["docker", "inspect"]:
+                return _Completed("0\n")
+            return _Completed("{}")
+
+        with (
+            patch("os.path.exists", side_effect=lambda path: str(path) == "scripts/llamacpp-vision-control.sh"),
+            patch.object(manager, "_active_model_ids_for_socket", return_value=[]),
+            patch("subprocess.run", side_effect=_fake_run),
+        ):
+            result = manager.unload_vision_model()
+
+        self.assertIn(["scripts/llamacpp-vision-control.sh", "unload-model"], invoked)
+        self.assertEqual(result["result"], "model_unloaded")
+        self.assertFalse(result["unload_model_supported"])
+        self.assertEqual(result["unload_model_mode"], "container_stop_fallback")
+        self.assertEqual(result["residency_state"], "container_stopped")
+
     def test_local_llm_model_states_reports_loaded_warm_cold_and_swap_required(self):
         with tempfile.TemporaryDirectory() as tmp:
             manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))

@@ -48,11 +48,25 @@ scripts/llamacpp-vision-control.sh start
 scripts/llamacpp-vision-control.sh ready
 scripts/llamacpp-vision-control.sh status
 scripts/llamacpp-vision-control.sh logs
+scripts/llamacpp-vision-control.sh unload-model
 scripts/llamacpp-vision-control.sh stop
 ```
 
 Do not run the vision runtime concurrently with image generation on the 12 GB GPU unless an operator has verified
 available VRAM. The first-pass vision runtime keeps `--parallel 1` and an 8192 context by default.
+
+The vision runtime is resident by default. `HEXE_VISION_LLM_ALWAYS_ON_ENABLED=true` lets the node periodically start
+the vision container and wait for the default model when no local work is in flight. Set
+`HEXE_VISION_LLM_ALWAYS_ON_ENABLED=false` for maintenance windows or when GPU image generation should keep the VRAM.
+The check interval is controlled by `HEXE_VISION_LLM_RESIDENCY_CHECK_INTERVAL_SECONDS` and defaults to 60 seconds.
+Service status includes `services.vision_llm.residency`, which distinguishes `container_stopped`, `model_loading`,
+`container_running_model_unloaded`, and `model_loaded`.
+
+`scripts/llamacpp-vision-control.sh unload-model` is the stable unload entry point. The pinned llama.cpp server loads
+the model as part of the server process and does not expose a process-resident model unload operation, so this command
+currently uses a `container_stop_fallback` that frees VRAM by stopping the vision container and health wrapper. The
+node reports `unload_model_supported: false` and `unload_model_mode: container_stop_fallback` until a true model unload
+primitive is available.
 
 ## Experimental Image Generation Runtime
 

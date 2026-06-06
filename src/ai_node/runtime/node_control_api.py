@@ -744,6 +744,10 @@ class NodeControlState:
             _env_int("HEXE_LOCAL_LLM_ALWAYS_ON_CHECK_INTERVAL_SECONDS", 60),
             1,
         )
+        self._vision_runtime_residency_check_interval_seconds = max(
+            _env_int("HEXE_VISION_LLM_RESIDENCY_CHECK_INTERVAL_SECONDS", 60),
+            1,
+        )
         self._load_identity()
         self._rehydrate_trusted_state()
         self._load_provider_selection_config()
@@ -3454,6 +3458,15 @@ class NodeControlState:
             task_kind="local_recurring",
             readiness_critical=False,
         )
+        self._internal_scheduler.register_interval_task(
+            task_id="vision_runtime_residency",
+            display_name="Vision Runtime Residency",
+            interval_seconds=self._vision_runtime_residency_check_interval_seconds,
+            schedule_name="interval_seconds",
+            schedule_detail=f"Every {self._vision_runtime_residency_check_interval_seconds} seconds",
+            task_kind="local_recurring",
+            readiness_critical=False,
+        )
         self._sync_operational_mqtt_health_schedule()
 
     def _operational_mqtt_health_schedule_definition(self) -> dict:
@@ -3600,6 +3613,11 @@ class NodeControlState:
                 initial_delay_seconds=0,
             )
             self._internal_scheduler.start_interval_task(
+                task_id="vision_runtime_residency",
+                coroutine_factory=self._vision_runtime_residency_job_once,
+                initial_delay_seconds=0,
+            )
+            self._internal_scheduler.start_interval_task(
                 task_id="operational_mqtt_health",
                 coroutine_factory=self._operational_mqtt_health_job_once,
                 initial_delay_seconds=0,
@@ -3678,6 +3696,19 @@ class NodeControlState:
             local_in_flight = max(local_in_flight, 1)
         result = await asyncio.to_thread(
             self._service_manager.ensure_local_llm_always_on,
+            local_in_flight=local_in_flight,
+        )
+        return {"status": "ok", "result": result if isinstance(result, dict) else {}}
+
+    async def _vision_runtime_residency_job_once(self) -> dict | None:
+        if self._service_manager is None or not hasattr(self._service_manager, "ensure_vision_runtime_resident"):
+            return {"status": "skipped", "reason": "service_manager_not_configured"}
+        admission = self.direct_execution_admission_payload()
+        local_in_flight = max(int(admission.get("in_flight") or 0), 0)
+        if self._local_llm_switch_lock.locked():
+            local_in_flight = max(local_in_flight, 1)
+        result = await asyncio.to_thread(
+            self._service_manager.ensure_vision_runtime_resident,
             local_in_flight=local_in_flight,
         )
         return {"status": "ok", "result": result if isinstance(result, dict) else {}}

@@ -35,6 +35,10 @@ Backend runtime:
 - `HEXE_PROVIDER_LOCAL_DEFAULT_MODEL_ID` default `qwen3-8b-q4_k_m`
 - `HEXE_LOCAL_LLM_ALWAYS_ON_ENABLED` default `true`; keeps the local text LLM runtime warm by periodically starting the default model when the llama.cpp sockets are not ready
 - `HEXE_LOCAL_LLM_ALWAYS_ON_CHECK_INTERVAL_SECONDS` default `60`; interval for the always-on local text LLM readiness check
+- `HEXE_PROVIDER_VISION_DEFAULT_MODEL_ID` default `qwen2.5-vl-3b-instruct-q4_k_m`
+- `HEXE_VISION_LLM_ALWAYS_ON_ENABLED` default `true`; keeps the local vision runtime resident when no local work is in flight
+- `HEXE_VISION_LLM_RESIDENCY_CHECK_INTERVAL_SECONDS` default `60`; interval for the vision runtime residency check
+- `HEXE_VISION_LLM_CONTROL_SCRIPT` default `scripts/llamacpp-vision-control.sh`
 - `HEXE_LOCAL_LLM_DEFAULT_REVERT_IDLE_SECONDS` default `900`; set `0` to disable automatic return to the default local model
 - `HEXE_LOCAL_LLM_DEFAULT_REVERT_CHECK_INTERVAL_SECONDS` default `60`
 - `HEXE_PROVIDER_LOCAL_TRANSPORT` default `socket`

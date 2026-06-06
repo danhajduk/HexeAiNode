@@ -190,6 +190,11 @@ case "${1:-}" in
     pkill -f "scripts/llamacpp-health.py.*${LLAMACPP_VISION_HEALTH_SOCKET}" >/dev/null 2>&1 || true
     rm -f "$LLAMACPP_VISION_SOCKET_PATH" "$LLAMACPP_VISION_HEALTH_SOCKET"
     ;;
+  unload-model)
+    # llama.cpp server does not currently expose a model-residency unload operation for this runtime.
+    # Stop the container as the VRAM-freeing fallback while preserving one stable operator/API command.
+    "$0" stop
+    ;;
   restart)
     "$0" stop
     "$0" start
@@ -208,7 +213,7 @@ case "${1:-}" in
     wait_ready
     ;;
   *)
-    echo "Usage: $0 {build|create|start|stop|restart|status|logs|ready}" >&2
+    echo "Usage: $0 {build|create|start|stop|restart|status|logs|ready|unload-model}" >&2
     exit 2
     ;;
 esac
