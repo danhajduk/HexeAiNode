@@ -53,6 +53,26 @@ def _http_json_get(host: str, port: int, path: str, *, timeout_s: float) -> tupl
     return response.status, payload if isinstance(payload, dict) else {}, None
 
 
+def _model_residency_from_system_stats(payload: dict | None) -> str:
+    if not isinstance(payload, dict):
+        return "unknown"
+    devices = payload.get("devices")
+    if not isinstance(devices, list):
+        return "unknown"
+    for device in devices:
+        if not isinstance(device, dict):
+            continue
+        if str(device.get("type") or "").strip().lower() != "cuda":
+            continue
+        try:
+            torch_vram_total = int(float(str(device.get("torch_vram_total") or "0").strip()))
+        except Exception:
+            torch_vram_total = 0
+        if torch_vram_total > 0:
+            return "loaded"
+    return "on_demand"
+
+
 class ComfyUISocketProxyHandler(BaseHTTPRequestHandler):
     upstream_host = "127.0.0.1"
     upstream_port = 8188
@@ -111,7 +131,7 @@ class ComfyUISocketProxyHandler(BaseHTTPRequestHandler):
             "api_transport": "unix_socket",
             "target_checkpoint": self.target_checkpoint or None,
             "target_lora": self.target_lora or None,
-            "model_residency": "on_demand",
+            "model_residency": _model_residency_from_system_stats(stats_payload),
             "system_stats": stats_payload if isinstance(stats_payload, dict) else {},
             "blockers": blockers,
             "latency_ms": round((time.perf_counter() - started) * 1000.0, 3),

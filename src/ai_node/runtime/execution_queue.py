@@ -246,6 +246,32 @@ class ExecutionQueueService:
                 "pending_count": queued_count + active_count,
             }
 
+    async def has_matching_work(
+        self,
+        *,
+        queue: str,
+        importance: str,
+        task_families: set[str],
+        statuses: set[str] | None = None,
+    ) -> bool:
+        queue_key = self._normalize_queue_key(queue)
+        importance_key = str(importance or "").strip().lower()
+        family_keys = {str(item or "").strip().lower() for item in task_families if str(item or "").strip()}
+        status_keys = {str(item or "").strip().lower() for item in (statuses or {"queued", "running"}) if str(item or "").strip()}
+        async with self._lock:
+            for job in self._jobs.values():
+                if str(job.get("queue") or "").strip().lower() != queue_key:
+                    continue
+                if str(job.get("importance") or "").strip().lower() != importance_key:
+                    continue
+                if str(job.get("status") or "").strip().lower() not in status_keys:
+                    continue
+                request = job.get("request") if isinstance(job.get("request"), dict) else {}
+                task_family = str(request.get("task_family") or "").strip().lower()
+                if task_family in family_keys:
+                    return True
+        return False
+
     def _ensure_dispatcher_locked(self, queue_key: str) -> None:
         task = self._dispatcher_tasks.get(queue_key)
         if task is not None and not task.done():

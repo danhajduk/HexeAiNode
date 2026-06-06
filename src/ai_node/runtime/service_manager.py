@@ -473,7 +473,10 @@ class UserSystemdServiceManager:
         *,
         active_model_ids: list[str] | None = None,
         local_in_flight: int = 0,
+        gpu_comfyui_critical_in_flight: bool = False,
     ) -> dict:
+        comfyui_gpu_model_loaded = self._comfyui_gpu_model_loaded()
+        comfyui_critical = bool(gpu_comfyui_critical_in_flight)
         active_models = (
             list(active_model_ids)
             if isinstance(active_model_ids, list)
@@ -497,6 +500,7 @@ class UserSystemdServiceManager:
             self._vision_llm_always_on_enabled
             and not self._vision_llm_residency_in_progress
             and max(int(local_in_flight), 0) == 0
+            and not comfyui_critical
             and not model_loaded
         )
         reason = None
@@ -506,6 +510,8 @@ class UserSystemdServiceManager:
             reason = "vision_start_in_progress"
         elif max(int(local_in_flight), 0) > 0:
             reason = "local_work_in_flight"
+        elif comfyui_critical and not model_loaded:
+            reason = "gpu_comfyui_critical_work_pending"
         elif model_loaded:
             reason = "vision_model_ready"
         elif container_running and not runtime_ready:
@@ -525,16 +531,28 @@ class UserSystemdServiceManager:
             "start_due": start_due,
             "start_in_progress": self._vision_llm_residency_in_progress,
             "local_in_flight": max(int(local_in_flight), 0),
+            "comfyui_gpu_model_loaded": comfyui_gpu_model_loaded,
+            "gpu_comfyui_critical_in_flight": comfyui_critical,
             "unload_model_supported": False,
             "unload_model_mode": "container_stop_fallback",
             "reason": reason,
         }
 
-    def ensure_vision_runtime_resident(self, *, local_in_flight: int = 0) -> dict:
-        status = self.vision_runtime_status(local_in_flight=local_in_flight)
+    def ensure_vision_runtime_resident(
+        self,
+        *,
+        local_in_flight: int = 0,
+        gpu_comfyui_critical_in_flight: bool = False,
+    ) -> dict:
+        status = self.vision_runtime_status(
+            local_in_flight=local_in_flight,
+            gpu_comfyui_critical_in_flight=gpu_comfyui_critical_in_flight,
+        )
         if not status.get("enabled"):
             return {"started": False, **status}
         if max(int(local_in_flight), 0) > 0:
+            return {"started": False, **status}
+        if status.get("gpu_comfyui_critical_in_flight"):
             return {"started": False, **status}
         if status.get("model_loaded"):
             return {"started": False, **status}
@@ -655,6 +673,30 @@ class UserSystemdServiceManager:
             "model_residency": "on_demand",
         }
 
+    def _comfyui_gpu_model_loaded(self) -> bool:
+        payload = self._uds_json_get(self._comfyui_gpu_health_socket, "/health")
+        if not isinstance(payload, dict):
+            return False
+        residency = str(payload.get("model_residency") or "").strip().lower()
+        if residency == "loaded":
+            return True
+        if residency in {"on_demand", "unloaded"}:
+            return False
+        stats = payload.get("system_stats") if isinstance(payload.get("system_stats"), dict) else {}
+        devices = stats.get("devices") if isinstance(stats, dict) else []
+        for device in devices if isinstance(devices, list) else []:
+            if not isinstance(device, dict):
+                continue
+            if str(device.get("type") or "").strip().lower() != "cuda":
+                continue
+            try:
+                torch_vram_total = int(float(str(device.get("torch_vram_total") or "0").strip()))
+            except Exception:
+                torch_vram_total = 0
+            if torch_vram_total > 0:
+                return True
+        return False
+
     def _query_container_pid(self, container_name: str) -> int:
         if not container_name:
             return 0
@@ -697,10 +739,28 @@ class UserSystemdServiceManager:
         return self._active_model_ids_for_socket(self._local_llm_socket)
 
     def _active_model_ids_for_socket(self, socket_path: str) -> list[str]:
-        if not socket_path:
+        payload = self._uds_json_get(socket_path, "/v1/models")
+        if not isinstance(payload, dict):
             return []
+        out: list[str] = []
+        for key in ("models", "data"):
+            entries = payload.get(key) if isinstance(payload, dict) else None
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                model_id = str(entry.get("id") or entry.get("model") or entry.get("name") or "").strip()
+                if model_id and model_id not in out:
+                    out.append(model_id)
+        return out
+
+    @staticmethod
+    def _uds_json_get(socket_path: str, path: str) -> dict | None:
+        if not socket_path:
+            return None
         try:
-            request = b"GET /v1/models HTTP/1.1\r\nHost: llamacpp\r\nConnection: close\r\n\r\n"
+            request = f"GET {path} HTTP/1.1\r\nHost: local-runtime\r\nConnection: close\r\n\r\n".encode("utf-8")
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
                 client.settimeout(5)
                 client.connect(socket_path)
@@ -715,19 +775,9 @@ class UserSystemdServiceManager:
             _, _, body = raw.partition(b"\r\n\r\n")
             payload = json.loads(body.decode("utf-8")) if body else {}
         except Exception:
-            return []
-        out: list[str] = []
-        for key in ("models", "data"):
-            entries = payload.get(key) if isinstance(payload, dict) else None
-            if not isinstance(entries, list):
-                continue
-            for entry in entries:
-                if not isinstance(entry, dict):
-                    continue
-                model_id = str(entry.get("id") or entry.get("model") or entry.get("name") or "").strip()
-                if model_id and model_id not in out:
-                    out.append(model_id)
-        return out
+            return None
+        return payload if isinstance(payload, dict) else None
+
 
     def _run_local_llm_control(self, command: str, *, env: dict | None = None) -> None:
         if not os.path.exists(self._local_llm_control_script):
@@ -1053,6 +1103,7 @@ class NullServiceManager:
         *,
         active_model_ids: list[str] | None = None,
         local_in_flight: int = 0,
+        gpu_comfyui_critical_in_flight: bool = False,
     ) -> dict:
         return {
             "enabled": False,
@@ -1065,13 +1116,25 @@ class NullServiceManager:
             "start_due": False,
             "start_in_progress": False,
             "local_in_flight": max(int(local_in_flight), 0),
+            "gpu_comfyui_critical_in_flight": bool(gpu_comfyui_critical_in_flight),
             "unload_model_supported": False,
             "unload_model_mode": "container_stop_fallback",
             "reason": "service_manager_unconfigured",
         }
 
-    def ensure_vision_runtime_resident(self, *, local_in_flight: int = 0) -> dict:
-        return {"started": False, **self.vision_runtime_status(local_in_flight=local_in_flight)}
+    def ensure_vision_runtime_resident(
+        self,
+        *,
+        local_in_flight: int = 0,
+        gpu_comfyui_critical_in_flight: bool = False,
+    ) -> dict:
+        return {
+            "started": False,
+            **self.vision_runtime_status(
+                local_in_flight=local_in_flight,
+                gpu_comfyui_critical_in_flight=gpu_comfyui_critical_in_flight,
+            ),
+        }
 
     def unload_vision_model(self) -> dict:
         return {

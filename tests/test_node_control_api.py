@@ -2303,8 +2303,16 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.calls.append(payload)
             return {"started": False, **payload}
 
-        def ensure_vision_runtime_resident(self, *, local_in_flight: int = 0):
-            payload = {"vision_local_in_flight": local_in_flight}
+        def ensure_vision_runtime_resident(
+            self,
+            *,
+            local_in_flight: int = 0,
+            gpu_comfyui_critical_in_flight: bool = False,
+        ):
+            payload = {
+                "vision_local_in_flight": local_in_flight,
+                "gpu_comfyui_critical_in_flight": bool(gpu_comfyui_critical_in_flight),
+            }
             self.calls.append(payload)
             return {"started": False, **payload}
 
@@ -2680,6 +2688,40 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(result["status"], "ok")
             self.assertEqual(service_manager.calls[-1]["vision_local_in_flight"], 0)
+            self.assertFalse(service_manager.calls[-1]["gpu_comfyui_critical_in_flight"])
+
+    async def test_vision_runtime_residency_job_passes_critical_gpu_comfyui_work(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service_manager = self._FakeServiceManager()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=service_manager,
+            )
+            blocker = asyncio.Event()
+
+            async def _blocked_runner():
+                await blocker.wait()
+                return {"status": "ok"}
+
+            await state._execution_queue.enqueue(
+                queue="local",
+                importance="critical",
+                job_name="critical-render",
+                request_payload={
+                    "task_id": "task-critical-image",
+                    "task_family": "task.image_generation",
+                },
+                runner=_blocked_runner,
+            )
+
+            result = await state._vision_runtime_residency_job_once()
+
+            self.assertEqual(result["status"], "ok")
+            self.assertTrue(service_manager.calls[-1]["gpu_comfyui_critical_in_flight"])
+            blocker.set()
 
     async def test_vision_runtime_residency_job_waits_while_model_switch_lock_is_held(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -4053,11 +4053,23 @@ class NodeControlState:
         local_in_flight = max(int(admission.get("in_flight") or 0), 0)
         if self._local_llm_switch_lock.locked():
             local_in_flight = max(local_in_flight, 1)
+        gpu_comfyui_critical_in_flight = await self._gpu_comfyui_critical_work_pending()
         result = await asyncio.to_thread(
             self._service_manager.ensure_vision_runtime_resident,
             local_in_flight=local_in_flight,
+            gpu_comfyui_critical_in_flight=gpu_comfyui_critical_in_flight,
         )
         return {"status": "ok", "result": result if isinstance(result, dict) else {}}
+
+    async def _gpu_comfyui_critical_work_pending(self) -> bool:
+        if self._execution_queue is None or not hasattr(self._execution_queue, "has_matching_work"):
+            return False
+        return await self._execution_queue.has_matching_work(
+            queue="local",
+            importance="critical",
+            task_families={"task.image_generation", "task.generation.image"},
+            statuses={"queued", "running"},
+        )
 
     async def _heartbeat_job_once(self) -> dict | None:
         if self._capability_runner is None or not hasattr(self._capability_runner, "emit_periodic_heartbeat"):

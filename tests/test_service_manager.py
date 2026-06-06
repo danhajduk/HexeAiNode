@@ -280,6 +280,125 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(result["residency_state"], "model_loaded")
         self.assertIn(["scripts/llamacpp-vision-control.sh", "ready"], invoked)
 
+    def test_vision_runtime_residency_starts_when_comfyui_has_no_model_loaded(self):
+        with patch.dict("os.environ", {"HEXE_VISION_LLM_ALWAYS_ON_ENABLED": "true"}, clear=False):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._vision_llm_control_script = "scripts/llamacpp-vision-control.sh"
+            runtime_ready = {"value": False}
+            invoked = []
+
+            def _fake_exists(path):
+                value = str(path)
+                if value == "scripts/llamacpp-vision-control.sh":
+                    return True
+                if value in {manager._vision_llm_socket, manager._vision_llm_health_socket}:
+                    return runtime_ready["value"]
+                return True
+
+            def _fake_run(cmd, check, capture_output, text, env=None):
+                invoked.append(cmd)
+                if cmd[:2] == ["docker", "inspect"]:
+                    return _Completed("4243\n" if runtime_ready["value"] else "0\n")
+                runtime_ready["value"] = True
+                return _Completed("{}")
+
+            with (
+                patch("os.path.exists", side_effect=_fake_exists),
+                patch.object(
+                    manager,
+                    "_active_model_ids_for_socket",
+                    side_effect=[[], ["qwen2.5-vl-3b-instruct-q4_k_m"]],
+                ),
+                patch.object(
+                    manager,
+                    "_uds_json_get",
+                    return_value={"model_residency": "on_demand", "system_stats": {"devices": [{"torch_vram_total": 0}]}},
+                ),
+                patch("subprocess.run", side_effect=_fake_run),
+            ):
+                result = manager.ensure_vision_runtime_resident()
+
+        self.assertTrue(result["started"])
+        self.assertFalse(result["comfyui_gpu_model_loaded"])
+        self.assertEqual(result["residency_state"], "model_loaded")
+        self.assertIn(["scripts/llamacpp-vision-control.sh", "ready"], invoked)
+
+    def test_vision_runtime_residency_starts_when_comfyui_has_model_loaded_without_critical_work(self):
+        with patch.dict("os.environ", {"HEXE_VISION_LLM_ALWAYS_ON_ENABLED": "true"}, clear=False):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._vision_llm_control_script = "scripts/llamacpp-vision-control.sh"
+            runtime_ready = {"value": False}
+            invoked = []
+
+            def _fake_exists(path):
+                value = str(path)
+                if value == "scripts/llamacpp-vision-control.sh":
+                    return True
+                if value in {manager._vision_llm_socket, manager._vision_llm_health_socket}:
+                    return runtime_ready["value"]
+                return True
+
+            def _fake_run(cmd, check, capture_output, text, env=None):
+                invoked.append(cmd)
+                if cmd[:2] == ["docker", "inspect"]:
+                    return _Completed("4243\n" if runtime_ready["value"] else "0\n")
+                runtime_ready["value"] = True
+                return _Completed("{}")
+
+            with (
+                patch("os.path.exists", side_effect=_fake_exists),
+                patch.object(
+                    manager,
+                    "_active_model_ids_for_socket",
+                    side_effect=[[], ["qwen2.5-vl-3b-instruct-q4_k_m"]],
+                ),
+                patch.object(
+                    manager,
+                    "_uds_json_get",
+                    return_value={"model_residency": "loaded", "system_stats": {"devices": [{"torch_vram_total": 4096}]}},
+                ),
+                patch("subprocess.run", side_effect=_fake_run),
+            ):
+                result = manager.ensure_vision_runtime_resident()
+
+        self.assertTrue(result["started"])
+        self.assertTrue(result["comfyui_gpu_model_loaded"])
+        self.assertFalse(result["gpu_comfyui_critical_in_flight"])
+        self.assertEqual(result["residency_state"], "model_loaded")
+        self.assertIn(["scripts/llamacpp-vision-control.sh", "ready"], invoked)
+
+    def test_vision_runtime_residency_waits_when_critical_comfyui_work_is_pending(self):
+        with patch.dict("os.environ", {"HEXE_VISION_LLM_ALWAYS_ON_ENABLED": "true"}, clear=False):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            def _fake_exists(path):
+                value = str(path)
+                if value in {manager._vision_llm_socket, manager._vision_llm_health_socket}:
+                    return False
+                return True
+
+            with (
+                patch("os.path.exists", side_effect=_fake_exists),
+                patch.object(manager, "_active_model_ids_for_socket", return_value=[]),
+                patch.object(
+                    manager,
+                    "_uds_json_get",
+                    return_value={"model_residency": "on_demand", "system_stats": {"devices": [{"torch_vram_total": 0}]}},
+                ),
+                patch("subprocess.run") as fake_run,
+            ):
+                result = manager.ensure_vision_runtime_resident(gpu_comfyui_critical_in_flight=True)
+
+        self.assertFalse(result["started"])
+        self.assertFalse(result["comfyui_gpu_model_loaded"])
+        self.assertTrue(result["gpu_comfyui_critical_in_flight"])
+        self.assertEqual(result["reason"], "gpu_comfyui_critical_work_pending")
+        control_calls = [
+            call.args[0]
+            for call in fake_run.call_args_list
+            if call.args and call.args[0][:1] == ["scripts/llamacpp-vision-control.sh"]
+        ]
+        self.assertEqual(control_calls, [])
+
     def test_vision_runtime_residency_waits_for_local_work(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
         with (

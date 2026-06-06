@@ -140,6 +140,10 @@ are gone. Gate latency is written to `.run/comfyui-gpu-vision-gate.json` as `vis
 tracked separately by the vision residency scheduler, so the artifact keeps `vision_reload_pending: true` after an
 unload. Set `COMFYUI_GPU_VISION_GATE_ENABLED=false` only for manual maintenance.
 
+Vision has higher residency priority than GPU ComfyUI when ComfyUI is idle or only has a non-critical workload. The
+vision residency scheduler reloads the vision model when no local work is in flight and only defers to GPU ComfyUI
+when a critical GPU image-generation job is queued or running.
+
 CPU ComfyUI is reserved for low-priority background image work. The direct execution queue exposes a `cpu_comfyui` lane
 with concurrency `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` defaulting to 1. Only `task.image_generation` or
 `task.generation.image` requests with `priority: "background"` or `priority: "low"` are eligible for that lane; normal
