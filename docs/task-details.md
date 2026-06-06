@@ -977,14 +977,14 @@ Implementation notes:
 
 ## Task 972
 Original task details:
-- Create 10-15 presets for GPU ComfyUI.
+- Create 10-15 preset configs for GPU ComfyUI.
 - Presets should include seed behavior, random seed option, steps, resolution, sampler/scheduler, and related generation settings.
 
 Implementation notes:
 - Base presets on the RealVisXL + SDXL-Lightning LoRA workflow.
-- Include weather-card presets derived from the saved ComfyUI weather prompt style.
+- Presets are general GPU ComfyUI generation configs, not weather-specific prompt presets.
 - Include explicit seed values and a random seed mode.
-- Include multiple resolutions, including the current `1344x768` weather-card size.
+- Include multiple resolutions, including the current saved ComfyUI prompt size when applicable.
 - Make presets discoverable by API/config instead of hard-coding only in scripts.
 
 ## Task 973
