@@ -2103,6 +2103,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.calls.append(payload)
             return {"switched": False, **payload}
 
+        def ensure_local_llm_always_on(self, *, local_in_flight: int = 0):
+            payload = {"local_in_flight": local_in_flight}
+            self.calls.append(payload)
+            return {"started": False, **payload}
+
     async def test_benchmark_v2_switches_local_models_before_timed_execution(self):
         class _LocalBenchmarkServiceManager:
             def __init__(self):
@@ -2385,6 +2390,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertIn("local_llm_default_revert", payload["tasks"])
             self.assertEqual(payload["tasks"]["local_llm_default_revert"]["schedule_name"], "interval_seconds")
+            self.assertIn("local_llm_always_on", payload["tasks"])
+            self.assertEqual(payload["tasks"]["local_llm_always_on"]["schedule_name"], "interval_seconds")
 
     async def test_local_llm_default_revert_job_calls_service_manager(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2415,6 +2422,41 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             await state._local_llm_switch_lock.acquire()
             try:
                 result = await state._local_llm_default_revert_job_once()
+            finally:
+                state._local_llm_switch_lock.release()
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(service_manager.calls[-1]["local_in_flight"], 1)
+
+    async def test_local_llm_always_on_job_calls_service_manager(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service_manager = self._FakeServiceManager()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=service_manager,
+            )
+
+            result = await state._local_llm_always_on_job_once()
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(service_manager.calls[-1]["local_in_flight"], 0)
+
+    async def test_local_llm_always_on_job_waits_while_model_switch_lock_is_held(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service_manager = self._FakeServiceManager()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=service_manager,
+            )
+            await state._local_llm_switch_lock.acquire()
+            try:
+                result = await state._local_llm_always_on_job_once()
             finally:
                 state._local_llm_switch_lock.release()
 

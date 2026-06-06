@@ -915,3 +915,99 @@ Task mapping:
   - Add queue diagnostics in node status/debug surfaces.
   - Add tests for importance ordering, FIFO within priority, anti-starvation, timeout/expiry, queued response shape, local-only privacy preservation, cloud/local queue separation, and model-swap delay behavior.
   - Update `docs/json-schemas/client-ai-v2/communication.md` with all three prompt contract versions, V3 preferred-use guidance, the API call contract, and client behavior: if the node replies `job queued`, poll after `check_after_seconds` using the returned job id/status route.
+
+## Task 967
+Original task details:
+- Create a local LLM policy that keeps the text LLM always on.
+- The policy should preserve the default local text model online after image/vision benchmark or runtime work completes.
+- It should coordinate with local model switching, default-return behavior, and future execution queues.
+- It should expose clear runtime status so operators can tell whether the always-on text LLM is healthy, loading, failed, or intentionally disabled.
+
+Implementation notes:
+- Start from the current llama.cpp `qwen3-8b-q4_k_m` default behavior unless configuration says otherwise.
+- Avoid silently stopping the text LLM when ComfyUI or vision work is started.
+- Add conservative configuration flags for disabling always-on mode during maintenance.
+
+## Task 968
+Original task details:
+- Vision module should be on by default.
+- Best behavior: keep the vision container running with the model loaded when possible.
+- Provide an option to unload only the vision model while leaving the container/process running.
+- The unload-only control is needed so GPU ComfyUI can temporarily reclaim VRAM without full vision container startup cost.
+
+Implementation notes:
+- Define explicit states such as container stopped, container running/model unloaded, model loading, model loaded/ready, and failed.
+- Add health/status reporting that distinguishes process health from model residency.
+- Preserve a path to reload vision after GPU ComfyUI work completes.
+
+## Task 969
+Original task details:
+- Create a ComfyUI deployment with two ComfyUI runtimes.
+- No default model should be loaded at container startup.
+- One ComfyUI runtime should be GPU-enabled and targeted at RealVisXL + SDXL-Lightning LoRA.
+- One ComfyUI runtime should be CPU-only and targeted at DreamShaper.
+
+Implementation notes:
+- Use separate container names, model/cache/user/output dirs, socket paths, and health surfaces.
+- GPU ComfyUI should support RealVisXL + `sdxl_lightning_4step_lora.safetensors`.
+- CPU ComfyUI should support `DreamShaper8_LCM.safetensors`.
+- Both should start without preloading a checkpoint; model load should be request-scoped unless an explicit keep-warm policy is enabled.
+
+## Task 970
+Original task details:
+- GPU ComfyUI should only load models per request.
+- GPU ComfyUI must only load after the vision model has been unloaded from VRAM.
+- This gate applies to GPU ComfyUI only.
+
+Implementation notes:
+- Implement an orchestration gate that checks current vision residency before admitting GPU ComfyUI work.
+- If vision is loaded, request vision model unload first, wait for confirmation, then submit the GPU ComfyUI request.
+- Record and expose the latency impact of vision unload and later reload separately from image generation time.
+- If vision cannot unload safely, reject or queue GPU ComfyUI work with a clear retry/status response.
+
+## Task 971
+Original task details:
+- CPU ComfyUI should run only low-level background jobs.
+- CPU ComfyUI must not compete with interactive/high-priority GPU image or text/vision work.
+
+Implementation notes:
+- Route only low-priority background image jobs to CPU ComfyUI.
+- Add admission/queue policy so CPU jobs are deprioritized under host memory/load pressure.
+- Add diagnostics that show CPU ComfyUI queue depth, active job, and oldest queued age.
+
+## Task 972
+Original task details:
+- Create 10-15 presets for GPU ComfyUI.
+- Presets should include seed behavior, random seed option, steps, resolution, sampler/scheduler, and related generation settings.
+
+Implementation notes:
+- Base presets on the RealVisXL + SDXL-Lightning LoRA workflow.
+- Include weather-card presets derived from the saved ComfyUI weather prompt style.
+- Include explicit seed values and a random seed mode.
+- Include multiple resolutions, including the current `1344x768` weather-card size.
+- Make presets discoverable by API/config instead of hard-coding only in scripts.
+
+## Task 973
+Original task details:
+- Make sure tasks are assigned to the new models.
+- Text, vision, GPU image, and CPU background image workloads should route to the correct local runtime/model.
+
+Implementation notes:
+- Update local task/model capability declarations after the runtime split.
+- Route text work to the always-on local text LLM.
+- Route vision work to the vision runtime.
+- Route interactive/high-priority image generation to GPU ComfyUI RealVisXL + Lightning presets.
+- Route low-priority/background image jobs to CPU ComfyUI DreamShaper where appropriate.
+- Add tests or dry-run diagnostics proving task family selection maps to the intended runtime.
+
+## Task 974
+Original task details:
+- The models should be in containers with health heartbeat and Linux socket APIs.
+- No HTTP API should be exposed externally for these local model runtimes.
+
+Implementation notes:
+- Use Unix/Linux domain sockets for local model API access.
+- Provide heartbeat/health wrappers for text LLM, vision, GPU ComfyUI, and CPU ComfyUI.
+- Keep HTTP bound only internally if a runtime requires it, and proxy/gate access through the socket API.
+- Do not expose ComfyUI or model-server HTTP ports on host interfaces unless explicitly enabled for debugging.
+- Add health payloads that include container status, model residency, socket readiness, GPU/VRAM state where relevant, and last error.

@@ -132,8 +132,84 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(first_payload["default_model_id"], "qwen3-8b-q4_k_m")
         self.assertIn("default_revert", first_payload)
         self.assertEqual(first_payload["default_revert"]["default_model_id"], "qwen3-8b-q4_k_m")
+        self.assertIn("always_on", first_payload)
+        self.assertTrue(first_payload["always_on"]["enabled"])
+        self.assertEqual(first_payload["always_on"]["reason"], "default_model_ready")
         self.assertIn("model_states", first_payload)
         self.assertEqual(second_payload["cpu_percent"], 25.0)
+
+    def test_local_llm_always_on_starts_default_when_runtime_is_not_ready(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "HEXE_PROVIDER_LOCAL_DEFAULT_MODEL_ID": "qwen3-8b-q4_k_m",
+                "HEXE_LOCAL_LLM_ALWAYS_ON_ENABLED": "true",
+            },
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._local_llm_models_config = str(self._write_local_model_config(tmp))
+            manager._local_llm_control_script = "scripts/llamacpp-control.sh"
+            runtime_ready = {"value": False}
+            invoked = []
+
+            def _fake_exists(path):
+                value = str(path)
+                if value == "scripts/llamacpp-control.sh":
+                    return True
+                if value in {manager._local_llm_socket, manager._local_llm_health_socket}:
+                    return runtime_ready["value"]
+                return True
+
+            def _fake_run(cmd, check, capture_output, text, env=None):
+                invoked.append((cmd, env))
+                runtime_ready["value"] = True
+                return _Completed("{}")
+
+            with (
+                patch("os.path.exists", side_effect=_fake_exists),
+                patch.object(
+                    manager,
+                    "_active_local_llm_model_ids",
+                    side_effect=[[], [], ["qwen3-8b-q4_k_m"], ["qwen3-8b-q4_k_m"]],
+                ),
+                patch("subprocess.run", side_effect=_fake_run),
+            ):
+                result = manager.ensure_local_llm_always_on()
+
+        self.assertTrue(result["started"])
+        self.assertTrue(result["runtime_ready"])
+        self.assertTrue(result["default_model_loaded"])
+        self.assertEqual(invoked[0][0], ["scripts/llamacpp-control.sh", "ready"])
+        self.assertEqual(invoked[0][1]["LLAMACPP_MODEL_ALIAS"], "qwen3-8b-q4_k_m")
+
+    def test_local_llm_always_on_can_be_disabled(self):
+        with patch.dict("os.environ", {"HEXE_LOCAL_LLM_ALWAYS_ON_ENABLED": "false"}, clear=False):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            with (
+                patch("os.path.exists", return_value=False),
+                patch.object(manager, "_active_local_llm_model_ids", return_value=[]),
+                patch("subprocess.run") as fake_run,
+            ):
+                result = manager.ensure_local_llm_always_on()
+
+        self.assertFalse(result["started"])
+        self.assertFalse(result["enabled"])
+        self.assertEqual(result["reason"], "disabled")
+        fake_run.assert_not_called()
+
+    def test_local_llm_always_on_waits_for_local_work(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+        with (
+            patch("os.path.exists", return_value=False),
+            patch.object(manager, "_active_local_llm_model_ids", return_value=[]),
+            patch("subprocess.run") as fake_run,
+        ):
+            result = manager.ensure_local_llm_always_on(local_in_flight=1)
+
+        self.assertFalse(result["started"])
+        self.assertEqual(result["reason"], "local_work_in_flight")
+        fake_run.assert_not_called()
 
     def test_local_llm_model_states_reports_loaded_warm_cold_and_swap_required(self):
         with tempfile.TemporaryDirectory() as tmp:

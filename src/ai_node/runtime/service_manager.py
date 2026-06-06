@@ -8,6 +8,7 @@ import time
 
 LOCAL_LLM_BUILTIN_DEFAULT_MODEL_ID = "qwen3-8b-q4_k_m"
 LOCAL_LLM_DEFAULT_REVERT_IDLE_SECONDS = 900
+LOCAL_LLM_ALWAYS_ON_CHECK_INTERVAL_SECONDS = 60
 
 
 def _env_int(name: str, *, default: int) -> int:
@@ -15,6 +16,13 @@ def _env_int(name: str, *, default: int) -> int:
         return int(str(os.environ.get(name) or "").strip() or default)
     except Exception:
         return default
+
+
+def _env_bool(name: str, *, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
 class UserSystemdServiceManager:
@@ -53,9 +61,11 @@ class UserSystemdServiceManager:
             ),
             0,
         )
+        self._local_llm_always_on_enabled = _env_bool("HEXE_LOCAL_LLM_ALWAYS_ON_ENABLED", default=True)
         self._local_llm_last_non_default_model_id: str | None = None
         self._local_llm_last_non_default_used_at: float | None = None
         self._local_llm_revert_in_progress = False
+        self._local_llm_always_on_in_progress = False
         self._cpu_samples: dict[str, tuple[float, float]] = {}
         uid = os.getuid()
         self._runtime_dir = f"/run/user/{uid}"
@@ -331,6 +341,78 @@ class UserSystemdServiceManager:
             self._local_llm_revert_in_progress = False
         return {"switched": bool(result.get("switched")), "switch_result": result, **self.local_llm_default_revert_status()}
 
+    def local_llm_always_on_status(
+        self,
+        *,
+        active_model_ids: list[str] | None = None,
+        local_in_flight: int = 0,
+    ) -> dict:
+        active_models = list(active_model_ids) if isinstance(active_model_ids, list) else self._active_local_llm_model_ids()
+        runtime_ready = bool(
+            self._local_llm_socket
+            and self._local_llm_health_socket
+            and os.path.exists(self._local_llm_socket)
+            and os.path.exists(self._local_llm_health_socket)
+        )
+        default_loaded = self._local_llm_default_model_id in set(active_models)
+        any_model_loaded = bool(active_models)
+        action_due = bool(
+            self._local_llm_always_on_enabled
+            and not self._local_llm_always_on_in_progress
+            and max(int(local_in_flight), 0) == 0
+            and (not runtime_ready or not any_model_loaded)
+        )
+        reason = None
+        if not self._local_llm_always_on_enabled:
+            reason = "disabled"
+        elif self._local_llm_always_on_in_progress:
+            reason = "always_on_start_in_progress"
+        elif max(int(local_in_flight), 0) > 0:
+            reason = "local_work_in_flight"
+        elif runtime_ready and default_loaded:
+            reason = "default_model_ready"
+        elif runtime_ready and any_model_loaded:
+            reason = "non_default_model_active"
+        elif runtime_ready:
+            reason = "runtime_ready_no_active_model"
+        else:
+            reason = "runtime_not_ready"
+        return {
+            "enabled": self._local_llm_always_on_enabled,
+            "default_model_id": self._local_llm_default_model_id,
+            "runtime_ready": runtime_ready,
+            "active_model_ids": active_models,
+            "default_model_loaded": default_loaded,
+            "start_due": action_due,
+            "start_in_progress": self._local_llm_always_on_in_progress,
+            "local_in_flight": max(int(local_in_flight), 0),
+            "reason": reason,
+        }
+
+    def ensure_local_llm_always_on(self, *, local_in_flight: int = 0) -> dict:
+        status = self.local_llm_always_on_status(local_in_flight=local_in_flight)
+        if not status.get("enabled"):
+            return {"started": False, **status}
+        if max(int(local_in_flight), 0) > 0:
+            return {"started": False, **status}
+        if status.get("runtime_ready") and status.get("active_model_ids"):
+            return {"started": False, **status}
+        if self._local_llm_always_on_in_progress:
+            return {"started": False, **status}
+        self._local_llm_always_on_in_progress = True
+        try:
+            started = time.perf_counter()
+            result = self.ensure_local_llm_model(model_id=self._local_llm_default_model_id)
+            load_seconds = round(time.perf_counter() - started, 3)
+        finally:
+            self._local_llm_always_on_in_progress = False
+        return {
+            "started": True,
+            "load_seconds": load_seconds,
+            "start_result": result,
+            **self.local_llm_always_on_status(),
+        }
+
     def _local_llm_status(self) -> dict:
         service_id = "local_llm"
         script_exists = os.path.exists(self._local_llm_control_script)
@@ -357,6 +439,7 @@ class UserSystemdServiceManager:
             "socket_path": self._local_llm_socket or None,
             "health_socket_path": self._local_llm_health_socket or None,
             "default_model_id": self._local_llm_default_model_id,
+            "always_on": self.local_llm_always_on_status(active_model_ids=active_model_ids),
             "default_revert": self.local_llm_default_revert_status(active_model_ids=active_model_ids),
             "model_states": self.local_llm_model_states_payload(active_model_ids=active_model_ids),
         }
@@ -710,3 +793,24 @@ class NullServiceManager:
         queued_model_ids: list[str] | None = None,
     ) -> dict:
         return {"switched": False, **self.local_llm_default_revert_status(local_in_flight=local_in_flight, queued_model_ids=queued_model_ids)}
+
+    def local_llm_always_on_status(
+        self,
+        *,
+        active_model_ids: list[str] | None = None,
+        local_in_flight: int = 0,
+    ) -> dict:
+        return {
+            "enabled": False,
+            "default_model_id": LOCAL_LLM_BUILTIN_DEFAULT_MODEL_ID,
+            "runtime_ready": False,
+            "active_model_ids": list(active_model_ids or []),
+            "default_model_loaded": False,
+            "start_due": False,
+            "start_in_progress": False,
+            "local_in_flight": max(int(local_in_flight), 0),
+            "reason": "service_manager_unconfigured",
+        }
+
+    def ensure_local_llm_always_on(self, *, local_in_flight: int = 0) -> dict:
+        return {"started": False, **self.local_llm_always_on_status(local_in_flight=local_in_flight)}

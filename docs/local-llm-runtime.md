@@ -117,6 +117,13 @@ The health wrapper socket defaults to `/run/hexe/ai-node/llamacpp-health.sock`.
 Downloaded model cache defaults to `runtime/cache/llamacpp` so Hugging Face downloads survive container recreation.
 The node service status resolves the llama.cpp container from `LLAMACPP_CONTAINER_NAME` (default `hexe-ai-node-llamacpp`) and reports its host PID, CPU percent, and memory percent under `services.local_llm`; supervisor registration and heartbeat payloads include the same service metadata.
 
+The local text LLM is always-on by default. `HEXE_LOCAL_LLM_ALWAYS_ON_ENABLED=true` makes the node periodically check
+the llama.cpp sockets and start the configured default model when the runtime is not ready. Set
+`HEXE_LOCAL_LLM_ALWAYS_ON_ENABLED=false` for maintenance windows where the text LLM should remain offline. The check
+interval is controlled by `HEXE_LOCAL_LLM_ALWAYS_ON_CHECK_INTERVAL_SECONDS` and defaults to 60 seconds. Service status
+includes `services.local_llm.always_on`, which reports whether the policy is enabled, whether the default model is
+loaded, whether a start is due, and why no action was taken.
+
 When an explicit local model override switches llama.cpp away from the default model, the node tracks the non-default
 model's idle time. `HEXE_LOCAL_LLM_DEFAULT_REVERT_IDLE_SECONDS` controls how long a non-default model may sit idle
 before the node returns to `qwen3-8b-q4_k_m`; the default is 900 seconds, and `0` disables automatic reversion.

@@ -47,3 +47,10 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
+[TODO] Task 968: Add vision runtime residency and unload-only model control
+[TODO] Task 969: Split ComfyUI into GPU and CPU-only container runtimes
+[TODO] Task 970: Gate GPU ComfyUI model loads on vision VRAM unload
+[TODO] Task 971: Restrict CPU ComfyUI to low-priority background jobs
+[TODO] Task 972: Add GPU ComfyUI weather preset catalog
+[TODO] Task 973: Assign image, vision, and text tasks to the new local model runtimes
+[TODO] Task 974: Move local model runtime APIs behind health heartbeat and Linux sockets
