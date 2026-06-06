@@ -99,6 +99,7 @@ CPU ComfyUI target:
 
 ```bash
 scripts/comfyui-control.sh gpu prepare
+scripts/comfyui-control.sh gpu gate
 scripts/comfyui-control.sh gpu build
 scripts/comfyui-control.sh gpu ready
 scripts/comfyui-control.sh gpu status
@@ -119,6 +120,13 @@ For compatibility, `scripts/comfyui-control.sh ready` still defaults to the GPU 
 workflow unless a future explicit keep-warm policy is enabled. During directory preparation, the control script creates
 per-runtime model folders and symlinks the expected checkpoint/LoRA from the legacy `runtime/models/comfyui` folder
 when the file is already present.
+
+GPU ComfyUI startup is gated on vision VRAM release by default. Before `scripts/comfyui-control.sh gpu start` or
+`ready` recreates the GPU container, the control script checks the vision socket/container, calls
+`scripts/llamacpp-vision-control.sh unload-model` when vision is resident, and waits until the vision sockets/container
+are gone. Gate latency is written to `.run/comfyui-gpu-vision-gate.json` as `vision_unload_seconds`; the later reload is
+tracked separately by the vision residency scheduler, so the artifact keeps `vision_reload_pending: true` after an
+unload. Set `COMFYUI_GPU_VISION_GATE_ENABLED=false` only for manual maintenance.
 
 On the RTX 3060 12 GB node, ComfyUI should be treated as exclusive GPU work for real generation. With both llama.cpp
 runtimes loaded, only about 2.5 GB VRAM remains, which is not enough for typical SDXL, FLUX, or Stable Diffusion 3.5

@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${COMFYUI_ENV_FILE:-$ROOT_DIR/scripts/stack.env}"
 COMPOSE_FILE="$ROOT_DIR/compose.comfyui.yaml"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
+PYTHON_BIN="${PYTHON_BIN:-$ROOT_DIR/.venv/bin/python}"
 COMFYUI_READY_TIMEOUT_S_OVERRIDE="${COMFYUI_READY_TIMEOUT_S:-}"
 
 if [[ -f "$ENV_FILE" ]]; then
@@ -44,6 +45,13 @@ COMFYUI_LEGACY_MODEL_DIR="${COMFYUI_LEGACY_MODEL_DIR:-$ROOT_DIR/runtime/models/c
 COMFYUI_CUDA_MODE="${COMFYUI_CUDA_MODE:-auto}"
 COMFYUI_CUDA_SMOKE_IMAGE="${COMFYUI_CUDA_SMOKE_IMAGE:-nvidia/cuda:12.4.1-base-ubuntu22.04}"
 COMFYUI_CUDA_CHECK_TIMEOUT_S="${COMFYUI_CUDA_CHECK_TIMEOUT_S:-45}"
+COMFYUI_GPU_VISION_GATE_ENABLED="${COMFYUI_GPU_VISION_GATE_ENABLED:-true}"
+COMFYUI_GPU_VISION_GATE_TIMEOUT_S="${COMFYUI_GPU_VISION_GATE_TIMEOUT_S:-90}"
+COMFYUI_GPU_VISION_GATE_ARTIFACT="${COMFYUI_GPU_VISION_GATE_ARTIFACT:-$ROOT_DIR/.run/comfyui-gpu-vision-gate.json}"
+COMFYUI_VISION_CONTROL_SCRIPT="${COMFYUI_VISION_CONTROL_SCRIPT:-$ROOT_DIR/scripts/llamacpp-vision-control.sh}"
+LLAMACPP_VISION_CONTAINER_NAME="${LLAMACPP_VISION_CONTAINER_NAME:-hexe-ai-node-llamacpp-vision}"
+LLAMACPP_VISION_SOCKET_PATH="${LLAMACPP_VISION_SOCKET_PATH:-/run/hexe/ai-node/llamacpp-vision.sock}"
+LLAMACPP_VISION_HEALTH_SOCKET="${LLAMACPP_VISION_HEALTH_SOCKET:-/run/hexe/ai-node/llamacpp-vision-health.sock}"
 
 target="${1:-gpu}"
 command="${2:-}"
@@ -120,6 +128,111 @@ cuda_mode() {
 
 cuda_smoke_check() {
   timeout "${COMFYUI_CUDA_CHECK_TIMEOUT_S}s" "$DOCKER_BIN" run --rm --gpus all "$COMFYUI_CUDA_SMOKE_IMAGE" nvidia-smi >/dev/null
+}
+
+now_ms() {
+  "$PYTHON_BIN" - <<'PY'
+import time
+print(int(time.time() * 1000))
+PY
+}
+
+write_vision_gate_artifact() {
+  local status="$1"
+  local action="$2"
+  local unload_seconds="$3"
+  local reason="$4"
+  mkdir -p "$(dirname "$COMFYUI_GPU_VISION_GATE_ARTIFACT")"
+  "$PYTHON_BIN" - "$COMFYUI_GPU_VISION_GATE_ARTIFACT" "$status" "$action" "$unload_seconds" "$reason" <<'PY'
+from __future__ import annotations
+import json
+import sys
+from datetime import datetime, timezone
+
+path, status, action, unload_seconds_raw, reason = sys.argv[1:6]
+try:
+    unload_seconds = None if unload_seconds_raw == "" else round(float(unload_seconds_raw), 3)
+except ValueError:
+    unload_seconds = None
+payload = {
+    "runtime": "comfyui-gpu",
+    "status": status,
+    "action": action,
+    "reason": reason or None,
+    "vision_unload_seconds": unload_seconds,
+    "vision_reload_seconds": None,
+    "vision_reload_pending": status == "ok" and action == "unloaded",
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+}
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, indent=2, sort_keys=True)
+    handle.write("\n")
+PY
+}
+
+vision_container_pid() {
+  local raw
+  raw="$("$DOCKER_BIN" inspect --format '{{.State.Pid}}' "$LLAMACPP_VISION_CONTAINER_NAME" 2>/dev/null || true)"
+  case "$raw" in
+    ''|*[!0-9]*) printf '0' ;;
+    *) printf '%s' "$raw" ;;
+  esac
+}
+
+vision_runtime_present() {
+  if [[ -S "$LLAMACPP_VISION_SOCKET_PATH" || -S "$LLAMACPP_VISION_HEALTH_SOCKET" ]]; then
+    return 0
+  fi
+  [[ "$(vision_container_pid)" != "0" ]]
+}
+
+wait_vision_unloaded() {
+  local deadline
+  deadline=$((SECONDS + COMFYUI_GPU_VISION_GATE_TIMEOUT_S))
+  while (( SECONDS < deadline )); do
+    if ! vision_runtime_present; then
+      return 0
+    fi
+    sleep "${COMFYUI_GPU_VISION_GATE_INTERVAL_S:-1}"
+  done
+  return 1
+}
+
+gate_gpu_on_vision_unload() {
+  if ! truthy "$COMFYUI_GPU_VISION_GATE_ENABLED"; then
+    write_vision_gate_artifact "ok" "skipped" "" "disabled"
+    return
+  fi
+  if ! vision_runtime_present; then
+    write_vision_gate_artifact "ok" "not_needed" "0" "vision_not_resident"
+    return
+  fi
+  if [[ ! -x "$COMFYUI_VISION_CONTROL_SCRIPT" ]]; then
+    write_vision_gate_artifact "rejected" "failed" "" "vision_control_script_unavailable"
+    echo "GPU ComfyUI gate rejected: vision control script is not executable: $COMFYUI_VISION_CONTROL_SCRIPT" >&2
+    return 1
+  fi
+  local started_ms finished_ms unload_seconds
+  started_ms="$(now_ms)"
+  if ! "$COMFYUI_VISION_CONTROL_SCRIPT" unload-model; then
+    write_vision_gate_artifact "rejected" "failed" "" "vision_unload_failed"
+    echo "GPU ComfyUI gate rejected: vision runtime unload failed" >&2
+    return 1
+  fi
+  if ! wait_vision_unloaded; then
+    write_vision_gate_artifact "rejected" "failed" "" "vision_unload_timeout"
+    echo "GPU ComfyUI gate rejected: vision runtime did not unload before timeout" >&2
+    return 1
+  fi
+  finished_ms="$(now_ms)"
+  unload_seconds="$("$PYTHON_BIN" - "$started_ms" "$finished_ms" <<'PY'
+import sys
+started = int(sys.argv[1])
+finished = int(sys.argv[2])
+print(round(max(finished - started, 0) / 1000.0, 3))
+PY
+)"
+  write_vision_gate_artifact "ok" "unloaded" "$unload_seconds" "vision_unloaded_for_gpu_comfyui"
 }
 
 link_model_file() {
@@ -218,6 +331,13 @@ case "$command" in
   prepare)
     prepare_runtime_dirs "$target"
     ;;
+  gate)
+    if [[ "$target" == "cpu" ]]; then
+      write_vision_gate_artifact "ok" "skipped" "" "cpu_runtime_not_gated"
+    else
+      gate_gpu_on_vision_unload
+    fi
+    ;;
   build)
     prepare_runtime_dirs "$target"
     for runtime in $(each_target); do
@@ -240,6 +360,9 @@ case "$command" in
     prepare_runtime_dirs "$target"
     for runtime in $(each_target); do
       select_runtime "$runtime"
+      if [[ "$runtime" == "gpu" ]]; then
+        gate_gpu_on_vision_unload
+      fi
       compose up -d --force-recreate "$(service_name "$runtime")"
     done
     ;;
@@ -279,8 +402,8 @@ case "$command" in
     done
     ;;
   *)
-    echo "Usage: $0 [gpu|cpu|all] {prepare|build|create|start|stop|restart|status|logs|ready}" >&2
-    echo "       $0 {prepare|build|create|start|stop|restart|status|logs|ready}  # defaults to gpu" >&2
+    echo "Usage: $0 [gpu|cpu|all] {prepare|gate|build|create|start|stop|restart|status|logs|ready}" >&2
+    echo "       $0 {prepare|gate|build|create|start|stop|restart|status|logs|ready}  # defaults to gpu" >&2
     exit 2
     ;;
 esac

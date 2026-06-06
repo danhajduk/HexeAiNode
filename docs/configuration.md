@@ -46,6 +46,9 @@ Backend runtime:
 - `COMFYUI_GPU_CHECKPOINT` default `RealVisXL_V5.0_fp16.safetensors`
 - `COMFYUI_GPU_LORA` default `sdxl_lightning_4step_lora.safetensors`
 - `COMFYUI_CPU_CHECKPOINT` default `DreamShaper8_LCM.safetensors`
+- `COMFYUI_GPU_VISION_GATE_ENABLED` default `true`; unloads the vision runtime before GPU ComfyUI startup/model work
+- `COMFYUI_GPU_VISION_GATE_TIMEOUT_S` default `90`; maximum wait for vision sockets/container to disappear before rejecting GPU ComfyUI work
+- `COMFYUI_GPU_VISION_GATE_ARTIFACT` default `.run/comfyui-gpu-vision-gate.json`
 - `HEXE_LOCAL_LLM_DEFAULT_REVERT_IDLE_SECONDS` default `900`; set `0` to disable automatic return to the default local model
 - `HEXE_LOCAL_LLM_DEFAULT_REVERT_CHECK_INTERVAL_SECONDS` default `60`
 - `HEXE_PROVIDER_LOCAL_TRANSPORT` default `socket`
