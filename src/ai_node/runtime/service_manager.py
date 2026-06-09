@@ -955,6 +955,14 @@ class UserSystemdServiceManager:
             **queue_state,
         }
 
+    def comfyui_webui_generation_status(self) -> dict:
+        session = self.comfyui_webui_session_status(include_queue=True)
+        return {
+            "runtime": session.get("runtime") or self._comfyui_webui_runtime,
+            "session": session,
+            "progress": self._comfyui_progress_state(),
+        }
+
     def _comfyui_queue_state(self) -> dict:
         payload = self._uds_json_get(self._comfyui_socket_for_runtime(self._comfyui_webui_runtime), "/queue")
         if not isinstance(payload, dict):
@@ -963,9 +971,13 @@ class UserSystemdServiceManager:
                 "queue_active": False,
                 "running_count": 0,
                 "pending_count": 0,
+                "running_prompt_id": None,
+                "pending_prompt_ids": [],
             }
         running = payload.get("queue_running")
         pending = payload.get("queue_pending")
+        running_items = running if isinstance(running, list) else []
+        pending_items = pending if isinstance(pending, list) else []
         running_count = len(running) if isinstance(running, list) else 0
         pending_count = len(pending) if isinstance(pending, list) else 0
         return {
@@ -973,7 +985,44 @@ class UserSystemdServiceManager:
             "queue_active": running_count > 0 or pending_count > 0,
             "running_count": running_count,
             "pending_count": pending_count,
+            "running_prompt_id": self._comfyui_prompt_id(running_items[0]) if running_items else None,
+            "pending_prompt_ids": [prompt_id for prompt_id in (self._comfyui_prompt_id(item) for item in pending_items[:5]) if prompt_id],
         }
+
+    def _comfyui_progress_state(self) -> dict:
+        payload = self._uds_json_get(self._comfyui_socket_for_runtime(self._comfyui_webui_runtime), "/progress")
+        if not isinstance(payload, dict):
+            return {"available": False, "active": False, "value": None, "max": None, "percent": None, "prompt_id": None, "node": None}
+        value = payload.get("value")
+        maximum = payload.get("max")
+        try:
+            numeric_value = float(value)
+            numeric_maximum = float(maximum)
+        except Exception:
+            numeric_value = None
+            numeric_maximum = None
+        percent = None
+        if numeric_value is not None and numeric_maximum and numeric_maximum > 0:
+            percent = round(max(min(numeric_value / numeric_maximum, 1.0), 0.0) * 100.0, 1)
+        return {
+            "available": True,
+            "active": bool(payload.get("prompt_id") or percent is not None),
+            "value": value,
+            "max": maximum,
+            "percent": percent,
+            "prompt_id": payload.get("prompt_id"),
+            "node": payload.get("node"),
+        }
+
+    @staticmethod
+    def _comfyui_prompt_id(item) -> str | None:
+        if isinstance(item, dict):
+            value = item.get("prompt_id") or item.get("id")
+            return str(value) if value else None
+        if isinstance(item, (list, tuple)) and len(item) > 1:
+            value = item[1]
+            return str(value) if value else None
+        return None
 
     def _write_comfyui_webui_session(
         self,

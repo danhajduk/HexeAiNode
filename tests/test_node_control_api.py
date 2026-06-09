@@ -2422,6 +2422,46 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.calls.append(payload)
             return {"closed": False, "reason": "manual_session_inactive"}
 
+    def test_manual_image_generation_status_includes_relevant_runtime_progress(self):
+        class _ManualImageServiceManager:
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "running"},
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"output_dir": "runtime/manual/comfyui-gpu/output"},
+                    },
+                }
+
+            def comfyui_webui_generation_status(self):
+                return {
+                    "runtime": "gpu",
+                    "session": {
+                        "state": "active",
+                        "queue_available": True,
+                        "queue_active": True,
+                        "running_count": 1,
+                        "pending_count": 0,
+                        "running_prompt_id": "prompt-running",
+                    },
+                    "progress": {"available": True, "percent": 50.0, "prompt_id": "prompt-running"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ManualImageServiceManager(),
+            )
+
+            payload = state.manual_image_generation_status()
+
+        self.assertEqual(payload["runtime_service"]["state"], "running")
+        self.assertEqual(payload["generation_status"]["session"]["running_prompt_id"], "prompt-running")
+        self.assertEqual(payload["generation_status"]["progress"]["percent"], 50.0)
+
     async def test_benchmark_v2_switches_local_models_before_timed_execution(self):
         class _LocalBenchmarkServiceManager:
             def __init__(self):

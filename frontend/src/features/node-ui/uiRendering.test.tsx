@@ -257,10 +257,40 @@ describe("OperationalDashboard", () => {
 
   it("shows manual image generation on its own section", () => {
     const markup = renderToStaticMarkup(
-      <OperationalDashboard {...buildOperationalProps({ currentSection: "manual_image" })} />
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "manual_image",
+          manualImageGenerationProps: {
+            payload: {
+              service: { state: "running", manual_session_active: true },
+              runtime_service: { state: "running" },
+              generation_status: {
+                session: {
+                  state: "active",
+                  queue_available: true,
+                  queue_active: true,
+                  running_count: 1,
+                  pending_count: 2,
+                  running_prompt_id: "prompt-running",
+                },
+                progress: {
+                  available: true,
+                  active: true,
+                  percent: 25,
+                  prompt_id: "prompt-running",
+                },
+              },
+              manual_paths: { output_dir: "runtime/manual/comfyui-gpu/output" },
+            },
+          },
+        })}
+      />
     );
 
     expect(markup).toContain("Manual Image Generation");
+    expect(markup).toContain("ComfyUI Runtime");
+    expect(markup).toContain("1 running / 2 pending");
+    expect(markup).toContain("25.0%");
     expect(markup).toContain("Reference Image");
     expect(markup).not.toContain("Runtime Health");
   });

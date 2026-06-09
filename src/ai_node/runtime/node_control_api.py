@@ -1422,6 +1422,17 @@ class NodeControlState:
         services = self.service_status_payload().get("services", {})
         webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
         manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
+        runtime = str(webui.get("runtime") or "gpu").strip().lower() if isinstance(webui, dict) else "gpu"
+        runtime_key = "comfyui_cpu" if runtime == "cpu" else "comfyui_gpu"
+        runtime_service = services.get(runtime_key) if isinstance(services, dict) else {}
+        generation_status = {}
+        if self._service_manager is not None and hasattr(self._service_manager, "comfyui_webui_generation_status"):
+            try:
+                generation_status = self._service_manager.comfyui_webui_generation_status()
+            except Exception as exc:
+                generation_status = {"available": False, "error": str(exc)}
+        if not isinstance(generation_status, dict):
+            generation_status = {}
         catalog = self.comfyui_template_catalog_payload()
         templates = [
             item
@@ -1433,6 +1444,8 @@ class NodeControlState:
         return {
             "configured": True,
             "service": webui,
+            "runtime_service": runtime_service if isinstance(runtime_service, dict) else {},
+            "generation_status": generation_status,
             "manual_paths": manual_paths if isinstance(manual_paths, dict) else {},
             "templates": templates,
             "outputs": self._manual_image_outputs(limit=24),

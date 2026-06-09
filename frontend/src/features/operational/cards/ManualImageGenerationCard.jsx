@@ -46,6 +46,35 @@ function variableInputType(variable) {
   return type === "integer" || type === "number" ? "number" : "text";
 }
 
+function objectValue(value) {
+  return value && typeof value === "object" ? value : {};
+}
+
+function formatQueue(session) {
+  if (session.queue_available === false) {
+    return "unavailable";
+  }
+  const running = Number(session.running_count || 0);
+  const pending = Number(session.pending_count || 0);
+  if (!running && !pending) {
+    return "idle";
+  }
+  return `${running} running / ${pending} pending`;
+}
+
+function formatProgress(progress) {
+  if (progress.available === false) {
+    return "unavailable";
+  }
+  if (Number.isFinite(Number(progress.percent))) {
+    return `${Number(progress.percent).toFixed(1)}%`;
+  }
+  if (progress.value !== null && progress.value !== undefined && progress.max !== null && progress.max !== undefined) {
+    return `${progress.value}/${progress.max}`;
+  }
+  return progress.active ? "working" : "idle";
+}
+
 export function ManualImageGenerationCard({
   payload = null,
   busy = false,
@@ -69,7 +98,12 @@ export function ManualImageGenerationCard({
   const [referenceFile, setReferenceFile] = useState(null);
   const outputs = asArray(payload?.outputs);
   const service = payload?.service || {};
+  const runtimeService = objectValue(payload?.runtime_service);
+  const generationStatus = objectValue(payload?.generation_status);
+  const generationSession = objectValue(generationStatus.session || service.session);
+  const generationProgress = objectValue(generationStatus.progress);
   const manualPaths = payload?.manual_paths || {};
+  const progressPercent = Number(generationProgress.percent);
   const selectedTemplate = useMemo(
     () => templates.find((template) => template?.template_id === selectedTemplateId) || templates[0] || null,
     [templates, selectedTemplateId]
@@ -142,8 +176,25 @@ export function ManualImageGenerationCard({
     <article className="card operational-card-full-span">
       <CardHeader title="Manual Image Generation" subtitle="Prompt-driven ComfyUI generation for the manual session." />
       <div className="state-grid">
+        <span>ComfyUI Runtime</span>
+        <StatusBadge value={serviceState(runtimeService)} />
         <span>ComfyUI Web UI</span>
         <StatusBadge value={serviceState(service)} />
+        <span>Manual Session</span>
+        <StatusBadge value={generationSession.state || (service.manual_session_active ? "active" : "inactive")} />
+        <span>Queue</span>
+        <code>{formatQueue(generationSession)}</code>
+        <span>Current Prompt</span>
+        <code>{generationProgress.prompt_id || generationSession.running_prompt_id || result?.prompt_id || "none"}</code>
+        <span>Progress</span>
+        <div className="manual-generation-progress">
+          <code>{formatProgress(generationProgress)}</code>
+          {Number.isFinite(progressPercent) ? (
+            <div className="manual-generation-progress-track" aria-hidden="true">
+              <span style={{ width: `${Math.max(Math.min(progressPercent, 100), 0)}%` }} />
+            </div>
+          ) : null}
+        </div>
         <span>Output</span>
         <code>{manualPaths.output_dir || "not_configured"}</code>
         <span>Last Submit</span>

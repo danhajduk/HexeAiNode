@@ -341,6 +341,35 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(session["idle_seconds"], 75.0)
         self.assertEqual(session["auto_close_at_epoch"], 400.0)
 
+    def test_comfyui_webui_generation_status_reports_queue_and_progress(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {"HEXE_COMFYUI_WEBUI_SESSION_FILE": str(Path(tmp) / "session.json")},
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._write_comfyui_webui_session(state="active", reason="test", last_active_epoch=100.0)
+
+            def _fake_uds_get(_socket_path, path):
+                if path == "/queue":
+                    return {
+                        "queue_running": [[0, "prompt-running"]],
+                        "queue_pending": [{"prompt_id": "prompt-pending"}],
+                    }
+                if path == "/progress":
+                    return {"value": 3, "max": 12, "prompt_id": "prompt-running", "node": "sampler"}
+                return None
+
+            with patch.object(manager, "_uds_json_get", side_effect=_fake_uds_get):
+                status = manager.comfyui_webui_generation_status()
+
+        self.assertEqual(status["runtime"], "gpu")
+        self.assertTrue(status["session"]["queue_active"])
+        self.assertEqual(status["session"]["running_prompt_id"], "prompt-running")
+        self.assertEqual(status["session"]["pending_prompt_ids"], ["prompt-pending"])
+        self.assertEqual(status["progress"]["percent"], 25.0)
+        self.assertEqual(status["progress"]["prompt_id"], "prompt-running")
+
     def test_comfyui_webui_start_refreshes_stale_idle_clock(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             "os.environ",
