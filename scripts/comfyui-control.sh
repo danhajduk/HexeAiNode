@@ -38,6 +38,8 @@ export COMFYUI_GPU_CONTROLNET_OPENPOSE_FILE="${COMFYUI_GPU_CONTROLNET_OPENPOSE_F
 export COMFYUI_GPU_CONTROLNET_OPENPOSE_URL="${COMFYUI_GPU_CONTROLNET_OPENPOSE_URL:-https://huggingface.co/thibaud/controlnet-openpose-sdxl-1.0/resolve/main/OpenPoseXL2.safetensors}"
 export COMFYUI_GPU_CONTROLNET_CANNY_FILE="${COMFYUI_GPU_CONTROLNET_CANNY_FILE:-controlnet-canny-sdxl-1.0-fp16.safetensors}"
 export COMFYUI_GPU_CONTROLNET_CANNY_URL="${COMFYUI_GPU_CONTROLNET_CANNY_URL:-https://huggingface.co/diffusers/controlnet-canny-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors}"
+export COMFYUI_GPU_CONTROLNET_DEPTH_FILE="${COMFYUI_GPU_CONTROLNET_DEPTH_FILE:-controlnet-depth-sdxl-1.0-fp16.safetensors}"
+export COMFYUI_GPU_CONTROLNET_DEPTH_URL="${COMFYUI_GPU_CONTROLNET_DEPTH_URL:-https://huggingface.co/diffusers/controlnet-depth-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors}"
 
 export COMFYUI_CPU_HOST="${COMFYUI_CPU_HOST:-$COMFYUI_HOST}"
 export COMFYUI_CPU_PORT="${COMFYUI_CPU_PORT:-8189}"
@@ -374,6 +376,7 @@ download_gpu_controlnet_models() {
   prepare_gpu_runtime_dirs
   download_if_missing "$COMFYUI_GPU_CONTROLNET_OPENPOSE_URL" "$COMFYUI_GPU_CONTROLNET_DIR/$COMFYUI_GPU_CONTROLNET_OPENPOSE_FILE"
   download_if_missing "$COMFYUI_GPU_CONTROLNET_CANNY_URL" "$COMFYUI_GPU_CONTROLNET_DIR/$COMFYUI_GPU_CONTROLNET_CANNY_FILE"
+  download_if_missing "$COMFYUI_GPU_CONTROLNET_DEPTH_URL" "$COMFYUI_GPU_CONTROLNET_DIR/$COMFYUI_GPU_CONTROLNET_DEPTH_FILE"
 }
 
 each_target() {

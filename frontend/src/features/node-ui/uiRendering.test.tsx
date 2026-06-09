@@ -313,6 +313,7 @@ describe("OperationalDashboard", () => {
                     { name: "denoise", required: false, type: "number" },
                     { name: "face_strength", required: false, type: "number" },
                     { name: "body_strength", required: false, type: "number" },
+                    { name: "body_depth_strength", required: false, type: "number" },
                   ],
                 },
               ],
@@ -365,6 +366,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Images to Queue");
     expect(markup).toContain("Randomize Seed");
     expect(markup).toContain("Randomize Face/Body");
+    expect(markup).toContain("Body Depth Strength");
     expect(markup).toContain("Variation");
     expect(markup).not.toContain("Runtime Health");
   });

@@ -62,6 +62,7 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
     "body_strength",
     "body_conditioning_strength",
     "body_latent_strength",
+    "body_depth_strength",
 )
 
 

@@ -48,6 +48,8 @@ Backend runtime:
 - `COMFYUI_CPU_HEALTH_SOCKET` default `/run/hexe/ai-node/comfyui-cpu-health.sock`
 - `COMFYUI_GPU_CHECKPOINT` default `RealVisXL_V5.0_fp16.safetensors`
 - `COMFYUI_GPU_LORA` default `sdxl_lightning_4step_lora.safetensors`
+- `COMFYUI_GPU_CONTROLNET_DEPTH_FILE` default `controlnet-depth-sdxl-1.0-fp16.safetensors`
+- `COMFYUI_GPU_CONTROLNET_DEPTH_URL` default `https://huggingface.co/diffusers/controlnet-depth-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors`
 - `HEXE_COMFYUI_GPU_PRESETS_CONFIG` default `config/comfyui-gpu-presets.json`; discoverable GPU preset catalog for RealVisXL + SDXL-Lightning workflows
 - `COMFYUI_CPU_CHECKPOINT` default `DreamShaper8_LCM.safetensors`
 - `HEXE_COMFYUI_WEBUI_RUNTIME` default `gpu`; ComfyUI runtime exposed by the manual Web UI bridge

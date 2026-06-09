@@ -3333,6 +3333,106 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["24"]["inputs"]["images"], ["19", 0])
         self.assertEqual(workflow["24"]["inputs"]["filename_prefix"], "hexe/avatar_identity_transparent/Jane_seed1001")
 
+    def test_manual_avatar_body_depth_reference_template_applies_depth_controlnet(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            template = state.get_comfyui_template_catalog_entry(
+                template_id="template.avatar_body_depth_reference.realvisxl.v1"
+            )["template"]
+
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id="template.avatar_body_depth_reference.realvisxl.v1",
+                    mode="txt2img",
+                    prompt="same woman, full body fashion reference pose",
+                    seed=1002,
+                    template_variables={
+                        "avatar_name": "Jane",
+                        "face_reference_image": "references/avatar/jane_face.png",
+                        "body_reference_image": "references/avatar/jane_body.png",
+                        "face_strength": "0.7",
+                        "body_depth_strength": "0.82",
+                        "body_depth_start": "0.05",
+                        "body_depth_end": "0.9",
+                        "depth_resolution": "1024",
+                    },
+                ),
+                input_image="",
+            )
+
+        self.assertEqual(template["metadata"]["edit_intent"], "body_depth_controlnet_composition_with_avatar_references")
+        self.assertEqual(template["model_requirements"]["controlnets"], ["controlnet-depth-sdxl-1.0-fp16.safetensors"])
+        self.assertEqual(workflow["10"]["inputs"]["image"], "references/avatar/jane_body.png")
+        self.assertEqual(workflow["11"]["class_type"], "ResizeAndPadImage")
+        self.assertEqual(workflow["11"]["inputs"]["target_width"], 768)
+        self.assertEqual(workflow["11"]["inputs"]["target_height"], 1152)
+        self.assertEqual(workflow["25"]["class_type"], "MiDaS-DepthMapPreprocessor")
+        self.assertEqual(workflow["25"]["inputs"]["image"], ["11", 0])
+        self.assertEqual(workflow["25"]["inputs"]["resolution"], 1024)
+        self.assertEqual(workflow["26"]["class_type"], "ControlNetLoader")
+        self.assertEqual(workflow["26"]["inputs"]["control_net_name"], "controlnet-depth-sdxl-1.0-fp16.safetensors")
+        self.assertEqual(workflow["27"]["class_type"], "ControlNetApplyAdvanced")
+        self.assertEqual(workflow["27"]["inputs"]["positive"], ["21", 0])
+        self.assertEqual(workflow["27"]["inputs"]["negative"], ["5", 0])
+        self.assertEqual(workflow["27"]["inputs"]["image"], ["25", 0])
+        self.assertEqual(workflow["27"]["inputs"]["strength"], 0.82)
+        self.assertEqual(workflow["27"]["inputs"]["start_percent"], 0.05)
+        self.assertEqual(workflow["27"]["inputs"]["end_percent"], 0.9)
+        self.assertEqual(workflow["14"]["inputs"]["positive"], ["27", 0])
+        self.assertEqual(workflow["14"]["inputs"]["negative"], ["27", 1])
+        self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["3", 0])
+        self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_body_depth/Jane_seed1002")
+
+    def test_manual_avatar_body_depth_transparent_template_adds_alpha_background_removal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            template = state.get_comfyui_template_catalog_entry(
+                template_id="template.avatar_body_depth_reference_transparent.realvisxl.v1"
+            )["template"]
+
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id="template.avatar_body_depth_reference_transparent.realvisxl.v1",
+                    mode="txt2img",
+                    prompt="same woman, isolated full body lingerie pose",
+                    seed=1003,
+                    template_variables={
+                        "avatar_name": "Jane",
+                        "face_reference_image": "references/avatar/jane_face.png",
+                        "body_reference_image": "references/avatar/jane_body.png",
+                    },
+                ),
+                input_image="",
+            )
+
+        self.assertTrue(template["metadata"]["transparent_background"])
+        self.assertEqual(workflow["25"]["class_type"], "MiDaS-DepthMapPreprocessor")
+        self.assertEqual(workflow["27"]["class_type"], "ControlNetApplyAdvanced")
+        self.assertEqual(workflow["17"]["class_type"], "LoadBackgroundRemovalModel")
+        self.assertEqual(workflow["17"]["inputs"]["bg_removal_name"], "birefnet.safetensors")
+        self.assertEqual(workflow["18"]["class_type"], "RemoveBackground")
+        self.assertEqual(workflow["18"]["inputs"]["image"], ["15", 0])
+        self.assertEqual(workflow["20"]["class_type"], "InvertMask")
+        self.assertEqual(workflow["20"]["inputs"]["mask"], ["18", 0])
+        self.assertEqual(workflow["19"]["class_type"], "JoinImageWithAlpha")
+        self.assertEqual(workflow["19"]["inputs"]["alpha"], ["20", 0])
+        self.assertEqual(workflow["16"]["inputs"]["images"], ["15", 0])
+        self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_body_depth_transparent/Jane_seed1003_rgb")
+        self.assertEqual(workflow["24"]["inputs"]["images"], ["19", 0])
+        self.assertEqual(workflow["24"]["inputs"]["filename_prefix"], "hexe/avatar_body_depth_transparent/Jane_seed1003")
+
     def test_manual_scene_reference_template_uses_scene_reference(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = NodeControlState(

@@ -126,9 +126,9 @@ startup checkpoint argument; checkpoints and LoRAs should be loaded by the reque
 keep-warm policy is enabled. During directory preparation, the control script creates per-runtime model folders and
 symlinks the expected checkpoint/LoRA from the legacy `runtime/models/comfyui` folder when the file is already present.
 The ComfyUI image includes `comfyui_controlnet_aux` preprocessors for pose, edge, and depth extraction. The optional
-`download-controlnets` command downloads the default SDXL OpenPose and Canny ControlNet weights into
-`runtime/models/comfyui-gpu/controlnet`; OpenPose is useful for posture, while Canny is useful for visible body
-silhouette and clothing/outline preservation.
+`download-controlnets` command downloads the default SDXL OpenPose, Canny, and Depth ControlNet weights into
+`runtime/models/comfyui-gpu/controlnet`; OpenPose is useful for posture, Canny is useful for visible body silhouette
+and clothing/outline preservation, and Depth is useful for body volume, pose, and full-body framing.
 Runtime custom nodes are mounted from `runtime/custom_nodes/comfyui-gpu` and `runtime/custom_nodes/comfyui-cpu`, with
 image-packaged nodes linked in at container startup when the persistent folder does not already contain that node name.
 Shared ComfyUI node assets are mounted from `runtime/assets/comfyui`; ControlNet-AUX annotator checkpoints are stored
@@ -240,6 +240,9 @@ face strength, body conditioning strength, body latent strength, and denoise con
 the body reference in prompt conditioning, higher body latent starts closer to the body reference silhouette, and higher
 denoise follows prompt changes more aggressively. If local background removal fails after the RGB fallback has been
 saved, the latest manual job is reported as `completed_with_fallback` and points to the `_rgb` output.
+The avatar body-depth templates instead resize and pad the body reference to the output aspect ratio, extract a MiDaS
+depth map, and apply the SDXL depth ControlNet before sampling from an empty latent. This is intended for stronger
+body pose, volume, and full-body framing control without copying the original body image pixels directly.
 
 The node UI runtime section also exposes a manual image-generation card backed by `GET/POST /api/manual-image-generation`.
 It starts or reuses the manual ComfyUI session, lets operators choose a GPU ComfyUI template and adjust its exposed

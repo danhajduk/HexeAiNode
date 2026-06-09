@@ -60,9 +60,13 @@ function variableInputType(variable) {
 }
 
 function isReferenceStrengthVariable(name) {
-  return ["face_strength", "body_strength", "body_conditioning_strength", "body_latent_strength"].includes(
-    String(name || "").trim()
-  );
+  return [
+    "face_strength",
+    "body_strength",
+    "body_conditioning_strength",
+    "body_latent_strength",
+    "body_depth_strength",
+  ].includes(String(name || "").trim());
 }
 
 function formatSliderValue(value) {
