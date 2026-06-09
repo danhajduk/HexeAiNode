@@ -31,4 +31,5 @@ runtime/cache/
 runtime/models/
 runtime/input/
 runtime/output/
+runtime/manual/
 runtime/user/
