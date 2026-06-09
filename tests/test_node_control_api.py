@@ -2316,6 +2316,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.calls.append(payload)
             return {"started": False, **payload}
 
+        def close_comfyui_webui_if_idle(self):
+            payload = {"comfyui_webui_idle_close": True}
+            self.calls.append(payload)
+            return {"closed": False, "reason": "manual_session_inactive"}
+
     async def test_benchmark_v2_switches_local_models_before_timed_execution(self):
         class _LocalBenchmarkServiceManager:
             def __init__(self):
@@ -2602,6 +2607,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["tasks"]["local_llm_always_on"]["schedule_name"], "interval_seconds")
             self.assertIn("vision_runtime_residency", payload["tasks"])
             self.assertEqual(payload["tasks"]["vision_runtime_residency"]["schedule_name"], "interval_seconds")
+            self.assertIn("comfyui_webui_idle_close", payload["tasks"])
+            self.assertEqual(payload["tasks"]["comfyui_webui_idle_close"]["schedule_name"], "interval_seconds")
 
     async def test_local_llm_default_revert_job_calls_service_manager(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2689,6 +2696,22 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["status"], "ok")
             self.assertEqual(service_manager.calls[-1]["vision_local_in_flight"], 0)
             self.assertFalse(service_manager.calls[-1]["gpu_comfyui_critical_in_flight"])
+
+    async def test_comfyui_webui_idle_close_job_calls_service_manager(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service_manager = self._FakeServiceManager()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=service_manager,
+            )
+
+            result = await state._comfyui_webui_idle_close_job_once()
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(service_manager.calls[-1], {"comfyui_webui_idle_close": True})
 
     async def test_manual_comfyui_takeover_preflight_blocks_local_vision_work(self):
         class _ManualComfyServiceManager:

@@ -55,6 +55,8 @@ Backend runtime:
 - `HEXE_COMFYUI_WEBUI_BRIDGE_SCRIPT` default `scripts/unix-socket-tcp-bridge.py`
 - `HEXE_COMFYUI_WEBUI_PID_FILE` default `.run/comfyui-webui-bridge.pid`
 - `HEXE_COMFYUI_WEBUI_SESSION_FILE` default `.run/comfyui-webui-session.json`; manual session lock used to block vision reload while ComfyUI owns the GPU
+- `HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS` default `300`; continuous ComfyUI `/queue` idle time before the manual Web UI session auto-closes
+- `HEXE_COMFYUI_WEBUI_IDLE_CHECK_INTERVAL_SECONDS` default `15`; scheduler interval for evaluating manual Web UI idle auto-close
 - `COMFYUI_GPU_VISION_GATE_ENABLED` default `true`; unloads the vision runtime before GPU ComfyUI startup/model work
 - `COMFYUI_GPU_VISION_GATE_TIMEOUT_S` default `90`; maximum wait for vision sockets/container to disappear before rejecting GPU ComfyUI work
 - `COMFYUI_GPU_VISION_GATE_ARTIFACT` default `.run/comfyui-gpu-vision-gate.json`

@@ -111,6 +111,7 @@ class UserSystemdServiceManager:
         self._comfyui_webui_session_file = str(
             os.environ.get("HEXE_COMFYUI_WEBUI_SESSION_FILE") or ".run/comfyui-webui-session.json"
         ).strip()
+        self._comfyui_webui_idle_timeout_seconds = max(_env_int("HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS", default=300), 1)
         self._vision_llm_default_model_id = (
             str(
                 os.environ.get("HEXE_PROVIDER_VISION_DEFAULT_MODEL_ID")
@@ -680,6 +681,30 @@ class UserSystemdServiceManager:
         self._clear_comfyui_webui_session()
         return {"target": "comfyui_webui", "result": "stopped", **self._comfyui_webui_status()}
 
+    def close_comfyui_webui_if_idle(self) -> dict:
+        session_status = self.comfyui_webui_session_status()
+        if not session_status.get("manual_session_active"):
+            return {"closed": False, "reason": "manual_session_inactive", "session": session_status}
+        if session_status.get("queue_active"):
+            self._write_comfyui_webui_session(
+                state="active",
+                reason="comfyui_queue_active",
+                last_active_epoch=time.time(),
+            )
+            return {"closed": False, "reason": "queue_active", "session": self.comfyui_webui_session_status()}
+        idle_seconds = session_status.get("idle_seconds")
+        if idle_seconds is None:
+            self._write_comfyui_webui_session(
+                state="idle",
+                reason="comfyui_queue_idle",
+                last_active_epoch=time.time(),
+            )
+            return {"closed": False, "reason": "idle_timer_started", "session": self.comfyui_webui_session_status()}
+        if float(idle_seconds) < self._comfyui_webui_idle_timeout_seconds:
+            return {"closed": False, "reason": "idle_timeout_not_reached", "session": session_status}
+        result = self.stop_comfyui_webui()
+        return {"closed": True, "reason": "idle_timeout_reached", "stop_result": result}
+
     def _local_llm_status(self) -> dict:
         service_id = "local_llm"
         script_exists = os.path.exists(self._local_llm_control_script)
@@ -800,6 +825,7 @@ class UserSystemdServiceManager:
             "pid_file": self._comfyui_webui_pid_file,
             "session_file": self._comfyui_webui_session_file,
             "manual_session_active": self._manual_comfyui_webui_active(),
+            "session": self.comfyui_webui_session_status(include_queue=False),
             "api_transport": "tcp_bridge_to_unix_socket",
         }
 
@@ -824,21 +850,97 @@ class UserSystemdServiceManager:
     def _comfyui_health_socket_for_runtime(self, runtime: str) -> str:
         return self._comfyui_cpu_health_socket if str(runtime or "").strip().lower() == "cpu" else self._comfyui_gpu_health_socket
 
-    def _write_comfyui_webui_session(self, *, state: str, reason: str) -> None:
+    def comfyui_webui_session_status(self, *, include_queue: bool = True) -> dict:
+        payload = self._read_comfyui_webui_session()
+        state = str(payload.get("state") or "").strip().lower()
+        manual_active = state in {"starting", "active", "idle", "closing", "restoring"}
+        queue_state = self._comfyui_queue_state() if include_queue and manual_active else {
+            "queue_available": None,
+            "queue_active": False,
+            "running_count": 0,
+            "pending_count": 0,
+        }
+        now_epoch = time.time()
+        last_active_epoch = payload.get("last_active_epoch")
+        try:
+            last_active = float(last_active_epoch)
+        except Exception:
+            last_active = None
+        idle_seconds = None
+        auto_close_at_epoch = None
+        if manual_active and not queue_state.get("queue_active") and last_active is not None:
+            idle_seconds = round(max(now_epoch - last_active, 0.0), 3)
+            auto_close_at_epoch = last_active + self._comfyui_webui_idle_timeout_seconds
+        return {
+            "manual_session_active": manual_active,
+            "state": state or "inactive",
+            "reason": payload.get("reason"),
+            "runtime": payload.get("runtime") or self._comfyui_webui_runtime,
+            "idle_timeout_seconds": self._comfyui_webui_idle_timeout_seconds,
+            "idle_seconds": idle_seconds,
+            "auto_close_at_epoch": round(auto_close_at_epoch, 3) if auto_close_at_epoch is not None else None,
+            "last_active_epoch": round(last_active, 3) if last_active is not None else None,
+            **queue_state,
+        }
+
+    def _comfyui_queue_state(self) -> dict:
+        payload = self._uds_json_get(self._comfyui_socket_for_runtime(self._comfyui_webui_runtime), "/queue")
+        if not isinstance(payload, dict):
+            return {
+                "queue_available": False,
+                "queue_active": False,
+                "running_count": 0,
+                "pending_count": 0,
+            }
+        running = payload.get("queue_running")
+        pending = payload.get("queue_pending")
+        running_count = len(running) if isinstance(running, list) else 0
+        pending_count = len(pending) if isinstance(pending, list) else 0
+        return {
+            "queue_available": True,
+            "queue_active": running_count > 0 or pending_count > 0,
+            "running_count": running_count,
+            "pending_count": pending_count,
+        }
+
+    def _write_comfyui_webui_session(
+        self,
+        *,
+        state: str,
+        reason: str,
+        last_active_epoch: float | None = None,
+    ) -> None:
         if not self._comfyui_webui_session_file:
             return
         path = self._comfyui_webui_session_file
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        existing = self._read_comfyui_webui_session()
+        now_epoch = time.time()
+        if last_active_epoch is None:
+            last_active_epoch = existing.get("last_active_epoch")
         payload = {
             "state": str(state or "").strip() or "active",
             "reason": str(reason or "").strip() or None,
             "runtime": self._comfyui_webui_runtime,
             "socket_path": self._comfyui_socket_for_runtime(self._comfyui_webui_runtime),
+            "idle_timeout_seconds": self._comfyui_webui_idle_timeout_seconds,
+            "last_active_epoch": last_active_epoch if last_active_epoch is not None else now_epoch,
+            "updated_at_epoch": now_epoch,
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, sort_keys=True)
             handle.write("\n")
+
+    def _read_comfyui_webui_session(self) -> dict:
+        if not self._comfyui_webui_session_file or not os.path.exists(self._comfyui_webui_session_file):
+            return {}
+        try:
+            with open(self._comfyui_webui_session_file, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
 
     def _clear_comfyui_webui_session(self) -> None:
         try:
@@ -848,11 +950,7 @@ class UserSystemdServiceManager:
 
     def _manual_comfyui_webui_active(self) -> bool:
         if self._comfyui_webui_session_file and os.path.exists(self._comfyui_webui_session_file):
-            try:
-                with open(self._comfyui_webui_session_file, "r", encoding="utf-8") as handle:
-                    payload = json.load(handle)
-            except Exception:
-                payload = {}
+            payload = self._read_comfyui_webui_session()
             state = str(payload.get("state") if isinstance(payload, dict) else "").strip().lower()
             return state in {"starting", "active", "idle", "closing", "restoring"}
         return self._comfyui_webui_status_without_session().get("state") == "running"

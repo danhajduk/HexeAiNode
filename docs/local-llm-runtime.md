@@ -148,6 +148,12 @@ manual ComfyUI takeover is rejected with `vision_work_pending` and the preflight
 preflight also reports queued cloud-reroute candidates, but already-enqueued jobs are not rewritten automatically because
 the current queue runner cannot safely rebind an executable local runner into a cloud runner after admission.
 
+While the manual session is active, the node polls ComfyUI `/queue` through the Unix socket. Non-empty
+`queue_running` or `queue_pending` resets the idle timer. Once the queue is empty for
+`HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS` seconds, default `300`, the `comfyui_webui_idle_close` scheduler job closes the
+manual Web UI session. `GET /api/services/status` includes `comfyui_webui.session.idle_seconds`,
+`idle_timeout_seconds`, and `auto_close_at_epoch` for UI countdowns.
+
 Example socket probes:
 
 ```bash

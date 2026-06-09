@@ -758,6 +758,10 @@ class NodeControlState:
             _env_int("HEXE_VISION_LLM_RESIDENCY_CHECK_INTERVAL_SECONDS", 60),
             1,
         )
+        self._comfyui_webui_idle_check_interval_seconds = max(
+            _env_int("HEXE_COMFYUI_WEBUI_IDLE_CHECK_INTERVAL_SECONDS", 15),
+            1,
+        )
         self._load_identity()
         self._rehydrate_trusted_state()
         self._load_provider_selection_config()
@@ -3849,6 +3853,15 @@ class NodeControlState:
             task_kind="local_recurring",
             readiness_critical=False,
         )
+        self._internal_scheduler.register_interval_task(
+            task_id="comfyui_webui_idle_close",
+            display_name="ComfyUI Web UI Idle Close",
+            interval_seconds=self._comfyui_webui_idle_check_interval_seconds,
+            schedule_name="interval_seconds",
+            schedule_detail=f"Every {self._comfyui_webui_idle_check_interval_seconds} seconds",
+            task_kind="local_recurring",
+            readiness_critical=False,
+        )
         self._sync_operational_mqtt_health_schedule()
 
     def _operational_mqtt_health_schedule_definition(self) -> dict:
@@ -4000,6 +4013,11 @@ class NodeControlState:
                 initial_delay_seconds=0,
             )
             self._internal_scheduler.start_interval_task(
+                task_id="comfyui_webui_idle_close",
+                coroutine_factory=self._comfyui_webui_idle_close_job_once,
+                initial_delay_seconds=self._comfyui_webui_idle_check_interval_seconds,
+            )
+            self._internal_scheduler.start_interval_task(
                 task_id="operational_mqtt_health",
                 coroutine_factory=self._operational_mqtt_health_job_once,
                 initial_delay_seconds=0,
@@ -4095,6 +4113,12 @@ class NodeControlState:
             local_in_flight=local_in_flight,
             gpu_comfyui_critical_in_flight=gpu_comfyui_critical_in_flight,
         )
+        return {"status": "ok", "result": result if isinstance(result, dict) else {}}
+
+    async def _comfyui_webui_idle_close_job_once(self) -> dict | None:
+        if self._service_manager is None or not hasattr(self._service_manager, "close_comfyui_webui_if_idle"):
+            return {"status": "skipped", "reason": "service_manager_not_configured"}
+        result = await asyncio.to_thread(self._service_manager.close_comfyui_webui_if_idle)
         return {"status": "ok", "result": result if isinstance(result, dict) else {}}
 
     async def _gpu_comfyui_critical_work_pending(self) -> bool:

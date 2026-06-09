@@ -244,6 +244,72 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(result["reason"], "blocked_by_manual_comfyui_webui")
         fake_run.assert_not_called()
 
+    def test_comfyui_webui_idle_close_closes_after_timeout(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "HEXE_COMFYUI_WEBUI_SESSION_FILE": str(Path(tmp) / "session.json"),
+                "HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS": "300",
+            },
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._write_comfyui_webui_session(state="idle", reason="test", last_active_epoch=100.0)
+            with (
+                patch("time.time", return_value=401.0),
+                patch.object(manager, "_uds_json_get", return_value={"queue_running": [], "queue_pending": []}),
+                patch.object(manager, "stop_comfyui_webui", return_value={"target": "comfyui_webui", "result": "stopped"}) as fake_stop,
+            ):
+                result = manager.close_comfyui_webui_if_idle()
+
+        self.assertTrue(result["closed"])
+        self.assertEqual(result["reason"], "idle_timeout_reached")
+        fake_stop.assert_called_once()
+
+    def test_comfyui_webui_idle_close_resets_when_queue_active(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {"HEXE_COMFYUI_WEBUI_SESSION_FILE": str(Path(tmp) / "session.json")},
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._write_comfyui_webui_session(state="idle", reason="test", last_active_epoch=100.0)
+            with (
+                patch("time.time", return_value=500.0),
+                patch.object(manager, "_uds_json_get", return_value={"queue_running": [{"prompt_id": "p1"}], "queue_pending": []}),
+                patch.object(manager, "stop_comfyui_webui") as fake_stop,
+            ):
+                result = manager.close_comfyui_webui_if_idle()
+                session = manager.comfyui_webui_session_status()
+
+        self.assertFalse(result["closed"])
+        self.assertEqual(result["reason"], "queue_active")
+        self.assertTrue(session["queue_active"])
+        self.assertEqual(session["last_active_epoch"], 500.0)
+        fake_stop.assert_not_called()
+
+    def test_comfyui_webui_idle_status_reports_countdown(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "HEXE_COMFYUI_WEBUI_SESSION_FILE": str(Path(tmp) / "session.json"),
+                "HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS": "300",
+            },
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._write_comfyui_webui_session(state="idle", reason="test", last_active_epoch=100.0)
+            with (
+                patch("time.time", return_value=175.0),
+                patch.object(manager, "_uds_json_get", return_value={"queue_running": [], "queue_pending": []}),
+            ):
+                session = manager.comfyui_webui_session_status()
+
+        self.assertTrue(session["manual_session_active"])
+        self.assertFalse(session["queue_active"])
+        self.assertEqual(session["idle_seconds"], 75.0)
+        self.assertEqual(session["auto_close_at_epoch"], 400.0)
+
     def test_unix_socket_tcp_bridge_forwards_http(self):
         with tempfile.TemporaryDirectory() as tmp:
             socket_path = str(Path(tmp) / "comfyui.sock")

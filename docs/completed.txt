@@ -549,3 +549,4 @@ Task 974: Move local model runtime APIs behind health heartbeat and Linux socket
 Task 975: Add manual ComfyUI Web UI session control - Completed on 06/09/2026 08:26
 Task 976: Preserve vision and GPU ComfyUI mutual exclusion for manual sessions - Completed on 06/09/2026 08:29
 Task 977: Drain or privacy-reroute vision work before manual ComfyUI takeover - Completed on 06/09/2026 08:34
+Task 978: Add five-minute idle auto-close for manual ComfyUI sessions - Completed on 06/09/2026 08:38
