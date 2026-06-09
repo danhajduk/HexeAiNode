@@ -49,6 +49,11 @@ Backend runtime:
 - `COMFYUI_GPU_LORA` default `sdxl_lightning_4step_lora.safetensors`
 - `HEXE_COMFYUI_GPU_PRESETS_CONFIG` default `config/comfyui-gpu-presets.json`; discoverable GPU preset catalog for RealVisXL + SDXL-Lightning workflows
 - `COMFYUI_CPU_CHECKPOINT` default `DreamShaper8_LCM.safetensors`
+- `HEXE_COMFYUI_WEBUI_RUNTIME` default `gpu`; ComfyUI runtime exposed by the manual Web UI bridge
+- `HEXE_COMFYUI_WEBUI_HOST` default `127.0.0.1`; bind host for the temporary manual Web UI bridge
+- `HEXE_COMFYUI_WEBUI_PORT` default `18188`; bind port for the temporary manual Web UI bridge
+- `HEXE_COMFYUI_WEBUI_BRIDGE_SCRIPT` default `scripts/unix-socket-tcp-bridge.py`
+- `HEXE_COMFYUI_WEBUI_PID_FILE` default `.run/comfyui-webui-bridge.pid`
 - `COMFYUI_GPU_VISION_GATE_ENABLED` default `true`; unloads the vision runtime before GPU ComfyUI startup/model work
 - `COMFYUI_GPU_VISION_GATE_TIMEOUT_S` default `90`; maximum wait for vision sockets/container to disappear before rejecting GPU ComfyUI work
 - `COMFYUI_GPU_VISION_GATE_ARTIFACT` default `.run/comfyui-gpu-vision-gate.json`

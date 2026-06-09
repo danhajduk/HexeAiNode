@@ -1,8 +1,16 @@
 import logging
 import json
+import socket
+import socketserver
+import subprocess
+import sys
 import tempfile
+import threading
+import time
 import unittest
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+from urllib.request import urlopen
 from unittest.mock import patch
 
 from ai_node.runtime.service_manager import UserSystemdServiceManager
@@ -12,6 +20,22 @@ class _Completed:
     def __init__(self, stdout: str):
         self.stdout = stdout
         self.stderr = ""
+
+
+class _UnixHTTPServer(socketserver.UnixStreamServer):
+    allow_reuse_address = True
+
+
+class _BridgeProbeHandler(BaseHTTPRequestHandler):
+    def do_GET(self):  # noqa: N802
+        body = b"bridge-ok"
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_args):
+        return
 
 
 class ServiceManagerTests(unittest.TestCase):
@@ -61,6 +85,7 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(payload["local_llm"]["service_id"], "local_llm")
         self.assertEqual(payload["comfyui_gpu"]["service_id"], "comfyui_gpu")
         self.assertEqual(payload["comfyui_cpu"]["service_id"], "comfyui_cpu")
+        self.assertEqual(payload["comfyui_webui"]["service_id"], "comfyui_webui")
         self.assertEqual(payload["node"], "degraded")
 
     def test_restart_node_restarts_both_units(self):
@@ -169,6 +194,73 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertTrue(gpu_payload["health_socket_ready"])
         self.assertEqual(cpu_payload["state"], "running")
         self.assertEqual(cpu_payload["socket_path"], manager._comfyui_cpu_socket)
+
+    def test_comfyui_webui_status_reports_local_bridge_contract(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "HEXE_COMFYUI_WEBUI_HOST": "127.0.0.1",
+                "HEXE_COMFYUI_WEBUI_PORT": "18188",
+                "HEXE_COMFYUI_WEBUI_PID_FILE": str(Path(tmp) / "bridge.pid"),
+            },
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+        payload = manager._comfyui_webui_status()
+
+        self.assertEqual(payload["service_id"], "comfyui_webui")
+        self.assertEqual(payload["state"], "stopped")
+        self.assertEqual(payload["runtime"], "gpu")
+        self.assertEqual(payload["host"], "127.0.0.1")
+        self.assertEqual(payload["port"], 18188)
+        self.assertEqual(payload["url"], "http://localhost:18188")
+        self.assertEqual(payload["api_transport"], "tcp_bridge_to_unix_socket")
+        self.assertEqual(payload["socket_path"], manager._comfyui_gpu_socket)
+
+    def test_unix_socket_tcp_bridge_forwards_http(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            socket_path = str(Path(tmp) / "comfyui.sock")
+            pid_file = Path(tmp) / "bridge.pid"
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                probe.bind(("127.0.0.1", 0))
+                bridge_port = probe.getsockname()[1]
+            server = _UnixHTTPServer(socket_path, _BridgeProbeHandler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            process = subprocess.Popen(
+                [
+                    sys.executable,
+                    "scripts/unix-socket-tcp-bridge.py",
+                    "--socket-path",
+                    socket_path,
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    str(bridge_port),
+                    "--pid-file",
+                    str(pid_file),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            try:
+                manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+                for _ in range(30):
+                    if manager._tcp_port_ready(host="127.0.0.1", port=bridge_port):
+                        break
+                    time.sleep(0.1)
+                self.assertTrue(manager._tcp_port_ready(host="127.0.0.1", port=bridge_port))
+                with urlopen(f"http://127.0.0.1:{bridge_port}/", timeout=5) as response:
+                    response_body = response.read().decode("utf-8")
+            finally:
+                process.terminate()
+                process.wait(timeout=5)
+                server.shutdown()
+                server.server_close()
+
+        self.assertEqual(response_body, "bridge-ok")
 
     def test_local_llm_always_on_starts_default_when_runtime_is_not_ready(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(

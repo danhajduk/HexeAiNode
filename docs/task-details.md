@@ -1011,3 +1011,154 @@ Implementation notes:
 - Keep HTTP bound only internally if a runtime requires it, and proxy/gate access through the socket API.
 - Do not expose ComfyUI or model-server HTTP ports on host interfaces unless explicitly enabled for debugging.
 - Add health payloads that include container status, model residency, socket readiness, GPU/VRAM state where relevant, and last error.
+
+## Task 975
+Original task details:
+- Add an explicit node UI/backend control to open the ComfyUI Web UI for manual human use.
+- ComfyUI should remain socket-first and not expose container HTTP ports by default.
+- The Web UI exposure should be an explicit temporary manual session, not a normal operational runtime state.
+
+Implementation notes:
+- Add a `comfyui_webui` service/control surface that can start, stop, and report a browser-accessible local URL.
+- Prefer a local TCP bridge to the existing ComfyUI Unix socket over publishing Docker ports.
+- Bind to localhost by default.
+- Make any LAN-wide bind an explicit advanced configuration, not the default.
+- Preserve existing governed ComfyUI API behavior for automated jobs.
+
+## Task 976
+Original task details:
+- Vision and GPU ComfyUI cannot coexist in VRAM.
+- Manual Web UI sessions must preserve the current vision/ComfyUI mutual-exclusion behavior.
+
+Implementation notes:
+- Opening the manual GPU ComfyUI Web UI must go through the existing GPU ComfyUI vision-unload gate.
+- Track a `manual_comfyui_webui_active` or equivalent runtime lock while the manual session is active.
+- Vision always-on/residency logic must treat the manual ComfyUI session lock as a blocker.
+- Do not clear the manual session lock until ComfyUI has been stopped/unloaded and its sockets/model residency are gone.
+- Expose clear status reasons such as `blocked_by_manual_comfyui_webui`.
+
+## Task 977
+Original task details:
+- Before a manual ComfyUI takeover, make sure vision jobs are handled correctly.
+- If privacy/governance allows it, eligible vision jobs may be rerouted to cloud.
+- Local-only or already-running vision work must not be silently interrupted.
+
+Implementation notes:
+- Add an admission/preflight step before starting the manual ComfyUI session.
+- Detect active local vision work and queued local vision work.
+- Active local vision jobs should finish before GPU takeover unless an explicit cancellation policy exists.
+- Queued vision jobs may reroute to cloud only when privacy policy, provider constraints, budget policy, and requested-provider rules allow it.
+- If any queued vision job is local-only or otherwise non-reroutable, block or delay the manual ComfyUI takeover with a clear UI/API reason.
+- Include routing-decision metadata showing which jobs were rerouted, delayed, or blocked.
+
+## Task 978
+Original task details:
+- Manual ComfyUI Web UI sessions should auto-close after five minutes of idle time.
+- Idle means ComfyUI is not actively executing and has no pending queue work.
+
+Implementation notes:
+- Poll the ComfyUI queue endpoint through the existing socket path.
+- Treat non-empty running or pending queues as active work and reset the idle timer.
+- Once the queue is empty for 300 continuous seconds, begin the manual session auto-close flow.
+- Report idle seconds, timeout seconds, session state, and projected auto-close time in service status.
+- Keep the manual session lock active for the full auto-close flow.
+
+## Task 979
+Original task details:
+- After manual ComfyUI idle auto-close, return the node to normal operational mode.
+- The shutdown order should be: close Web UI bridge, unload/stop ComfyUI, clear manual session state, load vision model.
+
+Implementation notes:
+- Close the Web UI bridge first so no new manual requests arrive.
+- Stop or unload GPU ComfyUI and confirm sockets/model residency are gone.
+- Clear `manual_comfyui_webui_active` only after ComfyUI is confirmed stopped/unloaded.
+- Reload the vision model/runtime after clearing the manual lock.
+- Return service status to normal operational state and record any restore errors.
+
+## Task 980
+Original task details:
+- Manual ComfyUI jobs should store artifacts in a different folder than normal operational generation.
+- Manual NSFW or experimental work must not mix with governed normal OP output.
+
+Implementation notes:
+- Add separate manual ComfyUI input/output/user/temp directories, for example under `runtime/manual/comfyui-gpu`.
+- The manual Web UI session should use the manual folders while automated/governed ComfyUI jobs keep using the existing operational folders.
+- Surface the manual output path in the node UI/status.
+- Document the manual folder boundary and cleanup expectations.
+- Ensure manual folder changes do not break existing operational GPU/CPU ComfyUI paths.
+
+## Task 981
+Original task details:
+- Surface manual ComfyUI session controls and status in the node UI.
+- The UI should make the temporary GPU takeover and auto-close behavior visible.
+
+Implementation notes:
+- Add a Runtime UI switch or toggle for `ComfyUI Web UI`.
+- Show an `Open ComfyUI` action only while the local Web UI bridge is active.
+- Show states for preflight, waiting on vision jobs, rerouting cloud-eligible vision work, unloading vision, active session, idle countdown, auto-closing, restoring vision, and blocked.
+- Show separate status for GPU ComfyUI runtime, manual Web UI bridge, idle timeout, and manual output directory.
+- Keep the default workflow concise while exposing enough detail for blocked/rerouting decisions.
+
+## Task 982
+Original task details:
+- Add image-generation template selection as an option in AI prompts for V3+ prompt contracts.
+- Prompt owners should be able to bind a V3+ image prompt to a reusable template such as a weather ComfyUI workflow.
+
+Implementation notes:
+- Extend V3+ prompt registration/update handling with an image template reference for image-generation task families.
+- Keep template selection prompt-owned policy, similar to routing policy, importance, and capability requirements.
+- Support fields such as `template_id`, `template_version`, `template_runtime`, and allowed template parameter overrides.
+- Ensure request-time execution may narrow or fill template variables but must not broaden prompt-owned template constraints.
+- Preserve V1/V2 prompt behavior and normalize missing template policy to `none`.
+- Add schema/tests covering prompt registration, prompt update, persisted prompt state, and execution metadata.
+
+## Task 983
+Original task details:
+- Add an image generation template registration flow like prompt registration.
+- Templates should be registerable, versioned, reviewed, retired, and discoverable.
+
+Implementation notes:
+- Create a node-local image generation template registry/state store parallel to prompt service registration.
+- Add APIs for register, update, get/list, transition lifecycle state, review, and migration where appropriate.
+- Persist template records with owner service/client, access scope, privacy class, lifecycle status, versions, metadata, and usage.
+- Include versioned references to ComfyUI API workflow JSON and optional UI workflow JSON.
+- Reuse prompt lifecycle vocabulary where practical: `active`, `probation`, `review_due`, `restricted`, `retired`.
+- Add JSON schema and tests for normalized template state.
+
+## Task 984
+Original task details:
+- Add a ComfyUI workflow template catalog and validation layer.
+- Templates should support reusable normal-operation workflows such as weather generation.
+
+Implementation notes:
+- Store durable template definitions under a config path such as `config/comfyui/templates`.
+- Support API workflow JSON for governed execution and UI workflow JSON for manual editing/session seeding.
+- Validate required models, runtime target, workflow file paths, editable variables, default values, and output scope.
+- Include model requirements such as checkpoint, LoRA, VAE, ControlNet, or other ComfyUI dependencies when present.
+- Provide discovery endpoints for available image templates and their editable variables.
+- Add at least one weather-oriented template fixture or test catalog entry.
+
+## Task 985
+Original task details:
+- Route normal image-generation operation through registered templates when a prompt references one.
+- Example: a weather prompt should select a reusable ComfyUI weather template and fill its variables at execution time.
+
+Implementation notes:
+- Resolve template references during direct and queued image-generation execution.
+- Fill template variables from prompt rendering, request inputs, defaults, and allowed request overrides.
+- Submit the resolved API workflow to the selected runtime, respecting existing GPU/CPU ComfyUI routing and vision VRAM gates.
+- Save normal-operation outputs to governed operational output folders, not manual session folders.
+- Include template id/version/runtime in execution results and diagnostics.
+- Ensure privacy, routing, budget, capability, and local/cloud policies are enforced before template execution.
+
+## Task 986
+Original task details:
+- Surface image generation template registration in documentation and the node UI.
+- Operators should be able to see which prompts use which templates.
+
+Implementation notes:
+- Document V3+ prompt template-selection fields and image template registration APIs.
+- Update client AI V2/V3 communication docs and JSON schemas after implementation.
+- Add node UI surfaces to list registered image templates, show lifecycle state, inspect variables, and see prompt-template bindings.
+- Show template validation errors clearly during registration/update.
+- Include output folder policy in UI/docs so normal OP and manual ComfyUI artifacts remain separate.

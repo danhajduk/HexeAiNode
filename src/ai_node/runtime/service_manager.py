@@ -3,6 +3,7 @@ import os
 import shlex
 import socket
 import subprocess
+import sys
 import time
 
 
@@ -96,6 +97,17 @@ class UserSystemdServiceManager:
         self._comfyui_cpu_health_socket = str(
             os.environ.get("COMFYUI_CPU_HEALTH_SOCKET") or f"{comfyui_socket_dir}/comfyui-cpu-health.sock"
         ).strip()
+        self._comfyui_webui_runtime = str(os.environ.get("HEXE_COMFYUI_WEBUI_RUNTIME") or "gpu").strip().lower()
+        if self._comfyui_webui_runtime not in {"gpu", "cpu"}:
+            self._comfyui_webui_runtime = "gpu"
+        self._comfyui_webui_host = str(os.environ.get("HEXE_COMFYUI_WEBUI_HOST") or "127.0.0.1").strip() or "127.0.0.1"
+        self._comfyui_webui_port = max(_env_int("HEXE_COMFYUI_WEBUI_PORT", default=18188), 1)
+        self._comfyui_webui_bridge_script = str(
+            os.environ.get("HEXE_COMFYUI_WEBUI_BRIDGE_SCRIPT") or "scripts/unix-socket-tcp-bridge.py"
+        ).strip()
+        self._comfyui_webui_pid_file = str(
+            os.environ.get("HEXE_COMFYUI_WEBUI_PID_FILE") or ".run/comfyui-webui-bridge.pid"
+        ).strip()
         self._vision_llm_default_model_id = (
             str(
                 os.environ.get("HEXE_PROVIDER_VISION_DEFAULT_MODEL_ID")
@@ -130,6 +142,7 @@ class UserSystemdServiceManager:
             "vision_llm": self._vision_llm_status(),
             "comfyui_gpu": self._comfyui_runtime_status(runtime="gpu"),
             "comfyui_cpu": self._comfyui_runtime_status(runtime="cpu"),
+            "comfyui_webui": self._comfyui_webui_status(),
             "node": node,
         }
 
@@ -151,6 +164,9 @@ class UserSystemdServiceManager:
         if value == "vision_llm":
             self._run_vision_llm_control("restart")
             return {"target": "vision_llm", "result": "restarted"}
+        if value == "comfyui_webui":
+            self.stop_comfyui_webui()
+            return self.start_comfyui_webui()
         raise ValueError("unsupported restart target")
 
     def start(self, *, target: str) -> dict:
@@ -171,6 +187,8 @@ class UserSystemdServiceManager:
         if value == "vision_llm":
             self._run_vision_llm_control("start")
             return {"target": "vision_llm", "result": "started"}
+        if value == "comfyui_webui":
+            return self.start_comfyui_webui()
         raise ValueError("unsupported start target")
 
     def stop(self, *, target: str) -> dict:
@@ -190,6 +208,8 @@ class UserSystemdServiceManager:
             return {"target": "local_llm", "result": "stopped"}
         if value == "vision_llm":
             return self.unload_vision_model()
+        if value == "comfyui_webui":
+            return self.stop_comfyui_webui()
         raise ValueError("unsupported stop target")
 
     def schedule_restart(self, *, target: str, delay_seconds: int) -> dict:
@@ -582,6 +602,64 @@ class UserSystemdServiceManager:
             **status,
         }
 
+    def start_comfyui_webui(self) -> dict:
+        current = self._comfyui_webui_status()
+        if current.get("state") == "running":
+            return {"target": "comfyui_webui", "result": "already_running", **current}
+        script_path = self._comfyui_webui_bridge_script
+        if not script_path or not os.path.exists(script_path):
+            raise ValueError("ComfyUI web UI bridge script is not configured")
+        socket_path = self._comfyui_socket_for_runtime(self._comfyui_webui_runtime)
+        if not socket_path or not os.path.exists(socket_path):
+            self._run_comfyui_control(self._comfyui_webui_runtime, "ready")
+        if not os.path.exists(socket_path):
+            raise ValueError("ComfyUI runtime socket is not ready")
+        subprocess.Popen(
+            [
+                sys.executable,
+                script_path,
+                "--socket-path",
+                socket_path,
+                "--host",
+                self._comfyui_webui_host,
+                "--port",
+                str(self._comfyui_webui_port),
+                "--pid-file",
+                self._comfyui_webui_pid_file,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        for _ in range(30):
+            time.sleep(0.1)
+            status = self._comfyui_webui_status()
+            if status.get("state") == "running":
+                return {"target": "comfyui_webui", "result": "started", **status}
+        raise ValueError("ComfyUI web UI bridge did not become ready")
+
+    def stop_comfyui_webui(self) -> dict:
+        pid = self._read_pid_file(self._comfyui_webui_pid_file)
+        if pid:
+            try:
+                os.kill(pid, 15)
+            except ProcessLookupError:
+                pass
+            for _ in range(30):
+                if not self._process_running(pid):
+                    break
+                time.sleep(0.1)
+            if self._process_running(pid):
+                try:
+                    os.kill(pid, 9)
+                except ProcessLookupError:
+                    pass
+        try:
+            os.unlink(self._comfyui_webui_pid_file)
+        except FileNotFoundError:
+            pass
+        return {"target": "comfyui_webui", "result": "stopped", **self._comfyui_webui_status()}
+
     def _local_llm_status(self) -> dict:
         service_id = "local_llm"
         script_exists = os.path.exists(self._local_llm_control_script)
@@ -672,6 +750,72 @@ class UserSystemdServiceManager:
             "api_transport": "unix_socket",
             "model_residency": "on_demand",
         }
+
+    def _comfyui_webui_status(self) -> dict:
+        pid = self._read_pid_file(self._comfyui_webui_pid_file)
+        running = bool(
+            pid
+            and self._process_running(pid)
+            and self._tcp_port_ready(host=self._comfyui_webui_host, port=self._comfyui_webui_port)
+        )
+        if pid and not running:
+            try:
+                os.unlink(self._comfyui_webui_pid_file)
+            except FileNotFoundError:
+                pass
+            pid = 0
+        url_host = "localhost" if self._comfyui_webui_host == "127.0.0.1" else self._comfyui_webui_host
+        return {
+            "service_id": "comfyui_webui",
+            "service_name": "comfyui_webui",
+            "state": "running" if running else "stopped",
+            "pid": pid or None,
+            "boot_order": 46,
+            "managed_by": "unix-socket-tcp-bridge",
+            "runtime": self._comfyui_webui_runtime,
+            "host": self._comfyui_webui_host,
+            "port": self._comfyui_webui_port,
+            "url": f"http://{url_host}:{self._comfyui_webui_port}",
+            "socket_path": self._comfyui_socket_for_runtime(self._comfyui_webui_runtime),
+            "pid_file": self._comfyui_webui_pid_file,
+            "api_transport": "tcp_bridge_to_unix_socket",
+        }
+
+    def _comfyui_socket_for_runtime(self, runtime: str) -> str:
+        return self._comfyui_cpu_socket if str(runtime or "").strip().lower() == "cpu" else self._comfyui_gpu_socket
+
+    def _run_comfyui_control(self, target: str, command: str) -> None:
+        if not self._comfyui_control_script:
+            raise ValueError("ComfyUI control script is not configured")
+        subprocess.run([self._comfyui_control_script, target, command], check=True)
+
+    @staticmethod
+    def _read_pid_file(path: str) -> int:
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                return max(int(str(handle.read()).strip() or "0"), 0)
+        except Exception:
+            return 0
+
+    @staticmethod
+    def _process_running(pid: int) -> bool:
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
+    @staticmethod
+    def _tcp_port_ready(*, host: str, port: int) -> bool:
+        try:
+            with socket.create_connection((host, int(port)), timeout=0.2):
+                return True
+        except OSError:
+            return False
 
     def _comfyui_gpu_model_loaded(self) -> bool:
         payload = self._uds_json_get(self._comfyui_gpu_health_socket, "/health")
@@ -1011,6 +1155,7 @@ class NullServiceManager:
             "vision_llm": "unknown",
             "comfyui_gpu": "unknown",
             "comfyui_cpu": "unknown",
+            "comfyui_webui": "unknown",
             "node": "unknown",
         }
 

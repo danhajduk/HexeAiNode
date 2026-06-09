@@ -126,6 +126,17 @@ ComfyUI no longer publishes host HTTP ports by default. The container keeps HTTP
 then exposes API and health access through Unix sockets under `/run/hexe/ai-node`. The health sockets serve `/health`;
 the API sockets forward regular ComfyUI HTTP API calls such as `/system_stats`, `/prompt`, and `/history`.
 
+The node service can expose a temporary manual Web UI bridge when requested through service control:
+
+```bash
+POST /api/services/start {"target":"comfyui_webui"}
+POST /api/services/stop {"target":"comfyui_webui"}
+```
+
+The bridge defaults to `http://localhost:18188` and forwards local TCP traffic to the configured ComfyUI Unix socket.
+`GET /api/services/status` reports the `comfyui_webui` service with its runtime, URL, socket path, and pid file. This
+does not publish the ComfyUI container port; LAN-wide exposure requires changing `HEXE_COMFYUI_WEBUI_HOST` explicitly.
+
 Example socket probes:
 
 ```bash
