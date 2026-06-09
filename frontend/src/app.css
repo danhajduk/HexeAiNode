@@ -210,6 +210,13 @@
   align-items: center;
 }
 
+.inline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+
 .app-header-top,
 .app-header-bottom,
 .app-header-meta {

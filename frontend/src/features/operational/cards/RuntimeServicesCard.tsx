@@ -7,10 +7,46 @@ function serviceState(value) {
   return value || "unknown";
 }
 
-export function RuntimeServicesCard({ serviceStatus }) {
+function formatSeconds(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return "none";
+  }
+  if (parsed < 60) {
+    return `${Math.floor(parsed)}s`;
+  }
+  return `${Math.floor(parsed / 60)}m ${Math.floor(parsed % 60)}s`;
+}
+
+function serviceObject(value) {
+  return value && typeof value === "object" ? value : {};
+}
+
+export function RuntimeServicesCard({
+  serviceStatus = {},
+  comfyuiWebuiBusy = false,
+  onStartComfyuiWebui,
+  onStopComfyuiWebui,
+  onOpenComfyuiWebui,
+}) {
+  const comfyuiGpu = serviceObject(serviceStatus.comfyui_gpu);
+  const comfyuiCpu = serviceObject(serviceStatus.comfyui_cpu);
+  const comfyuiWebui = serviceObject(serviceStatus.comfyui_webui);
+  const session = serviceObject(comfyuiWebui.session);
+  const webuiActive = serviceState(comfyuiWebui) === "running" || Boolean(comfyuiWebui.manual_session_active);
+  const manualPaths = serviceObject(comfyuiWebui.manual_paths);
+
+  function onToggleComfyuiWebui(event) {
+    if (event.target.checked) {
+      onStartComfyuiWebui?.();
+      return;
+    }
+    onStopComfyuiWebui?.();
+  }
+
   return (
     <article className="card">
-      <CardHeader title="Runtime Services" subtitle="Primary home for backend, frontend, node, and local LLM service state." />
+      <CardHeader title="Runtime Services" subtitle="Primary home for backend, frontend, node, local LLM, and ComfyUI service state." />
       <div className="state-grid">
         <span>Backend</span>
         <StatusBadge value={serviceState(serviceStatus.backend)} />
@@ -18,8 +54,33 @@ export function RuntimeServicesCard({ serviceStatus }) {
         <StatusBadge value={serviceState(serviceStatus.frontend)} />
         <span>Local LLM</span>
         <StatusBadge value={serviceState(serviceStatus.local_llm)} />
+        <span>ComfyUI GPU</span>
+        <StatusBadge value={serviceState(comfyuiGpu)} />
+        <span>ComfyUI CPU</span>
+        <StatusBadge value={serviceState(comfyuiCpu)} />
+        <span>ComfyUI Web UI</span>
+        <StatusBadge value={serviceState(comfyuiWebui)} />
+        <span>Manual Session</span>
+        <StatusBadge value={session.state || (webuiActive ? "active" : "inactive")} />
+        <span>Idle</span>
+        <code>{formatSeconds(session.idle_seconds)}</code>
+        <span>Idle Timeout</span>
+        <code>{formatSeconds(session.idle_timeout_seconds)}</code>
+        <span>Manual Output</span>
+        <code>{manualPaths.output_dir || "not_configured"}</code>
         <span>Node</span>
         <StatusBadge value={serviceState(serviceStatus.node)} />
+      </div>
+      <div className="row">
+        <label className="inline-toggle">
+          <input type="checkbox" checked={webuiActive} onChange={onToggleComfyuiWebui} disabled={comfyuiWebuiBusy} />
+          <span>{comfyuiWebuiBusy ? "Working..." : "ComfyUI Web UI"}</span>
+        </label>
+        {comfyuiWebui.url && serviceState(comfyuiWebui) === "running" ? (
+          <button className="btn btn-primary" type="button" onClick={onOpenComfyuiWebui}>
+            Open ComfyUI
+          </button>
+        ) : null}
       </div>
     </article>
   );

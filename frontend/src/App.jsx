@@ -1692,6 +1692,9 @@ export default function App() {
   const localLlmServiceObject = localLlmService && typeof localLlmService === "object" ? localLlmService : {};
   const localLlmRuntimeState = serviceState(localLlmService);
   const localLlmBusy = restartingServiceTarget === "local_llm";
+  const comfyuiWebuiService = uiState.serviceStatus?.comfyui_webui || {};
+  const comfyuiWebuiObject = comfyuiWebuiService && typeof comfyuiWebuiService === "object" ? comfyuiWebuiService : {};
+  const comfyuiWebuiBusy = restartingServiceTarget === "comfyui_webui";
   const operationalDashboardProps = {
     currentSection: currentOperationalSection,
     sections: operationalSections,
@@ -1762,6 +1765,14 @@ export default function App() {
     resolvedTasks: resolvedNodeTasks,
     runtimeServicesProps: {
       serviceStatus: uiState.serviceStatus,
+      comfyuiWebuiBusy,
+      onStartComfyuiWebui: () => onControlService("start", "comfyui_webui"),
+      onStopComfyuiWebui: () => onControlService("stop", "comfyui_webui"),
+      onOpenComfyuiWebui: () => {
+        if (comfyuiWebuiObject.url) {
+          window.open(comfyuiWebuiObject.url, "_blank", "noopener,noreferrer");
+        }
+      },
     },
     operationalActions,
     activityItems: recentActivityItems,
