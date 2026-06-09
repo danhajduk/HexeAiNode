@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { CardHeader, StatusBadge } from "../../../components/uiPrimitives";
 
@@ -26,6 +26,26 @@ function serviceState(value) {
   return value || "unknown";
 }
 
+function variableNames(template) {
+  return asArray(template?.variables).map((variable) => String(variable?.name || "").trim()).filter(Boolean);
+}
+
+function templateMode(template) {
+  const metadataMode = String(template?.metadata?.input_mode || "").trim();
+  if (metadataMode === "image") {
+    return "img2img";
+  }
+  if (variableNames(template).includes("input_image")) {
+    return "img2img";
+  }
+  return "txt2img";
+}
+
+function variableInputType(variable) {
+  const type = String(variable?.type || "").trim().toLowerCase();
+  return type === "integer" || type === "number" ? "number" : "text";
+}
+
 export function ManualImageGenerationCard({
   payload = null,
   busy = false,
@@ -34,6 +54,8 @@ export function ManualImageGenerationCard({
   onSubmit,
   onRefresh,
 }) {
+  const templates = asArray(payload?.templates);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [mode, setMode] = useState("txt2img");
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("low quality, blurry, watermark, text");
@@ -43,16 +65,56 @@ export function ManualImageGenerationCard({
   const [steps, setSteps] = useState("4");
   const [cfg, setCfg] = useState("1.6");
   const [denoise, setDenoise] = useState("0.55");
+  const [templateVariables, setTemplateVariables] = useState({});
   const [referenceFile, setReferenceFile] = useState(null);
   const outputs = asArray(payload?.outputs);
   const service = payload?.service || {};
   const manualPaths = payload?.manual_paths || {};
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template?.template_id === selectedTemplateId) || templates[0] || null,
+    [templates, selectedTemplateId]
+  );
+  const adjustableVariables = asArray(selectedTemplate?.variables).filter((variable) => {
+    const name = String(variable?.name || "").trim();
+    return name && !["positive_prompt", "negative_prompt", "input_image", "width", "height", "seed", "steps", "cfg", "denoise"].includes(name);
+  });
   const canSubmit = Boolean(prompt.trim()) && !busy;
+
+  useEffect(() => {
+    if (!selectedTemplateId && templates[0]?.template_id) {
+      setSelectedTemplateId(templates[0].template_id);
+    }
+  }, [selectedTemplateId, templates]);
+
+  useEffect(() => {
+    if (!selectedTemplate) {
+      return;
+    }
+    const defaults = selectedTemplate.defaults || {};
+    setMode(templateMode(selectedTemplate));
+    setNegativePrompt(String(defaults.negative_prompt || "low quality, blurry, watermark, text"));
+    setWidth(String(defaults.width || 1024));
+    setHeight(String(defaults.height || 1024));
+    setSeed(defaults.seed === null || defaults.seed === undefined ? "" : String(defaults.seed));
+    setSteps(String(defaults.steps || 4));
+    setCfg(String(defaults.cfg || 1.6));
+    setDenoise(String(defaults.denoise || 0.55));
+    setTemplateVariables(
+      Object.fromEntries(
+        adjustableVariables.map((variable) => {
+          const name = String(variable?.name || "").trim();
+          const value = defaults[name] ?? variable?.default ?? "";
+          return [name, value === null || value === undefined ? "" : String(value)];
+        })
+      )
+    );
+  }, [selectedTemplateId]);
 
   async function handleSubmit(event) {
     event.preventDefault();
     const referenceData = referenceFile ? await fileToDataUrl(referenceFile) : "";
     onSubmit?.({
+      template_id: selectedTemplate?.template_id || null,
       mode: referenceFile ? "img2img" : mode,
       prompt,
       negative_prompt: negativePrompt,
@@ -64,6 +126,7 @@ export function ManualImageGenerationCard({
       denoise: Number.parseFloat(denoise) || 0.55,
       reference_image_filename: referenceFile?.name || null,
       reference_image_data_base64: referenceData || null,
+      template_variables: templateVariables,
     });
   }
 
@@ -86,15 +149,18 @@ export function ManualImageGenerationCard({
         <span>Last Submit</span>
         <code>{result?.prompt_id || "none"}</code>
         <span>Template</span>
-        <code>{referenceFile || mode === "img2img" ? "template.img2img.realvisxl.v1" : "template.txt2img.realvisxl.v1"}</code>
+        <code>{selectedTemplate?.template_id || "not_configured"}</code>
       </div>
       <form className="setup-form" onSubmit={handleSubmit}>
         <div className="form-grid two-column-form-grid">
           <label>
-            Mode
-            <select value={mode} onChange={(event) => setMode(event.target.value)}>
-              <option value="txt2img">Text</option>
-              <option value="img2img">Image</option>
+            Template
+            <select value={selectedTemplate?.template_id || ""} onChange={(event) => setSelectedTemplateId(event.target.value)}>
+              {templates.map((template) => (
+                <option value={template?.template_id} key={template?.template_id}>
+                  {template?.template_name || template?.template_id}
+                </option>
+              ))}
             </select>
           </label>
           <label>
@@ -136,6 +202,23 @@ export function ManualImageGenerationCard({
             <input type="number" min="0" max="1" step="0.05" value={denoise} onChange={(event) => setDenoise(event.target.value)} />
           </label>
         </div>
+        {adjustableVariables.length ? (
+          <div className="form-grid">
+            {adjustableVariables.map((variable) => {
+              const name = String(variable?.name || "").trim();
+              return (
+                <label key={name}>
+                  {name}
+                  <input
+                    type={variableInputType(variable)}
+                    value={templateVariables[name] ?? ""}
+                    onChange={(event) => setTemplateVariables((current) => ({ ...current, [name]: event.target.value }))}
+                  />
+                </label>
+              );
+            })}
+          </div>
+        ) : null}
         <div className="row">
           <button className="btn btn-primary" type="submit" disabled={!canSubmit}>
             {busy ? "Generating..." : "Generate"}

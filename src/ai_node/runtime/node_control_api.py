@@ -1427,7 +1427,8 @@ class NodeControlState:
             item
             for item in list(catalog.get("templates") or [])
             if isinstance(item, dict)
-            and str(item.get("template_id") or "") in {"template.txt2img.realvisxl.v1", "template.img2img.realvisxl.v1"}
+            and str(item.get("runtime_id") or "") == "comfyui_gpu"
+            and str(item.get("output_scope") or "") in {"normal", "manual", "normal_and_manual"}
         ]
         return {
             "configured": True,
@@ -1456,8 +1457,12 @@ class NodeControlState:
                 filename=payload.reference_image_filename,
                 data_base64=payload.reference_image_data_base64,
             )
-        template_id = "template.img2img.realvisxl.v1" if mode == "img2img" else "template.txt2img.realvisxl.v1"
+        template_id = str(payload.template_id or "").strip()
+        if not template_id:
+            template_id = "template.img2img.realvisxl.v1" if mode == "img2img" else "template.txt2img.realvisxl.v1"
         template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
+        if str(template.get("runtime_id") or "") != "comfyui_gpu":
+            raise ValueError("manual_image_template_runtime_unsupported")
         workflow = self._manual_image_workflow_from_template(template=template, payload=payload, input_image=input_image)
         response = self._uds_json_request(
             socket_path=socket_path,
@@ -1502,6 +1507,11 @@ class NodeControlState:
                 "denoise": float(payload.denoise if payload.denoise is not None else values.get("denoise") or 0.55),
             }
         )
+        if isinstance(payload.template_variables, dict):
+            for key, value in payload.template_variables.items():
+                name = str(key or "").strip()
+                if name in variables and name not in {"positive_prompt", "negative_prompt", "input_image"}:
+                    values[name] = value
         if "input_image" in variables:
             values["input_image"] = input_image
         for name, variable in variables.items():
@@ -5475,6 +5485,7 @@ class ImageGenerationTemplateReviewRequest(BaseModel):
 
 
 class ManualImageGenerationRequest(BaseModel):
+    template_id: str | None = None
     mode: str = "txt2img"
     prompt: str
     negative_prompt: str | None = None
@@ -5487,6 +5498,7 @@ class ManualImageGenerationRequest(BaseModel):
     input_image: str | None = None
     reference_image_filename: str | None = None
     reference_image_data_base64: str | None = None
+    template_variables: dict | None = None
 
 
 class ExecutionAuthorizeRequest(BaseModel):

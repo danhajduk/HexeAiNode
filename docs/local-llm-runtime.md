@@ -222,8 +222,9 @@ The default ComfyUI template catalog includes `template.txt2img.realvisxl.v1` fo
 which must reference an image available to ComfyUI's selected runtime input folder.
 
 The node UI runtime section also exposes a manual image-generation card backed by `GET/POST /api/manual-image-generation`.
-It starts or reuses the manual ComfyUI session, submits txt2img or img2img workflows, stores reference images in the
-manual input folder, and lists recent files from the manual output folder through node API output URLs.
+It starts or reuses the manual ComfyUI session, lets operators choose a GPU ComfyUI template and adjust its exposed
+settings, submits txt2img or img2img workflows, stores reference images in the manual input folder, and lists recent
+files from the manual output folder through node API output URLs.
 
 On the RTX 3060 12 GB node, ComfyUI should be treated as exclusive GPU work for real generation. With both llama.cpp
 runtimes loaded, only about 2.5 GB VRAM remains, which is not enough for typical SDXL, FLUX, or Stable Diffusion 3.5
