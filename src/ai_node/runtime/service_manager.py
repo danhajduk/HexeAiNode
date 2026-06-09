@@ -991,7 +991,7 @@ class UserSystemdServiceManager:
 
     def _comfyui_progress_state(self) -> dict:
         payload = self._uds_json_get(self._comfyui_socket_for_runtime(self._comfyui_webui_runtime), "/progress")
-        if not isinstance(payload, dict):
+        if not isinstance(payload, dict) or not payload:
             return {"available": False, "active": False, "value": None, "max": None, "percent": None, "prompt_id": None, "node": None}
         value = payload.get("value")
         maximum = payload.get("max")
@@ -1213,7 +1213,10 @@ class UserSystemdServiceManager:
                         break
                     chunks.append(chunk)
             raw = b"".join(chunks)
-            _, _, body = raw.partition(b"\r\n\r\n")
+            head, _, body = raw.partition(b"\r\n\r\n")
+            status_line = head.decode("utf-8", errors="replace").splitlines()[0] if head else ""
+            if " 2" not in status_line:
+                return None
             payload = json.loads(body.decode("utf-8")) if body else {}
         except Exception:
             return None

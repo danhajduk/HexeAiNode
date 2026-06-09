@@ -370,6 +370,15 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(status["progress"]["percent"], 25.0)
         self.assertEqual(status["progress"]["prompt_id"], "prompt-running")
 
+    def test_comfyui_progress_empty_payload_is_unavailable(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+        with patch.object(manager, "_uds_json_get", return_value={}):
+            progress = manager._comfyui_progress_state()
+
+        self.assertFalse(progress["available"])
+        self.assertFalse(progress["active"])
+
     def test_comfyui_webui_start_refreshes_stale_idle_clock(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             "os.environ",
