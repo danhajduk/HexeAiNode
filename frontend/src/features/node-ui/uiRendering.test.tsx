@@ -285,6 +285,34 @@ describe("OperationalDashboard", () => {
                 prompt_id: "prompt-running",
               },
               manual_paths: { output_dir: "runtime/manual/comfyui-gpu/output" },
+              templates: [
+                {
+                  template_id: "template.avatar_reference.realvisxl.v1",
+                  template_name: "Avatar References RealVisXL",
+                  metadata: { domain: "avatar", input_mode: "image" },
+                  defaults: {
+                    negative_prompt: "low quality, blurry",
+                    width: 768,
+                    height: 1152,
+                    steps: 4,
+                    cfg: 1.8,
+                    denoise: 0.55,
+                  },
+                  variables: [
+                    { name: "positive_prompt", required: true, type: "string" },
+                    { name: "input_image", required: true, type: "image" },
+                    { name: "face_reference_image", required: true, type: "image" },
+                    { name: "body_reference_image", required: true, type: "image" },
+                    { name: "negative_prompt", required: false, type: "string" },
+                    { name: "width", required: false, type: "integer" },
+                    { name: "height", required: false, type: "integer" },
+                    { name: "seed", required: false, type: "integer" },
+                    { name: "steps", required: false, type: "integer" },
+                    { name: "cfg", required: false, type: "number" },
+                    { name: "denoise", required: false, type: "number" },
+                  ],
+                },
+              ],
               outputs: [
                 {
                   relative_path: "hexe/sample.png",
@@ -313,7 +341,11 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("prompt-running");
     expect(markup).toContain("1 running / 2 pending");
     expect(markup).toContain("25.0%");
-    expect(markup).toContain("Reference Image");
+    expect(markup).toContain("Template");
+    expect(markup).toContain("Source Image");
+    expect(markup).toContain("Avatar References");
+    expect(markup).toContain("Prompt");
+    expect(markup).toContain("Outputs");
     expect(markup).toContain("Upload Reference");
     expect(markup).toContain("Vision Mode");
     expect(markup).toContain("Scene");

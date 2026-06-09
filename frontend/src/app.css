@@ -744,6 +744,19 @@
   margin-bottom: 14px;
 }
 
+.manual-generation-card-stack {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.manual-generation-card-stack > .card {
+  min-width: 0;
+}
+
+.manual-generation-card-wide {
+  grid-column: 1 / -1;
+}
+
 .manual-generation-status-row {
   display: grid;
   gap: 10px;
@@ -1507,6 +1520,10 @@ h2 {
   .manual-generation-status-row,
   .manual-generation-status-row-primary,
   .manual-generation-status-row-secondary {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-generation-card-stack {
     grid-template-columns: 1fr;
   }
 

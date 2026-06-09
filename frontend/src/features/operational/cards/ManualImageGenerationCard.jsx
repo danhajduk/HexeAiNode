@@ -46,6 +46,14 @@ function templateForMode(templates, mode) {
   return asArray(templates).find((template) => templateMode(template) === normalizedMode) || null;
 }
 
+function hasVariable(template, name) {
+  return variableNames(template).includes(name);
+}
+
+function requiredVariable(template, name) {
+  return asArray(template?.variables).some((variable) => String(variable?.name || "").trim() === name && Boolean(variable?.required));
+}
+
 function variableInputType(variable) {
   const type = String(variable?.type || "").trim().toLowerCase();
   return type === "integer" || type === "number" ? "number" : "text";
@@ -172,11 +180,20 @@ export function ManualImageGenerationCard({
     () => templates.find((template) => template?.template_id === selectedTemplateId) || templates[0] || null,
     [templates, selectedTemplateId]
   );
-  const effectiveMode = referenceFile || selectedReference ? "img2img" : mode;
-  const effectiveTemplate =
-    selectedTemplate && templateMode(selectedTemplate) === effectiveMode
-      ? selectedTemplate
-      : templateForMode(templates, effectiveMode) || selectedTemplate;
+  const effectiveTemplate = selectedTemplate;
+  const effectiveMode = templateMode(effectiveTemplate) || mode;
+  const templateDomain = String(effectiveTemplate?.metadata?.domain || "").trim();
+  const needsSourceImage = hasVariable(effectiveTemplate, "input_image");
+  const needsFaceReference = hasVariable(effectiveTemplate, "face_reference_image");
+  const needsBodyReference = hasVariable(effectiveTemplate, "body_reference_image");
+  const needsSceneReference = hasVariable(effectiveTemplate, "scene_reference_image");
+  const supportsDenoise = hasVariable(effectiveTemplate, "denoise");
+  const showAvatarReferences = templateDomain === "avatar" || needsFaceReference || needsBodyReference;
+  const showSceneReferences = templateDomain === "scene" || needsSceneReference;
+  const sourceImageReady = !requiredVariable(effectiveTemplate, "input_image") || Boolean(referenceFile || selectedReference);
+  const faceReferenceReady = !requiredVariable(effectiveTemplate, "face_reference_image") || Boolean(faceReference);
+  const bodyReferenceReady = !requiredVariable(effectiveTemplate, "body_reference_image") || Boolean(bodyReference);
+  const sceneReferenceReady = !requiredVariable(effectiveTemplate, "scene_reference_image") || Boolean(sceneReference);
   const adjustableVariables = asArray(selectedTemplate?.variables).filter((variable) => {
     const name = String(variable?.name || "").trim();
     return (
@@ -197,7 +214,13 @@ export function ManualImageGenerationCard({
       ].includes(name)
     );
   });
-  const canSubmit = Boolean(prompt.trim()) && !busy;
+  const canSubmit =
+    Boolean(prompt.trim()) &&
+    sourceImageReady &&
+    faceReferenceReady &&
+    bodyReferenceReady &&
+    sceneReferenceReady &&
+    !busy;
   const helperDisabled = busy || promptHelperBusy;
 
   useEffect(() => {
@@ -263,7 +286,7 @@ export function ManualImageGenerationCard({
     if (file) {
       setSelectedReference(null);
     }
-    if (file) {
+    if (file && !needsSourceImage) {
       setMode("img2img");
       const img2imgTemplate = templateForMode(templates, "img2img");
       if (img2imgTemplate?.template_id && templateMode(selectedTemplate) !== "img2img") {
@@ -285,9 +308,17 @@ export function ManualImageGenerationCard({
       data_base64: referenceData,
     });
     if (result?.reference) {
-      setSelectedReference(result.reference);
-      setReferenceFile(null);
-      setMode("img2img");
+      if (libraryRole === "face") {
+        setFaceReference(result.reference);
+      } else if (libraryRole === "body") {
+        setBodyReference(result.reference);
+      } else if (libraryCategory === "scene" || libraryRole === "place") {
+        setSceneReference(result.reference);
+      } else {
+        setSelectedReference(result.reference);
+        setReferenceFile(null);
+        setMode("img2img");
+      }
     }
     setLibraryFile(null);
   }
@@ -304,7 +335,7 @@ export function ManualImageGenerationCard({
       setReferenceFile(null);
       setMode("img2img");
       const img2imgTemplate = templateForMode(templates, "img2img");
-      if (img2imgTemplate?.template_id && templateMode(selectedTemplate) !== "img2img") {
+      if (!needsSourceImage && img2imgTemplate?.template_id && templateMode(selectedTemplate) !== "img2img") {
         setSelectedTemplateId(img2imgTemplate.template_id);
       }
     }
@@ -351,6 +382,7 @@ export function ManualImageGenerationCard({
   }
 
   return (
+    <>
     <article className="card operational-card-full-span">
       <CardHeader title="Manual Image Generation" subtitle="Prompt-driven ComfyUI generation for the manual session." />
       <div className="manual-generation-status-grid">
@@ -414,7 +446,11 @@ export function ManualImageGenerationCard({
           />
         </div>
       </div>
-      <form className="setup-form" onSubmit={handleSubmit}>
+    </article>
+
+    <form className="setup-form manual-generation-card-stack operational-card-full-span" onSubmit={handleSubmit}>
+      <article className="card manual-generation-card-wide">
+        <CardHeader title="Template" subtitle="Select the ComfyUI workflow for this manual job." />
         <div className="form-grid two-column-form-grid">
           <label>
             Template
@@ -427,45 +463,171 @@ export function ManualImageGenerationCard({
             </select>
           </label>
           <label>
-            Reference Image
-            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onReferenceChange} />
+            Job Type
+            <input type="text" value={effectiveMode} readOnly />
           </label>
         </div>
-        <div className="form-grid">
-          <label>
-            Reference Type
-            <select value={libraryCategory} onChange={(event) => setLibraryCategory(event.target.value)}>
-              <option value="avatar">Avatar</option>
-              <option value="scene">Scene / Place</option>
-            </select>
-          </label>
-          <label>
-            Reference Role
-            <select value={libraryRole} onChange={(event) => setLibraryRole(event.target.value)}>
-              <option value="reference">Reference</option>
-              <option value="face">Face</option>
-              <option value="body">Body</option>
-              <option value="place">Place</option>
-            </select>
-          </label>
-          <label>
-            Reference Name
-            <input type="text" value={libraryName} onChange={(event) => setLibraryName(event.target.value)} />
-          </label>
-          <label>
-            Upload Reference
-            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setLibraryFile(event.target.files?.[0] || null)} />
-          </label>
+        <div className="state-grid">
+          <span>Template ID</span>
+          <code>{effectiveTemplate?.template_id || "not_configured"}</code>
+          <span>Domain</span>
+          <code>{templateDomain || "general"}</code>
+          <span>Required</span>
+          <code>
+            {[
+              needsSourceImage ? "source" : null,
+              needsFaceReference ? "face" : null,
+              needsBodyReference ? "body" : null,
+              needsSceneReference ? "scene" : null,
+            ].filter(Boolean).join(", ") || "prompt"}
+          </code>
         </div>
-        <div className="row">
-          <button className="btn" type="button" onClick={handleUploadReference} disabled={busy || !libraryFile}>
-            Upload Reference
-          </button>
-          {selectedReference ? <code>{selectedReference.name || selectedReference.filename}</code> : null}
-          {faceReference ? <code>{`Face: ${faceReference.name || faceReference.filename}`}</code> : null}
-          {bodyReference ? <code>{`Body: ${bodyReference.name || bodyReference.filename}`}</code> : null}
-          {sceneReference ? <code>{`Scene: ${sceneReference.name || sceneReference.filename}`}</code> : null}
-        </div>
+      </article>
+
+      {needsSourceImage ? (
+        <article className="card">
+          <CardHeader title="Source Image" subtitle="Image used as the direct img2img source for this template." />
+          <div className="form-grid two-column-form-grid">
+            <label>
+              Upload Source
+              <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onReferenceChange} />
+            </label>
+            <label>
+              Selected Source
+              <input type="text" value={referenceFile?.name || selectedReference?.name || selectedReference?.filename || ""} readOnly />
+            </label>
+          </div>
+          {references.length ? (
+            <div className="image-output-grid">
+              {references.slice(0, 8).map((reference) => (
+                <div className="image-output-tile" key={`source:${reference.relative_path}`}>
+                  <div className="row">
+                    <button className="btn" type="button" onClick={() => useReference(reference, "source")} disabled={busy}>
+                      Source
+                    </button>
+                  </div>
+                  <a href={`${apiBase}${reference.url}`} target="_blank" rel="noreferrer">
+                    <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
+                    <span>{reference.name || reference.filename}</span>
+                  </a>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </article>
+      ) : null}
+
+      {showAvatarReferences ? (
+        <article className="card">
+          <CardHeader title="Avatar References" subtitle="Manage face and body references for avatar templates." />
+          <div className="form-grid">
+            <label>
+              Reference Role
+              <select value={libraryRole} onChange={(event) => setLibraryRole(event.target.value)}>
+                <option value="face">Face</option>
+                <option value="body">Body</option>
+                <option value="reference">Reference</option>
+              </select>
+            </label>
+            <label>
+              Reference Name
+              <input type="text" value={libraryName} onChange={(event) => setLibraryName(event.target.value)} />
+            </label>
+            <label>
+              Upload Avatar Reference
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => {
+                  setLibraryCategory("avatar");
+                  setLibraryFile(event.target.files?.[0] || null);
+                }}
+              />
+            </label>
+          </div>
+          <div className="row">
+            <button className="btn" type="button" onClick={handleUploadReference} disabled={busy || !libraryFile}>
+              Upload Reference
+            </button>
+            {faceReference ? <code>{`Face: ${faceReference.name || faceReference.filename}`}</code> : null}
+            {bodyReference ? <code>{`Body: ${bodyReference.name || bodyReference.filename}`}</code> : null}
+          </div>
+          {references.length ? (
+            <div className="image-output-grid">
+              {references.slice(0, 8).map((reference) => (
+                <div className="image-output-tile" key={`avatar:${reference.relative_path}`}>
+                  <div className="row">
+                    {needsFaceReference ? (
+                      <button className="btn" type="button" onClick={() => useReference(reference, "face")} disabled={busy}>
+                        Face
+                      </button>
+                    ) : null}
+                    {needsBodyReference ? (
+                      <button className="btn" type="button" onClick={() => useReference(reference, "body")} disabled={busy}>
+                        Body
+                      </button>
+                    ) : null}
+                  </div>
+                  <a href={`${apiBase}${reference.url}`} target="_blank" rel="noreferrer">
+                    <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
+                    <span>{reference.name || reference.filename}</span>
+                  </a>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </article>
+      ) : null}
+
+      {showSceneReferences ? (
+        <article className="card">
+          <CardHeader title="Scene Reference" subtitle="Select a place or scene reference for scene templates." />
+          <div className="form-grid">
+            <label>
+              Reference Name
+              <input type="text" value={libraryName} onChange={(event) => setLibraryName(event.target.value)} />
+            </label>
+            <label>
+              Upload Scene Reference
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => {
+                  setLibraryCategory("scene");
+                  setLibraryRole("place");
+                  setLibraryFile(event.target.files?.[0] || null);
+                }}
+              />
+            </label>
+          </div>
+          <div className="row">
+            <button className="btn" type="button" onClick={handleUploadReference} disabled={busy || !libraryFile}>
+              Upload Reference
+            </button>
+            {sceneReference ? <code>{`Scene: ${sceneReference.name || sceneReference.filename}`}</code> : null}
+          </div>
+          {references.length ? (
+            <div className="image-output-grid">
+              {references.slice(0, 8).map((reference) => (
+                <div className="image-output-tile" key={`scene:${reference.relative_path}`}>
+                  <div className="row">
+                    <button className="btn" type="button" onClick={() => useReference(reference, "scene")} disabled={busy}>
+                      Scene
+                    </button>
+                  </div>
+                  <a href={`${apiBase}${reference.url}`} target="_blank" rel="noreferrer">
+                    <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
+                    <span>{reference.name || reference.filename}</span>
+                  </a>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </article>
+      ) : null}
+
+      <article className="card manual-generation-card-wide">
+        <CardHeader title="Vision" subtitle="Describe reference images with the local vision runtime." />
         <div className="form-grid two-column-form-grid">
           <label>
             Vision Mode
@@ -480,6 +642,23 @@ export function ManualImageGenerationCard({
             <input type="text" value={visionPrompt} onChange={(event) => setVisionPrompt(event.target.value)} />
           </label>
         </div>
+        {references.length ? (
+          <div className="image-output-grid">
+            {references.slice(0, 8).map((reference) => (
+              <div className="image-output-tile" key={`vision:${reference.relative_path}`}>
+                <div className="row">
+                  <button className="btn" type="button" onClick={() => describeReference(reference)} disabled={visionBusy}>
+                    {visionBusy ? "Describing..." : "Describe"}
+                  </button>
+                </div>
+                <a href={`${apiBase}${reference.url}`} target="_blank" rel="noreferrer">
+                  <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
+                  <span>{reference.name || reference.filename}</span>
+                </a>
+              </div>
+            ))}
+          </div>
+        ) : null}
         {visionDescription ? (
           <div className="setup-form">
             <label>
@@ -493,35 +672,10 @@ export function ManualImageGenerationCard({
             </div>
           </div>
         ) : null}
-        {references.length ? (
-          <div className="image-output-grid">
-            {references.slice(0, 8).map((reference) => (
-              <div className="image-output-tile" key={reference.relative_path}>
-                <div className="row">
-                  <button className="btn" type="button" onClick={() => useReference(reference, "source")} disabled={busy}>
-                    Source
-                  </button>
-                  <button className="btn" type="button" onClick={() => useReference(reference, "face")} disabled={busy}>
-                    Face
-                  </button>
-                  <button className="btn" type="button" onClick={() => useReference(reference, "body")} disabled={busy}>
-                    Body
-                  </button>
-                  <button className="btn" type="button" onClick={() => useReference(reference, "scene")} disabled={busy}>
-                    Scene
-                  </button>
-                  <button className="btn" type="button" onClick={() => describeReference(reference)} disabled={visionBusy}>
-                    {visionBusy ? "Describing..." : "Describe"}
-                  </button>
-                </div>
-                <a href={`${apiBase}${reference.url}`} target="_blank" rel="noreferrer">
-                  <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
-                  <span>{reference.name || reference.filename}</span>
-                </a>
-              </div>
-            ))}
-          </div>
-        ) : null}
+      </article>
+
+      <article className="card manual-generation-card-wide">
+        <CardHeader title="Prompt" subtitle="Prompt text and template settings for the selected workflow." />
         <label>
           Prompt
           <textarea rows={4} value={prompt} onChange={(event) => setPrompt(event.target.value)} />
@@ -556,10 +710,12 @@ export function ManualImageGenerationCard({
             CFG
             <input type="number" min="0" step="0.1" value={cfg} onChange={(event) => setCfg(event.target.value)} />
           </label>
-          <label>
-            Denoise
-            <input type="number" min="0" max="1" step="0.05" value={denoise} onChange={(event) => setDenoise(event.target.value)} />
-          </label>
+          {supportsDenoise ? (
+            <label>
+              Denoise
+              <input type="number" min="0" max="1" step="0.05" value={denoise} onChange={(event) => setDenoise(event.target.value)} />
+            </label>
+          ) : null}
         </div>
         {adjustableVariables.length ? (
           <div className="form-grid">
@@ -586,7 +742,11 @@ export function ManualImageGenerationCard({
             Refresh Outputs
           </button>
         </div>
-      </form>
+      </article>
+    </form>
+
+    <article className="card operational-card-full-span">
+      <CardHeader title="Outputs" subtitle="Recent manual ComfyUI results stored in the manual output folder." />
       {outputs.length ? (
         <div className="image-output-grid">
           {outputs.map((output) => (
@@ -605,5 +765,6 @@ export function ManualImageGenerationCard({
         <p className="muted tiny">No manual outputs.</p>
       )}
     </article>
+    </>
   );
 }
