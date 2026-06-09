@@ -732,7 +732,7 @@ class NodeControlFastApiTests(unittest.TestCase):
 
             self.assertEqual(catalog_response.status_code, 200)
             self.assertTrue(catalog_response.json()["summary"]["valid"])
-            self.assertEqual(catalog_response.json()["summary"]["template_count"], 1)
+            self.assertEqual(catalog_response.json()["summary"]["template_count"], 3)
             self.assertEqual(template_response.status_code, 200)
             template = template_response.json()["template"]
             self.assertEqual(template["template_id"], "template.weather.realvisxl.v1")

@@ -15,14 +15,18 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
 
         self.assertTrue(payload["configured"])
         self.assertEqual(payload["schema_version"], "1.0")
-        self.assertEqual(len(payload["templates"]), 1)
-        template = payload["templates"][0]
-        self.assertEqual(template["template_id"], "template.weather.realvisxl.v1")
+        self.assertEqual(len(payload["templates"]), 3)
+        templates_by_id = {template["template_id"]: template for template in payload["templates"]}
+        template = templates_by_id["template.weather.realvisxl.v1"]
         self.assertEqual(template["runtime_id"], "comfyui_gpu")
         self.assertEqual(template["output_scope"], "normal")
         self.assertEqual(template["model_requirements"]["checkpoint"], "RealVisXL_V5.0_fp16.safetensors")
         self.assertIn("positive_prompt", [item["name"] for item in template["variables"]])
         self.assertTrue(template["validation"]["valid"])
+        self.assertEqual(templates_by_id["template.txt2img.realvisxl.v1"]["metadata"]["input_mode"], "text")
+        img2img = templates_by_id["template.img2img.realvisxl.v1"]
+        self.assertEqual(img2img["metadata"]["input_mode"], "image")
+        self.assertIn("input_image", [item["name"] for item in img2img["variables"]])
 
     def test_validate_rejects_default_without_variable(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -150,7 +150,7 @@ the current queue runner cannot safely rebind an executable local runner into a 
 
 While the manual session is active, the node polls ComfyUI `/queue` through the Unix socket. Non-empty
 `queue_running` or `queue_pending` resets the idle timer. Once the queue is empty for
-`HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS` seconds, default `300`, the `comfyui_webui_idle_close` scheduler job closes the
+`HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS` seconds, default `900`, the `comfyui_webui_idle_close` scheduler job closes the
 manual Web UI session. `GET /api/services/status` includes `comfyui_webui.session.idle_seconds`,
 `idle_timeout_seconds`, and `auto_close_at_epoch` for UI countdowns. Idle auto-close shuts down the Web UI bridge,
 stops ComfyUI, waits for the ComfyUI sockets to disappear, clears the manual session marker, and then calls the normal
@@ -216,6 +216,10 @@ fills template variables from rendered prompt text, request inputs, defaults, an
 the resolved API workflow under `inputs.comfyui_workflow`. The effective request also includes
 `constraints.image_template_resolved` with template id, version, runtime, model requirements, and
 `output_folder_policy: operational`, keeping governed generation separate from manual Web UI artifact folders.
+
+The default ComfyUI template catalog includes `template.txt2img.realvisxl.v1` for prompt-only generation and
+`template.img2img.realvisxl.v1` for prompt plus input image generation. The img2img template accepts `input_image`,
+which must reference an image available to ComfyUI's selected runtime input folder.
 
 On the RTX 3060 12 GB node, ComfyUI should be treated as exclusive GPU work for real generation. With both llama.cpp
 runtimes loaded, only about 2.5 GB VRAM remains, which is not enough for typical SDXL, FLUX, or Stable Diffusion 3.5

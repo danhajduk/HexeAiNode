@@ -2,6 +2,149 @@
   "schema_version": "1.0",
   "templates": [
     {
+      "template_id": "template.txt2img.realvisxl.v1",
+      "template_name": "Txt2Img RealVisXL",
+      "description": "Reusable normal-operation prompt-only RealVisXL workflow.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "txt2img-realvisxl/api_workflow.json",
+      "ui_workflow_path": "txt2img-realvisxl/ui_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Rendered positive prompt."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress."
+        },
+        {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width."
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed. Use null for runtime randomization."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "low quality, blurry, distorted text, watermark",
+        "width": 1024,
+        "height": 1024,
+        "seed": null,
+        "steps": 4,
+        "cfg": 1.6
+      },
+      "model_requirements": {
+        "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "loras": ["sdxl_lightning_4step_lora.safetensors"],
+        "vae": null,
+        "controlnets": []
+      },
+      "output_scope": "normal",
+      "metadata": {
+        "preset_family": "realvisxl_lightning",
+        "domain": "general",
+        "input_mode": "text"
+      }
+    },
+    {
+      "template_id": "template.img2img.realvisxl.v1",
+      "template_name": "Img2Img RealVisXL",
+      "description": "Reusable normal-operation RealVisXL workflow for a prompt plus an input image.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "img2img-realvisxl/api_workflow.json",
+      "ui_workflow_path": "img2img-realvisxl/ui_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Rendered positive prompt."
+        },
+        {
+          "name": "input_image",
+          "type": "image",
+          "required": true,
+          "description": "ComfyUI input image filename or path available to the selected runtime."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed. Use null for runtime randomization."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        },
+        {
+          "name": "denoise",
+          "type": "number",
+          "required": false,
+          "description": "Image guidance strength."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "low quality, blurry, distorted text, watermark",
+        "seed": null,
+        "steps": 4,
+        "cfg": 1.6,
+        "denoise": 0.55
+      },
+      "model_requirements": {
+        "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "loras": ["sdxl_lightning_4step_lora.safetensors"],
+        "vae": null,
+        "controlnets": []
+      },
+      "output_scope": "normal",
+      "metadata": {
+        "preset_family": "realvisxl_lightning",
+        "domain": "general",
+        "input_mode": "image"
+      }
+    },
+    {
       "template_id": "template.weather.realvisxl.v1",
       "template_name": "Weather RealVisXL",
       "description": "Reusable normal-operation weather image workflow for forecast-driven scenes.",

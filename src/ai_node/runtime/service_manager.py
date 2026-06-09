@@ -112,7 +112,7 @@ class UserSystemdServiceManager:
         self._comfyui_webui_session_file = str(
             os.environ.get("HEXE_COMFYUI_WEBUI_SESSION_FILE") or ".run/comfyui-webui-session.json"
         ).strip()
-        self._comfyui_webui_idle_timeout_seconds = max(_env_int("HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS", default=300), 1)
+        self._comfyui_webui_idle_timeout_seconds = max(_env_int("HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS", default=900), 1)
         self._comfyui_manual_gpu_input_dir = str(
             os.environ.get("HEXE_COMFYUI_MANUAL_GPU_INPUT_DIR") or "runtime/manual/comfyui-gpu/input"
         ).strip()

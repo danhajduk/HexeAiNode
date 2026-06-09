@@ -41,6 +41,15 @@ function catalogById(catalogTemplates) {
   return new Map(catalogTemplates.map((template) => [template?.template_id, template]));
 }
 
+function templateInputMode(template) {
+  const metadataMode = String(template?.metadata?.input_mode || "").trim();
+  if (metadataMode) {
+    return metadataMode;
+  }
+  const names = asArray(template?.variables).map((variable) => String(variable?.name || variable || "").trim());
+  return names.includes("input_image") ? "image" : "text";
+}
+
 export function ImageTemplatesCard({
   imageTemplatePayload = null,
   comfyuiTemplateCatalogPayload = null,
@@ -77,6 +86,7 @@ export function ImageTemplatesCard({
               <th>Template</th>
               <th>State</th>
               <th>Runtime</th>
+              <th>Input</th>
               <th>Variables</th>
               <th>Prompts</th>
             </tr>
@@ -97,6 +107,7 @@ export function ImageTemplatesCard({
                     </td>
                     <td><StatusBadge value={template?.status || "unknown"} /></td>
                     <td><code>{currentVersion?.runtime_id || "unknown"}</code></td>
+                    <td><code>{templateInputMode(catalogTemplate || currentVersion)}</code></td>
                     <td><span className="muted tiny">{variableNames(catalogTemplate || currentVersion)}</span></td>
                     <td>
                       {bindings.length ? (
@@ -115,7 +126,7 @@ export function ImageTemplatesCard({
               })
             ) : (
               <tr>
-                <td colSpan={5}><span className="muted tiny">No registered image templates.</span></td>
+                <td colSpan={6}><span className="muted tiny">No registered image templates.</span></td>
               </tr>
             )}
           </tbody>
@@ -126,7 +137,7 @@ export function ImageTemplatesCard({
           {catalogTemplates.map((template) => (
             <span className="template-catalog-chip" key={template?.template_id}>
               <code>{template?.template_id}</code>
-              <span>{variableNames(template)}</span>
+              <span>{templateInputMode(template)} | {variableNames(template)}</span>
             </span>
           ))}
         </div>
