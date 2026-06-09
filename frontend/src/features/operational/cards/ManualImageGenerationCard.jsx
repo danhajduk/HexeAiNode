@@ -122,6 +122,7 @@ export function ManualImageGenerationCard({
   onSubmit,
   onImprovePrompt,
   onUploadReference,
+  onDeleteReference,
   onDescribeReference,
   onDeleteOutput,
   onRefresh,
@@ -362,6 +363,22 @@ export function ManualImageGenerationCard({
     }
   }
 
+  async function deleteReference(reference) {
+    await onDeleteReference?.(reference.relative_path);
+    if (selectedReference?.relative_path === reference.relative_path) {
+      setSelectedReference(null);
+    }
+    if (faceReference?.relative_path === reference.relative_path) {
+      setFaceReference(null);
+    }
+    if (bodyReference?.relative_path === reference.relative_path) {
+      setBodyReference(null);
+    }
+    if (sceneReference?.relative_path === reference.relative_path) {
+      setSceneReference(null);
+    }
+  }
+
   function insertVisionDescription() {
     const description = visionDescription.trim();
     if (!description) {
@@ -543,6 +560,9 @@ export function ManualImageGenerationCard({
                     <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
                     <span>{reference.name || reference.filename}</span>
                   </a>
+                  <button className="btn btn-danger" type="button" onClick={() => deleteReference(reference)} disabled={busy}>
+                    Delete
+                  </button>
                 </div>
               ))}
             </div>
@@ -605,6 +625,9 @@ export function ManualImageGenerationCard({
                     <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
                     <span>{reference.name || reference.filename}</span>
                   </a>
+                  <button className="btn btn-danger" type="button" onClick={() => deleteReference(reference)} disabled={busy}>
+                    Delete
+                  </button>
                 </div>
               ))}
             </div>
@@ -652,6 +675,9 @@ export function ManualImageGenerationCard({
                     <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
                     <span>{reference.name || reference.filename}</span>
                   </a>
+                  <button className="btn btn-danger" type="button" onClick={() => deleteReference(reference)} disabled={busy}>
+                    Delete
+                  </button>
                 </div>
               ))}
             </div>
@@ -688,6 +714,9 @@ export function ManualImageGenerationCard({
                   <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
                   <span>{reference.name || reference.filename}</span>
                 </a>
+                <button className="btn btn-danger" type="button" onClick={() => deleteReference(reference)} disabled={busy}>
+                  Delete
+                </button>
               </div>
             ))}
           </div>

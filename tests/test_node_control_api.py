@@ -2837,6 +2837,50 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(reference["input_image"].startswith("references/avatar/Jane_Doe_face_"))
         self.assertEqual(status["references"][0]["input_image"], reference["input_image"])
 
+    def test_delete_manual_image_reference_removes_image_and_sidecar(self):
+        class _ReferenceServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ReferenceServiceManager(str(input_dir)),
+            )
+            result = state.upload_manual_image_reference(
+                payload=ManualImageReferenceUploadRequest(
+                    category="avatar",
+                    role="body",
+                    name="Jane Doe",
+                    filename="avatar.png",
+                    data_base64=base64.b64encode(b"png-data").decode("ascii"),
+                )
+            )
+            relative_path = result["reference"]["relative_path"]
+            reference_path = state._manual_image_reference_root() / relative_path
+            sidecar_path = reference_path.with_suffix(reference_path.suffix + ".json")
+
+            delete_result = state.delete_manual_image_reference(relative_path=relative_path)
+
+            self.assertTrue(delete_result["deleted"])
+            self.assertFalse(reference_path.exists())
+            self.assertFalse(sidecar_path.exists())
+            self.assertEqual(delete_result["references"], [])
+            with self.assertRaises(ValueError):
+                state.delete_manual_image_reference(relative_path="../outside.png")
+
     def test_manual_image_vision_describe_uses_local_vision_socket(self):
         class _VisionServiceManager:
             def __init__(self, input_dir: str):

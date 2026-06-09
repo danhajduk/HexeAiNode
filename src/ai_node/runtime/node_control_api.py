@@ -1649,6 +1649,24 @@ class NodeControlState:
             raise ValueError("manual_reference_not_found")
         return FileResponse(path)
 
+    def delete_manual_image_reference(self, *, relative_path: str) -> dict:
+        root = self._manual_image_reference_root()
+        safe_relative = self._safe_relative_path(relative_path)
+        path = (root / safe_relative).resolve()
+        if root not in path.parents and path != root:
+            raise ValueError("manual_reference_path_invalid")
+        if not path.exists() or not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            raise ValueError("manual_reference_not_found")
+        path.unlink()
+        sidecar = path.with_suffix(path.suffix + ".json")
+        if sidecar.exists() and sidecar.is_file():
+            sidecar.unlink()
+        return {
+            "deleted": True,
+            "relative_path": safe_relative.as_posix(),
+            "references": self._manual_image_references(limit=48),
+        }
+
     def manual_image_vision_describe(self, *, payload: "ManualImageVisionDescribeRequest") -> dict:
         services = self.service_status_payload().get("services", {})
         vision_llm = services.get("vision_llm") if isinstance(services, dict) else {}
@@ -6798,6 +6816,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def get_manual_image_generation_reference(relative_path: str):
         try:
             return state.manual_image_reference_response(relative_path=relative_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.delete("/api/manual-image-generation/references/{relative_path:path}")
+    def delete_manual_image_generation_reference(relative_path: str):
+        try:
+            return state.delete_manual_image_reference(relative_path=relative_path)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

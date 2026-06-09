@@ -966,6 +966,25 @@ export default function App() {
     }
   }
 
+  async function onDeleteManualImageReference(relativePath) {
+    const normalized = String(relativePath || "").trim();
+    if (!normalized || manualImageGenerationBusy) {
+      return;
+    }
+    setManualImageGenerationBusy(true);
+    setError("");
+    try {
+      const encodedPath = normalized.split("/").map((part) => encodeURIComponent(part)).join("/");
+      await apiDelete(`/api/manual-image-generation/references/${encodedPath}`);
+      await loadStatus();
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+    } finally {
+      setManualImageGenerationBusy(false);
+    }
+  }
+
   async function onImproveManualImagePrompt(payload) {
     if (manualImagePromptHelperBusy) {
       return null;
@@ -1930,6 +1949,7 @@ export default function App() {
       onSubmit: onSubmitManualImageGeneration,
       onImprovePrompt: onImproveManualImagePrompt,
       onUploadReference: onUploadManualImageReference,
+      onDeleteReference: onDeleteManualImageReference,
       onDescribeReference: onDescribeManualImageReference,
       onDeleteOutput: onDeleteManualImageOutput,
       onRefresh: loadStatus,
