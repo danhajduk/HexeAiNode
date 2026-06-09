@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 980: Store manual ComfyUI artifacts in separate manual runtime folders
 [TODO] Task 981: Surface manual ComfyUI session state and controls in the node UI
 [TODO] Task 982: Add V3+ prompt support for image generation template selection
 [TODO] Task 983: Add image generation template registration state and APIs

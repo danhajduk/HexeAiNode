@@ -324,6 +324,26 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(session["idle_seconds"], 75.0)
         self.assertEqual(session["auto_close_at_epoch"], 400.0)
 
+    def test_comfyui_manual_runtime_env_uses_separate_artifact_dirs(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "HEXE_COMFYUI_MANUAL_GPU_INPUT_DIR": str(Path(tmp) / "manual-gpu" / "input"),
+                "HEXE_COMFYUI_MANUAL_GPU_OUTPUT_DIR": str(Path(tmp) / "manual-gpu" / "output"),
+                "HEXE_COMFYUI_MANUAL_GPU_USER_DIR": str(Path(tmp) / "manual-gpu" / "user"),
+            },
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._prepare_comfyui_manual_dirs(runtime="gpu")
+            env = manager._comfyui_manual_runtime_env(runtime="gpu")
+            status = manager._comfyui_webui_status()
+            self.assertTrue(Path(env["COMFYUI_GPU_INPUT_DIR"]).exists())
+            self.assertTrue(Path(env["COMFYUI_GPU_OUTPUT_DIR"]).exists())
+            self.assertTrue(Path(env["COMFYUI_GPU_USER_DIR"]).exists())
+            self.assertIn("manual-gpu/input", env["COMFYUI_GPU_INPUT_DIR"])
+            self.assertIn("manual-gpu/output", status["manual_paths"]["output_dir"])
+
     def test_unix_socket_tcp_bridge_forwards_http(self):
         with tempfile.TemporaryDirectory() as tmp:
             socket_path = str(Path(tmp) / "comfyui.sock")

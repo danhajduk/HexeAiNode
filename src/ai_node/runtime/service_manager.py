@@ -112,6 +112,24 @@ class UserSystemdServiceManager:
             os.environ.get("HEXE_COMFYUI_WEBUI_SESSION_FILE") or ".run/comfyui-webui-session.json"
         ).strip()
         self._comfyui_webui_idle_timeout_seconds = max(_env_int("HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS", default=300), 1)
+        self._comfyui_manual_gpu_input_dir = str(
+            os.environ.get("HEXE_COMFYUI_MANUAL_GPU_INPUT_DIR") or "runtime/manual/comfyui-gpu/input"
+        ).strip()
+        self._comfyui_manual_gpu_output_dir = str(
+            os.environ.get("HEXE_COMFYUI_MANUAL_GPU_OUTPUT_DIR") or "runtime/manual/comfyui-gpu/output"
+        ).strip()
+        self._comfyui_manual_gpu_user_dir = str(
+            os.environ.get("HEXE_COMFYUI_MANUAL_GPU_USER_DIR") or "runtime/manual/comfyui-gpu/user"
+        ).strip()
+        self._comfyui_manual_cpu_input_dir = str(
+            os.environ.get("HEXE_COMFYUI_MANUAL_CPU_INPUT_DIR") or "runtime/manual/comfyui-cpu/input"
+        ).strip()
+        self._comfyui_manual_cpu_output_dir = str(
+            os.environ.get("HEXE_COMFYUI_MANUAL_CPU_OUTPUT_DIR") or "runtime/manual/comfyui-cpu/output"
+        ).strip()
+        self._comfyui_manual_cpu_user_dir = str(
+            os.environ.get("HEXE_COMFYUI_MANUAL_CPU_USER_DIR") or "runtime/manual/comfyui-cpu/user"
+        ).strip()
         self._vision_llm_default_model_id = (
             str(
                 os.environ.get("HEXE_PROVIDER_VISION_DEFAULT_MODEL_ID")
@@ -623,8 +641,12 @@ class UserSystemdServiceManager:
         socket_path = self._comfyui_socket_for_runtime(self._comfyui_webui_runtime)
         self._write_comfyui_webui_session(state="starting", reason="manual_webui_start_requested")
         try:
-            if not socket_path or not os.path.exists(socket_path):
-                self._run_comfyui_control(self._comfyui_webui_runtime, "ready")
+            self._prepare_comfyui_manual_dirs(runtime=self._comfyui_webui_runtime)
+            self._run_comfyui_control(
+                self._comfyui_webui_runtime,
+                "ready",
+                env=self._comfyui_manual_runtime_env(runtime=self._comfyui_webui_runtime),
+            )
             if not os.path.exists(socket_path):
                 raise ValueError("ComfyUI runtime socket is not ready")
             subprocess.Popen(
@@ -828,6 +850,7 @@ class UserSystemdServiceManager:
             "port": self._comfyui_webui_port,
             "url": f"http://{url_host}:{self._comfyui_webui_port}",
             "socket_path": self._comfyui_socket_for_runtime(self._comfyui_webui_runtime),
+            "manual_paths": self._comfyui_manual_paths(runtime=self._comfyui_webui_runtime),
             "pid_file": self._comfyui_webui_pid_file,
             "session_file": self._comfyui_webui_session_file,
             "manual_session_active": self._manual_comfyui_webui_active(),
@@ -838,10 +861,37 @@ class UserSystemdServiceManager:
     def _comfyui_socket_for_runtime(self, runtime: str) -> str:
         return self._comfyui_cpu_socket if str(runtime or "").strip().lower() == "cpu" else self._comfyui_gpu_socket
 
-    def _run_comfyui_control(self, target: str, command: str) -> None:
+    def _run_comfyui_control(self, target: str, command: str, *, env: dict | None = None) -> None:
         if not self._comfyui_control_script:
             raise ValueError("ComfyUI control script is not configured")
-        subprocess.run([self._comfyui_control_script, target, command], check=True)
+        subprocess.run([self._comfyui_control_script, target, command], check=True, env=env)
+
+    def _prepare_comfyui_manual_dirs(self, *, runtime: str) -> None:
+        for path in self._comfyui_manual_paths(runtime=runtime).values():
+            if path:
+                os.makedirs(path, exist_ok=True)
+
+    def _comfyui_manual_runtime_env(self, *, runtime: str) -> dict:
+        env = dict(os.environ)
+        paths = self._comfyui_manual_paths(runtime=runtime)
+        runtime_key = "CPU" if str(runtime or "").strip().lower() == "cpu" else "GPU"
+        env[f"COMFYUI_{runtime_key}_INPUT_DIR"] = paths["input_dir"]
+        env[f"COMFYUI_{runtime_key}_OUTPUT_DIR"] = paths["output_dir"]
+        env[f"COMFYUI_{runtime_key}_USER_DIR"] = paths["user_dir"]
+        return env
+
+    def _comfyui_manual_paths(self, *, runtime: str) -> dict:
+        if str(runtime or "").strip().lower() == "cpu":
+            return {
+                "input_dir": self._comfyui_manual_cpu_input_dir,
+                "output_dir": self._comfyui_manual_cpu_output_dir,
+                "user_dir": self._comfyui_manual_cpu_user_dir,
+            }
+        return {
+            "input_dir": self._comfyui_manual_gpu_input_dir,
+            "output_dir": self._comfyui_manual_gpu_output_dir,
+            "user_dir": self._comfyui_manual_gpu_user_dir,
+        }
 
     def _wait_comfyui_runtime_stopped(self, *, runtime: str, timeout_seconds: float = 15.0) -> bool:
         deadline = time.monotonic() + max(float(timeout_seconds), 0.0)
@@ -929,6 +979,7 @@ class UserSystemdServiceManager:
             "reason": str(reason or "").strip() or None,
             "runtime": self._comfyui_webui_runtime,
             "socket_path": self._comfyui_socket_for_runtime(self._comfyui_webui_runtime),
+            "manual_paths": self._comfyui_manual_paths(runtime=self._comfyui_webui_runtime),
             "idle_timeout_seconds": self._comfyui_webui_idle_timeout_seconds,
             "last_active_epoch": last_active_epoch if last_active_epoch is not None else now_epoch,
             "updated_at_epoch": now_epoch,

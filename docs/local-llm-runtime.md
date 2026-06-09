@@ -156,6 +156,12 @@ manual Web UI session. `GET /api/services/status` includes `comfyui_webui.sessio
 stops ComfyUI, waits for the ComfyUI sockets to disappear, clears the manual session marker, and then calls the normal
 vision residency path to reload the vision runtime when enabled.
 
+Manual Web UI sessions use separate artifact folders so human/experimental outputs do not mix with governed normal OP
+generation. The default manual GPU paths are `runtime/manual/comfyui-gpu/input`,
+`runtime/manual/comfyui-gpu/output`, and `runtime/manual/comfyui-gpu/user`; CPU manual sessions use the matching
+`runtime/manual/comfyui-cpu/*` paths. Model directories remain shared so manual sessions do not duplicate checkpoints.
+The `comfyui_webui` service status includes `manual_paths` for the active runtime.
+
 Example socket probes:
 
 ```bash

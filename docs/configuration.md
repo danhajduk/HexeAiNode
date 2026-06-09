@@ -57,6 +57,12 @@ Backend runtime:
 - `HEXE_COMFYUI_WEBUI_SESSION_FILE` default `.run/comfyui-webui-session.json`; manual session lock used to block vision reload while ComfyUI owns the GPU
 - `HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS` default `300`; continuous ComfyUI `/queue` idle time before the manual Web UI session auto-closes
 - `HEXE_COMFYUI_WEBUI_IDLE_CHECK_INTERVAL_SECONDS` default `15`; scheduler interval for evaluating manual Web UI idle auto-close
+- `HEXE_COMFYUI_MANUAL_GPU_INPUT_DIR` default `runtime/manual/comfyui-gpu/input`
+- `HEXE_COMFYUI_MANUAL_GPU_OUTPUT_DIR` default `runtime/manual/comfyui-gpu/output`
+- `HEXE_COMFYUI_MANUAL_GPU_USER_DIR` default `runtime/manual/comfyui-gpu/user`
+- `HEXE_COMFYUI_MANUAL_CPU_INPUT_DIR` default `runtime/manual/comfyui-cpu/input`
+- `HEXE_COMFYUI_MANUAL_CPU_OUTPUT_DIR` default `runtime/manual/comfyui-cpu/output`
+- `HEXE_COMFYUI_MANUAL_CPU_USER_DIR` default `runtime/manual/comfyui-cpu/user`
 - `COMFYUI_GPU_VISION_GATE_ENABLED` default `true`; unloads the vision runtime before GPU ComfyUI startup/model work
 - `COMFYUI_GPU_VISION_GATE_TIMEOUT_S` default `90`; maximum wait for vision sockets/container to disappear before rejecting GPU ComfyUI work
 - `COMFYUI_GPU_VISION_GATE_ARTIFACT` default `.run/comfyui-gpu-vision-gate.json`
