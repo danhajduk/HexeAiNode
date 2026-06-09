@@ -303,7 +303,7 @@
     {
       "template_id": "template.avatar_identity_reference.realvisxl.v1",
       "template_name": "Avatar Identity Reference RealVisXL",
-      "description": "New-composition avatar workflow that uses selected face and body images as references without preserving the source pose.",
+      "description": "Body-preserving avatar workflow that uses selected face and body references, starting from the body reference latent for stronger silhouette retention.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-identity-reference-realvisxl/api_workflow.json",
       "ui_workflow_path": "avatar-identity-reference-realvisxl/ui_workflow.json",
@@ -367,6 +367,12 @@
           "type": "number",
           "required": false,
           "description": "Classifier-free guidance scale."
+        },
+        {
+          "name": "denoise",
+          "type": "number",
+          "required": false,
+          "description": "How much the body reference latent may change. Lower preserves body/clothing more; higher follows prompt changes more."
         }
       ],
       "defaults": {
@@ -376,7 +382,8 @@
         "height": 1152,
         "seed": null,
         "steps": 4,
-        "cfg": 1.8
+        "cfg": 1.8,
+        "denoise": 0.68
       },
       "model_requirements": {
         "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
@@ -385,7 +392,8 @@
         "controlnets": [],
         "other": {
           "nodes": ["ReferenceLatent"],
-          "identity_strength": "fallback_reference_latent_not_faceid"
+          "identity_strength": "fallback_reference_latent_not_faceid",
+          "body_preservation": "body_reference_latent_start"
         }
       },
       "output_scope": "normal",
@@ -393,14 +401,14 @@
         "preset_family": "realvisxl_lightning",
         "domain": "avatar",
         "input_mode": "text",
-        "edit_intent": "new_composition_with_avatar_references",
+        "edit_intent": "body_preserving_composition_with_avatar_references",
         "reference_roles": ["face", "body"]
       }
     },
     {
       "template_id": "template.avatar_identity_reference_transparent.realvisxl.v1",
       "template_name": "Avatar Identity Reference Transparent RealVisXL",
-      "description": "New-composition avatar workflow that uses selected face and body references, then removes the background and saves a transparent PNG.",
+      "description": "Body-preserving avatar workflow that starts from the body reference latent, uses face/body references, then removes the background and saves a transparent PNG.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-identity-reference-transparent-realvisxl/api_workflow.json",
       "ui_workflow_path": "avatar-identity-reference-transparent-realvisxl/ui_workflow.json",
@@ -470,6 +478,12 @@
           "type": "number",
           "required": false,
           "description": "Classifier-free guidance scale."
+        },
+        {
+          "name": "denoise",
+          "type": "number",
+          "required": false,
+          "description": "How much the body reference latent may change. Lower preserves body/clothing more; higher follows prompt changes more."
         }
       ],
       "defaults": {
@@ -480,7 +494,8 @@
         "height": 1152,
         "seed": null,
         "steps": 4,
-        "cfg": 1.0
+        "cfg": 1.0,
+        "denoise": 0.68
       },
       "model_requirements": {
         "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
@@ -490,6 +505,7 @@
         "other": {
           "nodes": ["ReferenceLatent", "LoadBackgroundRemovalModel", "RemoveBackground", "InvertMask", "JoinImageWithAlpha"],
           "identity_strength": "fallback_reference_latent_not_faceid",
+          "body_preservation": "body_reference_latent_start",
           "background_removal": "birefnet.safetensors"
         }
       },
@@ -498,7 +514,7 @@
         "preset_family": "realvisxl_lightning",
         "domain": "avatar",
         "input_mode": "text",
-        "edit_intent": "new_composition_with_avatar_references_transparent_background",
+        "edit_intent": "body_preserving_composition_with_avatar_references_transparent_background",
         "reference_roles": ["face", "body"],
         "transparent_background": true
       }

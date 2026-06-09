@@ -13,11 +13,6 @@
       "title": "SDXL Lightning LoRA"
     },
     {
-      "id": 3,
-      "type": "EmptyLatentImage",
-      "title": "New Composition Canvas"
-    },
-    {
       "id": 4,
       "type": "CLIPTextEncode",
       "title": "Avatar Scene Prompt"
@@ -38,6 +33,11 @@
       "title": "Body Reference"
     },
     {
+      "id": 12,
+      "type": "VAEEncode",
+      "title": "Body Reference Latent Start"
+    },
+    {
       "id": 13,
       "type": "ReferenceLatent",
       "title": "Apply Body Reference"
@@ -56,6 +56,6 @@
   "links": [],
   "extra": {
     "template_id": "template.avatar_identity_reference.realvisxl.v1",
-    "notes": "New-composition avatar generation using face and body images as references, without using the source avatar image as the output latent."
+    "notes": "Body-preserving avatar generation using the body reference as the sampler latent start and face/body images as reference conditioning."
   }
 }

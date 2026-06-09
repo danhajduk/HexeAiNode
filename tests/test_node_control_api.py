@@ -2915,7 +2915,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["10"]["inputs"]["images"], ["21", 0])
         self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar_refs_transparent/Jane_seed888")
 
-    def test_manual_avatar_identity_reference_template_uses_new_composition_latent(self):
+    def test_manual_avatar_identity_reference_template_uses_body_reference_latent_start(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = NodeControlState(
                 lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
@@ -2944,11 +2944,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(template["metadata"]["input_mode"], "text")
-        self.assertEqual(workflow["3"]["class_type"], "EmptyLatentImage")
         self.assertEqual(workflow["6"]["inputs"]["image"], "references/avatar/jane_face.png")
         self.assertEqual(workflow["10"]["inputs"]["image"], "references/avatar/jane_body.png")
-        self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["3", 0])
+        self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["12", 0])
         self.assertEqual(workflow["14"]["inputs"]["positive"], ["13", 0])
+        self.assertEqual(workflow["14"]["inputs"]["denoise"], 0.68)
         self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_identity/Jane_seed999")
 
     def test_manual_avatar_identity_reference_transparent_template_adds_alpha_background_removal(self):
@@ -2981,7 +2981,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(template["metadata"]["input_mode"], "text")
         self.assertTrue(template["metadata"]["transparent_background"])
-        self.assertEqual(workflow["3"]["class_type"], "EmptyLatentImage")
+        self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["12", 0])
+        self.assertEqual(workflow["14"]["inputs"]["denoise"], 0.68)
         self.assertEqual(workflow["17"]["class_type"], "LoadBackgroundRemovalModel")
         self.assertEqual(workflow["17"]["inputs"]["bg_removal_name"], "birefnet.safetensors")
         self.assertEqual(workflow["18"]["class_type"], "RemoveBackground")
