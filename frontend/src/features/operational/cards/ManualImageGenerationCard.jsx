@@ -126,6 +126,7 @@ export function ManualImageGenerationCard({
   const [selectedReference, setSelectedReference] = useState(null);
   const [faceReference, setFaceReference] = useState(null);
   const [bodyReference, setBodyReference] = useState(null);
+  const [sceneReference, setSceneReference] = useState(null);
   const [libraryCategory, setLibraryCategory] = useState("avatar");
   const [libraryRole, setLibraryRole] = useState("reference");
   const [libraryName, setLibraryName] = useState("");
@@ -186,6 +187,7 @@ export function ManualImageGenerationCard({
         "input_image",
         "face_reference_image",
         "body_reference_image",
+        "scene_reference_image",
         "width",
         "height",
         "seed",
@@ -235,6 +237,7 @@ export function ManualImageGenerationCard({
       ...templateVariables,
       face_reference_image: faceReference?.input_image || templateVariables.face_reference_image || "",
       body_reference_image: bodyReference?.input_image || templateVariables.body_reference_image || "",
+      scene_reference_image: sceneReference?.input_image || templateVariables.scene_reference_image || "",
     };
     onSubmit?.({
       template_id: effectiveTemplate?.template_id || null,
@@ -294,6 +297,8 @@ export function ManualImageGenerationCard({
       setFaceReference(reference);
     } else if (slot === "body") {
       setBodyReference(reference);
+    } else if (slot === "scene") {
+      setSceneReference(reference);
     } else {
       setSelectedReference(reference);
       setReferenceFile(null);
@@ -455,6 +460,7 @@ export function ManualImageGenerationCard({
           {selectedReference ? <code>{selectedReference.name || selectedReference.filename}</code> : null}
           {faceReference ? <code>{`Face: ${faceReference.name || faceReference.filename}`}</code> : null}
           {bodyReference ? <code>{`Body: ${bodyReference.name || bodyReference.filename}`}</code> : null}
+          {sceneReference ? <code>{`Scene: ${sceneReference.name || sceneReference.filename}`}</code> : null}
         </div>
         <div className="form-grid two-column-form-grid">
           <label>
@@ -496,6 +502,9 @@ export function ManualImageGenerationCard({
                   </button>
                   <button className="btn" type="button" onClick={() => useReference(reference, "body")} disabled={busy}>
                     Body
+                  </button>
+                  <button className="btn" type="button" onClick={() => useReference(reference, "scene")} disabled={busy}>
+                    Scene
                   </button>
                   <button className="btn" type="button" onClick={() => describeReference(reference)} disabled={visionBusy}>
                     {visionBusy ? "Describing..." : "Describe"}

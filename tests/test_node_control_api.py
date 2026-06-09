@@ -2674,6 +2674,34 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["8"]["inputs"]["positive"], ["18", 0])
         self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar_refs/Jane_seed777")
 
+    def test_manual_scene_reference_template_uses_scene_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            template = state.get_comfyui_template_catalog_entry(template_id="template.scene_reference.realvisxl.v1")["template"]
+
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id="template.scene_reference.realvisxl.v1",
+                    mode="img2img",
+                    prompt="turn the place into a rainy evening market",
+                    seed=888,
+                    template_variables={"scene_reference_image": "references/scene/paris.png"},
+                ),
+                input_image="references/scene/source.png",
+            )
+
+        self.assertEqual(workflow["3"]["inputs"]["image"], "references/scene/source.png")
+        self.assertEqual(workflow["11"]["inputs"]["image"], "references/scene/paris.png")
+        self.assertEqual(workflow["14"]["class_type"], "ReferenceLatent")
+        self.assertEqual(workflow["8"]["inputs"]["positive"], ["14", 0])
+        self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/scene_refs/scene_seed888")
+
     def test_manual_image_prompt_helper_uses_local_llm_socket(self):
         class _PromptHelperServiceManager:
             def get_status(self):
