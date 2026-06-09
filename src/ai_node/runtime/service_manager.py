@@ -1,9 +1,12 @@
+import base64
+import hashlib
 import json
 import os
 import shlex
 import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -145,6 +148,11 @@ class UserSystemdServiceManager:
         self._local_llm_last_non_default_used_at: float | None = None
         self._local_llm_revert_in_progress = False
         self._local_llm_always_on_in_progress = False
+        self._comfyui_progress_client_id = "hexe-node-manual-image-ui"
+        self._comfyui_progress_lock = threading.Lock()
+        self._comfyui_progress_cache: dict = {}
+        self._comfyui_progress_listener_thread: threading.Thread | None = None
+        self._comfyui_progress_listener_stop = threading.Event()
         self._cpu_samples: dict[str, tuple[float, float]] = {}
         uid = os.getuid()
         self._runtime_dir = f"/run/user/{uid}"
@@ -687,6 +695,7 @@ class UserSystemdServiceManager:
             raise
 
     def stop_comfyui_webui(self) -> dict:
+        self.stop_comfyui_progress_listener()
         self._write_comfyui_webui_session(state="closing", reason="manual_webui_stop_requested")
         pid = self._read_pid_file(self._comfyui_webui_pid_file)
         if pid:
@@ -957,6 +966,8 @@ class UserSystemdServiceManager:
 
     def comfyui_webui_generation_status(self) -> dict:
         session = self.comfyui_webui_session_status(include_queue=True)
+        if session.get("manual_session_active"):
+            self.ensure_comfyui_progress_listener(client_id=self._comfyui_progress_client_id)
         progress = self._comfyui_progress_state()
         if session.get("queue_active") and (progress.get("available") is False or progress.get("percent") in (None, 0, 0.0)):
             running_prompt_id = session.get("running_prompt_id")
@@ -1000,8 +1011,32 @@ class UserSystemdServiceManager:
             "pending_prompt_ids": [prompt_id for prompt_id in (self._comfyui_prompt_id(item) for item in pending_items[:5]) if prompt_id],
         }
 
+    def ensure_comfyui_progress_listener(self, *, client_id: str | None = None) -> dict:
+        normalized_client_id = str(client_id or self._comfyui_progress_client_id or "").strip()
+        if not normalized_client_id:
+            normalized_client_id = "hexe-node-manual-image-ui"
+        self._comfyui_progress_client_id = normalized_client_id
+        thread = self._comfyui_progress_listener_thread
+        if thread is not None and thread.is_alive():
+            return {"started": False, "running": True, "client_id": normalized_client_id}
+        self._comfyui_progress_listener_stop.clear()
+        self._comfyui_progress_listener_thread = threading.Thread(
+            target=self._comfyui_progress_listener_loop,
+            args=(normalized_client_id,),
+            name="comfyui-progress-listener",
+            daemon=True,
+        )
+        self._comfyui_progress_listener_thread.start()
+        return {"started": True, "running": True, "client_id": normalized_client_id}
+
+    def stop_comfyui_progress_listener(self) -> None:
+        self._comfyui_progress_listener_stop.set()
+        with self._comfyui_progress_lock:
+            self._comfyui_progress_cache = {}
+
     def _comfyui_progress_state(self) -> dict:
-        payload = self._uds_json_get(self._comfyui_socket_for_runtime(self._comfyui_webui_runtime), "/progress")
+        with self._comfyui_progress_lock:
+            payload = dict(self._comfyui_progress_cache)
         if not isinstance(payload, dict) or not payload:
             return {"available": False, "active": False, "value": None, "max": None, "percent": None, "prompt_id": None, "node": None}
         value = payload.get("value")
@@ -1023,7 +1058,141 @@ class UserSystemdServiceManager:
             "percent": percent,
             "prompt_id": payload.get("prompt_id"),
             "node": payload.get("node"),
+            "updated_at_epoch": payload.get("updated_at_epoch"),
         }
+
+    def _comfyui_progress_listener_loop(self, client_id: str) -> None:
+        while not self._comfyui_progress_listener_stop.is_set():
+            try:
+                self._comfyui_progress_listen_once(client_id=client_id)
+            except Exception as exc:
+                self._logger.debug("ComfyUI progress listener unavailable: %s", exc)
+                self._comfyui_progress_listener_stop.wait(1.0)
+
+    def _comfyui_progress_listen_once(self, *, client_id: str) -> None:
+        host = self._comfyui_webui_host
+        if host in {"0.0.0.0", "::"}:
+            host = "127.0.0.1"
+        key = base64.b64encode(os.urandom(16)).decode("ascii")
+        path = f"/ws?clientId={client_id}"
+        request = (
+            f"GET {path} HTTP/1.1\r\n"
+            f"Host: {host}:{self._comfyui_webui_port}\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            "Sec-WebSocket-Version: 13\r\n"
+            "\r\n"
+        ).encode("ascii")
+        with socket.create_connection((host, self._comfyui_webui_port), timeout=5.0) as ws:
+            ws.settimeout(1.0)
+            ws.sendall(request)
+            header = self._read_websocket_http_header(ws)
+            status_line = header.splitlines()[0] if header else ""
+            if " 101 " not in status_line:
+                raise RuntimeError(f"websocket_upgrade_failed:{status_line}")
+            accept = self._header_value(header, "sec-websocket-accept")
+            expected = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()).decode("ascii")
+            if accept and accept != expected:
+                raise RuntimeError("websocket_accept_mismatch")
+            while not self._comfyui_progress_listener_stop.is_set():
+                frame = self._read_websocket_frame(ws)
+                if frame is None:
+                    return
+                opcode, payload = frame
+                if opcode == 0x8:
+                    return
+                if opcode == 0x9:
+                    self._send_websocket_frame(ws, opcode=0xA, payload=payload)
+                    continue
+                if opcode != 0x1:
+                    continue
+                try:
+                    message = json.loads(payload.decode("utf-8"))
+                except Exception:
+                    continue
+                if not isinstance(message, dict) or message.get("type") != "progress":
+                    continue
+                data = message.get("data")
+                if not isinstance(data, dict):
+                    continue
+                with self._comfyui_progress_lock:
+                    self._comfyui_progress_cache = {**data, "updated_at_epoch": time.time()}
+
+    @staticmethod
+    def _read_websocket_http_header(sock: socket.socket) -> str:
+        chunks: list[bytes] = []
+        while b"\r\n\r\n" not in b"".join(chunks):
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            if sum(len(item) for item in chunks) > 65536:
+                break
+        return b"".join(chunks).split(b"\r\n\r\n", 1)[0].decode("utf-8", errors="replace")
+
+    @staticmethod
+    def _header_value(header: str, name: str) -> str | None:
+        normalized = name.lower()
+        for line in header.splitlines()[1:]:
+            key, _, value = line.partition(":")
+            if key.strip().lower() == normalized:
+                return value.strip()
+        return None
+
+    @staticmethod
+    def _read_websocket_exact(sock: socket.socket, size: int) -> bytes | None:
+        chunks: list[bytes] = []
+        remaining = size
+        while remaining > 0:
+            try:
+                chunk = sock.recv(remaining)
+            except socket.timeout:
+                continue
+            if not chunk:
+                return None
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks)
+
+    @classmethod
+    def _read_websocket_frame(cls, sock: socket.socket) -> tuple[int, bytes] | None:
+        header = cls._read_websocket_exact(sock, 2)
+        if header is None:
+            return None
+        opcode = header[0] & 0x0F
+        masked = bool(header[1] & 0x80)
+        length = header[1] & 0x7F
+        if length == 126:
+            extended = cls._read_websocket_exact(sock, 2)
+            if extended is None:
+                return None
+            length = int.from_bytes(extended, "big")
+        elif length == 127:
+            extended = cls._read_websocket_exact(sock, 8)
+            if extended is None:
+                return None
+            length = int.from_bytes(extended, "big")
+        mask = cls._read_websocket_exact(sock, 4) if masked else b""
+        payload = cls._read_websocket_exact(sock, length) if length else b""
+        if payload is None:
+            return None
+        if masked and mask:
+            payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+        return opcode, payload
+
+    @staticmethod
+    def _send_websocket_frame(sock: socket.socket, *, opcode: int, payload: bytes = b"") -> None:
+        length = len(payload)
+        if length < 126:
+            header = bytes([0x80 | opcode, 0x80 | length])
+        elif length < 65536:
+            header = bytes([0x80 | opcode, 0x80 | 126]) + length.to_bytes(2, "big")
+        else:
+            header = bytes([0x80 | opcode, 0x80 | 127]) + length.to_bytes(8, "big")
+        mask = os.urandom(4)
+        masked_payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+        sock.sendall(header + mask + masked_payload)
 
     @staticmethod
     def _comfyui_prompt_id(item) -> str | None:

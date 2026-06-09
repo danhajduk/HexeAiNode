@@ -26,6 +26,7 @@ from ai_node.runtime.node_control_api import (
 )
 from ai_node.runtime.execution_queue import ExecutionQueueService
 from ai_node.runtime.operational_mqtt_recovery_store import OperationalMqttRecoveryStore
+from ai_node.runtime.service_manager import UserSystemdServiceManager
 
 
 class NodeControlApiTests(unittest.TestCase):
@@ -2358,6 +2359,27 @@ class NodeControlApiTests(unittest.TestCase):
         self.assertEqual(local_llm["mem_percent"], 56.78)
         self.assertEqual(local_llm["model_states"]["models"][0]["warmth_state"], "loaded")
 
+    def test_comfyui_progress_state_uses_cached_websocket_progress(self):
+        service_manager = UserSystemdServiceManager(logger=logging.getLogger("node-control-test"))
+        with service_manager._comfyui_progress_lock:
+            service_manager._comfyui_progress_cache = {
+                "value": 3,
+                "max": 10,
+                "prompt_id": "prompt-progress",
+                "node": "8",
+                "updated_at_epoch": 123.456,
+            }
+
+        progress = service_manager._comfyui_progress_state()
+
+        self.assertTrue(progress["available"])
+        self.assertTrue(progress["active"])
+        self.assertEqual(progress["value"], 3)
+        self.assertEqual(progress["max"], 10)
+        self.assertEqual(progress["percent"], 30.0)
+        self.assertEqual(progress["prompt_id"], "prompt-progress")
+        self.assertEqual(progress["node"], "8")
+
 
 class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
     class _FakeCapabilityRunner:
@@ -2518,6 +2540,55 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["latest_job"]["prompt_id"], "prompt-done")
         self.assertEqual(payload["latest_job"]["status"], "completed")
         self.assertEqual(payload["latest_job"]["completed_output_count"], 1)
+
+    async def test_submit_manual_image_generation_starts_progress_listener(self):
+        class _ManualImageServiceManager:
+            def __init__(self):
+                self.listener_calls = []
+
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "running"},
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "socket_path": "/tmp/comfyui.sock",
+                        "manual_paths": {"output_dir": "runtime/manual/comfyui-gpu/output"},
+                    },
+                }
+
+            def ensure_comfyui_progress_listener(self, *, client_id: str | None = None):
+                self.listener_calls.append(client_id)
+                return {"started": True, "client_id": client_id}
+
+        async def _fake_start_service(*, target: str):
+            return {"status": "ok", "services": service_manager.get_status()}
+
+        service_manager = _ManualImageServiceManager()
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=service_manager,
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            state.start_service = _fake_start_service
+            with patch.object(state, "_manual_image_outputs", return_value=[]), patch.object(
+                state,
+                "_uds_json_request",
+                return_value={"prompt_id": "prompt-progress", "number": 1},
+            ):
+                result = await state.submit_manual_image_generation(
+                    payload=ManualImageGenerationRequest(
+                        template_id="template.txt2img.realvisxl.v1",
+                        mode="txt2img",
+                        prompt="progress listener smoke",
+                    )
+                )
+
+        self.assertEqual(result["prompt_id"], "prompt-progress")
+        self.assertEqual(service_manager.listener_calls, ["hexe-node-manual-image-ui"])
 
     def test_manual_image_workflow_generates_seed_when_blank(self):
         with tempfile.TemporaryDirectory() as tmp:

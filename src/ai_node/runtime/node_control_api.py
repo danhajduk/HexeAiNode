@@ -1490,6 +1490,11 @@ class NodeControlState:
         workflow = self._manual_image_workflow_from_template(template=template, payload=payload, input_image=input_image)
         outputs_before = self._manual_image_outputs(limit=24)
         submitted_at = datetime.now(timezone.utc).isoformat()
+        if self._service_manager is not None and hasattr(self._service_manager, "ensure_comfyui_progress_listener"):
+            try:
+                self._service_manager.ensure_comfyui_progress_listener(client_id="hexe-node-manual-image-ui")
+            except Exception as exc:
+                self._logger.debug("manual image progress listener unavailable: %s", exc)
         response = self._uds_json_request(
             socket_path=socket_path,
             method="POST",
