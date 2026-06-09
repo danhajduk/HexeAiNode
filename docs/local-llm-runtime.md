@@ -228,21 +228,16 @@ the resolved API workflow under `inputs.comfyui_workflow`. The effective request
 `constraints.image_template_resolved` with template id, version, runtime, model requirements, and
 `output_folder_policy: operational`, keeping governed generation separate from manual Web UI artifact folders.
 
-The default ComfyUI template catalog includes `template.txt2img.realvisxl.v1` for prompt-only generation,
-`template.img2img.realvisxl.v1` for prompt plus input image generation, and avatar-oriented templates for source,
-face, and body references. Avatar templates have regular and transparent-background variants. The transparent variants
-save an RGB fallback before using ComfyUI's local background-removal nodes with an inverted alpha
-mask to save transparent output under separate transparent avatar folders. They require the native BiRefNet background-removal checkpoint in the runtime
-model folder, for example `runtime/models/comfyui-gpu/background_removal/birefnet.safetensors`. The img2img and avatar source templates
-accept `input_image`, which must reference an image available to ComfyUI's selected runtime input folder. The avatar
-identity-reference templates start sampling from a blend of the body reference latent and an empty latent. They expose
-face strength, body conditioning strength, body latent strength, and denoise controls: higher body conditioning follows
-the body reference in prompt conditioning, higher body latent starts closer to the body reference silhouette, and higher
-denoise follows prompt changes more aggressively. If local background removal fails after the RGB fallback has been
-saved, the latest manual job is reported as `completed_with_fallback` and points to the `_rgb` output.
-The avatar body-depth templates instead resize and pad the body reference to the output aspect ratio, extract a Depth Anything V2
-depth map, and apply the SDXL depth ControlNet before sampling from an empty latent. This is intended for stronger
-body pose, volume, and full-body framing control without copying the original body image pixels directly.
+The default ComfyUI template catalog intentionally contains only
+`template.avatar_body_depth_reference_transparent.realvisxl.v1`. Older prompt-only, img2img, scene, avatar-reference,
+avatar-identity, and non-transparent depth templates were removed from `config/comfyui/templates` while the local
+text-to-pose helper is being developed. The remaining template resizes and pads the body reference to the output aspect
+ratio, extracts a Depth Anything V2 depth map, and applies the SDXL depth ControlNet before sampling from an empty
+latent. It also saves an RGB fallback before using ComfyUI's local background-removal nodes with an inverted alpha mask
+to save transparent output under `hexe/avatar_body_depth_transparent/`. The template requires the native BiRefNet
+background-removal checkpoint in the runtime model folder, for example
+`runtime/models/comfyui-gpu/background_removal/birefnet.safetensors`. If local background removal fails after the RGB
+fallback has been saved, the latest manual job is reported as `completed_with_fallback` and points to the `_rgb` output.
 
 The node UI runtime section also exposes a manual image-generation card backed by `GET/POST /api/manual-image-generation`.
 It starts or reuses the manual ComfyUI session, lets operators choose a GPU ComfyUI template and adjust its exposed

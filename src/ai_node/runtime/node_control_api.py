@@ -65,6 +65,8 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
     "body_depth_strength",
 )
 
+MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"
+
 
 class CapabilityDeclarationPrerequisiteError(ValueError):
     def __init__(self, *, payload: dict) -> None:
@@ -1494,7 +1496,7 @@ class NodeControlState:
             )
         template_id = str(payload.template_id or "").strip()
         if not template_id:
-            template_id = "template.img2img.realvisxl.v1" if mode == "img2img" else "template.txt2img.realvisxl.v1"
+            template_id = MANUAL_IMAGE_DEFAULT_TEMPLATE_ID
         template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
         if str(template.get("runtime_id") or "") != "comfyui_gpu":
             raise ValueError("manual_image_template_runtime_unsupported")

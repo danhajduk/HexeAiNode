@@ -149,24 +149,25 @@ Image template registration payload shape:
 
 ```json
 {
-  "template_id": "template.weather.realvisxl.v1",
-  "service_id": "weather-node",
-  "template_name": "Weather RealVisXL",
+  "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
+  "service_id": "avatar-node",
+  "template_name": "Avatar Body Depth Reference Transparent RealVisXL",
   "version": "v1",
   "template_version": {
     "runtime_id": "comfyui_gpu",
-    "api_workflow_path": "config/comfyui/templates/weather-realvisxl/api_workflow.json",
-    "ui_workflow_path": "config/comfyui/templates/weather-realvisxl/ui_workflow.json",
-    "variables": ["positive_prompt", "negative_prompt", "width", "height", "seed"],
+    "api_workflow_path": "config/comfyui/templates/avatar-body-depth-reference-transparent-realvisxl/api_workflow.json",
+    "ui_workflow_path": "config/comfyui/templates/avatar-body-depth-reference-transparent-realvisxl/ui_workflow.json",
+    "variables": ["positive_prompt", "face_reference_image", "body_reference_image", "negative_prompt", "width", "height", "seed"],
     "defaults": {
-      "negative_prompt": "low quality, blurry",
-      "width": 1344,
-      "height": 768,
+      "negative_prompt": "low quality, blurry, cropped body",
+      "width": 768,
+      "height": 1152,
       "seed": null
     },
     "model_requirements": {
       "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
-      "loras": ["sdxl_lightning_4step_lora.safetensors"]
+      "loras": ["sdxl_lightning_4step_lora.safetensors"],
+      "controlnets": ["controlnet-depth-sdxl-1.0-fp16.safetensors"]
     },
     "output_scope": "normal"
   }

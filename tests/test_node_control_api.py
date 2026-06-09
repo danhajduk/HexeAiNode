@@ -844,32 +844,46 @@ class NodeControlApiTests(unittest.TestCase):
                         logger=logging.getLogger("node-control-test"),
                     ),
                     comfyui_template_catalog_dir="config/comfyui/templates",
+                    direct_execution_admission_config=DirectExecutionAdmissionConfig(enabled=False),
                 )
                 state.register_image_generation_template(
-                    template_id="template.weather.realvisxl.v1",
+                    template_id="template.avatar_body_depth_reference_transparent.realvisxl.v1",
                     service_id="service.alpha",
                     version="v1",
                     template_version={
                         "runtime_id": "comfyui_gpu",
-                        "api_workflow_path": "config/comfyui/templates/weather-realvisxl/api_workflow.json",
-                        "ui_workflow_path": "config/comfyui/templates/weather-realvisxl/ui_workflow.json",
-                        "variables": ["positive_prompt", "negative_prompt", "width", "height", "seed"],
-                        "defaults": {"negative_prompt": "low quality", "width": 1344, "height": 768, "seed": 42},
+                        "api_workflow_path": "config/comfyui/templates/avatar-body-depth-reference-transparent-realvisxl/api_workflow.json",
+                        "ui_workflow_path": "config/comfyui/templates/avatar-body-depth-reference-transparent-realvisxl/ui_workflow.json",
+                        "variables": [
+                            "positive_prompt",
+                            "face_reference_image",
+                            "body_reference_image",
+                            "negative_prompt",
+                            "width",
+                            "height",
+                            "seed",
+                        ],
+                        "defaults": {
+                            "negative_prompt": "low quality",
+                            "width": 768,
+                            "height": 1152,
+                            "seed": 42,
+                        },
                     },
                 )
                 state.register_prompt_service(
-                    prompt_id="prompt.weather.image",
+                    prompt_id="prompt.avatar.image",
                     service_id="service.alpha",
                     task_family="task.image_generation",
                     version="v3.0",
                     definition={
-                        "prompt_template": "{{condition}} over {{location}}, editorial weather photo",
-                        "template_variables": ["condition", "location"],
+                        "prompt_template": "{{pose}} in {{wardrobe}}, isolated full body avatar reference",
+                        "template_variables": ["pose", "wardrobe"],
                     },
                     constraints={
                         "routing_policy": {"mode": "local_only"},
                         "image_template": {
-                            "template_id": "template.weather.realvisxl.v1",
+                            "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
                             "template_version": "v1",
                             "template_runtime": "comfyui_gpu",
                             "allowed_parameter_overrides": ["seed"],
@@ -879,34 +893,43 @@ class NodeControlApiTests(unittest.TestCase):
 
                 request = TaskExecutionRequest.model_validate(
                     {
-                        "task_id": "task-weather-image-001",
-                        "prompt_id": "prompt.weather.image",
+                        "task_id": "task-avatar-image-001",
+                        "prompt_id": "prompt.avatar.image",
                         "prompt_version": "v3.0",
                         "task_family": "task.image_generation",
                         "requested_by": "service.alpha",
-                        "inputs": {"condition": "storm clouds", "location": "Seattle", "seed": 7},
+                        "inputs": {
+                            "pose": "standing three-quarter pose",
+                            "wardrobe": "black lingerie",
+                            "face_reference_image": "references/avatar/jane_face.png",
+                            "body_reference_image": "references/avatar/jane_body.png",
+                            "seed": 7,
+                        },
                         "response_mode": "async_if_queued",
                         "priority": "normal",
-                        "trace_id": "trace-weather-image-001",
+                        "trace_id": "trace-avatar-image-001",
                     }
                 )
 
                 preview = await state.preview_direct_execution_route(request=request)
                 resolved = preview["effective_request"]["constraints"]["image_template_resolved"]
-                self.assertEqual(resolved["template_id"], "template.weather.realvisxl.v1")
+                self.assertEqual(resolved["template_id"], "template.avatar_body_depth_reference_transparent.realvisxl.v1")
                 self.assertEqual(resolved["template_version"], "v1")
                 self.assertEqual(resolved["template_runtime"], "comfyui_gpu")
                 self.assertEqual(resolved["output_folder_policy"], "operational")
                 self.assertEqual(resolved["variables"]["seed"], 7)
-                self.assertIn("storm clouds over Seattle", preview["effective_request"]["constraints"]["image_template_resolved"]["variables"]["positive_prompt"])
+                self.assertIn(
+                    "standing three-quarter pose in black lingerie",
+                    preview["effective_request"]["constraints"]["image_template_resolved"]["variables"]["positive_prompt"],
+                )
 
                 sync_result = await state.execute_direct(
-                    request=request.model_copy(update={"task_id": "task-weather-image-sync-001", "response_mode": "sync"}, deep=True)
+                    request=request.model_copy(update={"task_id": "task-avatar-image-sync-001", "response_mode": "sync"}, deep=True)
                 )
                 self.assertEqual(sync_result["status"], "degraded")
                 self.assertEqual(
                     sync_result["resolution_metadata"]["image_template"]["template_id"],
-                    "template.weather.realvisxl.v1",
+                    "template.avatar_body_depth_reference_transparent.realvisxl.v1",
                 )
                 self.assertEqual(
                     sync_result["resolution_metadata"]["image_template"]["output_folder_policy"],
@@ -918,11 +941,14 @@ class NodeControlApiTests(unittest.TestCase):
                 status = await state.execution_job_status(job_id=queued["job_id"])
                 effective_request = status["request"]
                 queued_template = effective_request["constraints"]["image_template_resolved"]
-                self.assertEqual(queued_template["template_id"], "template.weather.realvisxl.v1")
+                self.assertEqual(queued_template["template_id"], "template.avatar_body_depth_reference_transparent.realvisxl.v1")
                 workflow = effective_request["inputs"]["comfyui_workflow"]
-                self.assertEqual(workflow["6"]["inputs"]["seed"], 7)
-                self.assertEqual(workflow["5"]["inputs"]["width"], 1344)
-                self.assertIn("storm clouds over Seattle", workflow["3"]["inputs"]["text"])
+                self.assertEqual(workflow["14"]["inputs"]["seed"], 7)
+                self.assertEqual(workflow["3"]["inputs"]["width"], 768)
+                self.assertEqual(workflow["3"]["inputs"]["height"], 1152)
+                self.assertEqual(workflow["6"]["inputs"]["image"], "references/avatar/jane_face.png")
+                self.assertEqual(workflow["10"]["inputs"]["image"], "references/avatar/jane_body.png")
+                self.assertIn("standing three-quarter pose in black lingerie", workflow["4"]["inputs"]["text"])
 
         asyncio.run(run_scenario())
 
@@ -2490,6 +2516,22 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["generation_status"]["session"]["running_prompt_id"], "prompt-running")
         self.assertEqual(payload["generation_status"]["progress"]["percent"], 50.0)
 
+    def test_manual_image_generation_status_only_exposes_active_manual_template(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+
+            payload = state.manual_image_generation_status()
+
+        self.assertEqual(
+            [item["template_id"] for item in payload["templates"]],
+            ["template.avatar_body_depth_reference_transparent.realvisxl.v1"],
+        )
+
     def test_manual_image_generation_status_reports_latest_job_completion(self):
         class _ManualImageServiceManager:
             def get_status(self):
@@ -2529,8 +2571,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 "_manual_image_outputs",
                 return_value=[
                     {
-                        "relative_path": "hexe/txt2img_00001_.png",
-                        "filename": "txt2img_00001_.png",
+                        "relative_path": "hexe/avatar_body_depth_transparent/Jane_seed123_00001_.png",
+                        "filename": "Jane_seed123_00001_.png",
                         "modified_at": "2026-06-09T12:00:05+00:00",
                     }
                 ],
@@ -2563,7 +2605,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                         "value": 20,
                         "max": 20,
                         "percent": 100.0,
-                        "prompt_id": "prompt-done",
+                        "prompt_id": "prompt-stale",
                     },
                 }
 
@@ -2587,8 +2629,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 "_manual_image_outputs",
                 return_value=[
                     {
-                        "relative_path": "hexe/txt2img_00001_.png",
-                        "filename": "txt2img_00001_.png",
+                        "relative_path": "hexe/avatar_body_depth_transparent/Jane_seed123_00001_.png",
+                        "filename": "Jane_seed123_00001_.png",
                         "modified_at": "2026-06-09T12:00:05+00:00",
                     }
                 ],
@@ -2638,7 +2680,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             state._write_manual_image_latest_job(
                 {
                     "status": "submitted",
-                    "template_id": "template.txt2img.realvisxl.v1",
+                    "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
                     "prompt_id": "prompt-batch-1",
                     "prompt_ids": ["prompt-batch-1", "prompt-batch-2", "prompt-batch-3"],
                     "batch_count": 3,
@@ -2682,7 +2724,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             state._write_manual_image_latest_job(
                 {
                     "status": "running",
-                    "template_id": "template.avatar_identity_reference_transparent.realvisxl.v1",
+                    "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
                     "prompt_id": "prompt-bg-oom",
                     "submitted_at": "2026-06-09T12:00:00+00:00",
                     "output_count_before": 0,
@@ -2693,7 +2735,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 "_manual_image_outputs",
                 return_value=[
                     {
-                        "relative_path": "hexe/avatar_identity_transparent/Jane_seed123_rgb_00001_.png",
+                        "relative_path": "hexe/avatar_body_depth_transparent/Jane_seed123_rgb_00001_.png",
                         "filename": "Jane_seed123_rgb_00001_.png",
                         "modified_at": "2026-06-09T12:00:05+00:00",
                     }
@@ -2734,7 +2776,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             output_dir = Path(tmp) / "manual-output"
-            target_dir = output_dir / "hexe" / "avatar_identity_transparent"
+            target_dir = output_dir / "hexe" / "avatar_body_depth_transparent"
             target_dir.mkdir(parents=True)
             transparent_path = target_dir / "Jane_seed123_00001_.png"
             rgb_path = target_dir / "Jane_seed123_rgb_00001_.png"
@@ -2751,7 +2793,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             state._write_manual_image_latest_job(
                 {
                     "status": "running",
-                    "template_id": "template.avatar_identity_reference_transparent.realvisxl.v1",
+                    "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
                     "prompt_id": "prompt-bg-ok",
                     "submitted_at": "2000-01-01T00:00:00+00:00",
                     "output_count_before": 0,
@@ -2766,7 +2808,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(latest_job["latest_output"]["filename"], "Jane_seed123_00001_.png")
             self.assertEqual(latest_job["completed_output_count"], 1)
             cleanup = latest_job["rgb_fallback_cleanup"]
-            self.assertEqual(cleanup["deleted"], ["hexe/avatar_identity_transparent/Jane_seed123_rgb_00001_.png"])
+            self.assertEqual(cleanup["deleted"], ["hexe/avatar_body_depth_transparent/Jane_seed123_rgb_00001_.png"])
             self.assertEqual(cleanup["errors"], [])
             self.assertTrue(transparent_path.exists())
             self.assertFalse(rgb_path.exists())
@@ -2798,7 +2840,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             output_dir = Path(tmp) / "manual-output"
-            image_path = output_dir / "hexe" / "avatar_refs_transparent" / "avatar_seed123_00001_.png"
+            image_path = output_dir / "hexe" / "avatar_body_depth_transparent" / "avatar_seed123_00001_.png"
             image_path.parent.mkdir(parents=True)
             image_path.write_bytes(b"png-data")
             state = NodeControlState(
@@ -2817,8 +2859,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                         "enabled": True,
                         "caption": "same woman as reference, full body, black lingerie",
                         "negative_prompt": "different person",
-                        "template_id": "template.avatar_reference_transparent.realvisxl.v1",
-                        "mode": "img2img",
+                        "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
+                        "mode": "txt2img",
                         "width": 768,
                         "height": 1152,
                         "seed": 123,
@@ -2837,9 +2879,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(caption_path.read_text(encoding="utf-8").strip(), "same woman as reference, full body, black lingerie")
             metadata = json.loads(json_path.read_text(encoding="utf-8"))
             self.assertEqual(metadata["purpose"], "lora_training_metadata")
-            self.assertEqual(metadata["template_id"], "template.avatar_reference_transparent.realvisxl.v1")
+            self.assertEqual(metadata["template_id"], "template.avatar_body_depth_reference_transparent.realvisxl.v1")
             self.assertEqual(metadata["caption_file"], "avatar_seed123_00001_.txt")
-            self.assertIn("hexe/avatar_refs_transparent/avatar_seed123_00001_.txt", payload["latest_job"]["lora_metadata"]["written"])
+            self.assertIn("hexe/avatar_body_depth_transparent/avatar_seed123_00001_.txt", payload["latest_job"]["lora_metadata"]["written"])
 
     async def test_submit_manual_image_generation_starts_progress_listener(self):
         class _ManualImageServiceManager:
@@ -2881,9 +2923,12 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             ):
                 result = await state.submit_manual_image_generation(
                     payload=ManualImageGenerationRequest(
-                        template_id="template.txt2img.realvisxl.v1",
                         mode="txt2img",
                         prompt="progress listener smoke",
+                        template_variables={
+                            "face_reference_image": "references/avatar/jane_face.png",
+                            "body_reference_image": "references/avatar/jane_body.png",
+                        },
                     )
                 )
 
@@ -2932,11 +2977,14 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             ), patch("ai_node.runtime.node_control_api.secrets.randbelow", side_effect=[111, 222, 333]):
                 result = await state.submit_manual_image_generation(
                     payload=ManualImageGenerationRequest(
-                        template_id="template.txt2img.realvisxl.v1",
                         mode="txt2img",
                         prompt="batch seed test",
                         batch_count=3,
                         randomize_seed=True,
+                        template_variables={
+                            "face_reference_image": "references/avatar/jane_face.png",
+                            "body_reference_image": "references/avatar/jane_body.png",
+                        },
                     )
                 )
 
@@ -2944,7 +2992,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["batch_count"], 3)
         self.assertEqual(result["prompt_ids"], ["prompt-batch-1", "prompt-batch-2", "prompt-batch-3"])
-        self.assertEqual([body["prompt"]["6"]["inputs"]["seed"] for body in request_bodies], [111, 222, 333])
+        self.assertEqual([body["prompt"]["14"]["inputs"]["seed"] for body in request_bodies], [111, 222, 333])
         self.assertEqual([item["seed"] for item in latest_job["submissions"]], [111, 222, 333])
         self.assertEqual(latest_job["lora_metadata"]["batch_count"], 3)
 
@@ -2957,10 +3005,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 comfyui_template_catalog_dir="config/comfyui/templates",
             )
             template = state.get_comfyui_template_catalog_entry(
-                template_id="template.avatar_identity_reference_transparent.realvisxl.v1"
+                template_id="template.avatar_body_depth_reference_transparent.realvisxl.v1"
             )["template"]
             payload = ManualImageGenerationRequest(
-                template_id="template.avatar_identity_reference_transparent.realvisxl.v1",
+                template_id="template.avatar_body_depth_reference_transparent.realvisxl.v1",
                 mode="txt2img",
                 prompt="jitter test",
                 seed=1001,
@@ -2971,18 +3019,16 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     "face_reference_image": "references/avatar/jane_face.png",
                     "body_reference_image": "references/avatar/jane_body.png",
                     "face_strength": "0.75",
-                    "body_conditioning_strength": "0.85",
-                    "body_latent_strength": "0.95",
+                    "body_depth_strength": "0.75",
                 },
             )
 
-            with patch("ai_node.runtime.node_control_api.secrets.randbelow", side_effect=[2_000_000, 0, 1_000_000]):
+            with patch("ai_node.runtime.node_control_api.secrets.randbelow", side_effect=[2_000_000, 0]):
                 item_payload = state._manual_image_batch_item_payload(template=template, payload=payload, batch_index=0)
             workflow = state._manual_image_workflow_from_template(template=template, payload=item_payload, input_image="")
 
         self.assertEqual(workflow["21"]["inputs"]["conditioning_to_strength"], 0.8)
-        self.assertEqual(workflow["22"]["inputs"]["conditioning_to_strength"], 0.8)
-        self.assertEqual(workflow["23"]["inputs"]["blend_factor"], 0.95)
+        self.assertEqual(workflow["27"]["inputs"]["strength"], 0.7)
 
     def test_manual_image_workflow_generates_seed_when_blank(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -3073,323 +3119,6 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["6"]["inputs"]["seed"], int(large_seed))
         self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], f"hexe/test_seed{large_seed}")
 
-    def test_manual_img2img_workflow_resizes_reference_to_requested_dimensions(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            state = NodeControlState(
-                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
-                config_path=str(Path(tmp) / "bootstrap_config.json"),
-                logger=logging.getLogger("node-control-api-test"),
-                comfyui_template_catalog_dir="config/comfyui/templates",
-            )
-            template = state.get_comfyui_template_catalog_entry(template_id="template.img2img.realvisxl.v1")["template"]
-
-            workflow = state._manual_image_workflow_from_template(
-                template=template,
-                payload=ManualImageGenerationRequest(
-                    template_id="template.img2img.realvisxl.v1",
-                    mode="img2img",
-                    prompt="resize test",
-                    width=1280,
-                    height=720,
-                    input_image="reference.png",
-                ),
-                input_image="reference.png",
-            )
-
-        self.assertEqual(workflow["4"]["class_type"], "ImageScale")
-        self.assertEqual(workflow["4"]["inputs"]["width"], 1280)
-        self.assertEqual(workflow["4"]["inputs"]["height"], 720)
-        self.assertEqual(workflow["5"]["inputs"]["pixels"], ["4", 0])
-
-    def test_manual_img2img_workflow_uses_scene_friendly_default_denoise(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            state = NodeControlState(
-                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
-                config_path=str(Path(tmp) / "bootstrap_config.json"),
-                logger=logging.getLogger("node-control-api-test"),
-                comfyui_template_catalog_dir="config/comfyui/templates",
-            )
-            template = state.get_comfyui_template_catalog_entry(template_id="template.img2img.realvisxl.v1")["template"]
-
-            workflow = state._manual_image_workflow_from_template(
-                template=template,
-                payload=ManualImageGenerationRequest(
-                    template_id="template.img2img.realvisxl.v1",
-                    mode="img2img",
-                    prompt="replace the whole background with a neon city street",
-                    input_image="reference.png",
-                    denoise=None,
-                ),
-                input_image="reference.png",
-            )
-
-        self.assertEqual(workflow["8"]["inputs"]["denoise"], 0.8)
-
-    def test_manual_avatar_img2img_template_applies_prompt_to_avatar_source(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            state = NodeControlState(
-                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
-                config_path=str(Path(tmp) / "bootstrap_config.json"),
-                logger=logging.getLogger("node-control-api-test"),
-            )
-            template = state.get_comfyui_template_catalog_entry(template_id="template.avatar_img2img.realvisxl.v1")["template"]
-
-            workflow = state._manual_image_workflow_from_template(
-                template=template,
-                payload=ManualImageGenerationRequest(
-                    template_id="template.avatar_img2img.realvisxl.v1",
-                    mode="img2img",
-                    prompt="cyberpunk avatar in a rainy neon street, full scene transformation",
-                    input_image="avatar.png",
-                    seed=12345,
-                    denoise=None,
-                    template_variables={"avatar_name": "Jane Doe #1"},
-                ),
-                input_image="avatar.png",
-            )
-
-        self.assertEqual(template["metadata"]["domain"], "avatar")
-        self.assertEqual(workflow["3"]["inputs"]["image"], "avatar.png")
-        self.assertEqual(workflow["11"]["class_type"], "ReferenceLatent")
-        self.assertEqual(workflow["11"]["inputs"]["latent"], ["5", 0])
-        self.assertEqual(workflow["8"]["inputs"]["positive"], ["11", 0])
-        self.assertEqual(workflow["8"]["inputs"]["denoise"], 0.55)
-        self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar/Jane_Doe_1_seed12345")
-
-    def test_manual_avatar_reference_template_uses_face_and_body_references(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            state = NodeControlState(
-                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
-                config_path=str(Path(tmp) / "bootstrap_config.json"),
-                logger=logging.getLogger("node-control-api-test"),
-                comfyui_template_catalog_dir="config/comfyui/templates",
-            )
-            template = state.get_comfyui_template_catalog_entry(template_id="template.avatar_reference.realvisxl.v1")["template"]
-
-            workflow = state._manual_image_workflow_from_template(
-                template=template,
-                payload=ManualImageGenerationRequest(
-                    template_id="template.avatar_reference.realvisxl.v1",
-                    mode="img2img",
-                    prompt="avatar in a cinematic noir alley",
-                    seed=777,
-                    template_variables={
-                        "avatar_name": "Jane",
-                        "face_reference_image": "references/avatar/jane_face.png",
-                        "body_reference_image": "references/avatar/jane_body.png",
-                    },
-                ),
-                input_image="references/avatar/jane_source.png",
-            )
-
-        self.assertEqual(workflow["11"]["inputs"]["image"], "references/avatar/jane_face.png")
-        self.assertEqual(workflow["15"]["inputs"]["image"], "references/avatar/jane_body.png")
-        self.assertEqual(workflow["4"]["inputs"]["width"], 768)
-        self.assertEqual(workflow["4"]["inputs"]["height"], 1152)
-        self.assertEqual(workflow["8"]["inputs"]["denoise"], 0.62)
-        self.assertEqual(workflow["14"]["class_type"], "ReferenceLatent")
-        self.assertEqual(workflow["18"]["inputs"]["conditioning"], ["14", 0])
-        self.assertEqual(workflow["8"]["inputs"]["positive"], ["18", 0])
-        self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar_refs/Jane_seed777")
-
-    def test_manual_avatar_reference_transparent_template_adds_alpha_background_removal(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            state = NodeControlState(
-                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
-                config_path=str(Path(tmp) / "bootstrap_config.json"),
-                logger=logging.getLogger("node-control-api-test"),
-                comfyui_template_catalog_dir="config/comfyui/templates",
-            )
-            template = state.get_comfyui_template_catalog_entry(
-                template_id="template.avatar_reference_transparent.realvisxl.v1"
-            )["template"]
-
-            workflow = state._manual_image_workflow_from_template(
-                template=template,
-                payload=ManualImageGenerationRequest(
-                    template_id="template.avatar_reference_transparent.realvisxl.v1",
-                    mode="img2img",
-                    prompt="avatar in lingerie, isolated full body",
-                    seed=888,
-                    template_variables={
-                        "avatar_name": "Jane",
-                        "face_reference_image": "references/avatar/jane_face.png",
-                        "body_reference_image": "references/avatar/jane_body.png",
-                    },
-                ),
-                input_image="references/avatar/jane_source.png",
-            )
-
-        self.assertTrue(template["metadata"]["transparent_background"])
-        self.assertEqual(workflow["19"]["class_type"], "LoadBackgroundRemovalModel")
-        self.assertEqual(workflow["19"]["inputs"]["bg_removal_name"], "birefnet.safetensors")
-        self.assertEqual(workflow["20"]["class_type"], "RemoveBackground")
-        self.assertEqual(workflow["20"]["inputs"]["image"], ["9", 0])
-        self.assertEqual(workflow["22"]["class_type"], "InvertMask")
-        self.assertEqual(workflow["22"]["inputs"]["mask"], ["20", 0])
-        self.assertEqual(workflow["21"]["class_type"], "JoinImageWithAlpha")
-        self.assertEqual(workflow["21"]["inputs"]["alpha"], ["22", 0])
-        self.assertEqual(workflow["10"]["inputs"]["images"], ["9", 0])
-        self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar_refs_transparent/Jane_seed888_rgb")
-        self.assertEqual(workflow["23"]["class_type"], "SaveImage")
-        self.assertEqual(workflow["23"]["inputs"]["images"], ["21", 0])
-        self.assertEqual(workflow["23"]["inputs"]["filename_prefix"], "hexe/avatar_refs_transparent/Jane_seed888")
-
-    def test_manual_avatar_identity_reference_template_uses_body_reference_latent_start(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            state = NodeControlState(
-                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
-                config_path=str(Path(tmp) / "bootstrap_config.json"),
-                logger=logging.getLogger("node-control-api-test"),
-                comfyui_template_catalog_dir="config/comfyui/templates",
-            )
-            template = state.get_comfyui_template_catalog_entry(
-                template_id="template.avatar_identity_reference.realvisxl.v1"
-            )["template"]
-
-            workflow = state._manual_image_workflow_from_template(
-                template=template,
-                payload=ManualImageGenerationRequest(
-                    template_id="template.avatar_identity_reference.realvisxl.v1",
-                    mode="txt2img",
-                    prompt="same woman in a warm bedroom portrait, new pose",
-                    seed=999,
-                    template_variables={
-                        "avatar_name": "Jane",
-                        "face_reference_image": "references/avatar/jane_face.png",
-                        "body_reference_image": "references/avatar/jane_body.png",
-                    },
-                ),
-                input_image="",
-            )
-
-        self.assertEqual(template["metadata"]["input_mode"], "text")
-        self.assertEqual(workflow["6"]["inputs"]["image"], "references/avatar/jane_face.png")
-        self.assertEqual(workflow["10"]["inputs"]["image"], "references/avatar/jane_body.png")
-        self.assertEqual(workflow["17"]["class_type"], "ConditioningAverage")
-        self.assertEqual(workflow["17"]["inputs"]["conditioning_to_strength"], 1.0)
-        self.assertEqual(workflow["18"]["class_type"], "ConditioningAverage")
-        self.assertEqual(workflow["18"]["inputs"]["conditioning_to_strength"], 0.9)
-        self.assertEqual(workflow["19"]["class_type"], "LatentBlend")
-        self.assertEqual(workflow["19"]["inputs"]["blend_factor"], 0.9)
-        self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["19", 0])
-        self.assertEqual(workflow["14"]["inputs"]["positive"], ["18", 0])
-        self.assertEqual(workflow["14"]["inputs"]["denoise"], 0.68)
-        self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_identity/Jane_seed999")
-
-    def test_manual_avatar_identity_reference_transparent_template_adds_alpha_background_removal(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            state = NodeControlState(
-                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
-                config_path=str(Path(tmp) / "bootstrap_config.json"),
-                logger=logging.getLogger("node-control-api-test"),
-                comfyui_template_catalog_dir="config/comfyui/templates",
-            )
-            template = state.get_comfyui_template_catalog_entry(
-                template_id="template.avatar_identity_reference_transparent.realvisxl.v1"
-            )["template"]
-
-            workflow = state._manual_image_workflow_from_template(
-                template=template,
-                payload=ManualImageGenerationRequest(
-                    template_id="template.avatar_identity_reference_transparent.realvisxl.v1",
-                    mode="txt2img",
-                    prompt="same woman, full body lingerie studio pose",
-                    seed=1001,
-                    template_variables={
-                        "avatar_name": "Jane",
-                        "face_reference_image": "references/avatar/jane_face.png",
-                        "body_reference_image": "references/avatar/jane_body.png",
-                        "face_strength": "0.75",
-                        "body_conditioning_strength": "0.85",
-                        "body_latent_strength": "0.95",
-                    },
-                ),
-                input_image="",
-            )
-
-        self.assertEqual(template["metadata"]["input_mode"], "text")
-        self.assertTrue(template["metadata"]["transparent_background"])
-        self.assertEqual(workflow["21"]["class_type"], "ConditioningAverage")
-        self.assertEqual(workflow["21"]["inputs"]["conditioning_to_strength"], 0.75)
-        self.assertEqual(workflow["22"]["class_type"], "ConditioningAverage")
-        self.assertEqual(workflow["22"]["inputs"]["conditioning_to_strength"], 0.85)
-        self.assertEqual(workflow["23"]["class_type"], "LatentBlend")
-        self.assertEqual(workflow["23"]["inputs"]["blend_factor"], 0.95)
-        self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["23", 0])
-        self.assertEqual(workflow["14"]["inputs"]["positive"], ["22", 0])
-        self.assertEqual(workflow["14"]["inputs"]["denoise"], 0.68)
-        self.assertEqual(workflow["17"]["class_type"], "LoadBackgroundRemovalModel")
-        self.assertEqual(workflow["17"]["inputs"]["bg_removal_name"], "birefnet.safetensors")
-        self.assertEqual(workflow["18"]["class_type"], "RemoveBackground")
-        self.assertEqual(workflow["18"]["inputs"]["image"], ["15", 0])
-        self.assertEqual(workflow["20"]["class_type"], "InvertMask")
-        self.assertEqual(workflow["20"]["inputs"]["mask"], ["18", 0])
-        self.assertEqual(workflow["19"]["class_type"], "JoinImageWithAlpha")
-        self.assertEqual(workflow["19"]["inputs"]["alpha"], ["20", 0])
-        self.assertEqual(workflow["16"]["inputs"]["images"], ["15", 0])
-        self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_identity_transparent/Jane_seed1001_rgb")
-        self.assertEqual(workflow["24"]["class_type"], "SaveImage")
-        self.assertEqual(workflow["24"]["inputs"]["images"], ["19", 0])
-        self.assertEqual(workflow["24"]["inputs"]["filename_prefix"], "hexe/avatar_identity_transparent/Jane_seed1001")
-
-    def test_manual_avatar_body_depth_reference_template_applies_depth_controlnet(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            state = NodeControlState(
-                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
-                config_path=str(Path(tmp) / "bootstrap_config.json"),
-                logger=logging.getLogger("node-control-api-test"),
-                comfyui_template_catalog_dir="config/comfyui/templates",
-            )
-            template = state.get_comfyui_template_catalog_entry(
-                template_id="template.avatar_body_depth_reference.realvisxl.v1"
-            )["template"]
-
-            workflow = state._manual_image_workflow_from_template(
-                template=template,
-                payload=ManualImageGenerationRequest(
-                    template_id="template.avatar_body_depth_reference.realvisxl.v1",
-                    mode="txt2img",
-                    prompt="same woman, full body fashion reference pose",
-                    seed=1002,
-                    template_variables={
-                        "avatar_name": "Jane",
-                        "face_reference_image": "references/avatar/jane_face.png",
-                        "body_reference_image": "references/avatar/jane_body.png",
-                        "face_strength": "0.7",
-                        "body_depth_strength": "0.82",
-                        "body_depth_start": "0.05",
-                        "body_depth_end": "0.9",
-                        "depth_resolution": "1024",
-                    },
-                ),
-                input_image="",
-            )
-
-        self.assertEqual(template["metadata"]["edit_intent"], "body_depth_controlnet_composition_with_avatar_references")
-        self.assertEqual(template["model_requirements"]["controlnets"], ["controlnet-depth-sdxl-1.0-fp16.safetensors"])
-        self.assertEqual(workflow["10"]["inputs"]["image"], "references/avatar/jane_body.png")
-        self.assertEqual(workflow["11"]["class_type"], "ResizeAndPadImage")
-        self.assertEqual(workflow["11"]["inputs"]["target_width"], 768)
-        self.assertEqual(workflow["11"]["inputs"]["target_height"], 1152)
-        self.assertEqual(workflow["25"]["class_type"], "DepthAnythingV2Preprocessor")
-        self.assertEqual(workflow["25"]["inputs"]["image"], ["11", 0])
-        self.assertEqual(workflow["25"]["inputs"]["ckpt_name"], "depth_anything_v2_vits.pth")
-        self.assertEqual(workflow["25"]["inputs"]["resolution"], 1024)
-        self.assertEqual(workflow["26"]["class_type"], "ControlNetLoader")
-        self.assertEqual(workflow["26"]["inputs"]["control_net_name"], "controlnet-depth-sdxl-1.0-fp16.safetensors")
-        self.assertEqual(workflow["27"]["class_type"], "ControlNetApplyAdvanced")
-        self.assertEqual(workflow["27"]["inputs"]["positive"], ["21", 0])
-        self.assertEqual(workflow["27"]["inputs"]["negative"], ["5", 0])
-        self.assertEqual(workflow["27"]["inputs"]["image"], ["25", 0])
-        self.assertEqual(workflow["27"]["inputs"]["strength"], 0.82)
-        self.assertEqual(workflow["27"]["inputs"]["start_percent"], 0.05)
-        self.assertEqual(workflow["27"]["inputs"]["end_percent"], 0.9)
-        self.assertEqual(workflow["14"]["inputs"]["positive"], ["27", 0])
-        self.assertEqual(workflow["14"]["inputs"]["negative"], ["27", 1])
-        self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["3", 0])
-        self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_body_depth/Jane_seed1002")
-
     def test_manual_avatar_body_depth_transparent_template_adds_alpha_background_removal(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = NodeControlState(
@@ -3433,34 +3162,6 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_body_depth_transparent/Jane_seed1003_rgb")
         self.assertEqual(workflow["24"]["inputs"]["images"], ["19", 0])
         self.assertEqual(workflow["24"]["inputs"]["filename_prefix"], "hexe/avatar_body_depth_transparent/Jane_seed1003")
-
-    def test_manual_scene_reference_template_uses_scene_reference(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            state = NodeControlState(
-                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
-                config_path=str(Path(tmp) / "bootstrap_config.json"),
-                logger=logging.getLogger("node-control-api-test"),
-                comfyui_template_catalog_dir="config/comfyui/templates",
-            )
-            template = state.get_comfyui_template_catalog_entry(template_id="template.scene_reference.realvisxl.v1")["template"]
-
-            workflow = state._manual_image_workflow_from_template(
-                template=template,
-                payload=ManualImageGenerationRequest(
-                    template_id="template.scene_reference.realvisxl.v1",
-                    mode="img2img",
-                    prompt="turn the place into a rainy evening market",
-                    seed=888,
-                    template_variables={"scene_reference_image": "references/scene/paris.png"},
-                ),
-                input_image="references/scene/source.png",
-            )
-
-        self.assertEqual(workflow["3"]["inputs"]["image"], "references/scene/source.png")
-        self.assertEqual(workflow["11"]["inputs"]["image"], "references/scene/paris.png")
-        self.assertEqual(workflow["14"]["class_type"], "ReferenceLatent")
-        self.assertEqual(workflow["8"]["inputs"]["positive"], ["14", 0])
-        self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/scene_refs/scene_seed888")
 
     def test_manual_image_prompt_helper_uses_local_llm_socket(self):
         class _PromptHelperServiceManager:
@@ -3687,9 +3388,15 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 logger=logging.getLogger("node-control-api-test"),
                 service_manager=_ManualImageServiceManager(),
             )
+
+            def _unlink_side_effect(path_self: Path):
+                if path_self == image_path.resolve():
+                    raise PermissionError
+                raise FileNotFoundError
+
             with (
                 patch.object(state, "_manual_image_output_dir", return_value=output_dir.resolve()),
-                patch.object(Path, "unlink", side_effect=PermissionError),
+                patch.object(Path, "unlink", autospec=True, side_effect=_unlink_side_effect),
                 patch("subprocess.run") as run_command,
             ):
                 result = state.delete_manual_image_output(relative_path="hexe/sample.png")
