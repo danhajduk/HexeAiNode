@@ -255,16 +255,30 @@ class ServiceManagerTests(unittest.TestCase):
         ):
             manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
             manager._write_comfyui_webui_session(state="idle", reason="test", last_active_epoch=100.0)
+            calls = []
+
+            def _stop_webui():
+                calls.append("stop_comfyui")
+                return {"target": "comfyui_webui", "result": "stopped"}
+
+            def _restore_vision(**_kwargs):
+                calls.append("restore_vision")
+                return {"started": True, "reason": "vision_container_stopped"}
+
             with (
                 patch("time.time", return_value=401.0),
                 patch.object(manager, "_uds_json_get", return_value={"queue_running": [], "queue_pending": []}),
-                patch.object(manager, "stop_comfyui_webui", return_value={"target": "comfyui_webui", "result": "stopped"}) as fake_stop,
+                patch.object(manager, "stop_comfyui_webui", side_effect=_stop_webui) as fake_stop,
+                patch.object(manager, "ensure_vision_runtime_resident", side_effect=_restore_vision) as fake_restore,
             ):
                 result = manager.close_comfyui_webui_if_idle()
 
         self.assertTrue(result["closed"])
         self.assertEqual(result["reason"], "idle_timeout_reached")
+        self.assertTrue(result["vision_restore"]["started"])
+        self.assertEqual(calls, ["stop_comfyui", "restore_vision"])
         fake_stop.assert_called_once()
+        fake_restore.assert_called_once_with(local_in_flight=0, gpu_comfyui_critical_in_flight=False)
 
     def test_comfyui_webui_idle_close_resets_when_queue_active(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(

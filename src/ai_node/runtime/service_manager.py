@@ -703,7 +703,13 @@ class UserSystemdServiceManager:
         if float(idle_seconds) < self._comfyui_webui_idle_timeout_seconds:
             return {"closed": False, "reason": "idle_timeout_not_reached", "session": session_status}
         result = self.stop_comfyui_webui()
-        return {"closed": True, "reason": "idle_timeout_reached", "stop_result": result}
+        vision_restore = self.ensure_vision_runtime_resident(local_in_flight=0, gpu_comfyui_critical_in_flight=False)
+        return {
+            "closed": True,
+            "reason": "idle_timeout_reached",
+            "stop_result": result,
+            "vision_restore": vision_restore,
+        }
 
     def _local_llm_status(self) -> dict:
         service_id = "local_llm"

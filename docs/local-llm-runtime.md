@@ -152,7 +152,9 @@ While the manual session is active, the node polls ComfyUI `/queue` through the 
 `queue_running` or `queue_pending` resets the idle timer. Once the queue is empty for
 `HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS` seconds, default `300`, the `comfyui_webui_idle_close` scheduler job closes the
 manual Web UI session. `GET /api/services/status` includes `comfyui_webui.session.idle_seconds`,
-`idle_timeout_seconds`, and `auto_close_at_epoch` for UI countdowns.
+`idle_timeout_seconds`, and `auto_close_at_epoch` for UI countdowns. Idle auto-close shuts down the Web UI bridge,
+stops ComfyUI, waits for the ComfyUI sockets to disappear, clears the manual session marker, and then calls the normal
+vision residency path to reload the vision runtime when enabled.
 
 Example socket probes:
 

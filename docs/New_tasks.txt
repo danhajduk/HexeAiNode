@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 979: Restore normal vision residency after manual ComfyUI auto-close
 [TODO] Task 980: Store manual ComfyUI artifacts in separate manual runtime folders
 [TODO] Task 981: Surface manual ComfyUI session state and controls in the node UI
 [TODO] Task 982: Add V3+ prompt support for image generation template selection
