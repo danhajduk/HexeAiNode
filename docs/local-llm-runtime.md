@@ -210,6 +210,13 @@ maps to GPU ComfyUI with RealVisXL plus SDXL-Lightning presets; low-priority and
 CPU ComfyUI with DreamShaper. Direct execution route previews include `local_runtime_assignment` so operators can
 confirm the selected runtime, model/checkpoint, queue, and policy before queuing work.
 
+Registered image-generation prompts can bind to a ComfyUI workflow template through their V3+ `constraints.image_template`
+policy. During direct or queued normal operation, the node resolves the registered template version, validates access,
+fills template variables from rendered prompt text, request inputs, defaults, and explicit allowed overrides, and adds
+the resolved API workflow under `inputs.comfyui_workflow`. The effective request also includes
+`constraints.image_template_resolved` with template id, version, runtime, model requirements, and
+`output_folder_policy: operational`, keeping governed generation separate from manual Web UI artifact folders.
+
 On the RTX 3060 12 GB node, ComfyUI should be treated as exclusive GPU work for real generation. With both llama.cpp
 runtimes loaded, only about 2.5 GB VRAM remains, which is not enough for typical SDXL, FLUX, or Stable Diffusion 3.5
 workflows. Stop `hexe-ai-node-llamacpp-vision` before lightweight generation, and stop both llama.cpp containers before

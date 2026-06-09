@@ -556,3 +556,4 @@ Task 981: Surface manual ComfyUI session state and controls in the node UI - Com
 Task 982: Add V3+ prompt support for image generation template selection - Completed on 06/09/2026 08:46
 Task 983: Add image generation template registration state and APIs - Completed on 06/09/2026 08:53
 Task 984: Add ComfyUI workflow template catalog and validation - Completed on 06/09/2026 08:57
+Task 985: Route normal image generation through registered templates - Completed on 06/09/2026 09:04

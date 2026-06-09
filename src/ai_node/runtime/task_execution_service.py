@@ -748,6 +748,12 @@ class TaskExecutionService:
             for key in ("n", "size", "quality", "background", "output_format")
             if inputs.get(key) is not None
         }
+        constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        image_template = (
+            constraints.get("image_template_resolved")
+            if isinstance(constraints.get("image_template_resolved"), dict)
+            else None
+        )
         return UnifiedExecutionRequest(
             task_family=request.task_family,
             prompt=str(prompt or "") if prompt is not None else None,
@@ -767,6 +773,19 @@ class TaskExecutionService:
                 "prompt_importance": TaskExecutionService._prompt_importance_level(authorization=authorization),
                 "lease_id": request.lease_id,
                 "structured_output_schema": structured_output_schema if isinstance(structured_output_schema, dict) else None,
+                "image_template": {
+                    key: image_template.get(key)
+                    for key in (
+                        "template_id",
+                        "template_version",
+                        "template_runtime",
+                        "output_scope",
+                        "output_folder_policy",
+                        "model_requirements",
+                    )
+                }
+                if image_template is not None
+                else None,
                 **image_generation_options,
             },
         )
@@ -822,6 +841,25 @@ class TaskExecutionService:
         }
         if isinstance(governance_constraints, dict) and isinstance(governance_constraints.get("model_capability_requirements"), dict):
             payload["capability_requirements"] = dict(governance_constraints.get("model_capability_requirements") or {})
+        request_constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        image_template = (
+            request_constraints.get("image_template_resolved")
+            if isinstance(request_constraints.get("image_template_resolved"), dict)
+            else None
+        )
+        if image_template is not None:
+            payload["image_template"] = {
+                key: image_template.get(key)
+                for key in (
+                    "template_id",
+                    "template_version",
+                    "template_runtime",
+                    "output_scope",
+                    "output_folder_policy",
+                    "api_workflow_path",
+                    "ui_workflow_path",
+                )
+            }
         if rejection_reason:
             payload["error_policy"] = recovery_policy_for_failure_code(rejection_reason)
         return payload

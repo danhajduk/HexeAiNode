@@ -2040,12 +2040,13 @@ class NodeControlState:
         return self._task_execution_service
 
     async def execute_direct(self, *, request: TaskExecutionRequest) -> dict:
+        request = self._resolve_image_generation_template_request(request=request)
         if request.response_mode == "async_if_queued":
             return await self._enqueue_direct_execution(request=request)
         return await self._execute_direct_now(request=request)
 
     async def preview_direct_execution_route(self, *, request: TaskExecutionRequest) -> dict:
-        request_copy = request.model_copy(deep=True)
+        request_copy = self._resolve_image_generation_template_request(request=request)
         authorization = self._direct_execution_authorization_snapshot(request=request_copy)
         authorization_payload = None
         if authorization is not None:
@@ -2153,7 +2154,7 @@ class NodeControlState:
             self._release_execution_admission(route="direct")
 
     async def _enqueue_direct_execution(self, *, request: TaskExecutionRequest) -> dict:
-        request_copy = request.model_copy(deep=True)
+        request_copy = self._resolve_image_generation_template_request(request=request)
         queue_context = await self._direct_execution_queue_context(request=request_copy)
         execution_request = self._execution_request_for_queue_context(request=request_copy, queue_context=queue_context)
         response = await self._execution_queue.enqueue(
@@ -2532,6 +2533,194 @@ class NodeControlState:
         routing_policy["mode"] = execution_routing_mode
         constraints["routing_policy"] = routing_policy
         return request.model_copy(update={"constraints": constraints}, deep=True)
+
+    def _resolve_image_generation_template_request(self, *, request: TaskExecutionRequest) -> TaskExecutionRequest:
+        task_key = str(request.task_family or "").strip().lower()
+        if task_key not in {"task.image_generation", "task.generation.image"} or not request.prompt_id:
+            return request.model_copy(deep=True)
+        request_constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        if isinstance(request_constraints.get("image_template_resolved"), dict):
+            return request.model_copy(deep=True)
+        authorization = self._direct_execution_authorization_snapshot(request=request)
+        if authorization is None or not getattr(authorization, "allowed", False):
+            return request.model_copy(deep=True)
+        prompt_constraints = authorization.prompt_constraints if isinstance(authorization.prompt_constraints, dict) else {}
+        image_template = (
+            prompt_constraints.get("image_template")
+            if isinstance(prompt_constraints.get("image_template"), dict)
+            else None
+        )
+        if not image_template or not image_template.get("template_id"):
+            return request.model_copy(deep=True)
+
+        registration = self._select_registered_image_template(
+            template_id=str(image_template.get("template_id") or ""),
+            template_version=image_template.get("template_version"),
+            template_runtime=image_template.get("template_runtime"),
+            request=request,
+        )
+        catalog_entry = None
+        try:
+            catalog_entry = self.get_comfyui_template_catalog_entry(template_id=registration["template_id"]).get("template")
+        except ValueError:
+            catalog_entry = None
+        version_entry = dict(registration["selected_version"])
+        variables = self._template_variable_names(
+            catalog_entry=catalog_entry,
+            version_entry=version_entry,
+        )
+        defaults = {}
+        if isinstance(catalog_entry, dict):
+            defaults.update(dict(catalog_entry.get("defaults") or {}))
+        defaults.update(dict(version_entry.get("defaults") or {}))
+        prompt_definition = authorization.prompt_definition if isinstance(authorization.prompt_definition, dict) else {}
+        rendered_prompt = render_prompt_template(prompt_definition=prompt_definition, request_inputs=request.inputs)
+        resolved_variables = self._resolve_template_variables(
+            variables=variables,
+            defaults=defaults,
+            request_inputs=request.inputs,
+            rendered_prompt=rendered_prompt,
+            allowed_parameter_overrides=list(image_template.get("allowed_parameter_overrides") or []),
+        )
+        api_workflow_path = str(version_entry.get("api_workflow_path") or "").strip()
+        try:
+            api_workflow = json.loads(Path(api_workflow_path).read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            raise ValueError("image_template_api_workflow_not_found") from exc
+        except json.JSONDecodeError as exc:
+            raise ValueError("image_template_api_workflow_invalid_json") from exc
+        resolved_workflow = self._substitute_template_placeholders(api_workflow, variables=resolved_variables)
+        request_inputs = dict(request.inputs or {})
+        request_inputs["comfyui_workflow"] = resolved_workflow
+        request_inputs["comfyui_template_variables"] = resolved_variables
+        constraints = dict(request.constraints or {})
+        resolved_template = {
+            "template_id": registration["template_id"],
+            "template_version": version_entry.get("version"),
+            "template_runtime": version_entry.get("runtime_id"),
+            "api_workflow_path": api_workflow_path,
+            "ui_workflow_path": version_entry.get("ui_workflow_path"),
+            "output_scope": version_entry.get("output_scope"),
+            "output_folder_policy": "operational",
+            "variables": resolved_variables,
+            "model_requirements": version_entry.get("model_requirements") or {},
+            "catalog_template_available": isinstance(catalog_entry, dict),
+        }
+        constraints["image_template_resolved"] = resolved_template
+        return request.model_copy(update={"inputs": request_inputs, "constraints": constraints}, deep=True)
+
+    def _select_registered_image_template(
+        self,
+        *,
+        template_id: str,
+        template_version: object,
+        template_runtime: object,
+        request: TaskExecutionRequest,
+    ) -> dict:
+        registration = self.get_image_generation_template(template_id=template_id).get("template")
+        if not isinstance(registration, dict):
+            raise ValueError("image_generation_template_not_found")
+        status = str(registration.get("status") or "").strip().lower()
+        if status not in {"active", "review_due"}:
+            raise ValueError("image_generation_template_state_invalid")
+        if not self._registered_image_template_access_allowed(registration=registration, request=request):
+            raise ValueError("image_generation_template_access_denied")
+        selected_version = str(template_version or registration.get("current_version") or "").strip()
+        versions = [item for item in list(registration.get("versions") or []) if isinstance(item, dict)]
+        version_entry = next(
+            (item for item in versions if str(item.get("version") or "").strip() == selected_version),
+            None,
+        )
+        if version_entry is None:
+            raise ValueError("image_generation_template_version_not_found")
+        runtime = str(template_runtime or "").strip()
+        if runtime and runtime != str(version_entry.get("runtime_id") or "").strip():
+            raise ValueError("image_generation_template_runtime_mismatch")
+        return {**registration, "selected_version": version_entry}
+
+    @staticmethod
+    def _registered_image_template_access_allowed(*, registration: dict, request: TaskExecutionRequest) -> bool:
+        access_scope = str(registration.get("access_scope") or "service").strip().lower()
+        requested_by = str(request.requested_by or "").strip()
+        service_id = str(request.service_id or request.requested_by or "").strip()
+        customer_id = str(request.customer_id or "").strip()
+        owner_client_id = str(registration.get("owner_client_id") or "").strip()
+        owner_service = str(registration.get("owner_service") or registration.get("service_id") or "").strip()
+        if access_scope == "public":
+            return True
+        if access_scope == "private":
+            return bool(owner_client_id and requested_by == owner_client_id)
+        if access_scope == "service":
+            return bool(owner_service and service_id == owner_service)
+        if access_scope == "shared":
+            return (
+                service_id in {str(item or "").strip() for item in list(registration.get("allowed_services") or [])}
+                or requested_by in {str(item or "").strip() for item in list(registration.get("allowed_clients") or [])}
+                or customer_id in {str(item or "").strip() for item in list(registration.get("allowed_customers") or [])}
+            )
+        return False
+
+    @staticmethod
+    def _template_variable_names(*, catalog_entry: dict | None, version_entry: dict) -> list[dict]:
+        if isinstance(catalog_entry, dict) and isinstance(catalog_entry.get("variables"), list):
+            return [
+                item
+                for item in list(catalog_entry.get("variables") or [])
+                if isinstance(item, dict) and str(item.get("name") or "").strip()
+            ]
+        return [
+            {"name": str(item or "").strip(), "required": False, "default": None}
+            for item in list(version_entry.get("variables") or [])
+            if str(item or "").strip()
+        ]
+
+    @staticmethod
+    def _resolve_template_variables(
+        *,
+        variables: list[dict],
+        defaults: dict,
+        request_inputs: dict,
+        rendered_prompt: str | None,
+        allowed_parameter_overrides: list[str],
+    ) -> dict:
+        values = dict(defaults or {})
+        allowed_overrides = {str(item or "").strip() for item in allowed_parameter_overrides if str(item or "").strip()}
+        variable_names = {str(item.get("name") or "").strip() for item in variables}
+        for variable in variables:
+            name = str(variable.get("name") or "").strip()
+            if not name:
+                continue
+            if name in request_inputs:
+                values[name] = request_inputs[name]
+            elif name == "positive_prompt" and rendered_prompt is not None:
+                values[name] = rendered_prompt
+            elif name == "positive_prompt" and request_inputs.get("prompt") is not None:
+                values[name] = request_inputs.get("prompt")
+            elif "default" in variable and variable.get("default") is not None and name not in values:
+                values[name] = variable.get("default")
+            if bool(variable.get("required")) and values.get(name) in (None, ""):
+                raise ValueError(f"image_template_variable_required:{name}")
+        for name in allowed_overrides:
+            if name in request_inputs:
+                values[name] = request_inputs[name]
+        return {key: value for key, value in values.items() if key in variable_names or key in allowed_overrides}
+
+    @classmethod
+    def _substitute_template_placeholders(cls, value, *, variables: dict):
+        if isinstance(value, dict):
+            return {key: cls._substitute_template_placeholders(item, variables=variables) for key, item in value.items()}
+        if isinstance(value, list):
+            return [cls._substitute_template_placeholders(item, variables=variables) for item in value]
+        if isinstance(value, str):
+            text = value.strip()
+            if text.startswith("{{") and text.endswith("}}") and text.count("{{") == 1 and text.count("}}") == 1:
+                key = text[2:-2].strip()
+                return variables.get(key)
+            rendered = value
+            for key, item in variables.items():
+                rendered = rendered.replace("{{" + key + "}}", "" if item is None else str(item))
+            return rendered
+        return value
 
     def _direct_execution_authorization_snapshot(self, *, request: TaskExecutionRequest):
         if not request.prompt_id:

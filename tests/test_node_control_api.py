@@ -11,6 +11,7 @@ from ai_node.config.task_capability_selection_config import TaskCapabilitySelect
 from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
+from ai_node.persistence.image_generation_template_store import ImageGenerationTemplateStateStore
 from ai_node.runtime.node_control_api import (
     DirectExecutionAdmissionConfig,
     DirectExecutionAdmissionGuard,
@@ -746,11 +747,13 @@ class NodeControlApiTests(unittest.TestCase):
     def test_low_priority_image_generation_routes_to_cpu_comfyui_queue(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:
+                provider_runtime_manager = self._FakeProviderRuntimeManager()
+                provider_runtime_manager._resolved_tasks = ["task.image_generation"]
                 state = NodeControlState(
                     lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
                     config_path=str(Path(tmp) / "bootstrap_config.json"),
                     logger=logging.getLogger("node-control-test"),
-                    provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                    provider_runtime_manager=provider_runtime_manager,
                     capability_runner=self._FakeCapabilityRunner(),
                 )
 
@@ -815,6 +818,104 @@ class NodeControlApiTests(unittest.TestCase):
                 self.assertEqual(preview["local_runtime_assignment"]["runtime_id"], "comfyui_gpu")
                 self.assertEqual(preview["local_runtime_assignment"]["checkpoint"], "RealVisXL_V5.0_fp16.safetensors")
                 self.assertEqual(preview["local_runtime_assignment"]["lora"], "sdxl_lightning_4step_lora.safetensors")
+
+        asyncio.run(run_scenario())
+
+    def test_image_generation_prompt_resolves_registered_comfyui_template(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                provider_runtime_manager = self._FakeProviderRuntimeManager()
+                provider_runtime_manager._resolved_tasks = ["task.image_generation"]
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=provider_runtime_manager,
+                    prompt_service_state_store=self._FakePromptServiceStateStore(),
+                    image_generation_template_state_store=ImageGenerationTemplateStateStore(
+                        path=str(Path(tmp) / "image_generation_template_state.json"),
+                        logger=logging.getLogger("node-control-test"),
+                    ),
+                    comfyui_template_catalog_dir="config/comfyui/templates",
+                )
+                state.register_image_generation_template(
+                    template_id="template.weather.realvisxl.v1",
+                    service_id="service.alpha",
+                    version="v1",
+                    template_version={
+                        "runtime_id": "comfyui_gpu",
+                        "api_workflow_path": "config/comfyui/templates/weather-realvisxl/api_workflow.json",
+                        "ui_workflow_path": "config/comfyui/templates/weather-realvisxl/ui_workflow.json",
+                        "variables": ["positive_prompt", "negative_prompt", "width", "height", "seed"],
+                        "defaults": {"negative_prompt": "low quality", "width": 1344, "height": 768, "seed": 42},
+                    },
+                )
+                state.register_prompt_service(
+                    prompt_id="prompt.weather.image",
+                    service_id="service.alpha",
+                    task_family="task.image_generation",
+                    version="v3.0",
+                    definition={
+                        "prompt_template": "{{condition}} over {{location}}, editorial weather photo",
+                        "template_variables": ["condition", "location"],
+                    },
+                    constraints={
+                        "routing_policy": {"mode": "local_only"},
+                        "image_template": {
+                            "template_id": "template.weather.realvisxl.v1",
+                            "template_version": "v1",
+                            "template_runtime": "comfyui_gpu",
+                            "allowed_parameter_overrides": ["seed"],
+                        },
+                    },
+                )
+
+                request = TaskExecutionRequest.model_validate(
+                    {
+                        "task_id": "task-weather-image-001",
+                        "prompt_id": "prompt.weather.image",
+                        "prompt_version": "v3.0",
+                        "task_family": "task.image_generation",
+                        "requested_by": "service.alpha",
+                        "inputs": {"condition": "storm clouds", "location": "Seattle", "seed": 7},
+                        "response_mode": "async_if_queued",
+                        "priority": "normal",
+                        "trace_id": "trace-weather-image-001",
+                    }
+                )
+
+                preview = await state.preview_direct_execution_route(request=request)
+                resolved = preview["effective_request"]["constraints"]["image_template_resolved"]
+                self.assertEqual(resolved["template_id"], "template.weather.realvisxl.v1")
+                self.assertEqual(resolved["template_version"], "v1")
+                self.assertEqual(resolved["template_runtime"], "comfyui_gpu")
+                self.assertEqual(resolved["output_folder_policy"], "operational")
+                self.assertEqual(resolved["variables"]["seed"], 7)
+                self.assertIn("storm clouds over Seattle", preview["effective_request"]["constraints"]["image_template_resolved"]["variables"]["positive_prompt"])
+
+                sync_result = await state.execute_direct(
+                    request=request.model_copy(update={"task_id": "task-weather-image-sync-001", "response_mode": "sync"}, deep=True)
+                )
+                self.assertEqual(sync_result["status"], "degraded")
+                self.assertEqual(
+                    sync_result["resolution_metadata"]["image_template"]["template_id"],
+                    "template.weather.realvisxl.v1",
+                )
+                self.assertEqual(
+                    sync_result["resolution_metadata"]["image_template"]["output_folder_policy"],
+                    "operational",
+                )
+
+                queued = await state.execute_direct(request=request)
+                self.assertEqual(queued["status"], "queued")
+                status = await state.execution_job_status(job_id=queued["job_id"])
+                effective_request = status["request"]
+                queued_template = effective_request["constraints"]["image_template_resolved"]
+                self.assertEqual(queued_template["template_id"], "template.weather.realvisxl.v1")
+                workflow = effective_request["inputs"]["comfyui_workflow"]
+                self.assertEqual(workflow["6"]["inputs"]["seed"], 7)
+                self.assertEqual(workflow["5"]["inputs"]["width"], 1344)
+                self.assertIn("storm clouds over Seattle", workflow["3"]["inputs"]["text"])
 
         asyncio.run(run_scenario())
 
