@@ -143,7 +143,7 @@
         "seed": null,
         "steps": 4,
         "cfg": 1.6,
-        "denoise": 0.55
+        "denoise": 0.8
       },
       "model_requirements": {
         "checkpoint": "RealVisXL_V5.0_fp16.safetensors",

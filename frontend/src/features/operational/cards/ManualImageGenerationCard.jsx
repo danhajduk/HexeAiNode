@@ -41,6 +41,11 @@ function templateMode(template) {
   return "txt2img";
 }
 
+function templateForMode(templates, mode) {
+  const normalizedMode = String(mode || "").trim();
+  return asArray(templates).find((template) => templateMode(template) === normalizedMode) || null;
+}
+
 function variableInputType(variable) {
   const type = String(variable?.type || "").trim().toLowerCase();
   return type === "integer" || type === "number" ? "number" : "text";
@@ -144,6 +149,11 @@ export function ManualImageGenerationCard({
     () => templates.find((template) => template?.template_id === selectedTemplateId) || templates[0] || null,
     [templates, selectedTemplateId]
   );
+  const effectiveMode = referenceFile ? "img2img" : mode;
+  const effectiveTemplate =
+    selectedTemplate && templateMode(selectedTemplate) === effectiveMode
+      ? selectedTemplate
+      : templateForMode(templates, effectiveMode) || selectedTemplate;
   const adjustableVariables = asArray(selectedTemplate?.variables).filter((variable) => {
     const name = String(variable?.name || "").trim();
     return name && !["positive_prompt", "negative_prompt", "input_image", "width", "height", "seed", "steps", "cfg", "denoise"].includes(name);
@@ -185,8 +195,8 @@ export function ManualImageGenerationCard({
     event.preventDefault();
     const referenceData = referenceFile ? await fileToDataUrl(referenceFile) : "";
     onSubmit?.({
-      template_id: selectedTemplate?.template_id || null,
-      mode: referenceFile ? "img2img" : mode,
+      template_id: effectiveTemplate?.template_id || null,
+      mode: effectiveMode,
       prompt,
       negative_prompt: negativePrompt,
       width: Number.parseInt(width, 10) || 1024,
@@ -206,6 +216,10 @@ export function ManualImageGenerationCard({
     setReferenceFile(file);
     if (file) {
       setMode("img2img");
+      const img2imgTemplate = templateForMode(templates, "img2img");
+      if (img2imgTemplate?.template_id && templateMode(selectedTemplate) !== "img2img") {
+        setSelectedTemplateId(img2imgTemplate.template_id);
+      }
     }
   }
 
@@ -214,8 +228,8 @@ export function ManualImageGenerationCard({
       return;
     }
     const result = await onImprovePrompt?.({
-      template_id: selectedTemplate?.template_id || null,
-      mode: referenceFile ? "img2img" : mode,
+      template_id: effectiveTemplate?.template_id || null,
+      mode: effectiveMode,
       prompt,
       negative_prompt: negativePrompt,
       width: Number.parseInt(width, 10) || 1024,
@@ -268,7 +282,7 @@ export function ManualImageGenerationCard({
         </div>
         <div className="manual-generation-status-item">
           <span>Template</span>
-          <code>{selectedTemplate?.template_id || "not_configured"}</code>
+          <code>{effectiveTemplate?.template_id || "not_configured"}</code>
         </div>
       </div>
       <div className="manual-generation-progress-panel">
