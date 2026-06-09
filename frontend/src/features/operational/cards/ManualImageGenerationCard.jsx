@@ -370,6 +370,17 @@ export function ManualImageGenerationCard({
     setPrompt((current) => (current.trim() ? `${current.trim()}\n${description}` : description));
   }
 
+  function resetTemplateSettings() {
+    const defaults = effectiveTemplate?.defaults || {};
+    setWidth(String(defaults.width || 1024));
+    setHeight(String(defaults.height || 1024));
+    setSeed(defaults.seed === null || defaults.seed === undefined ? "" : String(defaults.seed));
+    setSteps(String(defaults.steps || 4));
+    setCfg(String(defaults.cfg || 1.6));
+    setDenoise(String(defaults.denoise || 0.55));
+    setNegativePrompt(String(defaults.negative_prompt || "low quality, blurry, watermark, text"));
+  }
+
   async function handleImprovePrompt() {
     if (helperDisabled) {
       return;
@@ -499,6 +510,10 @@ export function ManualImageGenerationCard({
           </code>
           <span>Reference Roles</span>
           <code>{templateReferenceRoles || "none"}</code>
+          <span>Default Size</span>
+          <code>{`${effectiveTemplate?.defaults?.width || 1024} x ${effectiveTemplate?.defaults?.height || 1024}`}</code>
+          <span>Current Size</span>
+          <code>{`${width || "?"} x ${height || "?"}`}</code>
         </div>
       </article>
 
@@ -701,6 +716,9 @@ export function ManualImageGenerationCard({
         <div className="row">
           <button className="btn" type="button" onClick={handleImprovePrompt} disabled={helperDisabled}>
             {promptHelperBusy ? "Drafting..." : "Draft / Improve Prompt"}
+          </button>
+          <button className="btn" type="button" onClick={resetTemplateSettings} disabled={busy}>
+            Reset Template Settings
           </button>
         </div>
         <label>

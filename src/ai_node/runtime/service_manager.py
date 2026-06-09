@@ -958,13 +958,14 @@ class UserSystemdServiceManager:
     def comfyui_webui_generation_status(self) -> dict:
         session = self.comfyui_webui_session_status(include_queue=True)
         progress = self._comfyui_progress_state()
-        if progress.get("available") is False and session.get("queue_active"):
+        if session.get("queue_active") and (progress.get("available") is False or progress.get("percent") in (None, 0, 0.0)):
             running_prompt_id = session.get("running_prompt_id")
             fallback_status = "running" if running_prompt_id else "queued"
             progress = {
                 **progress,
                 "active": True,
                 "prompt_id": running_prompt_id or (list(session.get("pending_prompt_ids") or [None])[0]),
+                "percent": None,
                 "fallback_status": fallback_status,
             }
         return {

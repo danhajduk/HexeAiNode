@@ -344,6 +344,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("25.0%");
     expect(markup).toContain("Template");
     expect(markup).toContain("Avatar workflow that applies prompt edits");
+    expect(markup).toContain("Default Size");
+    expect(markup).toContain("Current Size");
     expect(markup).toContain("Source Image");
     expect(markup).toContain("Avatar References");
     expect(markup).toContain("Prompt");
@@ -354,6 +356,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Describe");
     expect(markup).toContain("Jane");
     expect(markup).toContain("Draft / Improve Prompt");
+    expect(markup).toContain("Reset Template Settings");
     expect(markup).toContain("Delete");
     expect(markup).toContain('step="8"');
     expect(markup).not.toContain("Runtime Health");
