@@ -5,6 +5,7 @@ import socket
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 
 LOCAL_LLM_BUILTIN_DEFAULT_MODEL_ID = "qwen3-8b-q4_k_m"
@@ -869,16 +870,23 @@ class UserSystemdServiceManager:
     def _prepare_comfyui_manual_dirs(self, *, runtime: str) -> None:
         for path in self._comfyui_manual_paths(runtime=runtime).values():
             if path:
-                os.makedirs(path, exist_ok=True)
+                os.makedirs(self._absolute_host_path(path), exist_ok=True)
 
     def _comfyui_manual_runtime_env(self, *, runtime: str) -> dict:
         env = dict(os.environ)
         paths = self._comfyui_manual_paths(runtime=runtime)
         runtime_key = "CPU" if str(runtime or "").strip().lower() == "cpu" else "GPU"
-        env[f"COMFYUI_{runtime_key}_INPUT_DIR"] = paths["input_dir"]
-        env[f"COMFYUI_{runtime_key}_OUTPUT_DIR"] = paths["output_dir"]
-        env[f"COMFYUI_{runtime_key}_USER_DIR"] = paths["user_dir"]
+        env[f"COMFYUI_{runtime_key}_INPUT_DIR"] = self._absolute_host_path(paths["input_dir"])
+        env[f"COMFYUI_{runtime_key}_OUTPUT_DIR"] = self._absolute_host_path(paths["output_dir"])
+        env[f"COMFYUI_{runtime_key}_USER_DIR"] = self._absolute_host_path(paths["user_dir"])
         return env
+
+    @staticmethod
+    def _absolute_host_path(path: str) -> str:
+        normalized = str(path or "").strip()
+        if not normalized:
+            return normalized
+        return str(Path(normalized).expanduser().resolve())
 
     def _comfyui_manual_paths(self, *, runtime: str) -> dict:
         if str(runtime or "").strip().lower() == "cpu":

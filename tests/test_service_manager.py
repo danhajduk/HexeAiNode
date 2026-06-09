@@ -344,6 +344,24 @@ class ServiceManagerTests(unittest.TestCase):
             self.assertIn("manual-gpu/input", env["COMFYUI_GPU_INPUT_DIR"])
             self.assertIn("manual-gpu/output", status["manual_paths"]["output_dir"])
 
+    def test_comfyui_manual_runtime_env_resolves_relative_dirs_for_compose_binds(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "HEXE_COMFYUI_MANUAL_GPU_INPUT_DIR": "runtime/manual/comfyui-gpu/input",
+                "HEXE_COMFYUI_MANUAL_GPU_OUTPUT_DIR": "runtime/manual/comfyui-gpu/output",
+                "HEXE_COMFYUI_MANUAL_GPU_USER_DIR": "runtime/manual/comfyui-gpu/user",
+            },
+            clear=False,
+        ), patch("pathlib.Path.cwd", return_value=Path(tmp)):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            env = manager._comfyui_manual_runtime_env(runtime="gpu")
+
+            self.assertTrue(Path(env["COMFYUI_GPU_INPUT_DIR"]).is_absolute())
+            self.assertTrue(Path(env["COMFYUI_GPU_OUTPUT_DIR"]).is_absolute())
+            self.assertTrue(Path(env["COMFYUI_GPU_USER_DIR"]).is_absolute())
+            self.assertNotIn(":", env["COMFYUI_GPU_INPUT_DIR"])
+
     def test_unix_socket_tcp_bridge_forwards_http(self):
         with tempfile.TemporaryDirectory() as tmp:
             socket_path = str(Path(tmp) / "comfyui.sock")
