@@ -158,6 +158,7 @@ export function ManualImageGenerationCard({
   const [avatarClothingPrompt, setAvatarClothingPrompt] = useState(DEFAULT_AVATAR_CLOTHING_PROMPT);
   const [avatarPosePrompt, setAvatarPosePrompt] = useState(DEFAULT_AVATAR_POSE_PROMPT);
   const [avatarQualityPrompt, setAvatarQualityPrompt] = useState(DEFAULT_AVATAR_QUALITY_PROMPT);
+  const [createLoraMetadata, setCreateLoraMetadata] = useState(false);
   const [negativePrompt, setNegativePrompt] = useState("low quality, blurry, watermark, text");
   const [width, setWidth] = useState("1024");
   const [height, setHeight] = useState("1024");
@@ -319,6 +320,7 @@ export function ManualImageGenerationCard({
       reference_image_filename: referenceFile?.name || null,
       reference_image_data_base64: referenceData || null,
       template_variables: referenceVariables,
+      create_lora_metadata: showAvatarPromptStructure && createLoraMetadata,
     });
   }
 
@@ -813,6 +815,16 @@ export function ManualImageGenerationCard({
           <button className="btn" type="button" onClick={resetTemplateSettings} disabled={busy}>
             Reset Template Settings
           </button>
+          {showAvatarPromptStructure ? (
+            <label className="manual-lora-metadata-toggle">
+              <input
+                type="checkbox"
+                checked={createLoraMetadata}
+                onChange={(event) => setCreateLoraMetadata(event.target.checked)}
+              />
+              Create LoRA metadata
+            </label>
+          ) : null}
         </div>
         <label>
           Negative Prompt

@@ -771,6 +771,23 @@
   color: hsl(var(--sx-text-muted));
 }
 
+.manual-lora-metadata-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  min-height: 36px;
+  margin: 0;
+  color: hsl(var(--sx-text));
+  font-size: 13px;
+}
+
+.manual-lora-metadata-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
 .manual-generation-template-description {
   margin: 0;
   overflow-wrap: anywhere;

@@ -1512,6 +1512,19 @@ class NodeControlState:
                 "submitted_at": submitted_at,
                 "output_count_before": len(outputs_before),
                 "completed_output_count": 0,
+                "lora_metadata": {
+                    "enabled": bool(payload.create_lora_metadata),
+                    "caption": str(payload.prompt or "").strip(),
+                    "negative_prompt": str(payload.negative_prompt or "").strip(),
+                    "template_id": template_id,
+                    "mode": mode,
+                    "width": payload.width,
+                    "height": payload.height,
+                    "seed": payload.seed,
+                    "steps": payload.steps,
+                    "cfg": payload.cfg,
+                    "denoise": payload.denoise,
+                },
             }
         )
         return {
@@ -1812,6 +1825,7 @@ class NodeControlState:
         completed_outputs = [item for item in outputs if str(item.get("modified_at") or "") >= submitted_at]
         if completed_outputs and (status == "submitted" or not queue_active):
             status = "completed"
+        lora_metadata = self._materialize_manual_lora_metadata(job=job, completed_outputs=completed_outputs)
         updated = {
             **job,
             "status": status,
@@ -1821,6 +1835,7 @@ class NodeControlState:
             "progress": progress,
             "completed_output_count": len(completed_outputs),
             "latest_output": completed_outputs[0] if completed_outputs else None,
+            "lora_metadata": lora_metadata,
         }
         if updated != job:
             self._write_manual_image_latest_job(updated)
@@ -1859,11 +1874,60 @@ class NodeControlState:
             path.unlink()
         except PermissionError:
             self._delete_manual_image_output_via_container(relative_path=safe_relative.as_posix())
+        self._delete_manual_lora_sidecars(path=path)
         return {
             "deleted": True,
             "relative_path": safe_relative.as_posix(),
             "outputs": self._manual_image_outputs(limit=24),
         }
+
+    def _materialize_manual_lora_metadata(self, *, job: dict, completed_outputs: list[dict]) -> dict:
+        metadata = job.get("lora_metadata") if isinstance(job.get("lora_metadata"), dict) else {}
+        if not metadata.get("enabled") or not completed_outputs:
+            return metadata if isinstance(metadata, dict) else {"enabled": False}
+        output_dir = self._manual_image_output_dir()
+        caption = str(metadata.get("caption") or "").strip()
+        written: list[str] = []
+        for output in completed_outputs:
+            relative = self._safe_relative_path(output.get("relative_path"))
+            image_path = (output_dir / relative).resolve()
+            if output_dir not in image_path.parents or not image_path.exists() or not image_path.is_file():
+                continue
+            caption_path = image_path.with_suffix(".txt")
+            json_path = image_path.with_suffix(".json")
+            if caption and not caption_path.exists():
+                caption_path.write_text(caption + "\n", encoding="utf-8")
+            payload = {
+                "schema_version": "1.0",
+                "purpose": "lora_training_metadata",
+                "image": image_path.name,
+                "caption_file": caption_path.name,
+                "caption": caption,
+                "negative_prompt": metadata.get("negative_prompt"),
+                "template_id": metadata.get("template_id"),
+                "mode": metadata.get("mode"),
+                "width": metadata.get("width"),
+                "height": metadata.get("height"),
+                "seed": metadata.get("seed"),
+                "steps": metadata.get("steps"),
+                "cfg": metadata.get("cfg"),
+                "denoise": metadata.get("denoise"),
+                "prompt_id": job.get("prompt_id"),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            if not json_path.exists():
+                json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            written.append(image_path.relative_to(output_dir).with_suffix(".txt").as_posix())
+        return {**metadata, "written": written}
+
+    @staticmethod
+    def _delete_manual_lora_sidecars(*, path: Path) -> None:
+        for suffix in (".txt", ".json"):
+            sidecar = path.with_suffix(suffix)
+            try:
+                sidecar.unlink()
+            except FileNotFoundError:
+                pass
 
     def _delete_manual_image_output_via_container(self, *, relative_path: str) -> None:
         services = self.service_status_payload().get("services", {})
@@ -5972,6 +6036,7 @@ class ManualImageGenerationRequest(BaseModel):
     reference_image_filename: str | None = None
     reference_image_data_base64: str | None = None
     template_variables: dict | None = None
+    create_lora_metadata: bool | None = False
 
 
 class ManualImagePromptHelperRequest(BaseModel):

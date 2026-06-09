@@ -2598,6 +2598,73 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["latest_job"]["status"], "completed")
         self.assertEqual(payload["latest_job"]["progress"]["percent"], 100.0)
 
+    def test_manual_image_generation_writes_lora_caption_sidecars(self):
+        class _ManualImageServiceManager:
+            def __init__(self, output_dir: str):
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "running"},
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"output_dir": self.output_dir},
+                    },
+                }
+
+            def comfyui_webui_generation_status(self):
+                return {
+                    "runtime": "gpu",
+                    "session": {"queue_active": False, "running_count": 0, "pending_count": 0},
+                    "progress": {"available": False},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "manual-output"
+            image_path = output_dir / "hexe" / "avatar_refs_transparent" / "avatar_seed123_00001_.png"
+            image_path.parent.mkdir(parents=True)
+            image_path.write_bytes(b"png-data")
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ManualImageServiceManager(str(output_dir)),
+            )
+            state._write_manual_image_latest_job(
+                {
+                    "status": "submitted",
+                    "prompt_id": "prompt-lora",
+                    "submitted_at": "2026-06-09T12:00:00+00:00",
+                    "output_count_before": 0,
+                    "lora_metadata": {
+                        "enabled": True,
+                        "caption": "same woman as reference, full body, black lingerie",
+                        "negative_prompt": "different person",
+                        "template_id": "template.avatar_reference_transparent.realvisxl.v1",
+                        "mode": "img2img",
+                        "width": 768,
+                        "height": 1152,
+                        "seed": 123,
+                        "steps": 20,
+                        "cfg": 1.8,
+                        "denoise": 0.55,
+                    },
+                }
+            )
+
+            payload = state.manual_image_generation_status()
+            caption_path = image_path.with_suffix(".txt")
+            json_path = image_path.with_suffix(".json")
+
+            self.assertEqual(payload["latest_job"]["status"], "completed")
+            self.assertEqual(caption_path.read_text(encoding="utf-8").strip(), "same woman as reference, full body, black lingerie")
+            metadata = json.loads(json_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["purpose"], "lora_training_metadata")
+            self.assertEqual(metadata["template_id"], "template.avatar_reference_transparent.realvisxl.v1")
+            self.assertEqual(metadata["caption_file"], "avatar_seed123_00001_.txt")
+            self.assertIn("hexe/avatar_refs_transparent/avatar_seed123_00001_.txt", payload["latest_job"]["lora_metadata"]["written"])
+
     async def test_submit_manual_image_generation_starts_progress_listener(self):
         class _ManualImageServiceManager:
             def __init__(self):
