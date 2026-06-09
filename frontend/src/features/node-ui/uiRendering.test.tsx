@@ -301,6 +301,36 @@ describe("OperationalDashboard", () => {
     expect(markup).not.toContain("Runtime Health");
   });
 
+  it("keeps the latest manual image job visible from the submit result", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "manual_image",
+          manualImageGenerationProps: {
+            payload: {
+              service: { state: "running", manual_session_active: true },
+              runtime_service: { state: "running" },
+              generation_status: {
+                session: { state: "active", queue_available: true, queue_active: false, running_count: 0, pending_count: 0 },
+                progress: { available: false },
+              },
+              latest_job: {},
+              manual_paths: { output_dir: "runtime/manual/comfyui-gpu/output" },
+            },
+            result: {
+              status: "submitted",
+              prompt_id: "prompt-submitted",
+            },
+          },
+        })}
+      />
+    );
+
+    expect(markup).toContain("Latest Job");
+    expect(markup).toContain("submitted");
+    expect(markup).toContain("prompt-submitted");
+  });
+
   it("shows friendly task kind and schedule names and sorts the legend by duration", () => {
     const markup = renderToStaticMarkup(
       <OperationalDashboard

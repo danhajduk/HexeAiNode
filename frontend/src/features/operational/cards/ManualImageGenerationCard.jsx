@@ -108,6 +108,7 @@ export function ManualImageGenerationCard({
   const generationSession = objectValue(generationStatus.session || service.session);
   const generationProgress = objectValue(generationStatus.progress);
   const latestJob = objectValue(payload?.latest_job);
+  const displayedLatestJob = latestJob.prompt_id || latestJob.status ? latestJob : objectValue(result);
   const manualPaths = payload?.manual_paths || {};
   const progressPercent = Number(generationProgress.percent);
   const selectedTemplate = useMemo(
@@ -191,9 +192,9 @@ export function ManualImageGenerationCard({
         <span>Queue</span>
         <code>{formatQueue(generationSession)}</code>
         <span>Latest Job</span>
-        <StatusBadge value={busy ? "submitting" : formatLatestJob(latestJob)} />
+        <StatusBadge value={busy ? "submitting" : formatLatestJob(displayedLatestJob)} />
         <span>Current Prompt</span>
-        <code>{generationProgress.prompt_id || generationSession.running_prompt_id || latestJob.prompt_id || result?.prompt_id || "none"}</code>
+        <code>{generationProgress.prompt_id || generationSession.running_prompt_id || displayedLatestJob.prompt_id || "none"}</code>
         <span>Progress</span>
         <div className="manual-generation-progress">
           <code>{formatProgress(generationProgress)}</code>
@@ -206,7 +207,7 @@ export function ManualImageGenerationCard({
         <span>Output</span>
         <code>{manualPaths.output_dir || "not_configured"}</code>
         <span>Last Submit</span>
-        <code>{latestJob.prompt_id || result?.prompt_id || "none"}</code>
+        <code>{displayedLatestJob.prompt_id || "none"}</code>
         <span>Template</span>
         <code>{selectedTemplate?.template_id || "not_configured"}</code>
       </div>
