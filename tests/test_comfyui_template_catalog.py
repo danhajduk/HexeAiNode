@@ -29,6 +29,7 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
         self.assertIn("input_image", [item["name"] for item in img2img["variables"]])
         transparent_avatar = templates_by_id["template.avatar_identity_reference_transparent.realvisxl.v1"]
         self.assertTrue(transparent_avatar["metadata"]["transparent_background"])
+        self.assertEqual(transparent_avatar["defaults"]["cfg"], 1.0)
         self.assertEqual(
             transparent_avatar["model_requirements"]["other"]["identity_strength"],
             "fallback_reference_latent_not_faceid",

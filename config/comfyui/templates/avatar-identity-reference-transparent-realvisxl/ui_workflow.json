@@ -58,14 +58,14 @@
       "title": "Create Foreground Alpha Mask"
     },
     {
-      "id": 19,
-      "type": "JoinImageWithAlpha",
-      "title": "Attach Transparent Background"
-    },
-    {
       "id": 20,
       "type": "InvertMask",
       "title": "Invert Alpha Mask"
+    },
+    {
+      "id": 19,
+      "type": "JoinImageWithAlpha",
+      "title": "Attach Transparent Background"
     },
     {
       "id": 16,

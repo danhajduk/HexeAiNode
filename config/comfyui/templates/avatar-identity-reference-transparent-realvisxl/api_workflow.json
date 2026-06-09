@@ -132,17 +132,17 @@
       "bg_removal_model": ["17", 0]
     }
   },
+  "20": {
+    "class_type": "InvertMask",
+    "inputs": {
+      "mask": ["18", 0]
+    }
+  },
   "19": {
     "class_type": "JoinImageWithAlpha",
     "inputs": {
       "image": ["15", 0],
       "alpha": ["20", 0]
-    }
-  },
-  "20": {
-    "class_type": "InvertMask",
-    "inputs": {
-      "mask": ["18", 0]
     }
   },
   "16": {

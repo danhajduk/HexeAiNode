@@ -480,7 +480,7 @@
         "height": 1152,
         "seed": null,
         "steps": 4,
-        "cfg": 1.8
+        "cfg": 1.0
       },
       "model_requirements": {
         "checkpoint": "RealVisXL_V5.0_fp16.safetensors",

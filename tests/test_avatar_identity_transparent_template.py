@@ -118,6 +118,7 @@ class AvatarIdentityTransparentTemplateTests(unittest.TestCase):
         self.assertEqual(workflow["19"]["inputs"]["image"], ["15", 0])
         self.assertEqual(workflow["19"]["inputs"]["alpha"], ["20", 0])
         self.assertEqual(workflow["16"]["inputs"]["images"], ["19", 0])
+        self.assertLess(list(workflow).index("20"), list(workflow).index("19"))
         self.assertEqual(
             workflow["16"]["inputs"]["filename_prefix"],
             "hexe/avatar_identity_transparent/{{avatar_name}}_seed{{seed}}",
