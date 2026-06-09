@@ -108,6 +108,9 @@ class UserSystemdServiceManager:
         self._comfyui_webui_pid_file = str(
             os.environ.get("HEXE_COMFYUI_WEBUI_PID_FILE") or ".run/comfyui-webui-bridge.pid"
         ).strip()
+        self._comfyui_webui_session_file = str(
+            os.environ.get("HEXE_COMFYUI_WEBUI_SESSION_FILE") or ".run/comfyui-webui-session.json"
+        ).strip()
         self._vision_llm_default_model_id = (
             str(
                 os.environ.get("HEXE_PROVIDER_VISION_DEFAULT_MODEL_ID")
@@ -497,6 +500,7 @@ class UserSystemdServiceManager:
     ) -> dict:
         comfyui_gpu_model_loaded = self._comfyui_gpu_model_loaded()
         comfyui_critical = bool(gpu_comfyui_critical_in_flight)
+        manual_comfyui_webui_active = self._manual_comfyui_webui_active()
         active_models = (
             list(active_model_ids)
             if isinstance(active_model_ids, list)
@@ -521,6 +525,7 @@ class UserSystemdServiceManager:
             and not self._vision_llm_residency_in_progress
             and max(int(local_in_flight), 0) == 0
             and not comfyui_critical
+            and not manual_comfyui_webui_active
             and not model_loaded
         )
         reason = None
@@ -532,6 +537,8 @@ class UserSystemdServiceManager:
             reason = "local_work_in_flight"
         elif comfyui_critical and not model_loaded:
             reason = "gpu_comfyui_critical_work_pending"
+        elif manual_comfyui_webui_active and not model_loaded:
+            reason = "blocked_by_manual_comfyui_webui"
         elif model_loaded:
             reason = "vision_model_ready"
         elif container_running and not runtime_ready:
@@ -553,6 +560,7 @@ class UserSystemdServiceManager:
             "local_in_flight": max(int(local_in_flight), 0),
             "comfyui_gpu_model_loaded": comfyui_gpu_model_loaded,
             "gpu_comfyui_critical_in_flight": comfyui_critical,
+            "manual_comfyui_webui_active": manual_comfyui_webui_active,
             "unload_model_supported": False,
             "unload_model_mode": "container_stop_fallback",
             "reason": reason,
@@ -573,6 +581,8 @@ class UserSystemdServiceManager:
         if max(int(local_in_flight), 0) > 0:
             return {"started": False, **status}
         if status.get("gpu_comfyui_critical_in_flight"):
+            return {"started": False, **status}
+        if status.get("manual_comfyui_webui_active"):
             return {"started": False, **status}
         if status.get("model_loaded"):
             return {"started": False, **status}
@@ -610,35 +620,42 @@ class UserSystemdServiceManager:
         if not script_path or not os.path.exists(script_path):
             raise ValueError("ComfyUI web UI bridge script is not configured")
         socket_path = self._comfyui_socket_for_runtime(self._comfyui_webui_runtime)
-        if not socket_path or not os.path.exists(socket_path):
-            self._run_comfyui_control(self._comfyui_webui_runtime, "ready")
-        if not os.path.exists(socket_path):
-            raise ValueError("ComfyUI runtime socket is not ready")
-        subprocess.Popen(
-            [
-                sys.executable,
-                script_path,
-                "--socket-path",
-                socket_path,
-                "--host",
-                self._comfyui_webui_host,
-                "--port",
-                str(self._comfyui_webui_port),
-                "--pid-file",
-                self._comfyui_webui_pid_file,
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        for _ in range(30):
-            time.sleep(0.1)
-            status = self._comfyui_webui_status()
-            if status.get("state") == "running":
-                return {"target": "comfyui_webui", "result": "started", **status}
-        raise ValueError("ComfyUI web UI bridge did not become ready")
+        self._write_comfyui_webui_session(state="starting", reason="manual_webui_start_requested")
+        try:
+            if not socket_path or not os.path.exists(socket_path):
+                self._run_comfyui_control(self._comfyui_webui_runtime, "ready")
+            if not os.path.exists(socket_path):
+                raise ValueError("ComfyUI runtime socket is not ready")
+            subprocess.Popen(
+                [
+                    sys.executable,
+                    script_path,
+                    "--socket-path",
+                    socket_path,
+                    "--host",
+                    self._comfyui_webui_host,
+                    "--port",
+                    str(self._comfyui_webui_port),
+                    "--pid-file",
+                    self._comfyui_webui_pid_file,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            for _ in range(30):
+                time.sleep(0.1)
+                status = self._comfyui_webui_status()
+                if status.get("state") == "running":
+                    self._write_comfyui_webui_session(state="active", reason="manual_webui_bridge_running")
+                    return {"target": "comfyui_webui", "result": "started", **status}
+            raise ValueError("ComfyUI web UI bridge did not become ready")
+        except Exception:
+            self._write_comfyui_webui_session(state="failed", reason="manual_webui_start_failed")
+            raise
 
     def stop_comfyui_webui(self) -> dict:
+        self._write_comfyui_webui_session(state="closing", reason="manual_webui_stop_requested")
         pid = self._read_pid_file(self._comfyui_webui_pid_file)
         if pid:
             try:
@@ -658,6 +675,9 @@ class UserSystemdServiceManager:
             os.unlink(self._comfyui_webui_pid_file)
         except FileNotFoundError:
             pass
+        self._run_comfyui_control(self._comfyui_webui_runtime, "stop")
+        self._wait_comfyui_runtime_stopped(runtime=self._comfyui_webui_runtime)
+        self._clear_comfyui_webui_session()
         return {"target": "comfyui_webui", "result": "stopped", **self._comfyui_webui_status()}
 
     def _local_llm_status(self) -> dict:
@@ -778,6 +798,8 @@ class UserSystemdServiceManager:
             "url": f"http://{url_host}:{self._comfyui_webui_port}",
             "socket_path": self._comfyui_socket_for_runtime(self._comfyui_webui_runtime),
             "pid_file": self._comfyui_webui_pid_file,
+            "session_file": self._comfyui_webui_session_file,
+            "manual_session_active": self._manual_comfyui_webui_active(),
             "api_transport": "tcp_bridge_to_unix_socket",
         }
 
@@ -788,6 +810,61 @@ class UserSystemdServiceManager:
         if not self._comfyui_control_script:
             raise ValueError("ComfyUI control script is not configured")
         subprocess.run([self._comfyui_control_script, target, command], check=True)
+
+    def _wait_comfyui_runtime_stopped(self, *, runtime: str, timeout_seconds: float = 15.0) -> bool:
+        deadline = time.monotonic() + max(float(timeout_seconds), 0.0)
+        socket_path = self._comfyui_socket_for_runtime(runtime)
+        health_socket_path = self._comfyui_health_socket_for_runtime(runtime)
+        while time.monotonic() <= deadline:
+            if not os.path.exists(socket_path) and not os.path.exists(health_socket_path):
+                return True
+            time.sleep(0.2)
+        return False
+
+    def _comfyui_health_socket_for_runtime(self, runtime: str) -> str:
+        return self._comfyui_cpu_health_socket if str(runtime or "").strip().lower() == "cpu" else self._comfyui_gpu_health_socket
+
+    def _write_comfyui_webui_session(self, *, state: str, reason: str) -> None:
+        if not self._comfyui_webui_session_file:
+            return
+        path = self._comfyui_webui_session_file
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        payload = {
+            "state": str(state or "").strip() or "active",
+            "reason": str(reason or "").strip() or None,
+            "runtime": self._comfyui_webui_runtime,
+            "socket_path": self._comfyui_socket_for_runtime(self._comfyui_webui_runtime),
+            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, sort_keys=True)
+            handle.write("\n")
+
+    def _clear_comfyui_webui_session(self) -> None:
+        try:
+            os.unlink(self._comfyui_webui_session_file)
+        except FileNotFoundError:
+            pass
+
+    def _manual_comfyui_webui_active(self) -> bool:
+        if self._comfyui_webui_session_file and os.path.exists(self._comfyui_webui_session_file):
+            try:
+                with open(self._comfyui_webui_session_file, "r", encoding="utf-8") as handle:
+                    payload = json.load(handle)
+            except Exception:
+                payload = {}
+            state = str(payload.get("state") if isinstance(payload, dict) else "").strip().lower()
+            return state in {"starting", "active", "idle", "closing", "restoring"}
+        return self._comfyui_webui_status_without_session().get("state") == "running"
+
+    def _comfyui_webui_status_without_session(self) -> dict:
+        pid = self._read_pid_file(self._comfyui_webui_pid_file)
+        running = bool(
+            pid
+            and self._process_running(pid)
+            and self._tcp_port_ready(host=self._comfyui_webui_host, port=self._comfyui_webui_port)
+        )
+        return {"state": "running" if running else "stopped", "pid": pid or None}
 
     @staticmethod
     def _read_pid_file(path: str) -> int:

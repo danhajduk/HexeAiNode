@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 976: Preserve vision and GPU ComfyUI mutual exclusion for manual sessions
 [TODO] Task 977: Drain or privacy-reroute vision work before manual ComfyUI takeover
 [TODO] Task 978: Add five-minute idle auto-close for manual ComfyUI sessions
 [TODO] Task 979: Restore normal vision residency after manual ComfyUI auto-close

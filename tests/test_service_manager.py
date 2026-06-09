@@ -218,6 +218,32 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(payload["api_transport"], "tcp_bridge_to_unix_socket")
         self.assertEqual(payload["socket_path"], manager._comfyui_gpu_socket)
 
+    def test_manual_comfyui_webui_session_blocks_vision_residency(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {"HEXE_COMFYUI_WEBUI_SESSION_FILE": str(Path(tmp) / "session.json")},
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._write_comfyui_webui_session(state="active", reason="test")
+            session_file = manager._comfyui_webui_session_file
+            with (
+                patch.object(manager, "_comfyui_gpu_model_loaded", return_value=False),
+                patch.object(manager, "_active_model_ids_for_socket", return_value=[]),
+                patch.object(manager, "_query_container_pid", return_value=0),
+                patch("os.path.exists", side_effect=lambda path: str(path) == session_file),
+                patch.object(manager, "_run_vision_llm_control") as fake_run,
+            ):
+                status = manager.vision_runtime_status()
+                result = manager.ensure_vision_runtime_resident()
+
+        self.assertFalse(status["start_due"])
+        self.assertTrue(status["manual_comfyui_webui_active"])
+        self.assertEqual(status["reason"], "blocked_by_manual_comfyui_webui")
+        self.assertFalse(result["started"])
+        self.assertEqual(result["reason"], "blocked_by_manual_comfyui_webui")
+        fake_run.assert_not_called()
+
     def test_unix_socket_tcp_bridge_forwards_http(self):
         with tempfile.TemporaryDirectory() as tmp:
             socket_path = str(Path(tmp) / "comfyui.sock")
