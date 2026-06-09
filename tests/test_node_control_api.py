@@ -2877,6 +2877,53 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(workflow["6"]["inputs"]["seed"], int)
         self.assertGreaterEqual(workflow["6"]["inputs"]["seed"], 0)
 
+    def test_manual_image_workflow_preserves_large_seed_from_string(self):
+        large_seed = "8144634414719883838"
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_path = Path(tmp) / "workflow.json"
+            workflow_path.write_text(
+                json.dumps(
+                    {
+                        "6": {
+                            "class_type": "KSampler",
+                            "inputs": {
+                                "seed": "{{seed}}",
+                                "steps": "{{steps}}",
+                                "cfg": "{{cfg}}",
+                            },
+                        },
+                        "10": {
+                            "class_type": "SaveImage",
+                            "inputs": {"filename_prefix": "hexe/test_seed{{seed}}"},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            workflow = state._manual_image_workflow_from_template(
+                template={
+                    "api_workflow_path": str(workflow_path),
+                    "variables": [
+                        {"name": "positive_prompt", "required": True},
+                        {"name": "seed", "required": False},
+                        {"name": "steps", "required": False},
+                        {"name": "cfg", "required": False},
+                    ],
+                    "defaults": {"seed": None, "steps": 4, "cfg": 1.6},
+                },
+                payload=ManualImageGenerationRequest(prompt="seed precision test", seed=large_seed),
+                input_image="",
+            )
+
+        self.assertEqual(workflow["6"]["inputs"]["seed"], int(large_seed))
+        self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], f"hexe/test_seed{large_seed}")
+
     def test_manual_img2img_workflow_resizes_reference_to_requested_dimensions(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = NodeControlState(

@@ -2042,7 +2042,7 @@ class NodeControlState:
     def _manual_image_workflow_from_template(self, *, template: dict, payload: "ManualImageGenerationRequest", input_image: str) -> dict:
         variables = {item["name"]: item for item in list(template.get("variables") or []) if isinstance(item, dict) and item.get("name")}
         values = dict(template.get("defaults") or {})
-        seed = int(payload.seed) if payload.seed is not None else values.get("seed")
+        seed = self._coerce_manual_image_seed(payload.seed) if payload.seed is not None else values.get("seed")
         if seed is None:
             seed = secrets.randbelow(2**63)
         values.update(
@@ -2071,6 +2071,15 @@ class NodeControlState:
                 raise ValueError(f"manual_image_variable_required:{name}")
         api_workflow = json.loads(Path(str(template.get("api_workflow_path") or "")).read_text(encoding="utf-8"))
         return self._substitute_template_placeholders(api_workflow, variables=values)
+
+    @staticmethod
+    def _coerce_manual_image_seed(value) -> int | None:
+        if value in (None, ""):
+            return None
+        seed = int(str(value).strip())
+        if seed < 0:
+            raise ValueError("manual_image_seed_invalid")
+        return seed
 
     @staticmethod
     def _coerce_manual_template_variable_value(*, variable: dict, value):
@@ -6126,7 +6135,7 @@ class ManualImageGenerationRequest(BaseModel):
     negative_prompt: str | None = None
     width: int | None = None
     height: int | None = None
-    seed: int | None = None
+    seed: int | str | None = None
     steps: int | None = None
     cfg: float | None = None
     denoise: float | None = None

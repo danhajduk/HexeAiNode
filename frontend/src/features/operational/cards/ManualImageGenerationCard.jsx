@@ -82,6 +82,11 @@ function objectValue(value) {
   return value && typeof value === "object" ? value : {};
 }
 
+function seedForPayload(value) {
+  const trimmed = String(value || "").trim();
+  return trimmed ? trimmed : null;
+}
+
 function formatQueue(session) {
   if (session.queue_available === false) {
     return "unavailable";
@@ -327,7 +332,7 @@ export function ManualImageGenerationCard({
       negative_prompt: negativePrompt,
       width: Number.parseInt(width, 10) || 1024,
       height: Number.parseInt(height, 10) || 1024,
-      seed: seed === "" ? null : Number.parseInt(seed, 10),
+      seed: seedForPayload(seed),
       steps: Number.parseInt(steps, 10) || 4,
       cfg: Number.parseFloat(cfg) || 1.6,
       denoise: Number.parseFloat(denoise) || 0.55,
@@ -879,7 +884,13 @@ export function ManualImageGenerationCard({
           </label>
           <label>
             Seed
-            <input type="number" value={seed} onChange={(event) => setSeed(event.target.value)} />
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={seed}
+              onChange={(event) => setSeed(event.target.value.replace(/\D/g, ""))}
+            />
           </label>
           <label>
             Steps
