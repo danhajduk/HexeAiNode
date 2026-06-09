@@ -167,11 +167,12 @@ export function OperationalDashboard({
               </div>
             </article>
             <RuntimeServicesCard {...runtimeServicesProps} />
-            <ManualImageGenerationCard {...manualImageGenerationProps} />
             <ImageTemplatesCard {...imageTemplatesProps} />
             <OperationalActionsCard {...operationalActions} />
           </>
         ) : null}
+
+        {currentSection === "manual_image" ? <ManualImageGenerationCard {...manualImageGenerationProps} /> : null}
 
         {currentSection === "activity" ? (
           <>

@@ -87,11 +87,13 @@ describe("uiRoutes", () => {
     expect(buildSetupRoute("openai")).toBe("#/setup/provider/openai");
     expect(buildSetupRoute("local")).toBe("#/setup/provider/local");
     expect(buildOperationalRoute()).toBe("#/dashboard");
+    expect(buildOperationalRoute("manual_image")).toBe("#/dashboard/manual_image");
     expect(buildOperationalRoute("diagnostics")).toBe("#/dashboard/diagnostics");
   });
 
   it("resolves operational sections and setup helpers", () => {
     expect(resolveOperationalSection("#/dashboard/runtime")).toBe("runtime");
+    expect(resolveOperationalSection("#/dashboard/manual_image")).toBe("manual_image");
     expect(resolveOperationalSection("#/dashboard/clients")).toBe("clients");
     expect(resolveOperationalSection("#/dashboard/scheduled")).toBe("scheduled");
     expect(resolveOperationalSection("#/dashboard")).toBe("overview");

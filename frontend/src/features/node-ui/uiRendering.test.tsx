@@ -11,6 +11,8 @@ function buildOperationalProps(overrides = {}) {
     currentSection: "overview",
     sections: [
       { id: "overview", label: "Overview", onClick: () => {} },
+      { id: "runtime", label: "Runtime", onClick: () => {} },
+      { id: "manual_image", label: "Manual Images", onClick: () => {} },
       { id: "scheduled", label: "Scheduled Tasks", onClick: () => {} },
       { id: "clients", label: "Clients", onClick: () => {} },
       { id: "diagnostics", label: "Diagnostics", onClick: () => {} },
@@ -250,6 +252,17 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Vision Runtime");
     expect(markup).toContain("Vision Residency");
     expect(markup).toContain("model_loaded");
+    expect(markup).not.toContain("Manual Image Generation");
+  });
+
+  it("shows manual image generation on its own section", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard {...buildOperationalProps({ currentSection: "manual_image" })} />
+    );
+
+    expect(markup).toContain("Manual Image Generation");
+    expect(markup).toContain("Reference Image");
+    expect(markup).not.toContain("Runtime Health");
   });
 
   it("shows friendly task kind and schedule names and sorts the legend by duration", () => {

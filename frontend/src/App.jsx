@@ -1670,6 +1670,7 @@ export default function App() {
     ["overview", "Overview"],
     ["capabilities", "Capabilities"],
     ["runtime", "Runtime"],
+    ["manual_image", "Manual Images"],
     ["activity", "Activity"],
     ["clients", "Clients"],
     ["scheduled", "Scheduled Tasks"],

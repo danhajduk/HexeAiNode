@@ -1,4 +1,13 @@
-export type OperationalSection = "overview" | "capabilities" | "runtime" | "activity" | "clients" | "scheduled" | "local_llm" | "diagnostics";
+export type OperationalSection =
+  | "overview"
+  | "capabilities"
+  | "runtime"
+  | "manual_image"
+  | "activity"
+  | "clients"
+  | "scheduled"
+  | "local_llm"
+  | "diagnostics";
 export type UiModeRoute = "identity" | "setup" | "operational";
 export type UiRouteIntent = "auto" | "setup" | "provider_openai" | "provider_local" | "dashboard" | "diagnostics";
 
@@ -6,6 +15,7 @@ const OPERATIONAL_SECTIONS: OperationalSection[] = [
   "overview",
   "capabilities",
   "runtime",
+  "manual_image",
   "activity",
   "clients",
   "scheduled",
