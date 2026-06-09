@@ -2672,6 +2672,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(workflow["11"]["inputs"]["image"], "references/avatar/jane_face.png")
         self.assertEqual(workflow["15"]["inputs"]["image"], "references/avatar/jane_body.png")
+        self.assertEqual(workflow["4"]["inputs"]["width"], 768)
+        self.assertEqual(workflow["4"]["inputs"]["height"], 1152)
+        self.assertEqual(workflow["8"]["inputs"]["denoise"], 0.62)
         self.assertEqual(workflow["14"]["class_type"], "ReferenceLatent")
         self.assertEqual(workflow["18"]["inputs"]["conditioning"], ["14", 0])
         self.assertEqual(workflow["8"]["inputs"]["positive"], ["18", 0])

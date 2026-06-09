@@ -76,7 +76,7 @@
     {
       "template_id": "template.avatar_reference.realvisxl.v1",
       "template_name": "Avatar References RealVisXL",
-      "description": "Avatar workflow that applies prompt edits while conditioning on selected face and body reference images.",
+      "description": "Portrait avatar workflow that applies prompt edits while conditioning on selected face and body reference images.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-reference-realvisxl/api_workflow.json",
       "ui_workflow_path": "avatar-reference-realvisxl/ui_workflow.json",
@@ -155,14 +155,14 @@
         }
       ],
       "defaults": {
-        "negative_prompt": "low quality, blurry, distorted face, distorted hands, extra limbs, malformed body, watermark, text",
+        "negative_prompt": "cropped head, cropped face, cropped body, out of frame, close-up crop, torso crop, missing legs, missing feet, different body shape, changed identity, altered face, low quality, blurry, distorted face, distorted hands, extra limbs, malformed body, watermark, text",
         "avatar_name": "avatar",
-        "width": 1024,
-        "height": 1024,
+        "width": 768,
+        "height": 1152,
         "seed": null,
         "steps": 4,
         "cfg": 1.8,
-        "denoise": 0.82
+        "denoise": 0.62
       },
       "model_requirements": {
         "checkpoint": "RealVisXL_V5.0_fp16.safetensors",

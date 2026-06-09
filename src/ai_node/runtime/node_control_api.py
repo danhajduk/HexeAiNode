@@ -5938,12 +5938,12 @@ class ManualImageGenerationRequest(BaseModel):
     mode: str = "txt2img"
     prompt: str
     negative_prompt: str | None = None
-    width: int | None = 1024
-    height: int | None = 1024
+    width: int | None = None
+    height: int | None = None
     seed: int | None = None
-    steps: int | None = 4
-    cfg: float | None = 1.6
-    denoise: float | None = 0.55
+    steps: int | None = None
+    cfg: float | None = None
+    denoise: float | None = None
     input_image: str | None = None
     reference_image_filename: str | None = None
     reference_image_data_base64: str | None = None
