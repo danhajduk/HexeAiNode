@@ -75,6 +75,11 @@ function formatProgress(progress) {
   return progress.active ? "working" : "idle";
 }
 
+function formatLatestJob(job) {
+  const status = String(job?.status || "").trim();
+  return status || "none";
+}
+
 export function ManualImageGenerationCard({
   payload = null,
   busy = false,
@@ -102,6 +107,7 @@ export function ManualImageGenerationCard({
   const generationStatus = objectValue(payload?.generation_status);
   const generationSession = objectValue(generationStatus.session || service.session);
   const generationProgress = objectValue(generationStatus.progress);
+  const latestJob = objectValue(payload?.latest_job);
   const manualPaths = payload?.manual_paths || {};
   const progressPercent = Number(generationProgress.percent);
   const selectedTemplate = useMemo(
@@ -184,8 +190,10 @@ export function ManualImageGenerationCard({
         <StatusBadge value={generationSession.state || (service.manual_session_active ? "active" : "inactive")} />
         <span>Queue</span>
         <code>{formatQueue(generationSession)}</code>
+        <span>Latest Job</span>
+        <StatusBadge value={busy ? "submitting" : formatLatestJob(latestJob)} />
         <span>Current Prompt</span>
-        <code>{generationProgress.prompt_id || generationSession.running_prompt_id || result?.prompt_id || "none"}</code>
+        <code>{generationProgress.prompt_id || generationSession.running_prompt_id || latestJob.prompt_id || result?.prompt_id || "none"}</code>
         <span>Progress</span>
         <div className="manual-generation-progress">
           <code>{formatProgress(generationProgress)}</code>
@@ -198,7 +206,7 @@ export function ManualImageGenerationCard({
         <span>Output</span>
         <code>{manualPaths.output_dir || "not_configured"}</code>
         <span>Last Submit</span>
-        <code>{result?.prompt_id || "none"}</code>
+        <code>{latestJob.prompt_id || result?.prompt_id || "none"}</code>
         <span>Template</span>
         <code>{selectedTemplate?.template_id || "not_configured"}</code>
       </div>

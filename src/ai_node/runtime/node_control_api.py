@@ -781,6 +781,10 @@ class NodeControlState:
             _env_int("HEXE_COMFYUI_WEBUI_IDLE_CHECK_INTERVAL_SECONDS", 15),
             1,
         )
+        self._manual_image_generation_job_path = Path(
+            os.environ.get("HEXE_MANUAL_IMAGE_GENERATION_JOB_PATH")
+            or self._config_path.parent / "manual_image_generation_job.json"
+        )
         self._load_identity()
         self._rehydrate_trusted_state()
         self._load_provider_selection_config()
@@ -1433,6 +1437,8 @@ class NodeControlState:
                 generation_status = {"available": False, "error": str(exc)}
         if not isinstance(generation_status, dict):
             generation_status = {}
+        outputs = self._manual_image_outputs(limit=24)
+        latest_job = self._manual_image_latest_job(generation_status=generation_status, outputs=outputs)
         catalog = self.comfyui_template_catalog_payload()
         templates = [
             item
@@ -1446,9 +1452,10 @@ class NodeControlState:
             "service": webui,
             "runtime_service": runtime_service if isinstance(runtime_service, dict) else {},
             "generation_status": generation_status,
+            "latest_job": latest_job,
             "manual_paths": manual_paths if isinstance(manual_paths, dict) else {},
             "templates": templates,
-            "outputs": self._manual_image_outputs(limit=24),
+            "outputs": outputs,
         }
 
     async def submit_manual_image_generation(self, *, payload: "ManualImageGenerationRequest") -> dict:
@@ -1477,23 +1484,82 @@ class NodeControlState:
         if str(template.get("runtime_id") or "") != "comfyui_gpu":
             raise ValueError("manual_image_template_runtime_unsupported")
         workflow = self._manual_image_workflow_from_template(template=template, payload=payload, input_image=input_image)
+        outputs_before = self._manual_image_outputs(limit=24)
+        submitted_at = datetime.now(timezone.utc).isoformat()
         response = self._uds_json_request(
             socket_path=socket_path,
             method="POST",
             path="/prompt",
             body={"client_id": "hexe-node-manual-image-ui", "prompt": workflow},
         )
+        prompt_id = response.get("prompt_id")
+        self._write_manual_image_latest_job(
+            {
+                "status": "submitted",
+                "mode": mode,
+                "template_id": template_id,
+                "prompt_id": prompt_id,
+                "number": response.get("number"),
+                "submitted_at": submitted_at,
+                "output_count_before": len(outputs_before),
+                "completed_output_count": 0,
+            }
+        )
         return {
             "status": "submitted",
             "mode": mode,
             "template_id": template_id,
-            "prompt_id": response.get("prompt_id"),
+            "prompt_id": prompt_id,
             "number": response.get("number"),
             "node_errors": response.get("node_errors") or {},
             "input_image": input_image or None,
             "manual_paths": manual_paths,
             "outputs": self._manual_image_outputs(limit=24),
         }
+
+    def _manual_image_latest_job(self, *, generation_status: dict, outputs: list[dict]) -> dict:
+        job = self._read_manual_image_latest_job()
+        prompt_id = str(job.get("prompt_id") or "").strip()
+        if not prompt_id:
+            return {}
+        session = generation_status.get("session") if isinstance(generation_status.get("session"), dict) else {}
+        progress = generation_status.get("progress") if isinstance(generation_status.get("progress"), dict) else {}
+        pending_prompt_ids = [str(item) for item in list(session.get("pending_prompt_ids") or [])]
+        running_prompt_id = str(session.get("running_prompt_id") or "").strip()
+        progress_prompt_id = str(progress.get("prompt_id") or "").strip()
+        status = "submitted"
+        if prompt_id == running_prompt_id or prompt_id == progress_prompt_id:
+            status = "running"
+        elif prompt_id in pending_prompt_ids:
+            status = "queued"
+        submitted_at = str(job.get("submitted_at") or "").strip()
+        completed_outputs = [item for item in outputs if str(item.get("modified_at") or "") >= submitted_at]
+        if completed_outputs and status == "submitted":
+            status = "completed"
+        updated = {
+            **job,
+            "status": status,
+            "queue_active": bool(session.get("queue_active")),
+            "running_count": int(session.get("running_count") or 0),
+            "pending_count": int(session.get("pending_count") or 0),
+            "progress": progress,
+            "completed_output_count": len(completed_outputs),
+            "latest_output": completed_outputs[0] if completed_outputs else None,
+        }
+        if updated != job:
+            self._write_manual_image_latest_job(updated)
+        return updated
+
+    def _read_manual_image_latest_job(self) -> dict:
+        try:
+            payload = json.loads(self._manual_image_generation_job_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _write_manual_image_latest_job(self, payload: dict) -> None:
+        self._manual_image_generation_job_path.parent.mkdir(parents=True, exist_ok=True)
+        self._manual_image_generation_job_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
     def manual_image_output_response(self, *, relative_path: str) -> FileResponse:
         output_dir = self._manual_image_output_dir()

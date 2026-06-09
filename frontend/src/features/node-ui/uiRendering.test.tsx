@@ -280,6 +280,10 @@ describe("OperationalDashboard", () => {
                   prompt_id: "prompt-running",
                 },
               },
+              latest_job: {
+                status: "running",
+                prompt_id: "prompt-running",
+              },
               manual_paths: { output_dir: "runtime/manual/comfyui-gpu/output" },
             },
           },
@@ -289,6 +293,8 @@ describe("OperationalDashboard", () => {
 
     expect(markup).toContain("Manual Image Generation");
     expect(markup).toContain("ComfyUI Runtime");
+    expect(markup).toContain("Latest Job");
+    expect(markup).toContain("prompt-running");
     expect(markup).toContain("1 running / 2 pending");
     expect(markup).toContain("25.0%");
     expect(markup).toContain("Reference Image");

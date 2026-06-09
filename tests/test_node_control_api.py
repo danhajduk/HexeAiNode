@@ -2462,6 +2462,57 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["generation_status"]["session"]["running_prompt_id"], "prompt-running")
         self.assertEqual(payload["generation_status"]["progress"]["percent"], 50.0)
 
+    def test_manual_image_generation_status_reports_latest_job_completion(self):
+        class _ManualImageServiceManager:
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "running"},
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"output_dir": "runtime/manual/comfyui-gpu/output"},
+                    },
+                }
+
+            def comfyui_webui_generation_status(self):
+                return {
+                    "runtime": "gpu",
+                    "session": {"queue_active": False, "running_count": 0, "pending_count": 0},
+                    "progress": {"available": False},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ManualImageServiceManager(),
+            )
+            state._write_manual_image_latest_job(
+                {
+                    "status": "submitted",
+                    "prompt_id": "prompt-done",
+                    "submitted_at": "2026-06-09T12:00:00+00:00",
+                    "output_count_before": 0,
+                }
+            )
+            with patch.object(
+                state,
+                "_manual_image_outputs",
+                return_value=[
+                    {
+                        "relative_path": "hexe/txt2img_00001_.png",
+                        "filename": "txt2img_00001_.png",
+                        "modified_at": "2026-06-09T12:00:05+00:00",
+                    }
+                ],
+            ):
+                payload = state.manual_image_generation_status()
+
+        self.assertEqual(payload["latest_job"]["prompt_id"], "prompt-done")
+        self.assertEqual(payload["latest_job"]["status"], "completed")
+        self.assertEqual(payload["latest_job"]["completed_output_count"], 1)
+
     async def test_benchmark_v2_switches_local_models_before_timed_execution(self):
         class _LocalBenchmarkServiceManager:
             def __init__(self):
