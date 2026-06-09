@@ -1519,6 +1519,101 @@ class NodeControlState:
             "outputs": self._manual_image_outputs(limit=24),
         }
 
+    def manual_image_prompt_helper(self, *, payload: "ManualImagePromptHelperRequest") -> dict:
+        services = self.service_status_payload().get("services", {})
+        local_llm = services.get("local_llm") if isinstance(services, dict) else {}
+        socket_path = str(local_llm.get("socket_path") or "") if isinstance(local_llm, dict) else ""
+        model_id = str(local_llm.get("model_id") or local_llm.get("default_model_id") or "local").strip() if isinstance(local_llm, dict) else "local"
+        if not socket_path:
+            raise ValueError("local_llm_socket_unavailable")
+        if isinstance(local_llm, dict) and str(local_llm.get("state") or "").strip().lower() not in {"running", "healthy"}:
+            raise ValueError("local_llm_unavailable")
+        mode = str(payload.mode or "txt2img").strip().lower()
+        if mode not in {"txt2img", "img2img"}:
+            mode = "img2img" if payload.reference_image_provided else "txt2img"
+        request_body = {
+            "model": model_id,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "/no_think You help draft concise SDXL/ComfyUI image prompts. "
+                        "Return only JSON with keys prompt and negative_prompt. "
+                        "Keep the user's intent, add visual detail, subject, setting, lighting, composition, and quality terms. "
+                        "Do not include explanations or markdown."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "/no_think "
+                        + json.dumps(
+                            {
+                                "mode": mode,
+                                "template_id": payload.template_id,
+                                "current_prompt": str(payload.prompt or "").strip(),
+                                "current_negative_prompt": str(payload.negative_prompt or "").strip(),
+                                "width": payload.width,
+                                "height": payload.height,
+                                "reference_image_provided": bool(payload.reference_image_provided),
+                            },
+                            sort_keys=True,
+                        )
+                    ),
+                },
+            ],
+            "temperature": 0.7,
+            "max_tokens": 350,
+            "stream": False,
+        }
+        response = self._uds_json_request(
+            socket_path=socket_path,
+            method="POST",
+            path="/v1/chat/completions",
+            body=request_body,
+            host="local-llm",
+            error_label="local_llm_prompt_helper_failed",
+        )
+        content = ""
+        choices = response.get("choices") if isinstance(response.get("choices"), list) else []
+        if choices and isinstance(choices[0], dict):
+            message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
+            content = str(message.get("content") or message.get("reasoning_content") or choices[0].get("text") or "").strip()
+        parsed = self._parse_manual_image_prompt_helper_content(content)
+        prompt = str(parsed.get("prompt") or content or payload.prompt or "").strip()
+        negative_prompt = str(parsed.get("negative_prompt") or payload.negative_prompt or "").strip()
+        return {
+            "status": "ok",
+            "provider": "local_llm",
+            "model_id": model_id,
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+        }
+
+    @staticmethod
+    def _parse_manual_image_prompt_helper_content(content: str) -> dict:
+        text = str(content or "").strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            start = text.find("{")
+            end = text.rfind("}")
+            if start >= 0 and end > start:
+                try:
+                    parsed = json.loads(text[start : end + 1])
+                except json.JSONDecodeError:
+                    parsed = {}
+            else:
+                parsed = {}
+        return parsed if isinstance(parsed, dict) else {}
+
     def _manual_image_latest_job(self, *, generation_status: dict, outputs: list[dict]) -> dict:
         job = self._read_manual_image_latest_job()
         prompt_id = str(job.get("prompt_id") or "").strip()
@@ -1707,11 +1802,19 @@ class NodeControlState:
         return target_name
 
     @staticmethod
-    def _uds_json_request(*, socket_path: str, method: str, path: str, body: dict | None = None) -> dict:
+    def _uds_json_request(
+        *,
+        socket_path: str,
+        method: str,
+        path: str,
+        body: dict | None = None,
+        host: str = "comfyui",
+        error_label: str = "comfyui_request_failed",
+    ) -> dict:
         payload = json.dumps(body or {}).encode("utf-8") if body is not None else b""
         headers = [
             f"{method.upper()} {path} HTTP/1.1",
-            "Host: comfyui",
+            f"Host: {host}",
             "Connection: close",
         ]
         if body is not None:
@@ -1731,7 +1834,7 @@ class NodeControlState:
         head, _, response_body = raw.partition(b"\r\n\r\n")
         status_line = head.decode("utf-8", errors="replace").splitlines()[0] if head else ""
         if " 2" not in status_line:
-            raise ValueError("comfyui_request_failed")
+            raise ValueError(error_label)
         parsed = json.loads(response_body.decode("utf-8")) if response_body else {}
         return parsed if isinstance(parsed, dict) else {}
 
@@ -5626,6 +5729,16 @@ class ManualImageGenerationRequest(BaseModel):
     template_variables: dict | None = None
 
 
+class ManualImagePromptHelperRequest(BaseModel):
+    template_id: str | None = None
+    mode: str = "txt2img"
+    prompt: str | None = None
+    negative_prompt: str | None = None
+    width: int | None = None
+    height: int | None = None
+    reference_image_provided: bool | None = False
+
+
 class ExecutionAuthorizeRequest(BaseModel):
     prompt_id: str
     task_family: str
@@ -6427,6 +6540,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     async def post_manual_image_generation(payload: ManualImageGenerationRequest):
         try:
             return await state.submit_manual_image_generation(payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/manual-image-generation/prompt-helper")
+    def post_manual_image_generation_prompt_helper(payload: ManualImagePromptHelperRequest):
+        try:
+            return state.manual_image_prompt_helper(payload=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -185,6 +185,7 @@ export default function App() {
   const [manualImageGenerationPayload, setManualImageGenerationPayload] = useState(null);
   const [manualImageGenerationBusy, setManualImageGenerationBusy] = useState(false);
   const [manualImageGenerationResult, setManualImageGenerationResult] = useState(null);
+  const [manualImagePromptHelperBusy, setManualImagePromptHelperBusy] = useState(false);
   const [runningAdminAction, setRunningAdminAction] = useState("");
   const [adminActionState, setAdminActionState] = useState("");
   const [uiState, setUiState] = useState(() =>
@@ -942,6 +943,23 @@ export default function App() {
       setError(message);
     } finally {
       setManualImageGenerationBusy(false);
+    }
+  }
+
+  async function onImproveManualImagePrompt(payload) {
+    if (manualImagePromptHelperBusy) {
+      return null;
+    }
+    setManualImagePromptHelperBusy(true);
+    setError("");
+    try {
+      return await apiPost("/api/manual-image-generation/prompt-helper", payload);
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setManualImagePromptHelperBusy(false);
     }
   }
 
@@ -1868,9 +1886,11 @@ export default function App() {
     manualImageGenerationProps: {
       payload: manualImageGenerationPayload,
       busy: manualImageGenerationBusy,
+      promptHelperBusy: manualImagePromptHelperBusy,
       result: manualImageGenerationResult,
       apiBase: getApiBase(),
       onSubmit: onSubmitManualImageGeneration,
+      onImprovePrompt: onImproveManualImagePrompt,
       onDeleteOutput: onDeleteManualImageOutput,
       onRefresh: loadStatus,
     },

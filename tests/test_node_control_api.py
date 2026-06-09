@@ -18,6 +18,7 @@ from ai_node.runtime.node_control_api import (
     DirectExecutionAdmissionGuard,
     DirectExecutionBusyError,
     ManualImageGenerationRequest,
+    ManualImagePromptHelperRequest,
     NodeControlState,
 )
 from ai_node.runtime.execution_queue import ExecutionQueueService
@@ -2555,6 +2556,85 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsInstance(workflow["6"]["inputs"]["seed"], int)
         self.assertGreaterEqual(workflow["6"]["inputs"]["seed"], 0)
+
+    def test_manual_img2img_workflow_resizes_reference_to_requested_dimensions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+            )
+            template = state.get_comfyui_template_catalog_entry(template_id="template.img2img.realvisxl.v1")["template"]
+
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id="template.img2img.realvisxl.v1",
+                    mode="img2img",
+                    prompt="resize test",
+                    width=1280,
+                    height=720,
+                    input_image="reference.png",
+                ),
+                input_image="reference.png",
+            )
+
+        self.assertEqual(workflow["4"]["class_type"], "ImageScale")
+        self.assertEqual(workflow["4"]["inputs"]["width"], 1280)
+        self.assertEqual(workflow["4"]["inputs"]["height"], 720)
+        self.assertEqual(workflow["5"]["inputs"]["pixels"], ["4", 0])
+
+    def test_manual_image_prompt_helper_uses_local_llm_socket(self):
+        class _PromptHelperServiceManager:
+            def get_status(self):
+                return {
+                    "local_llm": {
+                        "state": "running",
+                        "socket_path": "/tmp/local-llm.sock",
+                        "model_id": "qwen3-8b-q4_k_m",
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_PromptHelperServiceManager(),
+            )
+            llm_response = {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "prompt": "cinematic mountain lake, sunrise, detailed reflections",
+                                    "negative_prompt": "low quality, blurry",
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+            with patch.object(state, "_uds_json_request", return_value=llm_response) as request:
+                result = state.manual_image_prompt_helper(
+                    payload=ManualImagePromptHelperRequest(
+                        mode="txt2img",
+                        prompt="mountain lake",
+                        negative_prompt="low quality",
+                        width=1280,
+                        height=720,
+                    )
+                )
+
+        self.assertEqual(result["provider"], "local_llm")
+        self.assertEqual(result["model_id"], "qwen3-8b-q4_k_m")
+        self.assertIn("cinematic mountain lake", result["prompt"])
+        request.assert_called_once()
+        self.assertEqual(request.call_args.kwargs["socket_path"], "/tmp/local-llm.sock")
+        self.assertEqual(request.call_args.kwargs["path"], "/v1/chat/completions")
+        messages = request.call_args.kwargs["body"]["messages"]
+        self.assertTrue(all("/no_think" in item["content"] for item in messages))
 
     def test_delete_manual_image_output_stays_inside_manual_output_dir(self):
         with tempfile.TemporaryDirectory() as tmp:

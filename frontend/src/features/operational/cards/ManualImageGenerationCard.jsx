@@ -86,9 +86,11 @@ function formatLatestJob(job) {
 export function ManualImageGenerationCard({
   payload = null,
   busy = false,
+  promptHelperBusy = false,
   result = null,
   apiBase = "",
   onSubmit,
+  onImprovePrompt,
   onDeleteOutput,
   onRefresh,
 }) {
@@ -147,6 +149,7 @@ export function ManualImageGenerationCard({
     return name && !["positive_prompt", "negative_prompt", "input_image", "width", "height", "seed", "steps", "cfg", "denoise"].includes(name);
   });
   const canSubmit = Boolean(prompt.trim()) && !busy;
+  const helperDisabled = busy || promptHelperBusy;
 
   useEffect(() => {
     if (!selectedTemplateId && templates[0]?.template_id) {
@@ -203,6 +206,27 @@ export function ManualImageGenerationCard({
     setReferenceFile(file);
     if (file) {
       setMode("img2img");
+    }
+  }
+
+  async function handleImprovePrompt() {
+    if (helperDisabled) {
+      return;
+    }
+    const result = await onImprovePrompt?.({
+      template_id: selectedTemplate?.template_id || null,
+      mode: referenceFile ? "img2img" : mode,
+      prompt,
+      negative_prompt: negativePrompt,
+      width: Number.parseInt(width, 10) || 1024,
+      height: Number.parseInt(height, 10) || 1024,
+      reference_image_provided: Boolean(referenceFile),
+    });
+    if (result?.prompt) {
+      setPrompt(String(result.prompt));
+    }
+    if (result?.negative_prompt) {
+      setNegativePrompt(String(result.negative_prompt));
     }
   }
 
@@ -287,6 +311,11 @@ export function ManualImageGenerationCard({
           Prompt
           <textarea rows={4} value={prompt} onChange={(event) => setPrompt(event.target.value)} />
         </label>
+        <div className="row">
+          <button className="btn" type="button" onClick={handleImprovePrompt} disabled={helperDisabled}>
+            {promptHelperBusy ? "Drafting..." : "Draft / Improve Prompt"}
+          </button>
+        </div>
         <label>
           Negative Prompt
           <textarea rows={2} value={negativePrompt} onChange={(event) => setNegativePrompt(event.target.value)} />

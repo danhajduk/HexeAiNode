@@ -305,6 +305,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("1 running / 2 pending");
     expect(markup).toContain("25.0%");
     expect(markup).toContain("Reference Image");
+    expect(markup).toContain("Draft / Improve Prompt");
     expect(markup).toContain("Delete");
     expect(markup).toContain('step="8"');
     expect(markup).not.toContain("Runtime Health");

@@ -100,6 +100,18 @@
           "description": "Prompt terms to suppress."
         },
         {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width."
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height."
+        },
+        {
           "name": "seed",
           "type": "integer",
           "required": false,
@@ -126,6 +138,8 @@
       ],
       "defaults": {
         "negative_prompt": "low quality, blurry, distorted text, watermark",
+        "width": 1024,
+        "height": 1024,
         "seed": null,
         "steps": 4,
         "cfg": 1.6,
