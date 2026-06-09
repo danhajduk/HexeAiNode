@@ -1,0 +1,76 @@
+{
+  "last_node_id": 19,
+  "last_link_id": 17,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "CheckpointLoaderSimple",
+      "title": "RealVisXL Checkpoint"
+    },
+    {
+      "id": 2,
+      "type": "LoraLoader",
+      "title": "SDXL Lightning LoRA"
+    },
+    {
+      "id": 3,
+      "type": "EmptyLatentImage",
+      "title": "New Composition Canvas"
+    },
+    {
+      "id": 4,
+      "type": "CLIPTextEncode",
+      "title": "Avatar Scene Prompt"
+    },
+    {
+      "id": 6,
+      "type": "LoadImage",
+      "title": "Face Reference"
+    },
+    {
+      "id": 9,
+      "type": "ReferenceLatent",
+      "title": "Apply Face Reference"
+    },
+    {
+      "id": 10,
+      "type": "LoadImage",
+      "title": "Body Reference"
+    },
+    {
+      "id": 13,
+      "type": "ReferenceLatent",
+      "title": "Apply Body Reference"
+    },
+    {
+      "id": 14,
+      "type": "KSampler",
+      "title": "Identity Reference Sampler"
+    },
+    {
+      "id": 17,
+      "type": "LoadBackgroundRemovalModel",
+      "title": "Load Background Removal Model"
+    },
+    {
+      "id": 18,
+      "type": "RemoveBackground",
+      "title": "Create Foreground Alpha Mask"
+    },
+    {
+      "id": 19,
+      "type": "JoinImageWithAlpha",
+      "title": "Attach Transparent Background"
+    },
+    {
+      "id": 16,
+      "type": "SaveImage",
+      "title": "Save Transparent Avatar Identity Reference"
+    }
+  ],
+  "links": [],
+  "extra": {
+    "template_id": "template.avatar_identity_reference_transparent.realvisxl.v1",
+    "notes": "New-composition avatar generation using face and body references, followed by local background removal and alpha output."
+  }
+}

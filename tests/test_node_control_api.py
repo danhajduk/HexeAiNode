@@ -2680,6 +2680,44 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["8"]["inputs"]["positive"], ["18", 0])
         self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar_refs/Jane_seed777")
 
+    def test_manual_avatar_reference_transparent_template_adds_alpha_background_removal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            template = state.get_comfyui_template_catalog_entry(
+                template_id="template.avatar_reference_transparent.realvisxl.v1"
+            )["template"]
+
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id="template.avatar_reference_transparent.realvisxl.v1",
+                    mode="img2img",
+                    prompt="avatar in lingerie, isolated full body",
+                    seed=888,
+                    template_variables={
+                        "avatar_name": "Jane",
+                        "face_reference_image": "references/avatar/jane_face.png",
+                        "body_reference_image": "references/avatar/jane_body.png",
+                    },
+                ),
+                input_image="references/avatar/jane_source.png",
+            )
+
+        self.assertTrue(template["metadata"]["transparent_background"])
+        self.assertEqual(workflow["19"]["class_type"], "LoadBackgroundRemovalModel")
+        self.assertEqual(workflow["19"]["inputs"]["bg_removal_name"], "birefnet.safetensors")
+        self.assertEqual(workflow["20"]["class_type"], "RemoveBackground")
+        self.assertEqual(workflow["20"]["inputs"]["image"], ["9", 0])
+        self.assertEqual(workflow["21"]["class_type"], "JoinImageWithAlpha")
+        self.assertEqual(workflow["21"]["inputs"]["alpha"], ["20", 0])
+        self.assertEqual(workflow["10"]["inputs"]["images"], ["21", 0])
+        self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar_refs_transparent/Jane_seed888")
+
     def test_manual_avatar_identity_reference_template_uses_new_composition_latent(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = NodeControlState(
@@ -2715,6 +2753,46 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["3", 0])
         self.assertEqual(workflow["14"]["inputs"]["positive"], ["13", 0])
         self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_identity/Jane_seed999")
+
+    def test_manual_avatar_identity_reference_transparent_template_adds_alpha_background_removal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            template = state.get_comfyui_template_catalog_entry(
+                template_id="template.avatar_identity_reference_transparent.realvisxl.v1"
+            )["template"]
+
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id="template.avatar_identity_reference_transparent.realvisxl.v1",
+                    mode="txt2img",
+                    prompt="same woman, full body lingerie studio pose",
+                    seed=1001,
+                    template_variables={
+                        "avatar_name": "Jane",
+                        "face_reference_image": "references/avatar/jane_face.png",
+                        "body_reference_image": "references/avatar/jane_body.png",
+                    },
+                ),
+                input_image="",
+            )
+
+        self.assertEqual(template["metadata"]["input_mode"], "text")
+        self.assertTrue(template["metadata"]["transparent_background"])
+        self.assertEqual(workflow["3"]["class_type"], "EmptyLatentImage")
+        self.assertEqual(workflow["17"]["class_type"], "LoadBackgroundRemovalModel")
+        self.assertEqual(workflow["17"]["inputs"]["bg_removal_name"], "birefnet.safetensors")
+        self.assertEqual(workflow["18"]["class_type"], "RemoveBackground")
+        self.assertEqual(workflow["18"]["inputs"]["image"], ["15", 0])
+        self.assertEqual(workflow["19"]["class_type"], "JoinImageWithAlpha")
+        self.assertEqual(workflow["19"]["inputs"]["alpha"], ["18", 0])
+        self.assertEqual(workflow["16"]["inputs"]["images"], ["19", 0])
+        self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_identity_transparent/Jane_seed1001")
 
     def test_manual_scene_reference_template_uses_scene_reference(self):
         with tempfile.TemporaryDirectory() as tmp:

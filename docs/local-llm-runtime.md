@@ -217,9 +217,13 @@ the resolved API workflow under `inputs.comfyui_workflow`. The effective request
 `constraints.image_template_resolved` with template id, version, runtime, model requirements, and
 `output_folder_policy: operational`, keeping governed generation separate from manual Web UI artifact folders.
 
-The default ComfyUI template catalog includes `template.txt2img.realvisxl.v1` for prompt-only generation and
-`template.img2img.realvisxl.v1` for prompt plus input image generation. The img2img template accepts `input_image`,
-which must reference an image available to ComfyUI's selected runtime input folder.
+The default ComfyUI template catalog includes `template.txt2img.realvisxl.v1` for prompt-only generation,
+`template.img2img.realvisxl.v1` for prompt plus input image generation, and avatar-oriented templates for source,
+face, and body references. Avatar templates have regular and transparent-background variants. The transparent variants
+run the same avatar generation path, then use ComfyUI's local background-removal nodes to save alpha output under
+separate transparent avatar folders. They require the native BiRefNet background-removal checkpoint in the runtime
+model folder, for example `runtime/models/comfyui-gpu/background_removal/birefnet.safetensors`. The img2img and avatar source templates
+accept `input_image`, which must reference an image available to ComfyUI's selected runtime input folder.
 
 The node UI runtime section also exposes a manual image-generation card backed by `GET/POST /api/manual-image-generation`.
 It starts or reuses the manual ComfyUI session, lets operators choose a GPU ComfyUI template and adjust its exposed

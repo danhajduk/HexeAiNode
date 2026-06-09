@@ -183,6 +183,124 @@
       }
     },
     {
+      "template_id": "template.avatar_reference_transparent.realvisxl.v1",
+      "template_name": "Avatar References Transparent RealVisXL",
+      "description": "Portrait avatar workflow that applies prompt edits with source, face, and body references, then removes the background and saves a transparent PNG.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "avatar-reference-transparent-realvisxl/api_workflow.json",
+      "ui_workflow_path": "avatar-reference-transparent-realvisxl/ui_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Rendered avatar edit prompt."
+        },
+        {
+          "name": "input_image",
+          "type": "image",
+          "required": true,
+          "description": "Source avatar image."
+        },
+        {
+          "name": "face_reference_image",
+          "type": "image",
+          "required": true,
+          "description": "Reference image for face identity."
+        },
+        {
+          "name": "body_reference_image",
+          "type": "image",
+          "required": true,
+          "description": "Reference image for body shape and pose guidance."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress."
+        },
+        {
+          "name": "avatar_name",
+          "type": "string",
+          "required": false,
+          "description": "Filesystem-safe avatar name used in output filenames."
+        },
+        {
+          "name": "bg_removal_model",
+          "type": "string",
+          "required": false,
+          "description": "Local ComfyUI background-removal model filename."
+        },
+        {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width."
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed. Use null for runtime randomization."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        },
+        {
+          "name": "denoise",
+          "type": "number",
+          "required": false,
+          "description": "Prompt application strength for the avatar source image."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "busy background, detailed background, cropped head, cropped face, cropped body, out of frame, close-up crop, torso crop, missing legs, missing feet, different body shape, changed identity, altered face, low quality, blurry, distorted face, distorted hands, extra limbs, malformed body, watermark, text",
+        "avatar_name": "avatar",
+        "bg_removal_model": "birefnet.safetensors",
+        "width": 768,
+        "height": 1152,
+        "seed": null,
+        "steps": 4,
+        "cfg": 1.8,
+        "denoise": 0.62
+      },
+      "model_requirements": {
+        "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "loras": ["sdxl_lightning_4step_lora.safetensors"],
+        "vae": null,
+        "controlnets": [],
+        "other": {
+          "nodes": ["ReferenceLatent", "LoadBackgroundRemovalModel", "RemoveBackground", "JoinImageWithAlpha"],
+          "background_removal": "birefnet.safetensors"
+        }
+      },
+      "output_scope": "normal",
+      "metadata": {
+        "preset_family": "realvisxl_lightning",
+        "domain": "avatar",
+        "input_mode": "image",
+        "edit_intent": "apply_prompt_with_face_body_references_transparent_background",
+        "reference_roles": ["source", "face", "body"],
+        "transparent_background": true
+      }
+    },
+    {
       "template_id": "template.avatar_identity_reference.realvisxl.v1",
       "template_name": "Avatar Identity Reference RealVisXL",
       "description": "New-composition avatar workflow that uses selected face and body images as references without preserving the source pose.",
@@ -277,6 +395,112 @@
         "input_mode": "text",
         "edit_intent": "new_composition_with_avatar_references",
         "reference_roles": ["face", "body"]
+      }
+    },
+    {
+      "template_id": "template.avatar_identity_reference_transparent.realvisxl.v1",
+      "template_name": "Avatar Identity Reference Transparent RealVisXL",
+      "description": "New-composition avatar workflow that uses selected face and body references, then removes the background and saves a transparent PNG.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "avatar-identity-reference-transparent-realvisxl/api_workflow.json",
+      "ui_workflow_path": "avatar-identity-reference-transparent-realvisxl/ui_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Rendered avatar scene prompt."
+        },
+        {
+          "name": "face_reference_image",
+          "type": "image",
+          "required": true,
+          "description": "Reference image for face identity."
+        },
+        {
+          "name": "body_reference_image",
+          "type": "image",
+          "required": true,
+          "description": "Reference image for body proportions."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress."
+        },
+        {
+          "name": "avatar_name",
+          "type": "string",
+          "required": false,
+          "description": "Filesystem-safe avatar name used in output filenames."
+        },
+        {
+          "name": "bg_removal_model",
+          "type": "string",
+          "required": false,
+          "description": "Local ComfyUI background-removal model filename."
+        },
+        {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width."
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed. Use null for runtime randomization."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "busy background, detailed background, different person, changed identity, altered face, altered body shape, low quality, blurry, distorted face, distorted hands, extra limbs, malformed body, watermark, text",
+        "avatar_name": "avatar",
+        "bg_removal_model": "birefnet.safetensors",
+        "width": 768,
+        "height": 1152,
+        "seed": null,
+        "steps": 4,
+        "cfg": 1.8
+      },
+      "model_requirements": {
+        "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "loras": ["sdxl_lightning_4step_lora.safetensors"],
+        "vae": null,
+        "controlnets": [],
+        "other": {
+          "nodes": ["ReferenceLatent", "LoadBackgroundRemovalModel", "RemoveBackground", "JoinImageWithAlpha"],
+          "identity_strength": "fallback_reference_latent_not_faceid",
+          "background_removal": "birefnet.safetensors"
+        }
+      },
+      "output_scope": "normal",
+      "metadata": {
+        "preset_family": "realvisxl_lightning",
+        "domain": "avatar",
+        "input_mode": "text",
+        "edit_intent": "new_composition_with_avatar_references_transparent_background",
+        "reference_roles": ["face", "body"],
+        "transparent_background": true
       }
     },
     {
