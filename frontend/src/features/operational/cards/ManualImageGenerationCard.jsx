@@ -903,7 +903,15 @@ export function ManualImageGenerationCard({
           {supportsDenoise ? (
             <label>
               Denoise
-              <input type="number" min="0" max="1" step="0.05" value={denoise} onChange={(event) => setDenoise(event.target.value)} />
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                max="1"
+                step="0.01"
+                value={denoise}
+                onChange={(event) => setDenoise(event.target.value)}
+              />
             </label>
           ) : null}
         </div>

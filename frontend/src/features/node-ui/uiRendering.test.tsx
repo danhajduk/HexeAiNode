@@ -359,6 +359,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Reset Template Settings");
     expect(markup).toContain("Delete");
     expect(markup).toContain('step="8"');
+    expect(markup).toContain('step="0.01"');
     expect(markup).not.toContain("Runtime Health");
   });
 
