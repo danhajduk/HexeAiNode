@@ -2713,8 +2713,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["19"]["inputs"]["bg_removal_name"], "birefnet.safetensors")
         self.assertEqual(workflow["20"]["class_type"], "RemoveBackground")
         self.assertEqual(workflow["20"]["inputs"]["image"], ["9", 0])
+        self.assertEqual(workflow["22"]["class_type"], "InvertMask")
+        self.assertEqual(workflow["22"]["inputs"]["mask"], ["20", 0])
         self.assertEqual(workflow["21"]["class_type"], "JoinImageWithAlpha")
-        self.assertEqual(workflow["21"]["inputs"]["alpha"], ["20", 0])
+        self.assertEqual(workflow["21"]["inputs"]["alpha"], ["22", 0])
         self.assertEqual(workflow["10"]["inputs"]["images"], ["21", 0])
         self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar_refs_transparent/Jane_seed888")
 
@@ -2789,8 +2791,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["17"]["inputs"]["bg_removal_name"], "birefnet.safetensors")
         self.assertEqual(workflow["18"]["class_type"], "RemoveBackground")
         self.assertEqual(workflow["18"]["inputs"]["image"], ["15", 0])
+        self.assertEqual(workflow["20"]["class_type"], "InvertMask")
+        self.assertEqual(workflow["20"]["inputs"]["mask"], ["18", 0])
         self.assertEqual(workflow["19"]["class_type"], "JoinImageWithAlpha")
-        self.assertEqual(workflow["19"]["inputs"]["alpha"], ["18", 0])
+        self.assertEqual(workflow["19"]["inputs"]["alpha"], ["20", 0])
         self.assertEqual(workflow["16"]["inputs"]["images"], ["19", 0])
         self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_identity_transparent/Jane_seed1001")
 

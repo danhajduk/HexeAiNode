@@ -286,7 +286,7 @@
         "vae": null,
         "controlnets": [],
         "other": {
-          "nodes": ["ReferenceLatent", "LoadBackgroundRemovalModel", "RemoveBackground", "JoinImageWithAlpha"],
+          "nodes": ["ReferenceLatent", "LoadBackgroundRemovalModel", "RemoveBackground", "InvertMask", "JoinImageWithAlpha"],
           "background_removal": "birefnet.safetensors"
         }
       },
@@ -488,7 +488,7 @@
         "vae": null,
         "controlnets": [],
         "other": {
-          "nodes": ["ReferenceLatent", "LoadBackgroundRemovalModel", "RemoveBackground", "JoinImageWithAlpha"],
+          "nodes": ["ReferenceLatent", "LoadBackgroundRemovalModel", "RemoveBackground", "InvertMask", "JoinImageWithAlpha"],
           "identity_strength": "fallback_reference_latent_not_faceid",
           "background_removal": "birefnet.safetensors"
         }

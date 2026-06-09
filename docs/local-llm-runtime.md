@@ -220,8 +220,8 @@ the resolved API workflow under `inputs.comfyui_workflow`. The effective request
 The default ComfyUI template catalog includes `template.txt2img.realvisxl.v1` for prompt-only generation,
 `template.img2img.realvisxl.v1` for prompt plus input image generation, and avatar-oriented templates for source,
 face, and body references. Avatar templates have regular and transparent-background variants. The transparent variants
-run the same avatar generation path, then use ComfyUI's local background-removal nodes to save alpha output under
-separate transparent avatar folders. They require the native BiRefNet background-removal checkpoint in the runtime
+run the same avatar generation path, then use ComfyUI's local background-removal nodes with an inverted alpha mask to
+save transparent output under separate transparent avatar folders. They require the native BiRefNet background-removal checkpoint in the runtime
 model folder, for example `runtime/models/comfyui-gpu/background_removal/birefnet.safetensors`. The img2img and avatar source templates
 accept `input_image`, which must reference an image available to ComfyUI's selected runtime input folder.
 

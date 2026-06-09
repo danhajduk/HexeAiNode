@@ -151,7 +151,13 @@
     "class_type": "JoinImageWithAlpha",
     "inputs": {
       "image": ["9", 0],
-      "alpha": ["20", 0]
+      "alpha": ["22", 0]
+    }
+  },
+  "22": {
+    "class_type": "InvertMask",
+    "inputs": {
+      "mask": ["20", 0]
     }
   },
   "10": {

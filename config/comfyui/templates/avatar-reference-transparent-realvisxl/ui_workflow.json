@@ -1,6 +1,6 @@
 {
-  "last_node_id": 21,
-  "last_link_id": 19,
+  "last_node_id": 22,
+  "last_link_id": 20,
   "nodes": [
     {
       "id": 1,
@@ -71,6 +71,11 @@
       "id": 21,
       "type": "JoinImageWithAlpha",
       "title": "Attach Transparent Background"
+    },
+    {
+      "id": 22,
+      "type": "InvertMask",
+      "title": "Invert Alpha Mask"
     },
     {
       "id": 10,
