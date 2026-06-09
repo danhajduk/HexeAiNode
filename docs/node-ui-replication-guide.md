@@ -1404,12 +1404,22 @@ Note:
 
 Subtitle:
 
-- `Primary home for backend, frontend, and node service state.`
+- `Primary home for backend, frontend, node, local LLM, vision, and ComfyUI service state.`
 
 Fields:
 
 - `Backend`
 - `Frontend`
+- `Local LLM`
+- `Vision Runtime`
+- `Vision Residency`
+- `ComfyUI GPU`
+- `ComfyUI CPU`
+- `ComfyUI Web UI`
+- `Manual Session`
+- `Idle`
+- `Idle Timeout`
+- `Manual Output`
 - `Node`
 
 ### 23.3 Shared Actions Card

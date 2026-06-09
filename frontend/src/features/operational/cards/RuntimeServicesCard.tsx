@@ -32,9 +32,15 @@ export function RuntimeServicesCard({
   const comfyuiGpu = serviceObject(serviceStatus.comfyui_gpu);
   const comfyuiCpu = serviceObject(serviceStatus.comfyui_cpu);
   const comfyuiWebui = serviceObject(serviceStatus.comfyui_webui);
+  const visionRuntime = serviceObject(serviceStatus.vision_llm);
+  const visionResidency = serviceObject(visionRuntime.residency);
   const session = serviceObject(comfyuiWebui.session);
   const webuiActive = serviceState(comfyuiWebui) === "running" || Boolean(comfyuiWebui.manual_session_active);
   const manualPaths = serviceObject(comfyuiWebui.manual_paths);
+  const visionRuntimeDetail =
+    visionResidency.residency_state ||
+    visionResidency.reason ||
+    (visionResidency.model_loaded ? "model_loaded" : visionRuntime.default_model_id || "unknown");
 
   function onToggleComfyuiWebui(event) {
     if (event.target.checked) {
@@ -46,7 +52,7 @@ export function RuntimeServicesCard({
 
   return (
     <article className="card">
-      <CardHeader title="Runtime Services" subtitle="Primary home for backend, frontend, node, local LLM, and ComfyUI service state." />
+      <CardHeader title="Runtime Services" subtitle="Primary home for backend, frontend, node, local LLM, vision, and ComfyUI service state." />
       <div className="state-grid">
         <span>Backend</span>
         <StatusBadge value={serviceState(serviceStatus.backend)} />
@@ -54,6 +60,10 @@ export function RuntimeServicesCard({
         <StatusBadge value={serviceState(serviceStatus.frontend)} />
         <span>Local LLM</span>
         <StatusBadge value={serviceState(serviceStatus.local_llm)} />
+        <span>Vision Runtime</span>
+        <StatusBadge value={serviceState(visionRuntime)} />
+        <span>Vision Residency</span>
+        <code>{visionRuntimeDetail}</code>
         <span>ComfyUI GPU</span>
         <StatusBadge value={serviceState(comfyuiGpu)} />
         <span>ComfyUI CPU</span>

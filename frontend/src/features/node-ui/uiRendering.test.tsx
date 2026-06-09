@@ -70,6 +70,12 @@ function buildOperationalProps(overrides = {}) {
       serviceStatus: {
         backend: "running",
         frontend: "running",
+        vision_llm: {
+          state: "running",
+          residency: {
+            residency_state: "model_loaded",
+          },
+        },
         node: "running",
       },
     },
@@ -234,6 +240,16 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Type");
     expect(markup).toContain("Every 10 seconds");
     expect(markup).not.toContain("Node Overview");
+  });
+
+  it("shows vision runtime status on the runtime section", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard {...buildOperationalProps({ currentSection: "runtime" })} />
+    );
+
+    expect(markup).toContain("Vision Runtime");
+    expect(markup).toContain("Vision Residency");
+    expect(markup).toContain("model_loaded");
   });
 
   it("shows friendly task kind and schedule names and sorts the legend by duration", () => {
