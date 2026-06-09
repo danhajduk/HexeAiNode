@@ -2677,6 +2677,42 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["8"]["inputs"]["positive"], ["18", 0])
         self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar_refs/Jane_seed777")
 
+    def test_manual_avatar_identity_reference_template_uses_new_composition_latent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            template = state.get_comfyui_template_catalog_entry(
+                template_id="template.avatar_identity_reference.realvisxl.v1"
+            )["template"]
+
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id="template.avatar_identity_reference.realvisxl.v1",
+                    mode="txt2img",
+                    prompt="same woman in a warm bedroom portrait, new pose",
+                    seed=999,
+                    template_variables={
+                        "avatar_name": "Jane",
+                        "face_reference_image": "references/avatar/jane_face.png",
+                        "body_reference_image": "references/avatar/jane_body.png",
+                    },
+                ),
+                input_image="",
+            )
+
+        self.assertEqual(template["metadata"]["input_mode"], "text")
+        self.assertEqual(workflow["3"]["class_type"], "EmptyLatentImage")
+        self.assertEqual(workflow["6"]["inputs"]["image"], "references/avatar/jane_face.png")
+        self.assertEqual(workflow["10"]["inputs"]["image"], "references/avatar/jane_body.png")
+        self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["3", 0])
+        self.assertEqual(workflow["14"]["inputs"]["positive"], ["13", 0])
+        self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_identity/Jane_seed999")
+
     def test_manual_scene_reference_template_uses_scene_reference(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = NodeControlState(

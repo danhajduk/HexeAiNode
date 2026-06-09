@@ -183,6 +183,103 @@
       }
     },
     {
+      "template_id": "template.avatar_identity_reference.realvisxl.v1",
+      "template_name": "Avatar Identity Reference RealVisXL",
+      "description": "New-composition avatar workflow that uses selected face and body images as references without preserving the source pose.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "avatar-identity-reference-realvisxl/api_workflow.json",
+      "ui_workflow_path": "avatar-identity-reference-realvisxl/ui_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Rendered avatar scene prompt."
+        },
+        {
+          "name": "face_reference_image",
+          "type": "image",
+          "required": true,
+          "description": "Reference image for face identity."
+        },
+        {
+          "name": "body_reference_image",
+          "type": "image",
+          "required": true,
+          "description": "Reference image for body proportions."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress."
+        },
+        {
+          "name": "avatar_name",
+          "type": "string",
+          "required": false,
+          "description": "Filesystem-safe avatar name used in output filenames."
+        },
+        {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width."
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed. Use null for runtime randomization."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "different person, changed identity, altered face, altered body shape, low quality, blurry, distorted face, distorted hands, extra limbs, malformed body, watermark, text",
+        "avatar_name": "avatar",
+        "width": 768,
+        "height": 1152,
+        "seed": null,
+        "steps": 4,
+        "cfg": 1.8
+      },
+      "model_requirements": {
+        "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "loras": ["sdxl_lightning_4step_lora.safetensors"],
+        "vae": null,
+        "controlnets": [],
+        "other": {
+          "nodes": ["ReferenceLatent"],
+          "identity_strength": "fallback_reference_latent_not_faceid"
+        }
+      },
+      "output_scope": "normal",
+      "metadata": {
+        "preset_family": "realvisxl_lightning",
+        "domain": "avatar",
+        "input_mode": "text",
+        "edit_intent": "new_composition_with_avatar_references",
+        "reference_roles": ["face", "body"]
+      }
+    },
+    {
       "template_id": "template.scene_reference.realvisxl.v1",
       "template_name": "Scene References RealVisXL",
       "description": "Scene/place workflow that applies prompt edits while conditioning on a selected scene reference image.",
