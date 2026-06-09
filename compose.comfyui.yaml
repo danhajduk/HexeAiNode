@@ -7,6 +7,7 @@ services:
       dockerfile: docker/comfyui/Dockerfile
       args:
         COMFYUI_REF: ${COMFYUI_REF:-master}
+        COMFYUI_CONTROLNET_AUX_REF: ${COMFYUI_CONTROLNET_AUX_REF:-main}
     image: ${COMFYUI_IMAGE:-hexe-ai-node-comfyui:local}
     container_name: ${COMFYUI_CONTAINER_NAME:-hexe-ai-node-comfyui}
     restart: unless-stopped
@@ -33,15 +34,22 @@ services:
       HEXE_COMFYUI_GPU_TARGET_CHECKPOINT: ${COMFYUI_GPU_CHECKPOINT:-RealVisXL_V5.0_fp16.safetensors}
       HEXE_COMFYUI_GPU_TARGET_LORA: ${COMFYUI_GPU_LORA:-sdxl_lightning_4step_lora.safetensors}
       HEXE_COMFYUI_CPU_TARGET_CHECKPOINT: ${COMFYUI_CPU_CHECKPOINT:-DreamShaper8_LCM.safetensors}
+      AUX_ANNOTATOR_CKPTS_PATH: ${COMFYUI_CONTROLNET_AUX_CONTAINER_CKPTS_DIR:-/runtime/assets/controlnet_aux/ckpts}
+      AUX_TEMP_DIR: ${COMFYUI_CONTROLNET_AUX_CONTAINER_TEMP_DIR:-/cache/controlnet_aux/temp}
+      AUX_USE_SYMLINKS: ${COMFYUI_CONTROLNET_AUX_USE_SYMLINKS:-False}
     volumes:
       - ${COMFYUI_GPU_MODEL_DIR:-./runtime/models/comfyui-gpu}:/runtime/gpu/models
       - ${COMFYUI_GPU_INPUT_DIR:-./runtime/input/comfyui-gpu}:/runtime/gpu/input
       - ${COMFYUI_GPU_OUTPUT_DIR:-./runtime/output/comfyui-gpu}:/runtime/gpu/output
       - ${COMFYUI_GPU_USER_DIR:-./runtime/user/comfyui-gpu}:/runtime/gpu/user
+      - ${COMFYUI_GPU_CUSTOM_NODES_DIR:-./runtime/custom_nodes/comfyui-gpu}:/runtime/gpu/custom_nodes
       - ${COMFYUI_CPU_MODEL_DIR:-./runtime/models/comfyui-cpu}:/runtime/cpu/models
       - ${COMFYUI_CPU_INPUT_DIR:-./runtime/input/comfyui-cpu}:/runtime/cpu/input
       - ${COMFYUI_CPU_OUTPUT_DIR:-./runtime/output/comfyui-cpu}:/runtime/cpu/output
       - ${COMFYUI_CPU_USER_DIR:-./runtime/user/comfyui-cpu}:/runtime/cpu/user
+      - ${COMFYUI_CPU_CUSTOM_NODES_DIR:-./runtime/custom_nodes/comfyui-cpu}:/runtime/cpu/custom_nodes
+      - ${COMFYUI_ASSET_DIR:-./runtime/assets/comfyui}:/runtime/assets
+      - ${COMFYUI_CONTROLNET_AUX_CKPTS_DIR:-./runtime/assets/comfyui/controlnet_aux/ckpts}:/opt/ComfyUI/custom_nodes/comfyui_controlnet_aux/ckpts
       - ${COMFYUI_CACHE_DIR:-./runtime/cache/comfyui}:/cache
       - ${COMFYUI_SOCKET_DIR:-/run/hexe/ai-node}:/run/hexe/ai-node
     healthcheck:

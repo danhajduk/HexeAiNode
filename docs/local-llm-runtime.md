@@ -84,6 +84,7 @@ GPU ComfyUI target:
 - models: `runtime/models/comfyui-gpu`
 - input: `runtime/input/comfyui-gpu`
 - output: `runtime/output/comfyui-gpu`
+- custom nodes: `runtime/custom_nodes/comfyui-gpu`
 - checkpoint target: `RealVisXL_V5.0_fp16.safetensors`
 - LoRA target: `sdxl_lightning_4step_lora.safetensors`
 
@@ -97,6 +98,7 @@ CPU ComfyUI target:
 - models: `runtime/models/comfyui-cpu`
 - input: `runtime/input/comfyui-cpu`
 - output: `runtime/output/comfyui-cpu`
+- custom nodes: `runtime/custom_nodes/comfyui-cpu`
 - checkpoint target: `DreamShaper8_LCM.safetensors`
 
 ```bash
@@ -127,6 +129,10 @@ The ComfyUI image includes `comfyui_controlnet_aux` preprocessors for pose, edge
 `download-controlnets` command downloads the default SDXL OpenPose and Canny ControlNet weights into
 `runtime/models/comfyui-gpu/controlnet`; OpenPose is useful for posture, while Canny is useful for visible body
 silhouette and clothing/outline preservation.
+Runtime custom nodes are mounted from `runtime/custom_nodes/comfyui-gpu` and `runtime/custom_nodes/comfyui-cpu`, with
+image-packaged nodes linked in at container startup when the persistent folder does not already contain that node name.
+Shared ComfyUI node assets are mounted from `runtime/assets/comfyui`; ControlNet-AUX annotator checkpoints are stored
+under `runtime/assets/comfyui/controlnet_aux/ckpts`, so preprocessor downloads survive container restarts and rebuilds.
 ComfyUI no longer publishes host HTTP ports by default. The container keeps HTTP bound internally for ComfyUI itself,
 then exposes API and health access through Unix sockets under `/run/hexe/ai-node`. The health sockets serve `/health`;
 the API sockets forward regular ComfyUI HTTP API calls such as `/system_stats`, `/prompt`, and `/history`.

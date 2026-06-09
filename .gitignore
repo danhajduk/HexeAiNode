@@ -28,6 +28,8 @@ docs/report-format.md
 data/
 providers/
 runtime/cache/
+runtime/assets/
+runtime/custom_nodes/
 runtime/models/
 runtime/input/
 runtime/output/

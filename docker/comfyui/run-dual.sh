@@ -11,11 +11,15 @@ GPU_HEALTH_SOCKET="${COMFYUI_GPU_HEALTH_SOCKET:-$SOCKET_DIR/comfyui-gpu-health.s
 CPU_SOCKET="${COMFYUI_CPU_SOCKET_PATH:-$SOCKET_DIR/comfyui-cpu.sock}"
 CPU_HEALTH_SOCKET="${COMFYUI_CPU_HEALTH_SOCKET:-$SOCKET_DIR/comfyui-cpu-health.sock}"
 
+export AUX_ANNOTATOR_CKPTS_PATH="${AUX_ANNOTATOR_CKPTS_PATH:-/runtime/assets/controlnet_aux/ckpts}"
+export AUX_TEMP_DIR="${AUX_TEMP_DIR:-/cache/controlnet_aux/temp}"
+
 mkdir -p \
   "$GPU_BASE_DIR/models" "$GPU_BASE_DIR/input" "$GPU_BASE_DIR/output" "$GPU_BASE_DIR/user" \
   "$GPU_BASE_DIR/temp" "$GPU_BASE_DIR/custom_nodes" \
   "$CPU_BASE_DIR/models" "$CPU_BASE_DIR/input" "$CPU_BASE_DIR/output" "$CPU_BASE_DIR/user" \
   "$CPU_BASE_DIR/temp" "$CPU_BASE_DIR/custom_nodes" \
+  "$AUX_ANNOTATOR_CKPTS_PATH" "$AUX_TEMP_DIR" \
   "$SOCKET_DIR"
 
 link_packaged_custom_nodes() {
