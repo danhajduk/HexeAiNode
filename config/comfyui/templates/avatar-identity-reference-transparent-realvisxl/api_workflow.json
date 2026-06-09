@@ -110,7 +110,7 @@
     "inputs": {
       "conditioning_to": ["13", 0],
       "conditioning_from": ["21", 0],
-      "conditioning_to_strength": "{{body_strength}}"
+      "conditioning_to_strength": "{{body_conditioning_strength}}"
     }
   },
   "23": {
@@ -118,7 +118,7 @@
     "inputs": {
       "samples1": ["12", 0],
       "samples2": ["3", 0],
-      "blend_factor": "{{body_strength}}"
+      "blend_factor": "{{body_latent_strength}}"
     }
   },
   "14": {
@@ -170,6 +170,13 @@
     }
   },
   "16": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["15", 0],
+      "filename_prefix": "hexe/avatar_identity_transparent/{{avatar_name}}_seed{{seed}}_rgb"
+    }
+  },
+  "24": {
     "class_type": "SaveImage",
     "inputs": {
       "images": ["19", 0],

@@ -163,6 +163,13 @@
   "10": {
     "class_type": "SaveImage",
     "inputs": {
+      "images": ["9", 0],
+      "filename_prefix": "hexe/avatar_refs_transparent/{{avatar_name}}_seed{{seed}}_rgb"
+    }
+  },
+  "23": {
+    "class_type": "SaveImage",
+    "inputs": {
       "images": ["21", 0],
       "filename_prefix": "hexe/avatar_refs_transparent/{{avatar_name}}_seed{{seed}}"
     }

@@ -185,7 +185,7 @@
     {
       "template_id": "template.avatar_reference_transparent.realvisxl.v1",
       "template_name": "Avatar References Transparent RealVisXL",
-      "description": "Portrait avatar workflow that applies prompt edits with source, face, and body references, then removes the background and saves a transparent PNG.",
+      "description": "Portrait avatar workflow that applies prompt edits with source, face, and body references, saves an RGB fallback, then removes the background and saves a transparent PNG.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-reference-transparent-realvisxl/api_workflow.json",
       "ui_workflow_path": "avatar-reference-transparent-realvisxl/ui_workflow.json",
@@ -286,7 +286,7 @@
         "vae": null,
         "controlnets": [],
         "other": {
-          "nodes": ["ReferenceLatent", "LoadBackgroundRemovalModel", "RemoveBackground", "InvertMask", "JoinImageWithAlpha"],
+          "nodes": ["ReferenceLatent", "LoadBackgroundRemovalModel", "RemoveBackground", "InvertMask", "JoinImageWithAlpha", "SaveImage"],
           "background_removal": "birefnet.safetensors"
         }
       },
@@ -422,7 +422,7 @@
     {
       "template_id": "template.avatar_identity_reference_transparent.realvisxl.v1",
       "template_name": "Avatar Identity Reference Transparent RealVisXL",
-      "description": "Body-preserving avatar workflow that uses adjustable face/body reference strengths and a body-reference latent blend, then removes the background and saves a transparent PNG.",
+      "description": "Body-preserving avatar workflow that uses adjustable face, body conditioning, and body latent strengths, saves an RGB fallback, then removes the background and saves a transparent PNG.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-identity-reference-transparent-realvisxl/api_workflow.json",
       "ui_workflow_path": "avatar-identity-reference-transparent-realvisxl/ui_workflow.json",
@@ -452,10 +452,16 @@
           "description": "Face reference strength from 0 to 1."
         },
         {
-          "name": "body_strength",
+          "name": "body_conditioning_strength",
           "type": "number",
           "required": false,
-          "description": "Body reference strength from 0 to 1. Higher values preserve the body reference silhouette more strongly."
+          "description": "Body reference conditioning strength from 0 to 1. Higher values make the prompt conditioning follow the body reference more strongly."
+        },
+        {
+          "name": "body_latent_strength",
+          "type": "number",
+          "required": false,
+          "description": "Body latent blend strength from 0 to 1. Higher values start sampling closer to the body reference silhouette."
         },
         {
           "name": "negative_prompt",
@@ -523,7 +529,8 @@
         "cfg": 1.0,
         "denoise": 0.68,
         "face_strength": 1.0,
-        "body_strength": 0.9
+        "body_conditioning_strength": 0.9,
+        "body_latent_strength": 0.9
       },
       "model_requirements": {
         "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
@@ -531,7 +538,7 @@
         "vae": null,
         "controlnets": [],
         "other": {
-          "nodes": ["ReferenceLatent", "ConditioningAverage", "LatentBlend", "LoadBackgroundRemovalModel", "RemoveBackground", "InvertMask", "JoinImageWithAlpha"],
+          "nodes": ["ReferenceLatent", "ConditioningAverage", "LatentBlend", "LoadBackgroundRemovalModel", "RemoveBackground", "InvertMask", "JoinImageWithAlpha", "SaveImage"],
           "identity_strength": "fallback_reference_latent_not_faceid",
           "body_preservation": "body_reference_latent_blend",
           "background_removal": "birefnet.safetensors"

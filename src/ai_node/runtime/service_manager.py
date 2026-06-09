@@ -643,7 +643,14 @@ class UserSystemdServiceManager:
     def start_comfyui_webui(self) -> dict:
         current = self._comfyui_webui_status()
         if current.get("state") == "running":
-            return {"target": "comfyui_webui", "result": "already_running", **current}
+            manual_mounts_active = self._comfyui_manual_mounts_active(runtime=self._comfyui_webui_runtime)
+            if manual_mounts_active is not False:
+                return {"target": "comfyui_webui", "result": "already_running", **current}
+            self._logger.info(
+                "restarting ComfyUI Web UI because active container is not mounted to manual %s paths",
+                self._comfyui_webui_runtime,
+            )
+            self.stop_comfyui_webui()
         script_path = self._comfyui_webui_bridge_script
         if not script_path or not os.path.exists(script_path):
             raise ValueError("ComfyUI web UI bridge script is not configured")
@@ -917,6 +924,43 @@ class UserSystemdServiceManager:
             "output_dir": self._comfyui_manual_gpu_output_dir,
             "user_dir": self._comfyui_manual_gpu_user_dir,
         }
+
+    def _comfyui_manual_mounts_active(self, *, runtime: str) -> bool | None:
+        if not self._comfyui_container_name:
+            return None
+        runtime_key = "cpu" if str(runtime or "").strip().lower() == "cpu" else "gpu"
+        paths = self._comfyui_manual_paths(runtime=runtime_key)
+        expected = {
+            f"/runtime/{runtime_key}/input": self._absolute_host_path(paths["input_dir"]),
+            f"/runtime/{runtime_key}/output": self._absolute_host_path(paths["output_dir"]),
+            f"/runtime/{runtime_key}/user": self._absolute_host_path(paths["user_dir"]),
+        }
+        try:
+            result = subprocess.run(
+                [self._docker_bin, "inspect", "--format", "{{json .Mounts}}", self._comfyui_container_name],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except Exception:
+            return None
+        if getattr(result, "returncode", 0) != 0:
+            return None
+        try:
+            mounts = json.loads(str(result.stdout or "[]").strip() or "[]")
+        except Exception:
+            return None
+        if not isinstance(mounts, list):
+            return None
+        by_destination = {
+            str(mount.get("Destination") or ""): self._absolute_host_path(str(mount.get("Source") or ""))
+            for mount in mounts
+            if isinstance(mount, dict)
+        }
+        for destination, source in expected.items():
+            if by_destination.get(destination) != source:
+                return False
+        return True
 
     def _wait_comfyui_runtime_stopped(self, *, runtime: str, timeout_seconds: float = 15.0) -> bool:
         deadline = time.monotonic() + max(float(timeout_seconds), 0.0)

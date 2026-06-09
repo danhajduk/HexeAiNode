@@ -2912,8 +2912,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["22"]["inputs"]["mask"], ["20", 0])
         self.assertEqual(workflow["21"]["class_type"], "JoinImageWithAlpha")
         self.assertEqual(workflow["21"]["inputs"]["alpha"], ["22", 0])
-        self.assertEqual(workflow["10"]["inputs"]["images"], ["21", 0])
-        self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar_refs_transparent/Jane_seed888")
+        self.assertEqual(workflow["10"]["inputs"]["images"], ["9", 0])
+        self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar_refs_transparent/Jane_seed888_rgb")
+        self.assertEqual(workflow["23"]["class_type"], "SaveImage")
+        self.assertEqual(workflow["23"]["inputs"]["images"], ["21", 0])
+        self.assertEqual(workflow["23"]["inputs"]["filename_prefix"], "hexe/avatar_refs_transparent/Jane_seed888")
 
     def test_manual_avatar_identity_reference_template_uses_body_reference_latent_start(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2981,7 +2984,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                         "face_reference_image": "references/avatar/jane_face.png",
                         "body_reference_image": "references/avatar/jane_body.png",
                         "face_strength": "0.75",
-                        "body_strength": "0.95",
+                        "body_conditioning_strength": "0.85",
+                        "body_latent_strength": "0.95",
                     },
                 ),
                 input_image="",
@@ -2992,7 +2996,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["21"]["class_type"], "ConditioningAverage")
         self.assertEqual(workflow["21"]["inputs"]["conditioning_to_strength"], 0.75)
         self.assertEqual(workflow["22"]["class_type"], "ConditioningAverage")
-        self.assertEqual(workflow["22"]["inputs"]["conditioning_to_strength"], 0.95)
+        self.assertEqual(workflow["22"]["inputs"]["conditioning_to_strength"], 0.85)
         self.assertEqual(workflow["23"]["class_type"], "LatentBlend")
         self.assertEqual(workflow["23"]["inputs"]["blend_factor"], 0.95)
         self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["23", 0])
@@ -3006,8 +3010,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["20"]["inputs"]["mask"], ["18", 0])
         self.assertEqual(workflow["19"]["class_type"], "JoinImageWithAlpha")
         self.assertEqual(workflow["19"]["inputs"]["alpha"], ["20", 0])
-        self.assertEqual(workflow["16"]["inputs"]["images"], ["19", 0])
-        self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_identity_transparent/Jane_seed1001")
+        self.assertEqual(workflow["16"]["inputs"]["images"], ["15", 0])
+        self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_identity_transparent/Jane_seed1001_rgb")
+        self.assertEqual(workflow["24"]["class_type"], "SaveImage")
+        self.assertEqual(workflow["24"]["inputs"]["images"], ["19", 0])
+        self.assertEqual(workflow["24"]["inputs"]["filename_prefix"], "hexe/avatar_identity_transparent/Jane_seed1001")
 
     def test_manual_scene_reference_template_uses_scene_reference(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,5 +1,5 @@
 {
-  "last_node_id": 22,
+  "last_node_id": 23,
   "last_link_id": 20,
   "nodes": [
     {
@@ -80,12 +80,17 @@
     {
       "id": 10,
       "type": "SaveImage",
+      "title": "Save RGB Avatar Reference Fallback"
+    },
+    {
+      "id": 23,
+      "type": "SaveImage",
       "title": "Save Transparent Avatar Reference Edit"
     }
   ],
   "links": [],
   "extra": {
     "template_id": "template.avatar_reference_transparent.realvisxl.v1",
-    "notes": "Avatar prompt generation with source, face, and body references, followed by local background removal and alpha output."
+    "notes": "Avatar prompt generation with source, face, and body references. The decoded RGB image is saved before local background removal."
   }
 }

@@ -60,7 +60,9 @@ function variableInputType(variable) {
 }
 
 function isReferenceStrengthVariable(name) {
-  return ["face_strength", "body_strength"].includes(String(name || "").trim());
+  return ["face_strength", "body_strength", "body_conditioning_strength", "body_latent_strength"].includes(
+    String(name || "").trim()
+  );
 }
 
 function formatSliderValue(value) {
@@ -250,6 +252,7 @@ export function ManualImageGenerationCard({
     const name = String(variable?.name || "").trim();
     return (
       name &&
+      !isReferenceStrengthVariable(name) &&
       ![
         "positive_prompt",
         "negative_prompt",
@@ -266,6 +269,9 @@ export function ManualImageGenerationCard({
       ].includes(name)
     );
   });
+  const referenceStrengthVariables = asArray(selectedTemplate?.variables).filter((variable) =>
+    isReferenceStrengthVariable(String(variable?.name || "").trim())
+  );
   const canSubmit =
     Boolean(composedPrompt.trim()) &&
     sourceImageReady &&
@@ -655,6 +661,29 @@ export function ManualImageGenerationCard({
             {faceReference ? <code>{`Face: ${faceReference.name || faceReference.filename}`}</code> : null}
             {bodyReference ? <code>{`Body: ${bodyReference.name || bodyReference.filename}`}</code> : null}
           </div>
+          {referenceStrengthVariables.length ? (
+            <div className="form-grid">
+              {referenceStrengthVariables.map((variable) => {
+                const name = String(variable?.name || "").trim();
+                return (
+                  <label className="manual-template-slider" key={name}>
+                    <span className="manual-template-slider-heading">
+                      <span>{variableLabel(name)}</span>
+                      <output>{formatSliderValue(templateVariables[name])}</output>
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={templateVariables[name] ?? "0"}
+                      onChange={(event) => setTemplateVariables((current) => ({ ...current, [name]: event.target.value }))}
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          ) : null}
           {references.length ? (
             <div className="image-output-grid">
               {references.slice(0, 8).map((reference) => (
@@ -871,24 +900,6 @@ export function ManualImageGenerationCard({
           <div className="form-grid">
             {adjustableVariables.map((variable) => {
               const name = String(variable?.name || "").trim();
-              if (isReferenceStrengthVariable(name)) {
-                return (
-                  <label className="manual-template-slider" key={name}>
-                    <span className="manual-template-slider-heading">
-                      <span>{variableLabel(name)}</span>
-                      <output>{formatSliderValue(templateVariables[name])}</output>
-                    </span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={templateVariables[name] ?? "0"}
-                      onChange={(event) => setTemplateVariables((current) => ({ ...current, [name]: event.target.value }))}
-                    />
-                  </label>
-                );
-              }
               return (
                 <label key={name}>
                   {variableLabel(name)}

@@ -490,6 +490,69 @@ class ServiceManagerTests(unittest.TestCase):
             self.assertTrue(Path(env["COMFYUI_GPU_USER_DIR"]).is_absolute())
             self.assertNotIn(":", env["COMFYUI_GPU_INPUT_DIR"])
 
+    def test_comfyui_manual_mounts_active_detects_manual_binds(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "HEXE_COMFYUI_MANUAL_GPU_INPUT_DIR": str(Path(tmp) / "manual-gpu" / "input"),
+                "HEXE_COMFYUI_MANUAL_GPU_OUTPUT_DIR": str(Path(tmp) / "manual-gpu" / "output"),
+                "HEXE_COMFYUI_MANUAL_GPU_USER_DIR": str(Path(tmp) / "manual-gpu" / "user"),
+            },
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            mounts = [
+                {"Source": str(Path(tmp) / "manual-gpu" / "input"), "Destination": "/runtime/gpu/input"},
+                {"Source": str(Path(tmp) / "manual-gpu" / "output"), "Destination": "/runtime/gpu/output"},
+                {"Source": str(Path(tmp) / "manual-gpu" / "user"), "Destination": "/runtime/gpu/user"},
+            ]
+
+            with patch("subprocess.run", return_value=_Completed(json.dumps(mounts))):
+                self.assertTrue(manager._comfyui_manual_mounts_active(runtime="gpu"))
+
+            stale_mounts = [
+                {"Source": str(Path(tmp) / "normal-gpu" / "input"), "Destination": "/runtime/gpu/input"},
+                {"Source": str(Path(tmp) / "manual-gpu" / "output"), "Destination": "/runtime/gpu/output"},
+                {"Source": str(Path(tmp) / "manual-gpu" / "user"), "Destination": "/runtime/gpu/user"},
+            ]
+            with patch("subprocess.run", return_value=_Completed(json.dumps(stale_mounts))):
+                self.assertFalse(manager._comfyui_manual_mounts_active(runtime="gpu"))
+
+    def test_comfyui_webui_start_restarts_when_running_with_non_manual_mounts(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "HEXE_COMFYUI_WEBUI_BRIDGE_SCRIPT": str(Path(tmp) / "bridge.py"),
+                "COMFYUI_GPU_SOCKET_PATH": str(Path(tmp) / "comfyui-gpu.sock"),
+                "HEXE_COMFYUI_MANUAL_GPU_INPUT_DIR": str(Path(tmp) / "manual-gpu" / "input"),
+                "HEXE_COMFYUI_MANUAL_GPU_OUTPUT_DIR": str(Path(tmp) / "manual-gpu" / "output"),
+                "HEXE_COMFYUI_MANUAL_GPU_USER_DIR": str(Path(tmp) / "manual-gpu" / "user"),
+            },
+            clear=False,
+        ):
+            Path(tmp, "bridge.py").touch()
+            Path(tmp, "comfyui-gpu.sock").touch()
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            running = {"state": "running", "runtime": "gpu", "socket_path": manager._comfyui_gpu_socket}
+            with (
+                patch.object(manager, "_comfyui_webui_status", side_effect=[running, running]),
+                patch.object(manager, "_comfyui_manual_mounts_active", return_value=False),
+                patch.object(manager, "stop_comfyui_webui", return_value={"target": "comfyui_webui", "result": "stopped"}) as fake_stop,
+                patch.object(manager, "_run_comfyui_control") as fake_run_control,
+                patch.object(manager, "_write_comfyui_webui_session"),
+                patch("subprocess.Popen") as fake_popen,
+                patch("time.sleep"),
+            ):
+                result = manager.start_comfyui_webui()
+
+        self.assertEqual(result["result"], "started")
+        fake_stop.assert_called_once()
+        fake_run_control.assert_called_once()
+        self.assertEqual(fake_run_control.call_args.args[:2], ("gpu", "ready"))
+        env = fake_run_control.call_args.kwargs["env"]
+        self.assertIn("manual-gpu/input", env["COMFYUI_GPU_INPUT_DIR"])
+        fake_popen.assert_called_once()
+
     def test_unix_socket_tcp_bridge_forwards_http(self):
         with tempfile.TemporaryDirectory() as tmp:
             socket_path = str(Path(tmp) / "comfyui.sock")
