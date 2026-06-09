@@ -608,7 +608,13 @@
           "name": "depth_resolution",
           "type": "integer",
           "required": false,
-          "description": "Resolution used by the MiDaS depth preprocessor."
+          "description": "Resolution used by the Depth Anything V2 preprocessor."
+        },
+        {
+          "name": "depth_anything_model",
+          "type": "string",
+          "required": false,
+          "description": "Depth Anything V2 annotator checkpoint filename."
         },
         {
           "name": "body_depth_controlnet",
@@ -679,6 +685,7 @@
         "body_depth_start": 0.0,
         "body_depth_end": 0.8,
         "depth_resolution": 768,
+        "depth_anything_model": "depth_anything_v2_vits.pth",
         "body_depth_controlnet": "controlnet-depth-sdxl-1.0-fp16.safetensors"
       },
       "model_requirements": {
@@ -687,9 +694,9 @@
         "vae": null,
         "controlnets": ["controlnet-depth-sdxl-1.0-fp16.safetensors"],
         "other": {
-          "nodes": ["ReferenceLatent", "ConditioningAverage", "ResizeAndPadImage", "MiDaS-DepthMapPreprocessor", "ControlNetLoader", "ControlNetApplyAdvanced"],
+          "nodes": ["ReferenceLatent", "ConditioningAverage", "ResizeAndPadImage", "DepthAnythingV2Preprocessor", "ControlNetLoader", "ControlNetApplyAdvanced"],
           "identity_strength": "fallback_reference_latent_not_faceid",
-          "body_preservation": "midas_depth_controlnet",
+          "body_preservation": "depth_anything_v2_controlnet",
           "body_reference_fit": "resize_and_pad_to_output_aspect"
         }
       },
@@ -756,7 +763,13 @@
           "name": "depth_resolution",
           "type": "integer",
           "required": false,
-          "description": "Resolution used by the MiDaS depth preprocessor."
+          "description": "Resolution used by the Depth Anything V2 preprocessor."
+        },
+        {
+          "name": "depth_anything_model",
+          "type": "string",
+          "required": false,
+          "description": "Depth Anything V2 annotator checkpoint filename."
         },
         {
           "name": "body_depth_controlnet",
@@ -834,6 +847,7 @@
         "body_depth_start": 0.0,
         "body_depth_end": 0.8,
         "depth_resolution": 768,
+        "depth_anything_model": "depth_anything_v2_vits.pth",
         "body_depth_controlnet": "controlnet-depth-sdxl-1.0-fp16.safetensors"
       },
       "model_requirements": {
@@ -842,9 +856,9 @@
         "vae": null,
         "controlnets": ["controlnet-depth-sdxl-1.0-fp16.safetensors"],
         "other": {
-          "nodes": ["ReferenceLatent", "ConditioningAverage", "ResizeAndPadImage", "MiDaS-DepthMapPreprocessor", "ControlNetLoader", "ControlNetApplyAdvanced", "LoadBackgroundRemovalModel", "RemoveBackground", "InvertMask", "JoinImageWithAlpha", "SaveImage"],
+          "nodes": ["ReferenceLatent", "ConditioningAverage", "ResizeAndPadImage", "DepthAnythingV2Preprocessor", "ControlNetLoader", "ControlNetApplyAdvanced", "LoadBackgroundRemovalModel", "RemoveBackground", "InvertMask", "JoinImageWithAlpha", "SaveImage"],
           "identity_strength": "fallback_reference_latent_not_faceid",
-          "body_preservation": "midas_depth_controlnet",
+          "body_preservation": "depth_anything_v2_controlnet",
           "body_reference_fit": "resize_and_pad_to_output_aspect",
           "background_removal": "birefnet.safetensors"
         }

@@ -240,7 +240,7 @@ face strength, body conditioning strength, body latent strength, and denoise con
 the body reference in prompt conditioning, higher body latent starts closer to the body reference silhouette, and higher
 denoise follows prompt changes more aggressively. If local background removal fails after the RGB fallback has been
 saved, the latest manual job is reported as `completed_with_fallback` and points to the `_rgb` output.
-The avatar body-depth templates instead resize and pad the body reference to the output aspect ratio, extract a MiDaS
+The avatar body-depth templates instead resize and pad the body reference to the output aspect ratio, extract a Depth Anything V2
 depth map, and apply the SDXL depth ControlNet before sampling from an empty latent. This is intended for stronger
 body pose, volume, and full-body framing control without copying the original body image pixels directly.
 

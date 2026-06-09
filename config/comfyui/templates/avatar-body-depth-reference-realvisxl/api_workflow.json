@@ -92,11 +92,10 @@
     }
   },
   "25": {
-    "class_type": "MiDaS-DepthMapPreprocessor",
+    "class_type": "DepthAnythingV2Preprocessor",
     "inputs": {
       "image": ["11", 0],
-      "a": 6.283185307179586,
-      "bg_threshold": 0.1,
+      "ckpt_name": "{{depth_anything_model}}",
       "resolution": "{{depth_resolution}}"
     }
   },
