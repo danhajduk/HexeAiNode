@@ -56,7 +56,7 @@
     "class_type": "KSampler",
     "inputs": {
       "model": ["2", 0],
-      "positive": ["6", 0],
+      "positive": ["11", 0],
       "negative": ["7", 0],
       "latent_image": ["5", 0],
       "seed": "{{seed}}",
@@ -65,6 +65,13 @@
       "sampler_name": "euler",
       "scheduler": "sgm_uniform",
       "denoise": "{{denoise}}"
+    }
+  },
+  "11": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": ["6", 0],
+      "latent": ["5", 0]
     }
   },
   "9": {

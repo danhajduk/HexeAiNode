@@ -2638,7 +2638,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(template["metadata"]["domain"], "avatar")
         self.assertEqual(workflow["3"]["inputs"]["image"], "avatar.png")
-        self.assertEqual(workflow["8"]["inputs"]["denoise"], 0.85)
+        self.assertEqual(workflow["11"]["class_type"], "ReferenceLatent")
+        self.assertEqual(workflow["11"]["inputs"]["latent"], ["5", 0])
+        self.assertEqual(workflow["8"]["inputs"]["positive"], ["11", 0])
+        self.assertEqual(workflow["8"]["inputs"]["denoise"], 0.55)
         self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar/Jane_Doe_1_seed12345")
 
     def test_manual_avatar_reference_template_uses_face_and_body_references(self):

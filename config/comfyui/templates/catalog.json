@@ -366,7 +366,7 @@
     {
       "template_id": "template.avatar_img2img.realvisxl.v1",
       "template_name": "Avatar Img2Img RealVisXL",
-      "description": "Reusable RealVisXL workflow for applying a prompt to an uploaded avatar image.",
+      "description": "Reusable RealVisXL workflow for applying a prompt to an uploaded avatar image while preserving source identity.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-img2img-realvisxl/api_workflow.json",
       "ui_workflow_path": "avatar-img2img-realvisxl/ui_workflow.json",
@@ -433,27 +433,30 @@
         }
       ],
       "defaults": {
-        "negative_prompt": "low quality, blurry, distorted face, distorted hands, extra limbs, malformed body, watermark, text",
+        "negative_prompt": "different person, changed identity, altered face, altered body shape, low quality, blurry, distorted face, distorted hands, extra limbs, malformed body, watermark, text",
         "avatar_name": "avatar",
         "width": 1024,
         "height": 1024,
         "seed": null,
         "steps": 4,
         "cfg": 1.8,
-        "denoise": 0.85
+        "denoise": 0.55
       },
       "model_requirements": {
         "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
         "loras": ["sdxl_lightning_4step_lora.safetensors"],
         "vae": null,
-        "controlnets": []
+        "controlnets": [],
+        "other": {
+          "nodes": ["ReferenceLatent"]
+        }
       },
       "output_scope": "normal",
       "metadata": {
         "preset_family": "realvisxl_lightning",
         "domain": "avatar",
         "input_mode": "image",
-        "edit_intent": "apply_prompt_to_avatar"
+        "edit_intent": "apply_prompt_to_avatar_preserve_identity"
       }
     },
     {

@@ -1,5 +1,5 @@
 {
-  "last_node_id": 10,
+  "last_node_id": 11,
   "last_link_id": 8,
   "nodes": [
     {
@@ -41,6 +41,11 @@
       "id": 8,
       "type": "KSampler",
       "title": "Avatar Prompt Sampler"
+    },
+    {
+      "id": 11,
+      "type": "ReferenceLatent",
+      "title": "Preserve Source Avatar"
     },
     {
       "id": 9,
