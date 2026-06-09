@@ -23,6 +23,14 @@ Implemented client-facing routes in this repository:
 | `GET /api/execution/queues` | Implemented | Read local/cloud execution queue diagnostics. |
 | `GET /api/providers/local/capability-resolution` | Implemented | Inspect deterministic local model feature and task mapping. |
 | `GET /api/providers/models/by-task/{task_family}` | Implemented | Discover enabled local/cloud providers and models mapped to a task family. |
+| `GET /api/image-templates` | Implemented | List registered image generation templates and lifecycle state. |
+| `POST /api/image-templates` | Implemented | Register a versioned image generation template. |
+| `GET /api/image-templates/{template_id}` | Implemented | Inspect one registered image generation template. |
+| `PUT /api/image-templates/{template_id}` | Implemented | Update template metadata or add/replace a version. |
+| `POST /api/image-templates/{template_id}/lifecycle` | Implemented | Transition template lifecycle state. |
+| `POST /api/image-templates/{template_id}/review` | Implemented | Mark a template review complete. |
+| `GET /api/comfyui/templates` | Implemented | Discover validated ComfyUI workflow templates and editable variables. |
+| `GET /api/comfyui/templates/{template_id}` | Implemented | Inspect one validated ComfyUI workflow template. |
 | `POST /api/benchmarks/execution/v2` | Implemented | Execution-only multi-target benchmark run. The client owns scoring. |
 | `GET /api/schemas/client-ai/v2` | Implemented | Schema catalog discovery. |
 | `GET /api/schemas/client-ai/v2/{schema_name}` | Implemented | Fetch one schema document. |
@@ -130,6 +138,40 @@ V3+ image generation template selection:
 - `allowed_parameter_overrides` lists template variables that execution requests may override. Requests may fill or
   narrow the prompt-owned template policy, but must not broaden it.
 - Missing `constraints.image_template` normalizes to `null` and preserves V1/V2 behavior.
+- During `POST /api/execution/direct` and `POST /api/execution/route-preview`, image-generation prompts with a template
+  policy resolve the registered template version before queue/provider routing. The effective request includes
+  `constraints.image_template_resolved` and `inputs.comfyui_workflow`.
+- Template variables are filled from rendered prompt text, request inputs, template defaults, and explicit allowed
+  overrides. The resolved template metadata includes `output_folder_policy: operational`, so normal governed generation
+  does not mix with manual ComfyUI Web UI artifacts.
+
+Image template registration payload shape:
+
+```json
+{
+  "template_id": "template.weather.realvisxl.v1",
+  "service_id": "weather-node",
+  "template_name": "Weather RealVisXL",
+  "version": "v1",
+  "template_version": {
+    "runtime_id": "comfyui_gpu",
+    "api_workflow_path": "config/comfyui/templates/weather-realvisxl/api_workflow.json",
+    "ui_workflow_path": "config/comfyui/templates/weather-realvisxl/ui_workflow.json",
+    "variables": ["positive_prompt", "negative_prompt", "width", "height", "seed"],
+    "defaults": {
+      "negative_prompt": "low quality, blurry",
+      "width": 1344,
+      "height": 768,
+      "seed": null
+    },
+    "model_requirements": {
+      "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+      "loras": ["sdxl_lightning_4step_lora.safetensors"]
+    },
+    "output_scope": "normal"
+  }
+}
+```
 
 Prompt `provider_preferences.default_provider` and `default_model` remain fallback defaults. They do not override a V3
 `local_preferred` or local-only effective routing policy; clients must send explicit `requested_provider` or

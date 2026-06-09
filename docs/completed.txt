@@ -557,3 +557,4 @@ Task 982: Add V3+ prompt support for image generation template selection - Compl
 Task 983: Add image generation template registration state and APIs - Completed on 06/09/2026 08:53
 Task 984: Add ComfyUI workflow template catalog and validation - Completed on 06/09/2026 08:57
 Task 985: Route normal image generation through registered templates - Completed on 06/09/2026 09:04
+Task 986: Surface image generation template registration in docs and node UI - Completed on 06/09/2026 09:08

@@ -7,6 +7,7 @@ import { CapabilitySummaryCard } from "./cards/CapabilitySummaryCard";
 import { ProviderRefreshCard } from "./cards/ProviderRefreshCard";
 import { ResolvedTasksCard } from "./cards/ResolvedTasksCard";
 import { RuntimeServicesCard } from "./cards/RuntimeServicesCard";
+import { ImageTemplatesCard } from "./cards/ImageTemplatesCard";
 import { RecentActivityCard } from "./cards/RecentActivityCard";
 import { ClientCostCard } from "./cards/ClientCostCard";
 import { OperationalActionsCard } from "./cards/OperationalActionsCard";
@@ -83,6 +84,7 @@ export function OperationalDashboard({
   providerRefreshProps,
   resolvedTasks = [],
   runtimeServicesProps,
+  imageTemplatesProps,
   operationalActions,
   activityItems = [],
   clientCostItems = [],
@@ -163,6 +165,7 @@ export function OperationalDashboard({
               </div>
             </article>
             <RuntimeServicesCard {...runtimeServicesProps} />
+            <ImageTemplatesCard {...imageTemplatesProps} />
             <OperationalActionsCard {...operationalActions} />
           </>
         ) : null}

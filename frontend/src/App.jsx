@@ -162,6 +162,9 @@ export default function App() {
   const [savingPopupPricing, setSavingPopupPricing] = useState(false);
   const [capabilityDiagnostics, setCapabilityDiagnostics] = useState(null);
   const [clientUsageSummary, setClientUsageSummary] = useState({ currentMonth: "", clients: [] });
+  const [promptServicesPayload, setPromptServicesPayload] = useState(null);
+  const [imageTemplatePayload, setImageTemplatePayload] = useState(null);
+  const [comfyuiTemplateCatalogPayload, setComfyuiTemplateCatalogPayload] = useState(null);
   const [runningAdminAction, setRunningAdminAction] = useState("");
   const [adminActionState, setAdminActionState] = useState("");
   const [uiState, setUiState] = useState(() =>
@@ -193,6 +196,8 @@ export default function App() {
       budgetResult,
       clientUsageResult,
       promptServicesResult,
+      imageTemplatesResult,
+      comfyuiTemplatesResult,
       capabilityDiagnosticsResult,
     ] = await Promise.allSettled([
       apiGet("/api/node/status"),
@@ -211,6 +216,8 @@ export default function App() {
       apiGet("/api/budgets/state"),
       apiGet("/api/usage/clients"),
       apiGet("/api/prompts/services"),
+      apiGet("/api/image-templates"),
+      apiGet("/api/comfyui/templates"),
       apiAdminGet("/api/capabilities/diagnostics"),
     ]);
 
@@ -250,6 +257,8 @@ export default function App() {
     const budgetPayload = budgetResult.status === "fulfilled" ? budgetResult.value : null;
     const clientUsagePayload = clientUsageResult.status === "fulfilled" ? clientUsageResult.value : null;
     const promptServicesPayload = promptServicesResult.status === "fulfilled" ? promptServicesResult.value : null;
+    const imageTemplatesPayload = imageTemplatesResult.status === "fulfilled" ? imageTemplatesResult.value : null;
+    const comfyuiTemplatesPayload = comfyuiTemplatesResult.status === "fulfilled" ? comfyuiTemplatesResult.value : null;
     const capabilityDiagnosticsPayload = capabilityDiagnosticsResult.status === "fulfilled" ? capabilityDiagnosticsResult.value : null;
     const partialFailures = [];
     if (governanceResult.status !== "fulfilled") {
@@ -297,6 +306,12 @@ export default function App() {
     if (promptServicesResult.status !== "fulfilled") {
       partialFailures.push("prompt_services_unavailable");
     }
+    if (imageTemplatesResult.status !== "fulfilled") {
+      partialFailures.push("image_templates_unavailable");
+    }
+    if (comfyuiTemplatesResult.status !== "fulfilled") {
+      partialFailures.push("comfyui_template_catalog_unavailable");
+    }
     setBackendStatus(payload.status || "unknown");
     setPendingApprovalUrl(payload.pending_approval_url || "");
     setNodeId(payload.node_id || "");
@@ -320,6 +335,9 @@ export default function App() {
     setResolvedNodeCapabilities(nodeCapabilitiesPayload);
     setCapabilityDiagnostics(capabilityDiagnosticsPayload);
     setClientUsageSummary(normalizeClientUsagePayload(clientUsagePayload, promptServicesPayload));
+    setPromptServicesPayload(promptServicesPayload);
+    setImageTemplatePayload(imageTemplatesPayload);
+    setComfyuiTemplateCatalogPayload(comfyuiTemplatesPayload);
     setGovernanceStatusPayload(governancePayload);
     setBudgetStatePayload(budgetPayload);
     setProviderBudgetSummaries(summarizeProviderBudgets({ providerConfig: providerPayload, budgetState: budgetPayload }));
@@ -1773,6 +1791,11 @@ export default function App() {
           window.open(comfyuiWebuiObject.url, "_blank", "noopener,noreferrer");
         }
       },
+    },
+    imageTemplatesProps: {
+      imageTemplatePayload,
+      comfyuiTemplateCatalogPayload,
+      promptServicesPayload,
     },
     operationalActions,
     activityItems: recentActivityItems,

@@ -628,6 +628,72 @@
   white-space: nowrap;
 }
 
+.compact-table-wrap {
+  overflow-x: auto;
+  border: 1px solid hsl(var(--sx-border) / 0.75);
+  border-radius: var(--sx-radius-md);
+  background: hsl(var(--sx-panel));
+}
+
+.compact-table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.compact-table th,
+.compact-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid hsl(var(--sx-border) / 0.6);
+  text-align: left;
+  vertical-align: top;
+}
+
+.compact-table th {
+  color: hsl(var(--sx-muted-foreground));
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.compact-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.compact-table td strong,
+.compact-table td code {
+  display: block;
+  max-width: 260px;
+  overflow-wrap: anywhere;
+}
+
+.inline-code-list-item {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.template-catalog-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.template-catalog-chip {
+  display: grid;
+  gap: 3px;
+  max-width: 360px;
+  padding: 8px 10px;
+  border: 1px solid hsl(var(--sx-border) / 0.75);
+  border-radius: var(--sx-radius-md);
+  background: hsl(var(--sx-panel) / 0.75);
+}
+
+.template-catalog-chip code,
+.template-catalog-chip span {
+  overflow-wrap: anywhere;
+}
+
 
 .client-grant-summary-item strong,
 .client-grant-summary-item code {

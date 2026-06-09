@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Image Generation Template Register Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["template_id", "service_id", "template_version"],
+  "properties": {
+    "template_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "service_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "template_name": {
+      "type": ["string", "null"],
+      "maxLength": 200
+    },
+    "owner_service": {
+      "type": ["string", "null"],
+      "maxLength": 160
+    },
+    "owner_client_id": {
+      "type": ["string", "null"],
+      "maxLength": 160
+    },
+    "privacy_class": {
+      "enum": ["public", "internal", "restricted", "sensitive"],
+      "default": "internal"
+    },
+    "access_scope": {
+      "enum": ["private", "service", "shared", "public"],
+      "default": "service"
+    },
+    "allowed_services": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "allowed_clients": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "allowed_customers": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "version": {
+      "type": ["string", "null"],
+      "maxLength": 80
+    },
+    "status": {
+      "enum": ["draft", "probation", "active", "review_due", "restricted", "suspended", "retired", "expired"],
+      "default": "active"
+    },
+    "metadata": {
+      "type": ["object", "null"]
+    },
+    "template_version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["api_workflow_path"],
+      "properties": {
+        "version": {
+          "type": ["string", "null"],
+          "maxLength": 80
+        },
+        "runtime_id": {
+          "enum": ["comfyui_gpu", "comfyui_cpu"],
+          "default": "comfyui_gpu"
+        },
+        "api_workflow_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ui_workflow_path": {
+          "type": ["string", "null"]
+        },
+        "variables": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "defaults": {
+          "type": ["object", "null"]
+        },
+        "model_requirements": {
+          "type": ["object", "null"]
+        },
+        "output_scope": {
+          "type": ["string", "null"],
+          "default": "normal"
+        },
+        "metadata": {
+          "type": ["object", "null"]
+        }
+      }
+    }
+  }
+}
