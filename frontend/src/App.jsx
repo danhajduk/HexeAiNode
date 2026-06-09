@@ -89,6 +89,23 @@ function formatPercent(value) {
   return Number.isFinite(parsed) ? `${parsed.toFixed(1)}%` : "unknown";
 }
 
+export function buildComfyuiWebuiBrowserUrl(rawUrl, locationObject = window.location) {
+  const normalized = String(rawUrl || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  try {
+    const parsed = new URL(normalized, locationObject.origin);
+    const currentHostname = String(locationObject.hostname || "").trim();
+    if (currentHostname && ["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"].includes(parsed.hostname)) {
+      parsed.hostname = currentHostname;
+    }
+    return parsed.toString();
+  } catch {
+    return normalized;
+  }
+}
+
 function ThemeToggle() {
   const [theme, setLocalTheme] = useState(getTheme());
 
@@ -1787,8 +1804,9 @@ export default function App() {
       onStartComfyuiWebui: () => onControlService("start", "comfyui_webui"),
       onStopComfyuiWebui: () => onControlService("stop", "comfyui_webui"),
       onOpenComfyuiWebui: () => {
-        if (comfyuiWebuiObject.url) {
-          window.open(comfyuiWebuiObject.url, "_blank", "noopener,noreferrer");
+        const browserUrl = buildComfyuiWebuiBrowserUrl(comfyuiWebuiObject.url);
+        if (browserUrl) {
+          window.open(browserUrl, "_blank", "noopener,noreferrer");
         }
       },
     },

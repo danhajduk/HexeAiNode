@@ -101,7 +101,7 @@ class UserSystemdServiceManager:
         self._comfyui_webui_runtime = str(os.environ.get("HEXE_COMFYUI_WEBUI_RUNTIME") or "gpu").strip().lower()
         if self._comfyui_webui_runtime not in {"gpu", "cpu"}:
             self._comfyui_webui_runtime = "gpu"
-        self._comfyui_webui_host = str(os.environ.get("HEXE_COMFYUI_WEBUI_HOST") or "127.0.0.1").strip() or "127.0.0.1"
+        self._comfyui_webui_host = str(os.environ.get("HEXE_COMFYUI_WEBUI_HOST") or "0.0.0.0").strip() or "0.0.0.0"
         self._comfyui_webui_port = max(_env_int("HEXE_COMFYUI_WEBUI_PORT", default=18188), 1)
         self._comfyui_webui_bridge_script = str(
             os.environ.get("HEXE_COMFYUI_WEBUI_BRIDGE_SCRIPT") or "scripts/unix-socket-tcp-bridge.py"
@@ -640,7 +640,11 @@ class UserSystemdServiceManager:
         if not script_path or not os.path.exists(script_path):
             raise ValueError("ComfyUI web UI bridge script is not configured")
         socket_path = self._comfyui_socket_for_runtime(self._comfyui_webui_runtime)
-        self._write_comfyui_webui_session(state="starting", reason="manual_webui_start_requested")
+        self._write_comfyui_webui_session(
+            state="starting",
+            reason="manual_webui_start_requested",
+            last_active_epoch=time.time(),
+        )
         try:
             self._prepare_comfyui_manual_dirs(runtime=self._comfyui_webui_runtime)
             self._run_comfyui_control(
@@ -671,7 +675,11 @@ class UserSystemdServiceManager:
                 time.sleep(0.1)
                 status = self._comfyui_webui_status()
                 if status.get("state") == "running":
-                    self._write_comfyui_webui_session(state="active", reason="manual_webui_bridge_running")
+                    self._write_comfyui_webui_session(
+                        state="active",
+                        reason="manual_webui_bridge_running",
+                        last_active_epoch=time.time(),
+                    )
                     return {"target": "comfyui_webui", "result": "started", **status}
             raise ValueError("ComfyUI web UI bridge did not become ready")
         except Exception:

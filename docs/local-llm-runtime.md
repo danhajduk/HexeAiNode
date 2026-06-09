@@ -134,9 +134,9 @@ POST /api/services/start {"target":"comfyui_webui"}
 POST /api/services/stop {"target":"comfyui_webui"}
 ```
 
-The bridge defaults to `http://localhost:18188` and forwards local TCP traffic to the configured ComfyUI Unix socket.
-`GET /api/services/status` reports the `comfyui_webui` service with its runtime, URL, socket path, and pid file. This
-does not publish the ComfyUI container port; LAN-wide exposure requires changing `HEXE_COMFYUI_WEBUI_HOST` explicitly.
+The bridge defaults to `0.0.0.0:18188` and forwards TCP traffic to the configured ComfyUI Unix socket.
+`GET /api/services/status` reports the `comfyui_webui` service with its runtime, URL, socket path, and pid file. The
+node UI opens local bridge URLs on the same hostname used for the current node UI session.
 The node writes `.run/comfyui-webui-session.json` while a manual session is starting, active, closing, or restoring;
 the vision residency scheduler treats that marker as `blocked_by_manual_comfyui_webui` and will not reload vision during
 the manual GPU takeover. Stopping `comfyui_webui` closes the bridge, stops ComfyUI, waits for the runtime sockets to

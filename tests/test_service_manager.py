@@ -218,6 +218,23 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(payload["api_transport"], "tcp_bridge_to_unix_socket")
         self.assertEqual(payload["socket_path"], manager._comfyui_gpu_socket)
 
+    def test_comfyui_webui_defaults_to_node_reachable_bridge_host(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "HEXE_COMFYUI_WEBUI_HOST": "",
+                "HEXE_COMFYUI_WEBUI_PORT": "18188",
+                "HEXE_COMFYUI_WEBUI_PID_FILE": str(Path(tmp) / "bridge.pid"),
+            },
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+        payload = manager._comfyui_webui_status()
+
+        self.assertEqual(payload["host"], "0.0.0.0")
+        self.assertEqual(payload["url"], "http://0.0.0.0:18188")
+
     def test_manual_comfyui_webui_session_blocks_vision_residency(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             "os.environ",
@@ -323,6 +340,29 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertFalse(session["queue_active"])
         self.assertEqual(session["idle_seconds"], 75.0)
         self.assertEqual(session["auto_close_at_epoch"], 400.0)
+
+    def test_comfyui_webui_start_refreshes_stale_idle_clock(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {"HEXE_COMFYUI_WEBUI_SESSION_FILE": str(Path(tmp) / "session.json")},
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._write_comfyui_webui_session(state="idle", reason="old", last_active_epoch=100.0)
+            with patch("time.time", return_value=500.0):
+                manager._write_comfyui_webui_session(
+                    state="starting",
+                    reason="manual_webui_start_requested",
+                    last_active_epoch=time.time(),
+                )
+            with (
+                patch("time.time", return_value=501.0),
+                patch.object(manager, "_uds_json_get", return_value={"queue_running": [], "queue_pending": []}),
+            ):
+                session = manager.comfyui_webui_session_status()
+
+        self.assertEqual(session["last_active_epoch"], 500.0)
+        self.assertEqual(session["idle_seconds"], 1.0)
 
     def test_comfyui_manual_runtime_env_uses_separate_artifact_dirs(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
