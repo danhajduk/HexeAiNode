@@ -303,7 +303,7 @@
     {
       "template_id": "template.avatar_identity_reference.realvisxl.v1",
       "template_name": "Avatar Identity Reference RealVisXL",
-      "description": "Body-preserving avatar workflow that uses selected face and body references, starting from the body reference latent for stronger silhouette retention.",
+      "description": "Body-preserving avatar workflow that uses selected face and body references with adjustable reference strengths and a body-reference latent blend.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-identity-reference-realvisxl/api_workflow.json",
       "ui_workflow_path": "avatar-identity-reference-realvisxl/ui_workflow.json",
@@ -325,6 +325,18 @@
           "type": "image",
           "required": true,
           "description": "Reference image for body proportions."
+        },
+        {
+          "name": "face_strength",
+          "type": "number",
+          "required": false,
+          "description": "Face reference strength from 0 to 1."
+        },
+        {
+          "name": "body_strength",
+          "type": "number",
+          "required": false,
+          "description": "Body reference strength from 0 to 1. Higher values preserve the body reference silhouette more strongly."
         },
         {
           "name": "negative_prompt",
@@ -383,7 +395,9 @@
         "seed": null,
         "steps": 4,
         "cfg": 1.8,
-        "denoise": 0.68
+        "denoise": 0.68,
+        "face_strength": 1.0,
+        "body_strength": 0.9
       },
       "model_requirements": {
         "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
@@ -391,9 +405,9 @@
         "vae": null,
         "controlnets": [],
         "other": {
-          "nodes": ["ReferenceLatent"],
+          "nodes": ["ReferenceLatent", "ConditioningAverage", "LatentBlend"],
           "identity_strength": "fallback_reference_latent_not_faceid",
-          "body_preservation": "body_reference_latent_start"
+          "body_preservation": "body_reference_latent_blend"
         }
       },
       "output_scope": "normal",
@@ -408,7 +422,7 @@
     {
       "template_id": "template.avatar_identity_reference_transparent.realvisxl.v1",
       "template_name": "Avatar Identity Reference Transparent RealVisXL",
-      "description": "Body-preserving avatar workflow that starts from the body reference latent, uses face/body references, then removes the background and saves a transparent PNG.",
+      "description": "Body-preserving avatar workflow that uses adjustable face/body reference strengths and a body-reference latent blend, then removes the background and saves a transparent PNG.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-identity-reference-transparent-realvisxl/api_workflow.json",
       "ui_workflow_path": "avatar-identity-reference-transparent-realvisxl/ui_workflow.json",
@@ -430,6 +444,18 @@
           "type": "image",
           "required": true,
           "description": "Reference image for body proportions."
+        },
+        {
+          "name": "face_strength",
+          "type": "number",
+          "required": false,
+          "description": "Face reference strength from 0 to 1."
+        },
+        {
+          "name": "body_strength",
+          "type": "number",
+          "required": false,
+          "description": "Body reference strength from 0 to 1. Higher values preserve the body reference silhouette more strongly."
         },
         {
           "name": "negative_prompt",
@@ -495,7 +521,9 @@
         "seed": null,
         "steps": 4,
         "cfg": 1.0,
-        "denoise": 0.68
+        "denoise": 0.68,
+        "face_strength": 1.0,
+        "body_strength": 0.9
       },
       "model_requirements": {
         "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
@@ -503,9 +531,9 @@
         "vae": null,
         "controlnets": [],
         "other": {
-          "nodes": ["ReferenceLatent", "LoadBackgroundRemovalModel", "RemoveBackground", "InvertMask", "JoinImageWithAlpha"],
+          "nodes": ["ReferenceLatent", "ConditioningAverage", "LatentBlend", "LoadBackgroundRemovalModel", "RemoveBackground", "InvertMask", "JoinImageWithAlpha"],
           "identity_strength": "fallback_reference_latent_not_faceid",
-          "body_preservation": "body_reference_latent_start",
+          "body_preservation": "body_reference_latent_blend",
           "background_removal": "birefnet.safetensors"
         }
       },

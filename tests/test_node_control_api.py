@@ -2946,8 +2946,14 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(template["metadata"]["input_mode"], "text")
         self.assertEqual(workflow["6"]["inputs"]["image"], "references/avatar/jane_face.png")
         self.assertEqual(workflow["10"]["inputs"]["image"], "references/avatar/jane_body.png")
-        self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["12", 0])
-        self.assertEqual(workflow["14"]["inputs"]["positive"], ["13", 0])
+        self.assertEqual(workflow["17"]["class_type"], "ConditioningAverage")
+        self.assertEqual(workflow["17"]["inputs"]["conditioning_to_strength"], 1.0)
+        self.assertEqual(workflow["18"]["class_type"], "ConditioningAverage")
+        self.assertEqual(workflow["18"]["inputs"]["conditioning_to_strength"], 0.9)
+        self.assertEqual(workflow["19"]["class_type"], "LatentBlend")
+        self.assertEqual(workflow["19"]["inputs"]["blend_factor"], 0.9)
+        self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["19", 0])
+        self.assertEqual(workflow["14"]["inputs"]["positive"], ["18", 0])
         self.assertEqual(workflow["14"]["inputs"]["denoise"], 0.68)
         self.assertEqual(workflow["16"]["inputs"]["filename_prefix"], "hexe/avatar_identity/Jane_seed999")
 
@@ -2974,6 +2980,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                         "avatar_name": "Jane",
                         "face_reference_image": "references/avatar/jane_face.png",
                         "body_reference_image": "references/avatar/jane_body.png",
+                        "face_strength": "0.75",
+                        "body_strength": "0.95",
                     },
                 ),
                 input_image="",
@@ -2981,7 +2989,14 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(template["metadata"]["input_mode"], "text")
         self.assertTrue(template["metadata"]["transparent_background"])
-        self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["12", 0])
+        self.assertEqual(workflow["21"]["class_type"], "ConditioningAverage")
+        self.assertEqual(workflow["21"]["inputs"]["conditioning_to_strength"], 0.75)
+        self.assertEqual(workflow["22"]["class_type"], "ConditioningAverage")
+        self.assertEqual(workflow["22"]["inputs"]["conditioning_to_strength"], 0.95)
+        self.assertEqual(workflow["23"]["class_type"], "LatentBlend")
+        self.assertEqual(workflow["23"]["inputs"]["blend_factor"], 0.95)
+        self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["23", 0])
+        self.assertEqual(workflow["14"]["inputs"]["positive"], ["22", 0])
         self.assertEqual(workflow["14"]["inputs"]["denoise"], 0.68)
         self.assertEqual(workflow["17"]["class_type"], "LoadBackgroundRemovalModel")
         self.assertEqual(workflow["17"]["inputs"]["bg_removal_name"], "birefnet.safetensors")

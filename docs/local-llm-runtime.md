@@ -224,8 +224,9 @@ run the same avatar generation path, then use ComfyUI's local background-removal
 save transparent output under separate transparent avatar folders. They require the native BiRefNet background-removal checkpoint in the runtime
 model folder, for example `runtime/models/comfyui-gpu/background_removal/birefnet.safetensors`. The img2img and avatar source templates
 accept `input_image`, which must reference an image available to ComfyUI's selected runtime input folder. The avatar
-identity-reference templates start sampling from the body reference latent and expose denoise as the body-preservation
-control: lower values keep more of the body reference, while higher values follow prompt changes more aggressively.
+identity-reference templates start sampling from a blend of the body reference latent and an empty latent. They expose
+face and body strength controls plus denoise: higher body strength keeps more of the body reference, while higher
+denoise follows prompt changes more aggressively.
 
 The node UI runtime section also exposes a manual image-generation card backed by `GET/POST /api/manual-image-generation`.
 It starts or reuses the manual ComfyUI session, lets operators choose a GPU ComfyUI template and adjust its exposed

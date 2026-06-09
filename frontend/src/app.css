@@ -704,6 +704,30 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.manual-template-slider {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.manual-template-slider-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.manual-template-slider output {
+  color: hsl(var(--sx-text-muted));
+  font-variant-numeric: tabular-nums;
+}
+
+.manual-template-slider input[type="range"] {
+  width: 100%;
+  margin: 4px 0 0;
+  accent-color: hsl(var(--sx-accent));
+}
+
 .image-output-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));

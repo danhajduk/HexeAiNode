@@ -1974,7 +1974,7 @@ class NodeControlState:
             for key, value in payload.template_variables.items():
                 name = str(key or "").strip()
                 if name in variables and name not in {"positive_prompt", "negative_prompt", "input_image"}:
-                    values[name] = value
+                    values[name] = self._coerce_manual_template_variable_value(variable=variables[name], value=value)
         if "avatar_name" in variables:
             values["avatar_name"] = self._safe_filename_component(values.get("avatar_name") or "avatar")
         if "input_image" in variables:
@@ -1984,6 +1984,17 @@ class NodeControlState:
                 raise ValueError(f"manual_image_variable_required:{name}")
         api_workflow = json.loads(Path(str(template.get("api_workflow_path") or "")).read_text(encoding="utf-8"))
         return self._substitute_template_placeholders(api_workflow, variables=values)
+
+    @staticmethod
+    def _coerce_manual_template_variable_value(*, variable: dict, value):
+        variable_type = str(variable.get("type") or "").strip().lower()
+        if value in (None, ""):
+            return value
+        if variable_type == "integer":
+            return int(value)
+        if variable_type == "number":
+            return float(value)
+        return value
 
     def _manual_image_output_dir(self) -> Path:
         services = self.service_status_payload().get("services", {})

@@ -15,6 +15,14 @@
       "strength_clip": 1.0
     }
   },
+  "3": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": "{{width}}",
+      "height": "{{height}}",
+      "batch_size": 1
+    }
+  },
   "4": {
     "class_type": "CLIPTextEncode",
     "inputs": {
@@ -59,6 +67,14 @@
       "latent": ["8", 0]
     }
   },
+  "21": {
+    "class_type": "ConditioningAverage",
+    "inputs": {
+      "conditioning_to": ["9", 0],
+      "conditioning_from": ["4", 0],
+      "conditioning_to_strength": "{{face_strength}}"
+    }
+  },
   "10": {
     "class_type": "LoadImage",
     "inputs": {
@@ -85,17 +101,33 @@
   "13": {
     "class_type": "ReferenceLatent",
     "inputs": {
-      "conditioning": ["9", 0],
+      "conditioning": ["21", 0],
       "latent": ["12", 0]
+    }
+  },
+  "22": {
+    "class_type": "ConditioningAverage",
+    "inputs": {
+      "conditioning_to": ["13", 0],
+      "conditioning_from": ["21", 0],
+      "conditioning_to_strength": "{{body_strength}}"
+    }
+  },
+  "23": {
+    "class_type": "LatentBlend",
+    "inputs": {
+      "samples1": ["12", 0],
+      "samples2": ["3", 0],
+      "blend_factor": "{{body_strength}}"
     }
   },
   "14": {
     "class_type": "KSampler",
     "inputs": {
       "model": ["2", 0],
-      "positive": ["13", 0],
+      "positive": ["22", 0],
       "negative": ["5", 0],
-      "latent_image": ["12", 0],
+      "latent_image": ["23", 0],
       "seed": "{{seed}}",
       "steps": "{{steps}}",
       "cfg": "{{cfg}}",

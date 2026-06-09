@@ -59,6 +59,15 @@ function variableInputType(variable) {
   return type === "integer" || type === "number" ? "number" : "text";
 }
 
+function isReferenceStrengthVariable(name) {
+  return ["face_strength", "body_strength"].includes(String(name || "").trim());
+}
+
+function formatSliderValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : "0.00";
+}
+
 function variableLabel(name) {
   return String(name || "")
     .split("_")
@@ -862,6 +871,24 @@ export function ManualImageGenerationCard({
           <div className="form-grid">
             {adjustableVariables.map((variable) => {
               const name = String(variable?.name || "").trim();
+              if (isReferenceStrengthVariable(name)) {
+                return (
+                  <label className="manual-template-slider" key={name}>
+                    <span className="manual-template-slider-heading">
+                      <span>{variableLabel(name)}</span>
+                      <output>{formatSliderValue(templateVariables[name])}</output>
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={templateVariables[name] ?? "0"}
+                      onChange={(event) => setTemplateVariables((current) => ({ ...current, [name]: event.target.value }))}
+                    />
+                  </label>
+                );
+              }
               return (
                 <label key={name}>
                   {variableLabel(name)}

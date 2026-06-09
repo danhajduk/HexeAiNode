@@ -1,5 +1,5 @@
 {
-  "last_node_id": 16,
+  "last_node_id": 19,
   "last_link_id": 14,
   "nodes": [
     {
@@ -11,6 +11,11 @@
       "id": 2,
       "type": "LoraLoader",
       "title": "SDXL Lightning LoRA"
+    },
+    {
+      "id": 3,
+      "type": "EmptyLatentImage",
+      "title": "Empty Latent Blend Target"
     },
     {
       "id": 4,
@@ -28,6 +33,11 @@
       "title": "Apply Face Reference"
     },
     {
+      "id": 17,
+      "type": "ConditioningAverage",
+      "title": "Face Reference Strength"
+    },
+    {
       "id": 10,
       "type": "LoadImage",
       "title": "Body Reference"
@@ -43,6 +53,16 @@
       "title": "Apply Body Reference"
     },
     {
+      "id": 18,
+      "type": "ConditioningAverage",
+      "title": "Body Reference Strength"
+    },
+    {
+      "id": 19,
+      "type": "LatentBlend",
+      "title": "Body Latent Strength"
+    },
+    {
       "id": 14,
       "type": "KSampler",
       "title": "Identity Reference Sampler"
@@ -56,6 +76,6 @@
   "links": [],
   "extra": {
     "template_id": "template.avatar_identity_reference.realvisxl.v1",
-    "notes": "Body-preserving avatar generation using the body reference as the sampler latent start and face/body images as reference conditioning."
+    "notes": "Body-preserving avatar generation using adjustable face/body conditioning strength and an adjustable body-reference latent start."
   }
 }
