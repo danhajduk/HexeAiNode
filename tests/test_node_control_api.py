@@ -2607,6 +2607,32 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(workflow["8"]["inputs"]["denoise"], 0.8)
 
+    def test_manual_avatar_img2img_template_applies_prompt_to_avatar_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+            )
+            template = state.get_comfyui_template_catalog_entry(template_id="template.avatar_img2img.realvisxl.v1")["template"]
+
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id="template.avatar_img2img.realvisxl.v1",
+                    mode="img2img",
+                    prompt="cyberpunk avatar in a rainy neon street, full scene transformation",
+                    input_image="avatar.png",
+                    denoise=None,
+                ),
+                input_image="avatar.png",
+            )
+
+        self.assertEqual(template["metadata"]["domain"], "avatar")
+        self.assertEqual(workflow["3"]["inputs"]["image"], "avatar.png")
+        self.assertEqual(workflow["8"]["inputs"]["denoise"], 0.85)
+        self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar")
+
     def test_manual_image_prompt_helper_uses_local_llm_socket(self):
         class _PromptHelperServiceManager:
             def get_status(self):
