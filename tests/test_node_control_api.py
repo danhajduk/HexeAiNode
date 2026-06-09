@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import logging
 import tempfile
@@ -19,6 +20,7 @@ from ai_node.runtime.node_control_api import (
     DirectExecutionBusyError,
     ManualImageGenerationRequest,
     ManualImagePromptHelperRequest,
+    ManualImageReferenceUploadRequest,
     NodeControlState,
 )
 from ai_node.runtime.execution_queue import ExecutionQueueService
@@ -2689,6 +2691,47 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.call_args.kwargs["path"], "/v1/chat/completions")
         messages = request.call_args.kwargs["body"]["messages"]
         self.assertTrue(all("/no_think" in item["content"] for item in messages))
+
+    def test_manual_image_reference_upload_stores_local_reference(self):
+        class _ReferenceServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ReferenceServiceManager(str(input_dir)),
+            )
+
+            result = state.upload_manual_image_reference(
+                payload=ManualImageReferenceUploadRequest(
+                    category="avatar",
+                    role="face",
+                    name="Jane Doe",
+                    filename="avatar.png",
+                    data_base64=base64.b64encode(b"png-data").decode("ascii"),
+                )
+            )
+            status = state.manual_image_generation_status()
+
+        reference = result["reference"]
+        self.assertEqual(reference["category"], "avatar")
+        self.assertEqual(reference["role"], "face")
+        self.assertEqual(reference["name"], "Jane Doe")
+        self.assertTrue(reference["input_image"].startswith("references/avatar/Jane_Doe_face_"))
+        self.assertEqual(status["references"][0]["input_image"], reference["input_image"])
 
     def test_delete_manual_image_output_stays_inside_manual_output_dir(self):
         with tempfile.TemporaryDirectory() as tmp:

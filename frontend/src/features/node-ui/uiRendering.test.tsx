@@ -292,6 +292,15 @@ describe("OperationalDashboard", () => {
                   url: "/api/manual-image-generation/outputs/hexe/sample.png",
                 },
               ],
+              references: [
+                {
+                  relative_path: "avatar/jane.png",
+                  filename: "jane.png",
+                  name: "Jane",
+                  url: "/api/manual-image-generation/references/avatar/jane.png",
+                  input_image: "references/avatar/jane.png",
+                },
+              ],
             },
           },
         })}
@@ -305,6 +314,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("1 running / 2 pending");
     expect(markup).toContain("25.0%");
     expect(markup).toContain("Reference Image");
+    expect(markup).toContain("Upload Reference");
+    expect(markup).toContain("Jane");
     expect(markup).toContain("Draft / Improve Prompt");
     expect(markup).toContain("Delete");
     expect(markup).toContain('step="8"');

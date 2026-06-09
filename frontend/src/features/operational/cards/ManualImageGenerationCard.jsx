@@ -104,6 +104,7 @@ export function ManualImageGenerationCard({
   apiBase = "",
   onSubmit,
   onImprovePrompt,
+  onUploadReference,
   onDeleteOutput,
   onRefresh,
 }) {
@@ -120,7 +121,13 @@ export function ManualImageGenerationCard({
   const [denoise, setDenoise] = useState("0.55");
   const [templateVariables, setTemplateVariables] = useState({});
   const [referenceFile, setReferenceFile] = useState(null);
+  const [selectedReference, setSelectedReference] = useState(null);
+  const [libraryCategory, setLibraryCategory] = useState("avatar");
+  const [libraryRole, setLibraryRole] = useState("reference");
+  const [libraryName, setLibraryName] = useState("");
+  const [libraryFile, setLibraryFile] = useState(null);
   const outputs = asArray(payload?.outputs);
+  const references = asArray(payload?.references);
   const service = payload?.service || {};
   const runtimeService = objectValue(payload?.runtime_service);
   const generationStatus = objectValue(payload?.generation_status);
@@ -157,7 +164,7 @@ export function ManualImageGenerationCard({
     () => templates.find((template) => template?.template_id === selectedTemplateId) || templates[0] || null,
     [templates, selectedTemplateId]
   );
-  const effectiveMode = referenceFile ? "img2img" : mode;
+  const effectiveMode = referenceFile || selectedReference ? "img2img" : mode;
   const effectiveTemplate =
     selectedTemplate && templateMode(selectedTemplate) === effectiveMode
       ? selectedTemplate
@@ -213,6 +220,7 @@ export function ManualImageGenerationCard({
       steps: Number.parseInt(steps, 10) || 4,
       cfg: Number.parseFloat(cfg) || 1.6,
       denoise: Number.parseFloat(denoise) || 0.55,
+      input_image: referenceFile ? null : selectedReference?.input_image || null,
       reference_image_filename: referenceFile?.name || null,
       reference_image_data_base64: referenceData || null,
       template_variables: templateVariables,
@@ -223,11 +231,44 @@ export function ManualImageGenerationCard({
     const file = event.target.files?.[0] || null;
     setReferenceFile(file);
     if (file) {
+      setSelectedReference(null);
+    }
+    if (file) {
       setMode("img2img");
       const img2imgTemplate = templateForMode(templates, "img2img");
       if (img2imgTemplate?.template_id && templateMode(selectedTemplate) !== "img2img") {
         setSelectedTemplateId(img2imgTemplate.template_id);
       }
+    }
+  }
+
+  async function handleUploadReference() {
+    if (!libraryFile || busy) {
+      return;
+    }
+    const referenceData = await fileToDataUrl(libraryFile);
+    const result = await onUploadReference?.({
+      category: libraryCategory,
+      role: libraryRole,
+      name: libraryName || libraryFile.name,
+      filename: libraryFile.name,
+      data_base64: referenceData,
+    });
+    if (result?.reference) {
+      setSelectedReference(result.reference);
+      setReferenceFile(null);
+      setMode("img2img");
+    }
+    setLibraryFile(null);
+  }
+
+  function useReference(reference) {
+    setSelectedReference(reference);
+    setReferenceFile(null);
+    setMode("img2img");
+    const img2imgTemplate = templateForMode(templates, "img2img");
+    if (img2imgTemplate?.template_id && templateMode(selectedTemplate) !== "img2img") {
+      setSelectedTemplateId(img2imgTemplate.template_id);
     }
   }
 
@@ -329,6 +370,53 @@ export function ManualImageGenerationCard({
             <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onReferenceChange} />
           </label>
         </div>
+        <div className="form-grid">
+          <label>
+            Reference Type
+            <select value={libraryCategory} onChange={(event) => setLibraryCategory(event.target.value)}>
+              <option value="avatar">Avatar</option>
+              <option value="scene">Scene / Place</option>
+            </select>
+          </label>
+          <label>
+            Reference Role
+            <select value={libraryRole} onChange={(event) => setLibraryRole(event.target.value)}>
+              <option value="reference">Reference</option>
+              <option value="face">Face</option>
+              <option value="body">Body</option>
+              <option value="place">Place</option>
+            </select>
+          </label>
+          <label>
+            Reference Name
+            <input type="text" value={libraryName} onChange={(event) => setLibraryName(event.target.value)} />
+          </label>
+          <label>
+            Upload Reference
+            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setLibraryFile(event.target.files?.[0] || null)} />
+          </label>
+        </div>
+        <div className="row">
+          <button className="btn" type="button" onClick={handleUploadReference} disabled={busy || !libraryFile}>
+            Upload Reference
+          </button>
+          {selectedReference ? <code>{selectedReference.name || selectedReference.filename}</code> : null}
+        </div>
+        {references.length ? (
+          <div className="image-output-grid">
+            {references.slice(0, 8).map((reference) => (
+              <div className="image-output-tile" key={reference.relative_path}>
+                <button className="btn" type="button" onClick={() => useReference(reference)} disabled={busy}>
+                  Use
+                </button>
+                <a href={`${apiBase}${reference.url}`} target="_blank" rel="noreferrer">
+                  <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
+                  <span>{reference.name || reference.filename}</span>
+                </a>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <label>
           Prompt
           <textarea rows={4} value={prompt} onChange={(event) => setPrompt(event.target.value)} />

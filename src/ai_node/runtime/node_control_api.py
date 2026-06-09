@@ -1441,6 +1441,7 @@ class NodeControlState:
             generation_status = {}
         outputs = self._manual_image_outputs(limit=24)
         latest_job = self._manual_image_latest_job(generation_status=generation_status, outputs=outputs)
+        references = self._manual_image_references(limit=48)
         catalog = self.comfyui_template_catalog_payload()
         templates = [
             item
@@ -1457,6 +1458,7 @@ class NodeControlState:
             "latest_job": latest_job,
             "manual_paths": manual_paths if isinstance(manual_paths, dict) else {},
             "templates": templates,
+            "references": references,
             "outputs": outputs,
         }
 
@@ -1589,6 +1591,63 @@ class NodeControlState:
             "prompt": prompt,
             "negative_prompt": negative_prompt,
         }
+
+    def upload_manual_image_reference(self, *, payload: "ManualImageReferenceUploadRequest") -> dict:
+        services = self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
+        category = self._manual_reference_category(payload.category)
+        role = self._safe_filename_component(payload.role or "reference")
+        display_name = str(payload.name or Path(str(payload.filename or "")).stem or category).strip()
+        safe_name = self._safe_filename_component(display_name)
+        raw_name = Path(str(payload.filename or f"{safe_name}.png")).name
+        suffix = Path(raw_name).suffix.lower()
+        if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+            suffix = ".png"
+        references_root = self._manual_image_reference_root(manual_paths=manual_paths if isinstance(manual_paths, dict) else {})
+        target_dir = references_root / category
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_name = f"{safe_name}_{role}_{int(time.time())}{suffix}"
+        target_path = target_dir / target_name
+        encoded = str(payload.data_base64 or "")
+        if "," in encoded and encoded.split(",", 1)[0].lower().startswith("data:"):
+            encoded = encoded.split(",", 1)[1]
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("invalid_reference_image_data") from exc
+        if not data:
+            raise ValueError("reference_image_empty")
+        if len(data) > 20 * 1024 * 1024:
+            raise ValueError("reference_image_too_large")
+        target_path.write_bytes(data)
+        metadata = {
+            "category": category,
+            "role": role,
+            "name": display_name or safe_name,
+            "filename": target_name,
+            "input_image": f"references/{category}/{target_name}",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        target_path.with_suffix(target_path.suffix + ".json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        return {
+            "status": "uploaded",
+            "reference": self._manual_image_reference_payload(path=target_path, metadata=metadata),
+            "references": self._manual_image_references(limit=48),
+        }
+
+    def manual_image_reference_response(self, *, relative_path: str) -> FileResponse:
+        root = self._manual_image_reference_root()
+        safe_relative = self._safe_relative_path(relative_path)
+        path = (root / safe_relative).resolve()
+        if root not in path.parents and path != root:
+            raise ValueError("manual_reference_path_invalid")
+        if not path.exists() or not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            raise ValueError("manual_reference_not_found")
+        return FileResponse(path)
 
     @staticmethod
     def _parse_manual_image_prompt_helper_content(content: str) -> dict:
@@ -1749,6 +1808,20 @@ class NodeControlState:
         output_dir = str(manual_paths.get("output_dir") or "runtime/manual/comfyui-gpu/output") if isinstance(manual_paths, dict) else "runtime/manual/comfyui-gpu/output"
         return Path(output_dir).resolve()
 
+    def _manual_image_input_dir(self) -> Path:
+        services = self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
+        input_dir = str(manual_paths.get("input_dir") or "runtime/manual/comfyui-gpu/input") if isinstance(manual_paths, dict) else "runtime/manual/comfyui-gpu/input"
+        return Path(input_dir).resolve()
+
+    def _manual_image_reference_root(self, *, manual_paths: dict | None = None) -> Path:
+        if isinstance(manual_paths, dict):
+            input_dir = Path(str(manual_paths.get("input_dir") or "runtime/manual/comfyui-gpu/input")).resolve()
+        else:
+            input_dir = self._manual_image_input_dir()
+        return (input_dir / "references").resolve()
+
     def _manual_image_outputs(self, *, limit: int) -> list[dict]:
         output_dir = self._manual_image_output_dir()
         if not output_dir.exists():
@@ -1770,6 +1843,48 @@ class NodeControlState:
                 }
             )
         return outputs
+
+    def _manual_image_references(self, *, limit: int) -> list[dict]:
+        root = self._manual_image_reference_root()
+        if not root.exists():
+            return []
+        allowed_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
+        files = [path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in allowed_suffixes]
+        files.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+        return [self._manual_image_reference_payload(path=path) for path in files[: max(int(limit), 1)]]
+
+    def _manual_image_reference_payload(self, *, path: Path, metadata: dict | None = None) -> dict:
+        root = self._manual_image_reference_root()
+        stat = path.stat()
+        relative = path.relative_to(root).as_posix()
+        if metadata is None:
+            try:
+                sidecar = json.loads(path.with_suffix(path.suffix + ".json").read_text(encoding="utf-8"))
+            except Exception:
+                sidecar = {}
+            metadata = sidecar if isinstance(sidecar, dict) else {}
+        category = str(metadata.get("category") or Path(relative).parts[0] if Path(relative).parts else "reference")
+        return {
+            "relative_path": relative,
+            "filename": path.name,
+            "category": category,
+            "role": str(metadata.get("role") or "reference"),
+            "name": str(metadata.get("name") or path.stem),
+            "input_image": str(metadata.get("input_image") or f"references/{relative}"),
+            "size_bytes": stat.st_size,
+            "modified_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+            "created_at": metadata.get("created_at"),
+            "url": f"/api/manual-image-generation/references/{relative}",
+        }
+
+    @staticmethod
+    def _manual_reference_category(value: object) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized in {"avatar", "scene"}:
+            return normalized
+        if normalized in {"place", "places", "location"}:
+            return "scene"
+        return "avatar"
 
     @staticmethod
     def _safe_relative_path(value: str) -> Path:
@@ -5749,6 +5864,14 @@ class ManualImagePromptHelperRequest(BaseModel):
     reference_image_provided: bool | None = False
 
 
+class ManualImageReferenceUploadRequest(BaseModel):
+    category: str = "avatar"
+    role: str | None = "reference"
+    name: str | None = None
+    filename: str | None = None
+    data_base64: str
+
+
 class ExecutionAuthorizeRequest(BaseModel):
     prompt_id: str
     task_family: str
@@ -6559,6 +6682,20 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             return state.manual_image_prompt_helper(payload=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/manual-image-generation/references")
+    def post_manual_image_generation_reference(payload: ManualImageReferenceUploadRequest):
+        try:
+            return state.upload_manual_image_reference(payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/manual-image-generation/references/{relative_path:path}")
+    def get_manual_image_generation_reference(relative_path: str):
+        try:
+            return state.manual_image_reference_response(relative_path=relative_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/manual-image-generation/outputs/{relative_path:path}")
     def get_manual_image_generation_output(relative_path: str):

@@ -946,6 +946,25 @@ export default function App() {
     }
   }
 
+  async function onUploadManualImageReference(payload) {
+    if (manualImageGenerationBusy) {
+      return null;
+    }
+    setManualImageGenerationBusy(true);
+    setError("");
+    try {
+      const result = await apiPost("/api/manual-image-generation/references", payload);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setManualImageGenerationBusy(false);
+    }
+  }
+
   async function onImproveManualImagePrompt(payload) {
     if (manualImagePromptHelperBusy) {
       return null;
@@ -1891,6 +1910,7 @@ export default function App() {
       apiBase: getApiBase(),
       onSubmit: onSubmitManualImageGeneration,
       onImprovePrompt: onImproveManualImagePrompt,
+      onUploadReference: onUploadManualImageReference,
       onDeleteOutput: onDeleteManualImageOutput,
       onRefresh: loadStatus,
     },
