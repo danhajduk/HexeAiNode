@@ -2598,6 +2598,63 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["latest_job"]["status"], "completed")
         self.assertEqual(payload["latest_job"]["progress"]["percent"], 100.0)
 
+    def test_manual_image_generation_marks_background_removal_rgb_fallback(self):
+        class _ManualImageServiceManager:
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "running"},
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"output_dir": "runtime/manual/comfyui-gpu/output"},
+                    },
+                }
+
+            def comfyui_webui_generation_status(self):
+                return {
+                    "runtime": "gpu",
+                    "session": {"queue_active": False, "running_count": 0, "pending_count": 0},
+                    "progress": {"available": False},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ManualImageServiceManager(),
+            )
+            state._write_manual_image_latest_job(
+                {
+                    "status": "running",
+                    "template_id": "template.avatar_identity_reference_transparent.realvisxl.v1",
+                    "prompt_id": "prompt-bg-oom",
+                    "submitted_at": "2026-06-09T12:00:00+00:00",
+                    "output_count_before": 0,
+                }
+            )
+            with patch.object(
+                state,
+                "_manual_image_outputs",
+                return_value=[
+                    {
+                        "relative_path": "hexe/avatar_identity_transparent/Jane_seed123_rgb_00001_.png",
+                        "filename": "Jane_seed123_rgb_00001_.png",
+                        "modified_at": "2026-06-09T12:00:05+00:00",
+                    }
+                ],
+            ):
+                payload = state.manual_image_generation_status()
+
+        latest_job = payload["latest_job"]
+        self.assertEqual(latest_job["status"], "completed_with_fallback")
+        self.assertEqual(latest_job["latest_output"]["filename"], "Jane_seed123_rgb_00001_.png")
+        self.assertEqual(latest_job["completed_output_count"], 1)
+        fallback = latest_job["background_removal_fallback"]
+        self.assertTrue(fallback["active"])
+        self.assertEqual(fallback["kind"], "background_removal_rgb_fallback")
+        self.assertEqual(fallback["latest_output"]["filename"], "Jane_seed123_rgb_00001_.png")
+
     def test_manual_image_generation_writes_lora_caption_sidecars(self):
         class _ManualImageServiceManager:
             def __init__(self, output_dir: str):

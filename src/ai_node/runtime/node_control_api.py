@@ -1823,7 +1823,27 @@ class NodeControlState:
             status = "queued"
         submitted_at = str(job.get("submitted_at") or "").strip()
         completed_outputs = [item for item in outputs if str(item.get("modified_at") or "") >= submitted_at]
-        if completed_outputs and (status == "submitted" or not queue_active):
+        transparent_background = self._manual_image_job_uses_transparent_background(job=job)
+        rgb_fallback_outputs = [
+            item for item in completed_outputs if self._manual_image_is_rgb_background_removal_fallback_output(output=item)
+        ]
+        transparent_outputs = [
+            item for item in completed_outputs if not self._manual_image_is_rgb_background_removal_fallback_output(output=item)
+        ]
+        job_inactive = status == "submitted" or not queue_active
+        bg_removal_fallback_active = bool(transparent_background and rgb_fallback_outputs and not transparent_outputs and job_inactive)
+        latest_output = transparent_outputs[0] if transparent_outputs else (completed_outputs[0] if completed_outputs else None)
+        fallback = None
+        if bg_removal_fallback_active:
+            status = "completed_with_fallback"
+            latest_output = rgb_fallback_outputs[0]
+            fallback = {
+                "active": True,
+                "kind": "background_removal_rgb_fallback",
+                "reason": "transparent_output_missing",
+                "latest_output": latest_output,
+            }
+        elif completed_outputs and job_inactive:
             status = "completed"
         lora_metadata = self._materialize_manual_lora_metadata(job=job, completed_outputs=completed_outputs)
         updated = {
@@ -1834,12 +1854,33 @@ class NodeControlState:
             "pending_count": int(session.get("pending_count") or 0),
             "progress": progress,
             "completed_output_count": len(completed_outputs),
-            "latest_output": completed_outputs[0] if completed_outputs else None,
+            "latest_output": latest_output,
+            "background_removal_fallback": fallback,
             "lora_metadata": lora_metadata,
         }
         if updated != job:
             self._write_manual_image_latest_job(updated)
         return updated
+
+    def _manual_image_job_uses_transparent_background(self, *, job: dict) -> bool:
+        template_id = str(job.get("template_id") or "").strip()
+        if not template_id:
+            metadata = job.get("lora_metadata") if isinstance(job.get("lora_metadata"), dict) else {}
+            template_id = str(metadata.get("template_id") or "").strip()
+        if not template_id:
+            return False
+        try:
+            template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
+            metadata = template.get("metadata") if isinstance(template.get("metadata"), dict) else {}
+            return bool(metadata.get("transparent_background"))
+        except Exception:
+            return "transparent" in template_id
+
+    @staticmethod
+    def _manual_image_is_rgb_background_removal_fallback_output(*, output: dict) -> bool:
+        filename = str(output.get("filename") or Path(str(output.get("relative_path") or "")).name).strip()
+        stem = Path(filename).stem
+        return stem.endswith("_rgb") or "_rgb_" in stem
 
     def _read_manual_image_latest_job(self) -> dict:
         try:

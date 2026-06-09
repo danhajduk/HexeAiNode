@@ -227,7 +227,8 @@ accept `input_image`, which must reference an image available to ComfyUI's selec
 identity-reference templates start sampling from a blend of the body reference latent and an empty latent. They expose
 face strength, body conditioning strength, body latent strength, and denoise controls: higher body conditioning follows
 the body reference in prompt conditioning, higher body latent starts closer to the body reference silhouette, and higher
-denoise follows prompt changes more aggressively.
+denoise follows prompt changes more aggressively. If local background removal fails after the RGB fallback has been
+saved, the latest manual job is reported as `completed_with_fallback` and points to the `_rgb` output.
 
 The node UI runtime section also exposes a manual image-generation card backed by `GET/POST /api/manual-image-generation`.
 It starts or reuses the manual ComfyUI session, lets operators choose a GPU ComfyUI template and adjust its exposed
