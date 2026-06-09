@@ -1649,6 +1649,102 @@ class NodeControlState:
             raise ValueError("manual_reference_not_found")
         return FileResponse(path)
 
+    def manual_image_vision_describe(self, *, payload: "ManualImageVisionDescribeRequest") -> dict:
+        services = self.service_status_payload().get("services", {})
+        vision_llm = services.get("vision_llm") if isinstance(services, dict) else {}
+        socket_path = str(vision_llm.get("socket_path") or "") if isinstance(vision_llm, dict) else ""
+        model_id = str(vision_llm.get("default_model_id") or VISION_LLM_BUILTIN_DEFAULT_MODEL_ID).strip()
+        state = str(vision_llm.get("state") or "").strip().lower() if isinstance(vision_llm, dict) else ""
+        if not socket_path or state not in {"running", "healthy"}:
+            residency = vision_llm.get("residency") if isinstance(vision_llm, dict) else {}
+            reason = str(residency.get("reason") or state or "vision_runtime_unavailable") if isinstance(residency, dict) else "vision_runtime_unavailable"
+            raise ValueError(f"vision_runtime_unavailable:{reason}")
+        image_bytes, mime_type, image_name = self._manual_vision_image_payload(payload=payload)
+        encoded = base64.b64encode(image_bytes).decode("ascii")
+        prompt = self._manual_vision_describe_prompt(mode=payload.mode, custom_prompt=payload.custom_prompt)
+        response = self._uds_json_request(
+            socket_path=socket_path,
+            method="POST",
+            path="/v1/chat/completions",
+            body={
+                "model": model_id,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{encoded}"}},
+                        ],
+                    }
+                ],
+                "temperature": 0.2,
+                "max_tokens": 450,
+                "stream": False,
+            },
+            host="vision-llm",
+            error_label="vision_describe_failed",
+        )
+        choices = response.get("choices") if isinstance(response.get("choices"), list) else []
+        content = ""
+        if choices and isinstance(choices[0], dict):
+            message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
+            content = str(message.get("content") or message.get("reasoning_content") or choices[0].get("text") or "").strip()
+        return {
+            "status": "ok",
+            "provider": "vision_llm",
+            "model_id": model_id,
+            "mode": str(payload.mode or "avatar"),
+            "image_name": image_name,
+            "description": content,
+        }
+
+    def _manual_vision_image_payload(self, *, payload: "ManualImageVisionDescribeRequest") -> tuple[bytes, str, str]:
+        if payload.reference_relative_path:
+            root = self._manual_image_reference_root()
+            safe_relative = self._safe_relative_path(payload.reference_relative_path)
+            path = (root / safe_relative).resolve()
+            if root not in path.parents and path != root:
+                raise ValueError("manual_reference_path_invalid")
+            if not path.exists() or not path.is_file():
+                raise ValueError("manual_reference_not_found")
+            return path.read_bytes(), self._image_mime_type(path.suffix), path.name
+        encoded = str(payload.image_data_base64 or "")
+        if "," in encoded and encoded.split(",", 1)[0].lower().startswith("data:"):
+            header, encoded = encoded.split(",", 1)
+            mime_type = header[5:].split(";", 1)[0] or self._image_mime_type(Path(str(payload.image_filename or "")).suffix)
+        else:
+            mime_type = self._image_mime_type(Path(str(payload.image_filename or "")).suffix)
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("invalid_vision_image_data") from exc
+        if not data:
+            raise ValueError("vision_image_empty")
+        if len(data) > 20 * 1024 * 1024:
+            raise ValueError("vision_image_too_large")
+        return data, mime_type, Path(str(payload.image_filename or "vision-reference.png")).name
+
+    @staticmethod
+    def _manual_vision_describe_prompt(*, mode: str, custom_prompt: str | None) -> str:
+        custom = str(custom_prompt or "").strip()
+        if custom:
+            return custom
+        normalized = str(mode or "").strip().lower()
+        if normalized in {"scene", "place", "location"}:
+            return "Describe this scene or place for an image-generation prompt. Include setting, objects, lighting, mood, camera angle, and useful style details. Be concise."
+        if normalized in {"face", "body", "avatar"}:
+            return "Describe this avatar for an image-generation prompt. Include face, hair, body/pose, clothing, visible style, scene context, and details useful for preserving identity. Be concise."
+        return "Describe this image for an image-generation prompt. Include subject, scene, lighting, composition, style, and important visual details. Be concise."
+
+    @staticmethod
+    def _image_mime_type(suffix: str) -> str:
+        normalized = str(suffix or "").lower()
+        if normalized in {".jpg", ".jpeg"}:
+            return "image/jpeg"
+        if normalized == ".webp":
+            return "image/webp"
+        return "image/png"
+
     @staticmethod
     def _parse_manual_image_prompt_helper_content(content: str) -> dict:
         text = str(content or "").strip()
@@ -5872,6 +5968,14 @@ class ManualImageReferenceUploadRequest(BaseModel):
     data_base64: str
 
 
+class ManualImageVisionDescribeRequest(BaseModel):
+    mode: str = "avatar"
+    custom_prompt: str | None = None
+    reference_relative_path: str | None = None
+    image_filename: str | None = None
+    image_data_base64: str | None = None
+
+
 class ExecutionAuthorizeRequest(BaseModel):
     prompt_id: str
     task_family: str
@@ -6696,6 +6800,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             return state.manual_image_reference_response(relative_path=relative_path)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/manual-image-generation/vision-describe")
+    def post_manual_image_generation_vision_describe(payload: ManualImageVisionDescribeRequest):
+        try:
+            return state.manual_image_vision_describe(payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/manual-image-generation/outputs/{relative_path:path}")
     def get_manual_image_generation_output(relative_path: str):

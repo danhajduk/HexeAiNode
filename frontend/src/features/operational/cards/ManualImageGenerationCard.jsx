@@ -100,11 +100,13 @@ export function ManualImageGenerationCard({
   payload = null,
   busy = false,
   promptHelperBusy = false,
+  visionBusy = false,
   result = null,
   apiBase = "",
   onSubmit,
   onImprovePrompt,
   onUploadReference,
+  onDescribeReference,
   onDeleteOutput,
   onRefresh,
 }) {
@@ -128,6 +130,9 @@ export function ManualImageGenerationCard({
   const [libraryRole, setLibraryRole] = useState("reference");
   const [libraryName, setLibraryName] = useState("");
   const [libraryFile, setLibraryFile] = useState(null);
+  const [visionMode, setVisionMode] = useState("avatar");
+  const [visionPrompt, setVisionPrompt] = useState("");
+  const [visionDescription, setVisionDescription] = useState("");
   const outputs = asArray(payload?.outputs);
   const references = asArray(payload?.references);
   const service = payload?.service || {};
@@ -300,6 +305,25 @@ export function ManualImageGenerationCard({
     }
   }
 
+  async function describeReference(reference) {
+    const result = await onDescribeReference?.({
+      mode: visionMode,
+      custom_prompt: visionPrompt,
+      reference_relative_path: reference.relative_path,
+    });
+    if (result?.description) {
+      setVisionDescription(String(result.description));
+    }
+  }
+
+  function insertVisionDescription() {
+    const description = visionDescription.trim();
+    if (!description) {
+      return;
+    }
+    setPrompt((current) => (current.trim() ? `${current.trim()}\n${description}` : description));
+  }
+
   async function handleImprovePrompt() {
     if (helperDisabled) {
       return;
@@ -432,6 +456,33 @@ export function ManualImageGenerationCard({
           {faceReference ? <code>{`Face: ${faceReference.name || faceReference.filename}`}</code> : null}
           {bodyReference ? <code>{`Body: ${bodyReference.name || bodyReference.filename}`}</code> : null}
         </div>
+        <div className="form-grid two-column-form-grid">
+          <label>
+            Vision Mode
+            <select value={visionMode} onChange={(event) => setVisionMode(event.target.value)}>
+              <option value="avatar">Avatar</option>
+              <option value="scene">Scene / Place</option>
+              <option value="image">Image</option>
+            </select>
+          </label>
+          <label>
+            Vision Prompt
+            <input type="text" value={visionPrompt} onChange={(event) => setVisionPrompt(event.target.value)} />
+          </label>
+        </div>
+        {visionDescription ? (
+          <div className="setup-form">
+            <label>
+              Vision Description
+              <textarea rows={3} value={visionDescription} onChange={(event) => setVisionDescription(event.target.value)} />
+            </label>
+            <div className="row">
+              <button className="btn" type="button" onClick={insertVisionDescription}>
+                Insert Description
+              </button>
+            </div>
+          </div>
+        ) : null}
         {references.length ? (
           <div className="image-output-grid">
             {references.slice(0, 8).map((reference) => (
@@ -445,6 +496,9 @@ export function ManualImageGenerationCard({
                   </button>
                   <button className="btn" type="button" onClick={() => useReference(reference, "body")} disabled={busy}>
                     Body
+                  </button>
+                  <button className="btn" type="button" onClick={() => describeReference(reference)} disabled={visionBusy}>
+                    {visionBusy ? "Describing..." : "Describe"}
                   </button>
                 </div>
                 <a href={`${apiBase}${reference.url}`} target="_blank" rel="noreferrer">

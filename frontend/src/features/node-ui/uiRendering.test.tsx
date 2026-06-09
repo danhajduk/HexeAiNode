@@ -315,6 +315,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("25.0%");
     expect(markup).toContain("Reference Image");
     expect(markup).toContain("Upload Reference");
+    expect(markup).toContain("Vision Mode");
+    expect(markup).toContain("Describe");
     expect(markup).toContain("Jane");
     expect(markup).toContain("Draft / Improve Prompt");
     expect(markup).toContain("Delete");

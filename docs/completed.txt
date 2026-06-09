@@ -561,3 +561,4 @@ Task 986: Surface image generation template registration in docs and node UI - C
 Task 987: Fix manual image generation progress reporting - Completed on 06/09/2026 10:57
 Task 988: Add avatar and scene reference image libraries to manual image generation - Completed on 06/09/2026 11:00
 Task 989: Use avatar reference images in avatar generation templates when supported by ComfyUI - Completed on 06/09/2026 11:03
+Task 990: Add local vision description helper for uploaded avatar and scene images - Completed on 06/09/2026 11:06

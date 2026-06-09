@@ -21,6 +21,7 @@ from ai_node.runtime.node_control_api import (
     ManualImageGenerationRequest,
     ManualImagePromptHelperRequest,
     ManualImageReferenceUploadRequest,
+    ManualImageVisionDescribeRequest,
     NodeControlState,
 )
 from ai_node.runtime.execution_queue import ExecutionQueueService
@@ -2765,6 +2766,53 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reference["name"], "Jane Doe")
         self.assertTrue(reference["input_image"].startswith("references/avatar/Jane_Doe_face_"))
         self.assertEqual(status["references"][0]["input_image"], reference["input_image"])
+
+    def test_manual_image_vision_describe_uses_local_vision_socket(self):
+        class _VisionServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "vision_llm": {
+                        "state": "running",
+                        "socket_path": "/tmp/vision.sock",
+                        "default_model_id": "qwen2.5-vl-3b-instruct-q4_k_m",
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            reference_dir = input_dir / "references" / "avatar"
+            reference_dir.mkdir(parents=True)
+            reference_path = reference_dir / "jane.png"
+            reference_path.write_bytes(b"png-data")
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_VisionServiceManager(str(input_dir)),
+            )
+            llm_response = {"choices": [{"message": {"content": "avatar with red hair in a studio scene"}}]}
+            with patch.object(state, "_uds_json_request", return_value=llm_response) as request:
+                result = state.manual_image_vision_describe(
+                    payload=ManualImageVisionDescribeRequest(
+                        mode="avatar",
+                        reference_relative_path="avatar/jane.png",
+                    )
+                )
+
+        self.assertEqual(result["provider"], "vision_llm")
+        self.assertIn("red hair", result["description"])
+        request.assert_called_once()
+        body = request.call_args.kwargs["body"]
+        self.assertEqual(request.call_args.kwargs["socket_path"], "/tmp/vision.sock")
+        self.assertEqual(body["messages"][0]["content"][1]["type"], "image_url")
 
     def test_delete_manual_image_output_stays_inside_manual_output_dir(self):
         with tempfile.TemporaryDirectory() as tmp:
