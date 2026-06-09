@@ -122,6 +122,8 @@ export function ManualImageGenerationCard({
   const [templateVariables, setTemplateVariables] = useState({});
   const [referenceFile, setReferenceFile] = useState(null);
   const [selectedReference, setSelectedReference] = useState(null);
+  const [faceReference, setFaceReference] = useState(null);
+  const [bodyReference, setBodyReference] = useState(null);
   const [libraryCategory, setLibraryCategory] = useState("avatar");
   const [libraryRole, setLibraryRole] = useState("reference");
   const [libraryName, setLibraryName] = useState("");
@@ -171,7 +173,22 @@ export function ManualImageGenerationCard({
       : templateForMode(templates, effectiveMode) || selectedTemplate;
   const adjustableVariables = asArray(selectedTemplate?.variables).filter((variable) => {
     const name = String(variable?.name || "").trim();
-    return name && !["positive_prompt", "negative_prompt", "input_image", "width", "height", "seed", "steps", "cfg", "denoise"].includes(name);
+    return (
+      name &&
+      ![
+        "positive_prompt",
+        "negative_prompt",
+        "input_image",
+        "face_reference_image",
+        "body_reference_image",
+        "width",
+        "height",
+        "seed",
+        "steps",
+        "cfg",
+        "denoise",
+      ].includes(name)
+    );
   });
   const canSubmit = Boolean(prompt.trim()) && !busy;
   const helperDisabled = busy || promptHelperBusy;
@@ -209,6 +226,11 @@ export function ManualImageGenerationCard({
   async function handleSubmit(event) {
     event.preventDefault();
     const referenceData = referenceFile ? await fileToDataUrl(referenceFile) : "";
+    const referenceVariables = {
+      ...templateVariables,
+      face_reference_image: faceReference?.input_image || templateVariables.face_reference_image || "",
+      body_reference_image: bodyReference?.input_image || templateVariables.body_reference_image || "",
+    };
     onSubmit?.({
       template_id: effectiveTemplate?.template_id || null,
       mode: effectiveMode,
@@ -223,7 +245,7 @@ export function ManualImageGenerationCard({
       input_image: referenceFile ? null : selectedReference?.input_image || null,
       reference_image_filename: referenceFile?.name || null,
       reference_image_data_base64: referenceData || null,
-      template_variables: templateVariables,
+      template_variables: referenceVariables,
     });
   }
 
@@ -262,13 +284,19 @@ export function ManualImageGenerationCard({
     setLibraryFile(null);
   }
 
-  function useReference(reference) {
-    setSelectedReference(reference);
-    setReferenceFile(null);
-    setMode("img2img");
-    const img2imgTemplate = templateForMode(templates, "img2img");
-    if (img2imgTemplate?.template_id && templateMode(selectedTemplate) !== "img2img") {
-      setSelectedTemplateId(img2imgTemplate.template_id);
+  function useReference(reference, slot = "source") {
+    if (slot === "face") {
+      setFaceReference(reference);
+    } else if (slot === "body") {
+      setBodyReference(reference);
+    } else {
+      setSelectedReference(reference);
+      setReferenceFile(null);
+      setMode("img2img");
+      const img2imgTemplate = templateForMode(templates, "img2img");
+      if (img2imgTemplate?.template_id && templateMode(selectedTemplate) !== "img2img") {
+        setSelectedTemplateId(img2imgTemplate.template_id);
+      }
     }
   }
 
@@ -401,14 +429,24 @@ export function ManualImageGenerationCard({
             Upload Reference
           </button>
           {selectedReference ? <code>{selectedReference.name || selectedReference.filename}</code> : null}
+          {faceReference ? <code>{`Face: ${faceReference.name || faceReference.filename}`}</code> : null}
+          {bodyReference ? <code>{`Body: ${bodyReference.name || bodyReference.filename}`}</code> : null}
         </div>
         {references.length ? (
           <div className="image-output-grid">
             {references.slice(0, 8).map((reference) => (
               <div className="image-output-tile" key={reference.relative_path}>
-                <button className="btn" type="button" onClick={() => useReference(reference)} disabled={busy}>
-                  Use
-                </button>
+                <div className="row">
+                  <button className="btn" type="button" onClick={() => useReference(reference, "source")} disabled={busy}>
+                    Source
+                  </button>
+                  <button className="btn" type="button" onClick={() => useReference(reference, "face")} disabled={busy}>
+                    Face
+                  </button>
+                  <button className="btn" type="button" onClick={() => useReference(reference, "body")} disabled={busy}>
+                    Body
+                  </button>
+                </div>
                 <a href={`${apiBase}${reference.url}`} target="_blank" rel="noreferrer">
                   <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
                   <span>{reference.name || reference.filename}</span>

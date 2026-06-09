@@ -2640,6 +2640,39 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["8"]["inputs"]["denoise"], 0.85)
         self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar/Jane_Doe_1_seed12345")
 
+    def test_manual_avatar_reference_template_uses_face_and_body_references(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            template = state.get_comfyui_template_catalog_entry(template_id="template.avatar_reference.realvisxl.v1")["template"]
+
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id="template.avatar_reference.realvisxl.v1",
+                    mode="img2img",
+                    prompt="avatar in a cinematic noir alley",
+                    seed=777,
+                    template_variables={
+                        "avatar_name": "Jane",
+                        "face_reference_image": "references/avatar/jane_face.png",
+                        "body_reference_image": "references/avatar/jane_body.png",
+                    },
+                ),
+                input_image="references/avatar/jane_source.png",
+            )
+
+        self.assertEqual(workflow["11"]["inputs"]["image"], "references/avatar/jane_face.png")
+        self.assertEqual(workflow["15"]["inputs"]["image"], "references/avatar/jane_body.png")
+        self.assertEqual(workflow["14"]["class_type"], "ReferenceLatent")
+        self.assertEqual(workflow["18"]["inputs"]["conditioning"], ["14", 0])
+        self.assertEqual(workflow["8"]["inputs"]["positive"], ["18", 0])
+        self.assertEqual(workflow["10"]["inputs"]["filename_prefix"], "hexe/avatar_refs/Jane_seed777")
+
     def test_manual_image_prompt_helper_uses_local_llm_socket(self):
         class _PromptHelperServiceManager:
             def get_status(self):
