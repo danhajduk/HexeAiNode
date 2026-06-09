@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import binascii
 import json
 import os
 import socket
@@ -11,6 +13,7 @@ from threading import Lock
 
 from fastapi import FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 
 from ai_node.config.bootstrap_config import BOOTSTRAP_PORT, BOOTSTRAP_TOPIC, create_bootstrap_config
@@ -1414,6 +1417,188 @@ class NodeControlState:
             if isinstance(entry, dict) and str(entry.get("template_id") or "").strip() == normalized_id:
                 return {"configured": catalog.get("configured"), "template": entry}
         raise ValueError("comfyui_template_not_found")
+
+    def manual_image_generation_status(self) -> dict:
+        services = self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
+        catalog = self.comfyui_template_catalog_payload()
+        templates = [
+            item
+            for item in list(catalog.get("templates") or [])
+            if isinstance(item, dict)
+            and str(item.get("template_id") or "") in {"template.txt2img.realvisxl.v1", "template.img2img.realvisxl.v1"}
+        ]
+        return {
+            "configured": True,
+            "service": webui,
+            "manual_paths": manual_paths if isinstance(manual_paths, dict) else {},
+            "templates": templates,
+            "outputs": self._manual_image_outputs(limit=24),
+        }
+
+    async def submit_manual_image_generation(self, *, payload: "ManualImageGenerationRequest") -> dict:
+        service = await self.start_service(target="comfyui_webui")
+        services = service.get("services") if isinstance(service.get("services"), dict) else self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
+        socket_path = str(webui.get("socket_path") or "") if isinstance(webui, dict) else ""
+        if not socket_path:
+            raise ValueError("manual_comfyui_socket_unavailable")
+
+        mode = str(payload.mode or "txt2img").strip().lower()
+        if mode not in {"txt2img", "img2img"}:
+            raise ValueError("invalid_manual_image_generation_mode")
+        input_image = str(payload.input_image or "").strip()
+        if payload.reference_image_data_base64:
+            input_image = self._save_manual_reference_image(
+                manual_paths=manual_paths if isinstance(manual_paths, dict) else {},
+                filename=payload.reference_image_filename,
+                data_base64=payload.reference_image_data_base64,
+            )
+        template_id = "template.img2img.realvisxl.v1" if mode == "img2img" else "template.txt2img.realvisxl.v1"
+        template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
+        workflow = self._manual_image_workflow_from_template(template=template, payload=payload, input_image=input_image)
+        response = self._uds_json_request(
+            socket_path=socket_path,
+            method="POST",
+            path="/prompt",
+            body={"client_id": "hexe-node-manual-image-ui", "prompt": workflow},
+        )
+        return {
+            "status": "submitted",
+            "mode": mode,
+            "template_id": template_id,
+            "prompt_id": response.get("prompt_id"),
+            "number": response.get("number"),
+            "node_errors": response.get("node_errors") or {},
+            "input_image": input_image or None,
+            "manual_paths": manual_paths,
+            "outputs": self._manual_image_outputs(limit=24),
+        }
+
+    def manual_image_output_response(self, *, relative_path: str) -> FileResponse:
+        output_dir = self._manual_image_output_dir()
+        safe_relative = self._safe_relative_path(relative_path)
+        path = (output_dir / safe_relative).resolve()
+        if output_dir not in path.parents and path != output_dir:
+            raise ValueError("manual_output_path_invalid")
+        if not path.exists() or not path.is_file():
+            raise ValueError("manual_output_not_found")
+        return FileResponse(path)
+
+    def _manual_image_workflow_from_template(self, *, template: dict, payload: "ManualImageGenerationRequest", input_image: str) -> dict:
+        variables = {item["name"]: item for item in list(template.get("variables") or []) if isinstance(item, dict) and item.get("name")}
+        values = dict(template.get("defaults") or {})
+        values.update(
+            {
+                "positive_prompt": str(payload.prompt or "").strip(),
+                "negative_prompt": str(payload.negative_prompt or values.get("negative_prompt") or "").strip(),
+                "width": int(payload.width or values.get("width") or 1024),
+                "height": int(payload.height or values.get("height") or 1024),
+                "seed": int(payload.seed) if payload.seed is not None else values.get("seed"),
+                "steps": int(payload.steps or values.get("steps") or 4),
+                "cfg": float(payload.cfg if payload.cfg is not None else values.get("cfg") or 1.6),
+                "denoise": float(payload.denoise if payload.denoise is not None else values.get("denoise") or 0.55),
+            }
+        )
+        if "input_image" in variables:
+            values["input_image"] = input_image
+        for name, variable in variables.items():
+            if bool(variable.get("required")) and values.get(name) in (None, ""):
+                raise ValueError(f"manual_image_variable_required:{name}")
+        api_workflow = json.loads(Path(str(template.get("api_workflow_path") or "")).read_text(encoding="utf-8"))
+        return self._substitute_template_placeholders(api_workflow, variables=values)
+
+    def _manual_image_output_dir(self) -> Path:
+        services = self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
+        output_dir = str(manual_paths.get("output_dir") or "runtime/manual/comfyui-gpu/output") if isinstance(manual_paths, dict) else "runtime/manual/comfyui-gpu/output"
+        return Path(output_dir).resolve()
+
+    def _manual_image_outputs(self, *, limit: int) -> list[dict]:
+        output_dir = self._manual_image_output_dir()
+        if not output_dir.exists():
+            return []
+        allowed_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
+        files = [path for path in output_dir.rglob("*") if path.is_file() and path.suffix.lower() in allowed_suffixes]
+        files.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+        outputs = []
+        for path in files[: max(int(limit), 1)]:
+            stat = path.stat()
+            relative = path.relative_to(output_dir).as_posix()
+            outputs.append(
+                {
+                    "relative_path": relative,
+                    "filename": path.name,
+                    "size_bytes": stat.st_size,
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+                    "url": f"/api/manual-image-generation/outputs/{relative}",
+                }
+            )
+        return outputs
+
+    @staticmethod
+    def _safe_relative_path(value: str) -> Path:
+        text = str(value or "").replace("\\", "/").strip().lstrip("/")
+        candidate = Path(text)
+        if not text or candidate.is_absolute() or ".." in candidate.parts:
+            raise ValueError("invalid_relative_path")
+        return candidate
+
+    def _save_manual_reference_image(self, *, manual_paths: dict, filename: str | None, data_base64: str) -> str:
+        input_dir = Path(str(manual_paths.get("input_dir") or "runtime/manual/comfyui-gpu/input")).resolve()
+        input_dir.mkdir(parents=True, exist_ok=True)
+        raw_name = Path(str(filename or "reference.png")).name
+        suffix = Path(raw_name).suffix.lower()
+        if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+            suffix = ".png"
+        safe_stem = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in Path(raw_name).stem).strip("_") or "reference"
+        target_name = f"{safe_stem}_{int(time.time())}{suffix}"
+        target_path = input_dir / target_name
+        encoded = str(data_base64 or "")
+        if "," in encoded and encoded.split(",", 1)[0].lower().startswith("data:"):
+            encoded = encoded.split(",", 1)[1]
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("invalid_reference_image_data") from exc
+        if not data:
+            raise ValueError("reference_image_empty")
+        if len(data) > 20 * 1024 * 1024:
+            raise ValueError("reference_image_too_large")
+        target_path.write_bytes(data)
+        return target_name
+
+    @staticmethod
+    def _uds_json_request(*, socket_path: str, method: str, path: str, body: dict | None = None) -> dict:
+        payload = json.dumps(body or {}).encode("utf-8") if body is not None else b""
+        headers = [
+            f"{method.upper()} {path} HTTP/1.1",
+            "Host: comfyui",
+            "Connection: close",
+        ]
+        if body is not None:
+            headers.extend(["Content-Type: application/json", f"Content-Length: {len(payload)}"])
+        request = ("\r\n".join(headers) + "\r\n\r\n").encode("utf-8") + payload
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(10)
+            client.connect(socket_path)
+            client.sendall(request)
+            chunks: list[bytes] = []
+            while True:
+                chunk = client.recv(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+        raw = b"".join(chunks)
+        head, _, response_body = raw.partition(b"\r\n\r\n")
+        status_line = head.decode("utf-8", errors="replace").splitlines()[0] if head else ""
+        if " 2" not in status_line:
+            raise ValueError("comfyui_request_failed")
+        parsed = json.loads(response_body.decode("utf-8")) if response_body else {}
+        return parsed if isinstance(parsed, dict) else {}
 
     def register_image_generation_template(
         self,
@@ -5289,6 +5474,21 @@ class ImageGenerationTemplateReviewRequest(BaseModel):
     state: str | None = "active"
 
 
+class ManualImageGenerationRequest(BaseModel):
+    mode: str = "txt2img"
+    prompt: str
+    negative_prompt: str | None = None
+    width: int | None = 1024
+    height: int | None = 1024
+    seed: int | None = None
+    steps: int | None = 4
+    cfg: float | None = 1.6
+    denoise: float | None = 0.55
+    input_image: str | None = None
+    reference_image_filename: str | None = None
+    reference_image_data_base64: str | None = None
+
+
 class ExecutionAuthorizeRequest(BaseModel):
     prompt_id: str
     task_family: str
@@ -6081,6 +6281,24 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         if payload.get("status") == "not_found":
             raise HTTPException(status_code=404, detail=payload)
         return payload
+
+    @app.get("/api/manual-image-generation")
+    def get_manual_image_generation():
+        return state.manual_image_generation_status()
+
+    @app.post("/api/manual-image-generation")
+    async def post_manual_image_generation(payload: ManualImageGenerationRequest):
+        try:
+            return await state.submit_manual_image_generation(payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/manual-image-generation/outputs/{relative_path:path}")
+    def get_manual_image_generation_output(relative_path: str):
+        try:
+            return state.manual_image_output_response(relative_path=relative_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/api/execution/compare")
     async def post_execution_compare(payload: ExecutionCompareRequest):

@@ -221,6 +221,10 @@ The default ComfyUI template catalog includes `template.txt2img.realvisxl.v1` fo
 `template.img2img.realvisxl.v1` for prompt plus input image generation. The img2img template accepts `input_image`,
 which must reference an image available to ComfyUI's selected runtime input folder.
 
+The node UI runtime section also exposes a manual image-generation card backed by `GET/POST /api/manual-image-generation`.
+It starts or reuses the manual ComfyUI session, submits txt2img or img2img workflows, stores reference images in the
+manual input folder, and lists recent files from the manual output folder through node API output URLs.
+
 On the RTX 3060 12 GB node, ComfyUI should be treated as exclusive GPU work for real generation. With both llama.cpp
 runtimes loaded, only about 2.5 GB VRAM remains, which is not enough for typical SDXL, FLUX, or Stable Diffusion 3.5
 workflows. Stop `hexe-ai-node-llamacpp-vision` before lightweight generation, and stop both llama.cpp containers before

@@ -182,6 +182,9 @@ export default function App() {
   const [promptServicesPayload, setPromptServicesPayload] = useState(null);
   const [imageTemplatePayload, setImageTemplatePayload] = useState(null);
   const [comfyuiTemplateCatalogPayload, setComfyuiTemplateCatalogPayload] = useState(null);
+  const [manualImageGenerationPayload, setManualImageGenerationPayload] = useState(null);
+  const [manualImageGenerationBusy, setManualImageGenerationBusy] = useState(false);
+  const [manualImageGenerationResult, setManualImageGenerationResult] = useState(null);
   const [runningAdminAction, setRunningAdminAction] = useState("");
   const [adminActionState, setAdminActionState] = useState("");
   const [uiState, setUiState] = useState(() =>
@@ -215,6 +218,7 @@ export default function App() {
       promptServicesResult,
       imageTemplatesResult,
       comfyuiTemplatesResult,
+      manualImageGenerationStatusResult,
       capabilityDiagnosticsResult,
     ] = await Promise.allSettled([
       apiGet("/api/node/status"),
@@ -235,6 +239,7 @@ export default function App() {
       apiGet("/api/prompts/services"),
       apiGet("/api/image-templates"),
       apiGet("/api/comfyui/templates"),
+      apiGet("/api/manual-image-generation"),
       apiAdminGet("/api/capabilities/diagnostics"),
     ]);
 
@@ -276,6 +281,8 @@ export default function App() {
     const promptServicesPayload = promptServicesResult.status === "fulfilled" ? promptServicesResult.value : null;
     const imageTemplatesPayload = imageTemplatesResult.status === "fulfilled" ? imageTemplatesResult.value : null;
     const comfyuiTemplatesPayload = comfyuiTemplatesResult.status === "fulfilled" ? comfyuiTemplatesResult.value : null;
+    const manualImageGenerationPayload =
+      manualImageGenerationStatusResult.status === "fulfilled" ? manualImageGenerationStatusResult.value : null;
     const capabilityDiagnosticsPayload = capabilityDiagnosticsResult.status === "fulfilled" ? capabilityDiagnosticsResult.value : null;
     const partialFailures = [];
     if (governanceResult.status !== "fulfilled") {
@@ -329,6 +336,9 @@ export default function App() {
     if (comfyuiTemplatesResult.status !== "fulfilled") {
       partialFailures.push("comfyui_template_catalog_unavailable");
     }
+    if (manualImageGenerationStatusResult.status !== "fulfilled") {
+      partialFailures.push("manual_image_generation_unavailable");
+    }
     setBackendStatus(payload.status || "unknown");
     setPendingApprovalUrl(payload.pending_approval_url || "");
     setNodeId(payload.node_id || "");
@@ -355,6 +365,7 @@ export default function App() {
     setPromptServicesPayload(promptServicesPayload);
     setImageTemplatePayload(imageTemplatesPayload);
     setComfyuiTemplateCatalogPayload(comfyuiTemplatesPayload);
+    setManualImageGenerationPayload(manualImageGenerationPayload);
     setGovernanceStatusPayload(governancePayload);
     setBudgetStatePayload(budgetPayload);
     setProviderBudgetSummaries(summarizeProviderBudgets({ providerConfig: providerPayload, budgetState: budgetPayload }));
@@ -894,6 +905,25 @@ export default function App() {
 
   async function onRestartService(target) {
     await onControlService("restart", target);
+  }
+
+  async function onSubmitManualImageGeneration(payload) {
+    if (manualImageGenerationBusy) {
+      return;
+    }
+    setManualImageGenerationBusy(true);
+    setManualImageGenerationResult(null);
+    setError("");
+    try {
+      const result = await apiPost("/api/manual-image-generation", payload);
+      setManualImageGenerationResult(result);
+      await loadStatus();
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+    } finally {
+      setManualImageGenerationBusy(false);
+    }
   }
 
   async function onDeclareCapabilities() {
@@ -1814,6 +1844,14 @@ export default function App() {
       imageTemplatePayload,
       comfyuiTemplateCatalogPayload,
       promptServicesPayload,
+    },
+    manualImageGenerationProps: {
+      payload: manualImageGenerationPayload,
+      busy: manualImageGenerationBusy,
+      result: manualImageGenerationResult,
+      apiBase: getApiBase(),
+      onSubmit: onSubmitManualImageGeneration,
+      onRefresh: loadStatus,
     },
     operationalActions,
     activityItems: recentActivityItems,
