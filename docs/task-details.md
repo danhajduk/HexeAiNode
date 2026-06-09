@@ -1216,3 +1216,20 @@ Implementation notes:
 - Add a scene/place template or template variant that applies a prompt using selected scene/place references where supported.
 - Add local vision scene/place description prompts.
 - Keep scene/place reference files separate from avatar references and normal operation outputs.
+
+## Task 992
+Original task details:
+- Implement the local text-to-pose helper discussed for manual avatar generation.
+- The helper should support the remaining avatar body-depth transparent ComfyUI template.
+- It should not restart or load the vision runtime while manual ComfyUI Web UI/session is active.
+
+Implementation notes:
+- Add a local helper endpoint that accepts a natural-language pose description and returns a normalized pose plan/schema.
+- Prefer local-only processing. Use the local text LLM for pose parsing/help where useful; do not use cloud or vision unless a privacy policy explicitly allows it.
+- Normalize pose fields such as body angle, camera/framing, head turn, gaze, shoulder/hip orientation, arm and hand placement, leg stance, weight distribution, and full-body framing requirements.
+- Render or export a reusable pose/reference guide that can be used by the active body-depth workflow as `body_reference_image` or stored in the manual reference library.
+- Surface the helper in the Manual Image Generation UI near avatar references, with a pose text field, generated pose summary/preview, and a way to apply the generated guide to the depth template.
+- Keep outputs in the manual runtime/reference folders, separate from normal operation generation outputs.
+- Preserve the current GPU residency behavior: ComfyUI manual mode and vision remain mutually exclusive, and the text helper must not trigger vision startup.
+- Add tests for pose parsing, local/privacy routing, reference-file creation, UI payload shape, and integration with the active depth template.
+- Update local runtime/manual image generation docs with the helper behavior and limitations.
