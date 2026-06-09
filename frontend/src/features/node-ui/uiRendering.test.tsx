@@ -298,6 +298,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("1 running / 2 pending");
     expect(markup).toContain("25.0%");
     expect(markup).toContain("Reference Image");
+    expect(markup).toContain('step="8"');
     expect(markup).not.toContain("Runtime Health");
   });
 

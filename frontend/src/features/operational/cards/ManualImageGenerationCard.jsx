@@ -239,11 +239,11 @@ export function ManualImageGenerationCard({
         <div className="form-grid">
           <label>
             Width
-            <input type="number" min="256" step="64" value={width} onChange={(event) => setWidth(event.target.value)} />
+            <input type="number" min="256" step="8" value={width} onChange={(event) => setWidth(event.target.value)} />
           </label>
           <label>
             Height
-            <input type="number" min="256" step="64" value={height} onChange={(event) => setHeight(event.target.value)} />
+            <input type="number" min="256" step="8" value={height} onChange={(event) => setHeight(event.target.value)} />
           </label>
           <label>
             Seed
