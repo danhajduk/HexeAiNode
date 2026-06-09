@@ -18,6 +18,7 @@ from ai_node.runtime.node_control_api import (
     NodeControlState,
     create_node_control_app,
 )
+from ai_node.persistence.image_generation_template_store import ImageGenerationTemplateStateStore
 from ai_node.runtime.execution_queue import ExecutionQueueService
 
 
@@ -572,6 +573,76 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual([item["provider"] for item in payload["results"]], ["openai", "local"])
             self.assertNotIn("winner", payload)
             self.assertNotIn("scores", payload)
+
+    def test_image_generation_template_registration_endpoints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                image_generation_template_state_store=ImageGenerationTemplateStateStore(
+                    path=str(Path(tmp) / "image_generation_template_state.json"),
+                    logger=logging.getLogger("node-control-fastapi-test"),
+                ),
+                service_manager=self._FakeServiceManager(),
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            register_response = client.post(
+                "/api/image-templates",
+                json={
+                    "template_id": "template.weather.v1",
+                    "service_id": "weather-node",
+                    "template_name": "Weather Image",
+                    "version": "v1",
+                    "template_version": {
+                        "runtime_id": "comfyui_gpu",
+                        "api_workflow_path": "runtime/templates/weather/api.json",
+                        "ui_workflow_path": "runtime/templates/weather/ui.json",
+                        "variables": ["forecast", "style"],
+                        "defaults": {"style": "editorial"},
+                    },
+                    "metadata": {"owner": "ops"},
+                },
+            )
+
+            self.assertEqual(register_response.status_code, 200)
+            self.assertEqual(register_response.json()["summary"]["template_count"], 1)
+            template = register_response.json()["state"]["templates"][0]
+            self.assertEqual(template["current_version"], "v1")
+            self.assertEqual(template["versions"][0]["runtime_id"], "comfyui_gpu")
+
+            update_response = client.put(
+                "/api/image-templates/template.weather.v1",
+                json={
+                    "template_version": {
+                        "version": "v2",
+                        "runtime_id": "comfyui_cpu",
+                        "api_workflow_path": "runtime/templates/weather/api-v2.json",
+                    }
+                },
+            )
+            self.assertEqual(update_response.status_code, 200)
+            self.assertEqual(update_response.json()["state"]["templates"][0]["current_version"], "v2")
+
+            lifecycle_response = client.post(
+                "/api/image-templates/template.weather.v1/lifecycle",
+                json={"state": "review_due", "reason": "model_changed"},
+            )
+            self.assertEqual(lifecycle_response.status_code, 200)
+            self.assertEqual(lifecycle_response.json()["state"]["templates"][0]["status"], "review_due")
+
+            review_response = client.post(
+                "/api/image-templates/template.weather.v1/review",
+                json={"reviewed_by": "ops", "review_reason": "approved"},
+            )
+            self.assertEqual(review_response.status_code, 200)
+            self.assertEqual(review_response.json()["state"]["templates"][0]["status"], "active")
+
+            detail_response = client.get("/api/image-templates/template.weather.v1")
+            self.assertEqual(detail_response.status_code, 200)
+            self.assertEqual(detail_response.json()["template"]["reviewed_by"], "ops")
 
     def test_provider_models_by_task_endpoint_returns_matching_models(self):
         class _CapabilityMappedRuntimeManager(self._FakeProviderRuntimeManager):

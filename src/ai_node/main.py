@@ -32,6 +32,7 @@ from ai_node.persistence.capability_state_store import CapabilityStateStore
 from ai_node.persistence.governance_state_store import GovernanceStateStore
 from ai_node.persistence.phase2_state_store import Phase2StateStore
 from ai_node.persistence.prompt_service_state_store import PromptServiceStateStore
+from ai_node.persistence.image_generation_template_store import ImageGenerationTemplateStateStore
 from ai_node.persistence.budget_state_store import BudgetStateStore
 from ai_node.persistence.internal_scheduler_state_store import InternalSchedulerStateStore
 from ai_node.persistence.client_usage_store import (
@@ -235,6 +236,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to persisted prompt/service registration and probation state",
     )
     parser.add_argument(
+        "--image-generation-template-state-path",
+        default=os.environ.get("HEXE_IMAGE_GENERATION_TEMPLATE_STATE_PATH", ".run/image_generation_template_state.json"),
+        help="Path to persisted image generation template registration state",
+    )
+    parser.add_argument(
         "--budget-state-path",
         default=os.environ.get("HEXE_BUDGET_STATE_PATH", ".run/budget_state.json"),
         help="Path to persisted budget policy, grant usage, and reservation state",
@@ -353,6 +359,7 @@ def run(
     phase2_state_path: str = ".run/phase2_state.json",
     provider_capability_report_path: str = ".run/provider_capability_report.json",
     prompt_service_state_path: str = ".run/prompt_service_state.json",
+    image_generation_template_state_path: str = ".run/image_generation_template_state.json",
     budget_state_path: str = ".run/budget_state.json",
     client_usage_db_path: str = ".run/client_usage.db",
     provider_capability_refresh_interval_seconds: int = 14400,
@@ -443,6 +450,10 @@ def run(
         pricing_stale_tolerance_seconds=openai_pricing_stale_tolerance_seconds,
     )
     prompt_service_state_store = PromptServiceStateStore(path=prompt_service_state_path, logger=LOGGER)
+    image_generation_template_state_store = ImageGenerationTemplateStateStore(
+        path=image_generation_template_state_path,
+        logger=LOGGER,
+    )
     needs_usage_seed = (
         not client_usage_store.has_usage_data()
         and client_usage_store.get_metadata(key="historical_seed_completed") != "1"
@@ -693,6 +704,7 @@ def run(
         trust_state_store=trust_state_store,
         governance_state_store=governance_state_store,
         prompt_service_state_store=prompt_service_state_store,
+        image_generation_template_state_store=image_generation_template_state_store,
         budget_state_store=budget_state_store,
         client_usage_store=client_usage_store,
         trust_status_client=trust_status_client,
@@ -765,6 +777,7 @@ def main() -> int:
         phase2_state_path=args.phase2_state_path,
         provider_capability_report_path=args.provider_capability_report_path,
         prompt_service_state_path=args.prompt_service_state_path,
+        image_generation_template_state_path=args.image_generation_template_state_path,
         budget_state_path=args.budget_state_path,
         client_usage_db_path=os.environ.get("HEXE_CLIENT_USAGE_DB_PATH", ".run/client_usage.db"),
         provider_capability_refresh_interval_seconds=args.provider_capability_refresh_interval_seconds,

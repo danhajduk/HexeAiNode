@@ -22,6 +22,12 @@ from ai_node.core_api.trust_status_client import TrustStatusClient
 from ai_node.providers.models import UnifiedExecutionRequest
 from ai_node.providers.openai_model_catalog import select_representative_openai_model_ids
 from ai_node.prompts import PromptRegistry
+from ai_node.persistence.image_generation_template_store import (
+    create_image_generation_template_registration,
+    create_image_generation_template_state,
+    normalize_image_generation_template_state,
+    normalize_template_version,
+)
 from ai_node.config.task_capability_selection_config import DECLARABLE_TASK_FAMILIES, create_task_capability_selection_config
 from ai_node.capabilities.task_families import canonicalize_task_family
 from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
@@ -619,6 +625,7 @@ class NodeControlState:
         trust_state_store=None,
         governance_state_store=None,
         prompt_service_state_store=None,
+        image_generation_template_state_store=None,
         budget_state_store=None,
         client_usage_store=None,
         trust_status_client=None,
@@ -663,6 +670,7 @@ class NodeControlState:
         self._governance_state_store = governance_state_store
         self._prompt_service_state_store = prompt_service_state_store
         self._prompt_registry = None
+        self._image_generation_template_state_store = image_generation_template_state_store
         self._budget_state_store = budget_state_store
         self._client_usage_store = client_usage_store
         self._trust_status_client = trust_status_client or TrustStatusClient(logger=logger)
@@ -737,6 +745,7 @@ class NodeControlState:
         self._provider_credentials_summary = None
         self._task_capability_selection_config = None
         self._prompt_service_state = None
+        self._image_generation_template_state = None
         self._node_id = None
         self._identity_state = "unknown"
         self._supervisor_registered = False
@@ -768,6 +777,7 @@ class NodeControlState:
         self._load_provider_credentials_summary()
         self._load_task_capability_selection_config()
         self._load_prompt_service_state()
+        self._load_image_generation_template_state()
         self._load_existing_config()
         self._register_background_scheduler_tasks()
 
@@ -1067,6 +1077,14 @@ class NodeControlState:
         self._prompt_registry = PromptRegistry(store=self._prompt_service_state_store, logger=self._logger)
         self._prompt_service_state = self._prompt_registry.snapshot()
 
+    def _load_image_generation_template_state(self) -> None:
+        if self._image_generation_template_state_store is None or not hasattr(
+            self._image_generation_template_state_store, "load_or_create"
+        ):
+            self._image_generation_template_state = None
+            return
+        self._image_generation_template_state = self._image_generation_template_state_store.load_or_create()
+
     @staticmethod
     def _now_iso() -> str:
         return local_now_iso()
@@ -1212,6 +1230,7 @@ class NodeControlState:
         self._delete_store_file(self._node_identity_store)
         self._delete_store_file(self._governance_state_store)
         self._delete_store_file(self._prompt_service_state_store)
+        self._delete_store_file(self._image_generation_template_state_store)
         if self._capability_runner is not None and hasattr(self._capability_runner, "clear_local_state_for_reonboarding"):
             self._capability_runner.clear_local_state_for_reonboarding()
         self._trusted_runtime_context = {}
@@ -1296,6 +1315,242 @@ class NodeControlState:
                 ),
             },
         }
+
+    def image_generation_template_state_payload(self) -> dict:
+        if self._image_generation_template_state_store is None:
+            return {"configured": False, "state": None}
+        if not isinstance(self._image_generation_template_state, dict):
+            self._load_image_generation_template_state()
+        state = self._image_generation_template_state if isinstance(self._image_generation_template_state, dict) else create_image_generation_template_state()
+        templates = state.get("templates") if isinstance(state.get("templates"), list) else []
+        return {
+            "configured": True,
+            "state": state,
+            "summary": {
+                "template_count": len(templates),
+                "active_count": len(
+                    [
+                        item
+                        for item in templates
+                        if isinstance(item, dict) and str(item.get("status") or "").strip().lower() == "active"
+                    ]
+                ),
+                "review_due_count": len(
+                    [
+                        item
+                        for item in templates
+                        if isinstance(item, dict) and str(item.get("status") or "").strip().lower() == "review_due"
+                    ]
+                ),
+            },
+        }
+
+    def _save_image_generation_template_state(self, state: dict) -> dict:
+        if self._image_generation_template_state_store is None or not hasattr(
+            self._image_generation_template_state_store, "save"
+        ):
+            raise ValueError("image generation template state store is not configured")
+        normalized = normalize_image_generation_template_state(state)
+        normalized["updated_at"] = self._now_iso()
+        self._image_generation_template_state = self._image_generation_template_state_store.save(normalized)
+        return self._image_generation_template_state
+
+    def _image_generation_template_index(self, *, template_id: str) -> int:
+        template = str(template_id or "").strip()
+        if not template:
+            raise ValueError("template_id_required")
+        state = self.image_generation_template_state_payload().get("state")
+        templates = state.get("templates") if isinstance(state, dict) else []
+        for index, entry in enumerate(templates if isinstance(templates, list) else []):
+            if isinstance(entry, dict) and str(entry.get("template_id") or "").strip() == template:
+                return index
+        raise ValueError("image_generation_template_not_found")
+
+    def get_image_generation_template(self, *, template_id: str) -> dict:
+        index = self._image_generation_template_index(template_id=template_id)
+        templates = self._image_generation_template_state.get("templates") if isinstance(self._image_generation_template_state, dict) else []
+        return {"configured": True, "template": templates[index]}
+
+    def register_image_generation_template(
+        self,
+        *,
+        template_id: str,
+        service_id: str,
+        template_name: str | None = None,
+        owner_service: str | None = None,
+        owner_client_id: str | None = None,
+        privacy_class: str = "internal",
+        access_scope: str = "service",
+        allowed_services: list[str] | None = None,
+        allowed_clients: list[str] | None = None,
+        allowed_customers: list[str] | None = None,
+        template_version: dict | None = None,
+        version: str | None = None,
+        metadata: dict | None = None,
+        status: str = "active",
+    ) -> dict:
+        state = self.image_generation_template_state_payload().get("state")
+        if not isinstance(state, dict):
+            raise ValueError("image generation template state store is not configured")
+        registration = create_image_generation_template_registration(
+            template_id=template_id,
+            service_id=service_id,
+            version=version,
+            template_name=template_name,
+            owner_service=owner_service,
+            owner_client_id=owner_client_id,
+            privacy_class=privacy_class,
+            access_scope=access_scope,
+            allowed_services=allowed_services,
+            allowed_clients=allowed_clients,
+            allowed_customers=allowed_customers,
+            template_version=template_version,
+            metadata=metadata,
+            status=status,
+        )
+        templates = list(state.get("templates") or [])
+        normalized_id = registration["template_id"]
+        existing_index = next(
+            (
+                index
+                for index, entry in enumerate(templates)
+                if isinstance(entry, dict) and str(entry.get("template_id") or "").strip() == normalized_id
+            ),
+            None,
+        )
+        if existing_index is None:
+            templates.append(registration)
+        else:
+            existing = dict(templates[existing_index])
+            if str(existing.get("status") or "").strip().lower() == "retired":
+                templates[existing_index] = registration
+            else:
+                version_entry = registration["versions"][0]
+                existing_versions = list(existing.get("versions") or [])
+                existing_versions = [
+                    item
+                    for item in existing_versions
+                    if isinstance(item, dict) and str(item.get("version") or "").strip() != version_entry["version"]
+                ]
+                existing_versions.append(version_entry)
+                existing.update(
+                    {
+                        "template_name": registration["template_name"],
+                        "service_id": registration["service_id"],
+                        "owner_service": registration["owner_service"],
+                        "owner_client_id": registration["owner_client_id"],
+                        "privacy_class": registration["privacy_class"],
+                        "access_scope": registration["access_scope"],
+                        "allowed_services": registration["allowed_services"],
+                        "allowed_clients": registration["allowed_clients"],
+                        "allowed_customers": registration["allowed_customers"],
+                        "status": registration["status"],
+                        "metadata": registration["metadata"],
+                        "current_version": version_entry["version"],
+                        "versions": existing_versions,
+                        "updated_at": self._now_iso(),
+                    }
+                )
+                history = list(existing.get("lifecycle_history") or [])
+                history.append({"state": registration["status"], "reason": "version_registered", "changed_at": self._now_iso()})
+                existing["lifecycle_history"] = history
+                templates[existing_index] = existing
+        state["templates"] = templates
+        self._save_image_generation_template_state(state)
+        return self.image_generation_template_state_payload()
+
+    def update_image_generation_template(
+        self,
+        *,
+        template_id: str,
+        template_name: str | None = None,
+        owner_service: str | None = None,
+        owner_client_id: str | None = None,
+        privacy_class: str | None = None,
+        access_scope: str | None = None,
+        allowed_services: list[str] | None = None,
+        allowed_clients: list[str] | None = None,
+        allowed_customers: list[str] | None = None,
+        template_version: dict | None = None,
+        version: str | None = None,
+        metadata: dict | None = None,
+    ) -> dict:
+        index = self._image_generation_template_index(template_id=template_id)
+        state = self._image_generation_template_state
+        templates = list(state.get("templates") or [])
+        existing = dict(templates[index])
+        for key, value in {
+            "template_name": template_name,
+            "owner_service": owner_service,
+            "owner_client_id": owner_client_id,
+            "privacy_class": privacy_class,
+            "access_scope": access_scope,
+            "allowed_services": allowed_services,
+            "allowed_clients": allowed_clients,
+            "allowed_customers": allowed_customers,
+            "metadata": metadata,
+        }.items():
+            if value is not None:
+                existing[key] = value
+        if template_version is not None:
+            version_entry = normalize_template_version(template_version, fallback_version=str(version or "").strip() or "v1")
+            versions = [
+                item
+                for item in list(existing.get("versions") or [])
+                if isinstance(item, dict) and str(item.get("version") or "").strip() != version_entry["version"]
+            ]
+            versions.append(version_entry)
+            existing["versions"] = versions
+            existing["current_version"] = version_entry["version"]
+        existing["updated_at"] = self._now_iso()
+        templates[index] = existing
+        state["templates"] = templates
+        self._save_image_generation_template_state(state)
+        return self.image_generation_template_state_payload()
+
+    def transition_image_generation_template(self, *, template_id: str, state: str, reason: str | None = None) -> dict:
+        index = self._image_generation_template_index(template_id=template_id)
+        payload = self._image_generation_template_state
+        templates = list(payload.get("templates") or [])
+        template = dict(templates[index])
+        normalized_state = str(state or "").strip().lower()
+        template["status"] = normalized_state
+        template["updated_at"] = self._now_iso()
+        if normalized_state == "retired":
+            template["retired_at"] = self._now_iso()
+        history = list(template.get("lifecycle_history") or [])
+        history.append({"state": normalized_state, "reason": str(reason or "").strip() or None, "changed_at": self._now_iso()})
+        template["lifecycle_history"] = history
+        templates[index] = template
+        payload["templates"] = templates
+        self._save_image_generation_template_state(payload)
+        return self.image_generation_template_state_payload()
+
+    def review_image_generation_template(
+        self,
+        *,
+        template_id: str,
+        reviewed_by: str | None = None,
+        review_reason: str | None = None,
+        state: str | None = "active",
+    ) -> dict:
+        index = self._image_generation_template_index(template_id=template_id)
+        payload = self._image_generation_template_state
+        templates = list(payload.get("templates") or [])
+        template = dict(templates[index])
+        normalized_state = str(state or "active").strip().lower()
+        template["status"] = normalized_state
+        template["last_reviewed_at"] = self._now_iso()
+        template["reviewed_by"] = str(reviewed_by or "").strip() or None
+        template["review_reason"] = str(review_reason or "").strip() or None
+        template["updated_at"] = self._now_iso()
+        history = list(template.get("lifecycle_history") or [])
+        history.append({"state": normalized_state, "reason": str(review_reason or "review_complete").strip(), "changed_at": self._now_iso()})
+        template["lifecycle_history"] = history
+        templates[index] = template
+        payload["templates"] = templates
+        self._save_image_generation_template_state(payload)
+        return self.image_generation_template_state_payload()
 
     def budget_state_payload(self) -> dict:
         if self._budget_manager is None:
@@ -4745,6 +5000,62 @@ class PromptReviewDueMigrationRequest(BaseModel):
     reason: str | None = "policy_migration_review_due"
 
 
+class ImageGenerationTemplateVersionRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    version: str | None = None
+    runtime_id: str | None = "comfyui_gpu"
+    api_workflow_path: str
+    ui_workflow_path: str | None = None
+    variables: list[str] | None = None
+    defaults: dict | None = None
+    model_requirements: dict | None = None
+    output_scope: str | None = "normal"
+    metadata: dict | None = None
+
+
+class ImageGenerationTemplateRegisterRequest(BaseModel):
+    template_id: str
+    service_id: str
+    template_name: str | None = None
+    owner_service: str | None = None
+    owner_client_id: str | None = None
+    privacy_class: str = "internal"
+    access_scope: str = "service"
+    allowed_services: list[str] | None = None
+    allowed_clients: list[str] | None = None
+    allowed_customers: list[str] | None = None
+    template_version: ImageGenerationTemplateVersionRequest
+    version: str | None = None
+    status: str = "active"
+    metadata: dict | None = None
+
+
+class ImageGenerationTemplateUpdateRequest(BaseModel):
+    template_name: str | None = None
+    owner_service: str | None = None
+    owner_client_id: str | None = None
+    privacy_class: str | None = None
+    access_scope: str | None = None
+    allowed_services: list[str] | None = None
+    allowed_clients: list[str] | None = None
+    allowed_customers: list[str] | None = None
+    template_version: ImageGenerationTemplateVersionRequest | None = None
+    version: str | None = None
+    metadata: dict | None = None
+
+
+class ImageGenerationTemplateLifecycleRequest(BaseModel):
+    state: str
+    reason: str | None = None
+
+
+class ImageGenerationTemplateReviewRequest(BaseModel):
+    reviewed_by: str | None = None
+    review_reason: str | None = None
+    state: str | None = "active"
+
+
 class ExecutionAuthorizeRequest(BaseModel):
     prompt_id: str
     task_family: str
@@ -4890,6 +5201,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/prompts/services/{prompt_id}",
                 "/api/prompts/services/{prompt_id}/lifecycle",
                 "/api/prompts/services/{prompt_id}/probation",
+                "/api/image-templates",
+                "/api/image-templates/{template_id}",
+                "/api/image-templates/{template_id}/lifecycle",
+                "/api/image-templates/{template_id}/review",
                 "/api/schemas/client-ai/v2",
                 "/api/schemas/client-ai/v2/communication.md",
                 "/api/schemas/client-ai/v2/{schema_name}",
@@ -5350,6 +5665,84 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def post_prompt_review_due_migration(payload: PromptReviewDueMigrationRequest):
         try:
             return state.migrate_prompt_services_to_review_due(reason=payload.reason or "policy_migration_review_due")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/image-templates")
+    def get_image_generation_templates():
+        return state.image_generation_template_state_payload()
+
+    @app.post("/api/image-templates")
+    def post_image_generation_template(payload: ImageGenerationTemplateRegisterRequest):
+        try:
+            return state.register_image_generation_template(
+                template_id=payload.template_id,
+                service_id=payload.service_id,
+                template_name=payload.template_name,
+                owner_service=payload.owner_service,
+                owner_client_id=payload.owner_client_id,
+                privacy_class=payload.privacy_class,
+                access_scope=payload.access_scope,
+                allowed_services=payload.allowed_services,
+                allowed_clients=payload.allowed_clients,
+                allowed_customers=payload.allowed_customers,
+                template_version=payload.template_version.model_dump(exclude_none=True),
+                version=payload.version,
+                status=payload.status,
+                metadata=payload.metadata,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/image-templates/{template_id}")
+    def get_image_generation_template(template_id: str):
+        try:
+            return state.get_image_generation_template(template_id=template_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.put("/api/image-templates/{template_id}")
+    def put_image_generation_template(template_id: str, payload: ImageGenerationTemplateUpdateRequest):
+        try:
+            return state.update_image_generation_template(
+                template_id=template_id,
+                template_name=payload.template_name,
+                owner_service=payload.owner_service,
+                owner_client_id=payload.owner_client_id,
+                privacy_class=payload.privacy_class,
+                access_scope=payload.access_scope,
+                allowed_services=payload.allowed_services,
+                allowed_clients=payload.allowed_clients,
+                allowed_customers=payload.allowed_customers,
+                template_version=payload.template_version.model_dump(exclude_none=True)
+                if payload.template_version is not None
+                else None,
+                version=payload.version,
+                metadata=payload.metadata,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/image-templates/{template_id}/lifecycle")
+    def post_image_generation_template_lifecycle(template_id: str, payload: ImageGenerationTemplateLifecycleRequest):
+        try:
+            return state.transition_image_generation_template(
+                template_id=template_id,
+                state=payload.state,
+                reason=payload.reason,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/image-templates/{template_id}/review")
+    def post_image_generation_template_review(template_id: str, payload: ImageGenerationTemplateReviewRequest):
+        try:
+            return state.review_image_generation_template(
+                template_id=template_id,
+                reviewed_by=payload.reviewed_by,
+                review_reason=payload.review_reason,
+                state=payload.state,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

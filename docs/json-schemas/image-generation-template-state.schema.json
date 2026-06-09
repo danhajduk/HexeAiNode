@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Image Generation Template State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "templates", "updated_at"],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "templates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "template_id",
+          "service_id",
+          "status",
+          "current_version",
+          "versions",
+          "registered_at",
+          "updated_at"
+        ],
+        "properties": {
+          "template_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "template_name": {
+            "type": "string"
+          },
+          "service_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner_service": {
+            "type": "string"
+          },
+          "owner_client_id": {
+            "type": ["string", "null"]
+          },
+          "privacy_class": {
+            "enum": ["public", "internal", "restricted", "sensitive"]
+          },
+          "access_scope": {
+            "enum": ["private", "service", "shared", "public"]
+          },
+          "allowed_services": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_clients": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_customers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "enum": ["draft", "probation", "active", "review_due", "restricted", "suspended", "retired", "expired"]
+          },
+          "current_version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "versions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["version", "runtime_id", "api_workflow_path", "variables", "defaults", "model_requirements", "output_scope", "metadata", "created_at"],
+              "properties": {
+                "version": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "runtime_id": {
+                  "enum": ["comfyui_gpu", "comfyui_cpu"]
+                },
+                "api_workflow_path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "ui_workflow_path": {
+                  "type": ["string", "null"]
+                },
+                "variables": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "defaults": {
+                  "type": "object"
+                },
+                "model_requirements": {
+                  "type": "object"
+                },
+                "output_scope": {
+                  "type": "string"
+                },
+                "metadata": {
+                  "type": "object"
+                },
+                "created_at": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "lifecycle_history": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "usage": {
+            "type": "object"
+          },
+          "registered_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "last_reviewed_at": {
+            "type": ["string", "null"]
+          },
+          "reviewed_by": {
+            "type": ["string", "null"]
+          },
+          "review_reason": {
+            "type": ["string", "null"]
+          },
+          "retired_at": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    },
+    "updated_at": {
+      "type": "string"
+    }
+  }
+}

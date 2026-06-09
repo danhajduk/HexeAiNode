@@ -27,6 +27,7 @@ Backend runtime:
 - `HEXE_PHASE2_STATE_PATH` default `.run/phase2_state.json`
 - `HEXE_PROVIDER_CAPABILITY_REPORT_PATH` default `.run/provider_capability_report.json`
 - `HEXE_PROMPT_SERVICE_STATE_PATH` default `.run/prompt_service_state.json`
+- `HEXE_IMAGE_GENERATION_TEMPLATE_STATE_PATH` default `.run/image_generation_template_state.json`
 - `HEXE_BUDGET_STATE_PATH` default `.run/budget_state.json`
 - `HEXE_PROVIDER_CAPABILITY_REFRESH_INTERVAL_SECONDS` default `14400`
 - `HEXE_FINALIZE_POLL_INTERVAL_SECONDS` default `2`
