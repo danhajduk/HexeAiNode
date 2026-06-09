@@ -185,6 +185,12 @@
           "description": "Prompt terms to suppress."
         },
         {
+          "name": "avatar_name",
+          "type": "string",
+          "required": false,
+          "description": "Filesystem-safe avatar name used in output filenames."
+        },
+        {
           "name": "width",
           "type": "integer",
           "required": false,
@@ -223,6 +229,7 @@
       ],
       "defaults": {
         "negative_prompt": "low quality, blurry, distorted face, distorted hands, extra limbs, malformed body, watermark, text",
+        "avatar_name": "avatar",
         "width": 1024,
         "height": 1024,
         "seed": null,

@@ -78,7 +78,7 @@
     "class_type": "SaveImage",
     "inputs": {
       "images": ["9", 0],
-      "filename_prefix": "hexe/avatar"
+      "filename_prefix": "hexe/avatar/{{avatar_name}}_seed{{seed}}"
     }
   }
 }

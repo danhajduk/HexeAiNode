@@ -51,6 +51,14 @@ function variableInputType(variable) {
   return type === "integer" || type === "number" ? "number" : "text";
 }
 
+function variableLabel(name) {
+  return String(name || "")
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function objectValue(value) {
   return value && typeof value === "object" ? value : {};
 }
@@ -366,7 +374,7 @@ export function ManualImageGenerationCard({
               const name = String(variable?.name || "").trim();
               return (
                 <label key={name}>
-                  {name}
+                  {variableLabel(name)}
                   <input
                     type={variableInputType(variable)}
                     value={templateVariables[name] ?? ""}

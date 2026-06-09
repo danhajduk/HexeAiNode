@@ -1732,6 +1732,8 @@ class NodeControlState:
                 name = str(key or "").strip()
                 if name in variables and name not in {"positive_prompt", "negative_prompt", "input_image"}:
                     values[name] = value
+        if "avatar_name" in variables:
+            values["avatar_name"] = self._safe_filename_component(values.get("avatar_name") or "avatar")
         if "input_image" in variables:
             values["input_image"] = input_image
         for name, variable in variables.items():
@@ -1776,6 +1778,14 @@ class NodeControlState:
         if not text or candidate.is_absolute() or ".." in candidate.parts:
             raise ValueError("invalid_relative_path")
         return candidate
+
+    @staticmethod
+    def _safe_filename_component(value: object) -> str:
+        text = str(value or "").strip()
+        safe = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in text).strip("_")
+        while "__" in safe:
+            safe = safe.replace("__", "_")
+        return safe[:80] or "avatar"
 
     def _save_manual_reference_image(self, *, manual_paths: dict, filename: str | None, data_base64: str) -> str:
         input_dir = Path(str(manual_paths.get("input_dir") or "runtime/manual/comfyui-gpu/input")).resolve()
