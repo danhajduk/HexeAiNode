@@ -15,7 +15,7 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
 
         self.assertTrue(payload["configured"])
         self.assertEqual(payload["schema_version"], "1.0")
-        self.assertEqual(len(payload["templates"]), 3)
+        self.assertGreaterEqual(len(payload["templates"]), 9)
         templates_by_id = {template["template_id"]: template for template in payload["templates"]}
         template = templates_by_id["template.weather.realvisxl.v1"]
         self.assertEqual(template["runtime_id"], "comfyui_gpu")
@@ -27,6 +27,12 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
         img2img = templates_by_id["template.img2img.realvisxl.v1"]
         self.assertEqual(img2img["metadata"]["input_mode"], "image")
         self.assertIn("input_image", [item["name"] for item in img2img["variables"]])
+        transparent_avatar = templates_by_id["template.avatar_identity_reference_transparent.realvisxl.v1"]
+        self.assertTrue(transparent_avatar["metadata"]["transparent_background"])
+        self.assertEqual(
+            transparent_avatar["model_requirements"]["other"]["identity_strength"],
+            "fallback_reference_latent_not_faceid",
+        )
 
     def test_validate_rejects_default_without_variable(self):
         with tempfile.TemporaryDirectory() as tmp:

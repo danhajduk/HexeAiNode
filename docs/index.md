@@ -24,6 +24,7 @@
 - [API Map](./api-map.md): route families grouped by the Hexe node API standard, with canonical versus compatibility notes.
 - [Provider Boundary](./provider-boundary.md): what is node-generic versus provider-specific in this repo.
 - [Local LLM Runtime](./local-llm-runtime.md): llama.cpp container, Unix sockets, health wrapper, downloads, and load tests.
+- [ComfyUI Avatar Identity Transparent Workflow](./comfyui_avatar_identity_transparent.md): transparent avatar workflow template, required nodes, placeholders, and ReferenceLatent limits.
 - [Benchmark Execution Migration](./ai-node/benchmark-execution-migration.md): migration from node-local benchmark judging to client-owned execution-only benchmark requests.
 - [Scheduler And Background Tasks](./scheduler-and-background-tasks.md): recurring work, lease compatibility, and runtime ownership.
 - [Runtime Path Ownership](./runtime-path-ownership.md): `.run`, `data`, and `logs` ownership plus current allowed-variant decision.
