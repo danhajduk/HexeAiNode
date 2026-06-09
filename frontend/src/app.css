@@ -740,9 +740,22 @@
 
 .manual-generation-status-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 14px;
+}
+
+.manual-generation-status-row {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.manual-generation-status-row-primary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.manual-generation-status-row-secondary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .manual-generation-status-item {
@@ -1488,6 +1501,12 @@ h2 {
   }
 
   .manual-generation-status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-generation-status-row,
+  .manual-generation-status-row-primary,
+  .manual-generation-status-row-secondary {
     grid-template-columns: 1fr;
   }
 

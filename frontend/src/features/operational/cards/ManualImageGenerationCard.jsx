@@ -354,41 +354,45 @@ export function ManualImageGenerationCard({
     <article className="card operational-card-full-span">
       <CardHeader title="Manual Image Generation" subtitle="Prompt-driven ComfyUI generation for the manual session." />
       <div className="manual-generation-status-grid">
-        <div className="manual-generation-status-item">
-          <span>ComfyUI Runtime</span>
-          <StatusBadge value={serviceState(runtimeService)} />
+        <div className="manual-generation-status-row manual-generation-status-row-primary">
+          <div className="manual-generation-status-item">
+            <span>ComfyUI Runtime</span>
+            <StatusBadge value={serviceState(runtimeService)} />
+          </div>
+          <div className="manual-generation-status-item">
+            <span>ComfyUI Web UI</span>
+            <StatusBadge value={serviceState(service)} />
+          </div>
+          <div className="manual-generation-status-item">
+            <span>Manual Session</span>
+            <StatusBadge value={generationSession.state || (service.manual_session_active ? "active" : "inactive")} />
+          </div>
+          <div className="manual-generation-status-item">
+            <span>Queue</span>
+            <code>{formatQueue(generationSession)}</code>
+          </div>
+          <div className="manual-generation-status-item">
+            <span>Latest Job</span>
+            <StatusBadge value={busy ? "submitting" : latestJobStatus} />
+          </div>
         </div>
-        <div className="manual-generation-status-item">
-          <span>ComfyUI Web UI</span>
-          <StatusBadge value={serviceState(service)} />
-        </div>
-        <div className="manual-generation-status-item">
-          <span>Manual Session</span>
-          <StatusBadge value={generationSession.state || (service.manual_session_active ? "active" : "inactive")} />
-        </div>
-        <div className="manual-generation-status-item">
-          <span>Queue</span>
-          <code>{formatQueue(generationSession)}</code>
-        </div>
-        <div className="manual-generation-status-item">
-          <span>Latest Job</span>
-          <StatusBadge value={busy ? "submitting" : latestJobStatus} />
-        </div>
-        <div className="manual-generation-status-item">
-          <span>Current Prompt</span>
-          <code>{effectiveProgress.prompt_id || generationSession.running_prompt_id || displayedLatestJob.prompt_id || "none"}</code>
-        </div>
-        <div className="manual-generation-status-item">
-          <span>Output</span>
-          <code>{manualPaths.output_dir || "not_configured"}</code>
-        </div>
-        <div className="manual-generation-status-item">
-          <span>Last Submit</span>
-          <code>{displayedLatestJob.prompt_id || "none"}</code>
-        </div>
-        <div className="manual-generation-status-item">
-          <span>Template</span>
-          <code>{effectiveTemplate?.template_id || "not_configured"}</code>
+        <div className="manual-generation-status-row manual-generation-status-row-secondary">
+          <div className="manual-generation-status-item">
+            <span>Current Prompt</span>
+            <code>{effectiveProgress.prompt_id || generationSession.running_prompt_id || displayedLatestJob.prompt_id || "none"}</code>
+          </div>
+          <div className="manual-generation-status-item">
+            <span>Output</span>
+            <code>{manualPaths.output_dir || "not_configured"}</code>
+          </div>
+          <div className="manual-generation-status-item">
+            <span>Last Submit</span>
+            <code>{displayedLatestJob.prompt_id || "none"}</code>
+          </div>
+          <div className="manual-generation-status-item">
+            <span>Template</span>
+            <code>{effectiveTemplate?.template_id || "not_configured"}</code>
+          </div>
         </div>
       </div>
       <div className="manual-generation-progress-panel">
