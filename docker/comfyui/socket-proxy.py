@@ -5,6 +5,8 @@ import argparse
 import http.client
 import json
 import os
+import select
+import socket
 import socketserver
 import time
 from http.server import BaseHTTPRequestHandler
@@ -140,6 +142,9 @@ class ComfyUISocketProxyHandler(BaseHTTPRequestHandler):
         _json_response(self, 200 if ready else 503, payload)
 
     def _proxy(self) -> None:
+        if self._is_websocket_upgrade():
+            self._proxy_upgrade()
+            return
         content_length = int(self.headers.get("Content-Length") or "0")
         body = self.rfile.read(content_length) if content_length > 0 else None
         headers = {
@@ -176,6 +181,58 @@ class ComfyUISocketProxyHandler(BaseHTTPRequestHandler):
             self.send_header(key, value)
         self.end_headers()
         self.wfile.write(response_body)
+
+    def _is_websocket_upgrade(self) -> bool:
+        connection = str(self.headers.get("Connection") or "").lower()
+        upgrade = str(self.headers.get("Upgrade") or "").lower()
+        return "upgrade" in connection and upgrade == "websocket"
+
+    def _proxy_upgrade(self) -> None:
+        try:
+            upstream = socket.create_connection((self.upstream_host, self.upstream_port), timeout=self.timeout_s)
+        except Exception as exc:
+            _json_response(
+                self,
+                502,
+                {
+                    "status": "upstream_error",
+                    "runtime_id": self.runtime_id,
+                    "error": str(exc),
+                },
+            )
+            return
+        try:
+            request = self._raw_upgrade_request()
+            upstream.sendall(request)
+            self._bridge_sockets(self.connection, upstream)
+        finally:
+            try:
+                upstream.close()
+            except Exception:
+                pass
+            self.close_connection = True
+
+    def _raw_upgrade_request(self) -> bytes:
+        lines = [f"{self.command} {self.path} HTTP/1.1", f"Host: {self.upstream_host}:{self.upstream_port}"]
+        for key, value in self.headers.items():
+            if key.lower() == "host":
+                continue
+            lines.append(f"{key}: {value}")
+        return ("\r\n".join(lines) + "\r\n\r\n").encode("utf-8")
+
+    @staticmethod
+    def _bridge_sockets(client: socket.socket, upstream: socket.socket) -> None:
+        sockets = [client, upstream]
+        while True:
+            readable, _, failed = select.select(sockets, [], sockets)
+            if failed:
+                return
+            for source in readable:
+                target = upstream if source is client else client
+                data = source.recv(65536)
+                if not data:
+                    return
+                target.sendall(data)
 
     def log_message(self, _format: str, *_args: object) -> None:
         return

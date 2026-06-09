@@ -1802,14 +1802,15 @@ class NodeControlState:
         pending_prompt_ids = [str(item) for item in list(session.get("pending_prompt_ids") or [])]
         running_prompt_id = str(session.get("running_prompt_id") or "").strip()
         progress_prompt_id = str(progress.get("prompt_id") or "").strip()
+        queue_active = bool(session.get("queue_active"))
         status = "submitted"
-        if prompt_id == running_prompt_id or prompt_id == progress_prompt_id:
+        if queue_active and (prompt_id == running_prompt_id or prompt_id == progress_prompt_id):
             status = "running"
         elif prompt_id in pending_prompt_ids:
             status = "queued"
         submitted_at = str(job.get("submitted_at") or "").strip()
         completed_outputs = [item for item in outputs if str(item.get("modified_at") or "") >= submitted_at]
-        if completed_outputs and status == "submitted":
+        if completed_outputs and (status == "submitted" or not queue_active):
             status = "completed"
         updated = {
             **job,
