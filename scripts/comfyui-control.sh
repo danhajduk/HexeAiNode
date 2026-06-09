@@ -261,15 +261,21 @@ link_model_file() {
   local source_dir="$1"
   local target_dir="$2"
   local filename="$3"
+  local source_path target_path
   if [[ -z "$filename" ]]; then
     return
   fi
+  source_path="$source_dir/$filename"
+  target_path="$target_dir/$filename"
   mkdir -p "$target_dir"
-  if [[ -e "$target_dir/$filename" ]]; then
+  if [[ -L "$target_path" ]]; then
+    rm -f "$target_path"
+  fi
+  if [[ -e "$target_path" ]]; then
     return
   fi
-  if [[ -f "$source_dir/$filename" ]]; then
-    ln -s "$source_dir/$filename" "$target_dir/$filename"
+  if [[ -f "$source_path" ]]; then
+    ln "$source_path" "$target_path" 2>/dev/null || cp "$source_path" "$target_path"
   fi
 }
 
