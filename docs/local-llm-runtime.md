@@ -246,6 +246,8 @@ It starts or reuses the manual ComfyUI session, lets operators choose a GPU Comf
 settings, submits txt2img or img2img workflows, stores reference images in the manual input folder, and lists recent
 files from the manual output folder through node API output URLs. Avatar templates can also write LoRA training sidecars
 next to completed images: a same-name `.txt` caption file and a `.json` metadata file.
+Manual image submissions can queue up to 25 separate ComfyUI prompts, optionally randomize each seed, and optionally
+jitter avatar face/body reference strengths around the configured slider values by a bounded variation amount.
 
 On the RTX 3060 12 GB node, ComfyUI should be treated as exclusive GPU work for real generation. With both llama.cpp
 runtimes loaded, only about 2.5 GB VRAM remains, which is not enough for typical SDXL, FLUX, or Stable Diffusion 3.5

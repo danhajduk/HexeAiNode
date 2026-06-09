@@ -311,6 +311,8 @@ describe("OperationalDashboard", () => {
                     { name: "steps", required: false, type: "integer" },
                     { name: "cfg", required: false, type: "number" },
                     { name: "denoise", required: false, type: "number" },
+                    { name: "face_strength", required: false, type: "number" },
+                    { name: "body_strength", required: false, type: "number" },
                   ],
                 },
               ],
@@ -360,6 +362,10 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Delete");
     expect(markup).toContain('step="8"');
     expect(markup).toContain('step="0.01"');
+    expect(markup).toContain("Images to Queue");
+    expect(markup).toContain("Randomize Seed");
+    expect(markup).toContain("Randomize Face/Body");
+    expect(markup).toContain("Variation");
     expect(markup).not.toContain("Runtime Health");
   });
 

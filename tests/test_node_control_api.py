@@ -2598,6 +2598,61 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["latest_job"]["status"], "completed")
         self.assertEqual(payload["latest_job"]["progress"]["percent"], 100.0)
 
+    def test_manual_image_generation_status_tracks_batch_prompt_ids(self):
+        class _ManualImageServiceManager:
+            def __init__(self, output_dir: str):
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "running"},
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"output_dir": self.output_dir},
+                    },
+                }
+
+            def comfyui_webui_generation_status(self):
+                return {
+                    "runtime": "gpu",
+                    "session": {
+                        "queue_active": True,
+                        "running_count": 1,
+                        "pending_count": 1,
+                        "running_prompt_id": "prompt-batch-2",
+                        "pending_prompt_ids": ["prompt-batch-3"],
+                    },
+                    "progress": {"available": True, "percent": 25.0, "prompt_id": "prompt-batch-2"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "manual-output"
+            output_dir.mkdir()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ManualImageServiceManager(str(output_dir)),
+            )
+            state._write_manual_image_latest_job(
+                {
+                    "status": "submitted",
+                    "template_id": "template.txt2img.realvisxl.v1",
+                    "prompt_id": "prompt-batch-1",
+                    "prompt_ids": ["prompt-batch-1", "prompt-batch-2", "prompt-batch-3"],
+                    "batch_count": 3,
+                    "submitted_at": "2000-01-01T00:00:00+00:00",
+                    "output_count_before": 0,
+                }
+            )
+
+            payload = state.manual_image_generation_status()
+
+        self.assertEqual(payload["latest_job"]["status"], "running")
+        self.assertEqual(payload["latest_job"]["running_count"], 1)
+        self.assertEqual(payload["latest_job"]["pending_count"], 1)
+
     def test_manual_image_generation_marks_background_removal_rgb_fallback(self):
         class _ManualImageServiceManager:
             def get_status(self):
@@ -2834,6 +2889,100 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["prompt_id"], "prompt-progress")
         self.assertEqual(service_manager.listener_calls, ["hexe-node-manual-image-ui"])
+
+    async def test_submit_manual_image_generation_queues_batch_with_randomized_seeds(self):
+        class _ManualImageServiceManager:
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "socket_path": "/tmp/comfyui.sock",
+                        "manual_paths": {"output_dir": "runtime/manual/comfyui-gpu/output"},
+                    },
+                }
+
+            def ensure_comfyui_progress_listener(self, *, client_id: str | None = None):
+                return {"started": True, "client_id": client_id}
+
+        async def _fake_start_service(*, target: str):
+            return {"status": "ok", "services": service_manager.get_status()}
+
+        request_bodies: list[dict] = []
+
+        def _fake_uds_request(*, socket_path: str, method: str, path: str, body: dict):
+            request_bodies.append(body)
+            index = len(request_bodies)
+            return {"prompt_id": f"prompt-batch-{index}", "number": index, "node_errors": {}}
+
+        service_manager = _ManualImageServiceManager()
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=service_manager,
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            state.start_service = _fake_start_service
+            with patch.object(state, "_manual_image_outputs", return_value=[]), patch.object(
+                state,
+                "_uds_json_request",
+                side_effect=_fake_uds_request,
+            ), patch("ai_node.runtime.node_control_api.secrets.randbelow", side_effect=[111, 222, 333]):
+                result = await state.submit_manual_image_generation(
+                    payload=ManualImageGenerationRequest(
+                        template_id="template.txt2img.realvisxl.v1",
+                        mode="txt2img",
+                        prompt="batch seed test",
+                        batch_count=3,
+                        randomize_seed=True,
+                    )
+                )
+
+            latest_job = state._read_manual_image_latest_job()
+
+        self.assertEqual(result["batch_count"], 3)
+        self.assertEqual(result["prompt_ids"], ["prompt-batch-1", "prompt-batch-2", "prompt-batch-3"])
+        self.assertEqual([body["prompt"]["6"]["inputs"]["seed"] for body in request_bodies], [111, 222, 333])
+        self.assertEqual([item["seed"] for item in latest_job["submissions"]], [111, 222, 333])
+        self.assertEqual(latest_job["lora_metadata"]["batch_count"], 3)
+
+    def test_manual_image_generation_jitters_avatar_reference_strengths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            template = state.get_comfyui_template_catalog_entry(
+                template_id="template.avatar_identity_reference_transparent.realvisxl.v1"
+            )["template"]
+            payload = ManualImageGenerationRequest(
+                template_id="template.avatar_identity_reference_transparent.realvisxl.v1",
+                mode="txt2img",
+                prompt="jitter test",
+                seed=1001,
+                randomize_reference_strengths=True,
+                reference_strength_jitter=0.05,
+                template_variables={
+                    "avatar_name": "Jane",
+                    "face_reference_image": "references/avatar/jane_face.png",
+                    "body_reference_image": "references/avatar/jane_body.png",
+                    "face_strength": "0.75",
+                    "body_conditioning_strength": "0.85",
+                    "body_latent_strength": "0.95",
+                },
+            )
+
+            with patch("ai_node.runtime.node_control_api.secrets.randbelow", side_effect=[2_000_000, 0, 1_000_000]):
+                item_payload = state._manual_image_batch_item_payload(template=template, payload=payload, batch_index=0)
+            workflow = state._manual_image_workflow_from_template(template=template, payload=item_payload, input_image="")
+
+        self.assertEqual(workflow["21"]["inputs"]["conditioning_to_strength"], 0.8)
+        self.assertEqual(workflow["22"]["inputs"]["conditioning_to_strength"], 0.8)
+        self.assertEqual(workflow["23"]["inputs"]["blend_factor"], 0.95)
 
     def test_manual_image_workflow_generates_seed_when_blank(self):
         with tempfile.TemporaryDirectory() as tmp:

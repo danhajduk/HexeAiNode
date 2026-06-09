@@ -57,6 +57,13 @@ from ai_node.runtime.capability_declaration_runner import (
 from ai_node.supervisor import SupervisorApiClient
 from ai_node.time_utils import local_now, local_now_iso
 
+MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
+    "face_strength",
+    "body_strength",
+    "body_conditioning_strength",
+    "body_latent_strength",
+)
+
 
 class CapabilityDeclarationPrerequisiteError(ValueError):
     def __init__(self, *, payload: dict) -> None:
@@ -1490,7 +1497,7 @@ class NodeControlState:
         template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
         if str(template.get("runtime_id") or "") != "comfyui_gpu":
             raise ValueError("manual_image_template_runtime_unsupported")
-        workflow = self._manual_image_workflow_from_template(template=template, payload=payload, input_image=input_image)
+        batch_count = self._manual_image_batch_count(payload.batch_count)
         outputs_before = self._manual_image_outputs(limit=24)
         submitted_at = datetime.now(timezone.utc).isoformat()
         if self._service_manager is not None and hasattr(self._service_manager, "ensure_comfyui_progress_listener"):
@@ -1498,20 +1505,48 @@ class NodeControlState:
                 self._service_manager.ensure_comfyui_progress_listener(client_id="hexe-node-manual-image-ui")
             except Exception as exc:
                 self._logger.debug("manual image progress listener unavailable: %s", exc)
-        response = self._uds_json_request(
-            socket_path=socket_path,
-            method="POST",
-            path="/prompt",
-            body={"client_id": "hexe-node-manual-image-ui", "prompt": workflow},
-        )
-        prompt_id = response.get("prompt_id")
+        submissions: list[dict] = []
+        for index in range(batch_count):
+            item_payload = self._manual_image_batch_item_payload(template=template, payload=payload, batch_index=index)
+            workflow, resolved_values = self._manual_image_workflow_and_values_from_template(
+                template=template,
+                payload=item_payload,
+                input_image=input_image,
+            )
+            response = self._uds_json_request(
+                socket_path=socket_path,
+                method="POST",
+                path="/prompt",
+                body={"client_id": "hexe-node-manual-image-ui", "prompt": workflow},
+            )
+            submissions.append(
+                {
+                    "index": index + 1,
+                    "prompt_id": response.get("prompt_id"),
+                    "number": response.get("number"),
+                    "seed": resolved_values.get("seed"),
+                    "reference_strengths": {
+                        name: resolved_values.get(name)
+                        for name in MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES
+                        if name in resolved_values
+                    },
+                    "node_errors": response.get("node_errors") or {},
+                }
+            )
+        prompt_ids = [str(item.get("prompt_id") or "").strip() for item in submissions if str(item.get("prompt_id") or "").strip()]
+        prompt_id = prompt_ids[0] if prompt_ids else None
+        first_submission = submissions[0] if submissions else {}
         self._write_manual_image_latest_job(
             {
                 "status": "submitted",
                 "mode": mode,
                 "template_id": template_id,
                 "prompt_id": prompt_id,
-                "number": response.get("number"),
+                "prompt_ids": prompt_ids,
+                "number": first_submission.get("number"),
+                "submissions": submissions,
+                "batch_count": batch_count,
+                "submitted_count": len(submissions),
                 "submitted_at": submitted_at,
                 "output_count_before": len(outputs_before),
                 "completed_output_count": 0,
@@ -1523,7 +1558,9 @@ class NodeControlState:
                     "mode": mode,
                     "width": payload.width,
                     "height": payload.height,
-                    "seed": payload.seed,
+                    "seed": first_submission.get("seed"),
+                    "batch_count": batch_count,
+                    "batch_items": submissions,
                     "steps": payload.steps,
                     "cfg": payload.cfg,
                     "denoise": payload.denoise,
@@ -1535,8 +1572,14 @@ class NodeControlState:
             "mode": mode,
             "template_id": template_id,
             "prompt_id": prompt_id,
-            "number": response.get("number"),
-            "node_errors": response.get("node_errors") or {},
+            "prompt_ids": prompt_ids,
+            "number": first_submission.get("number"),
+            "batch_count": batch_count,
+            "submitted_count": len(submissions),
+            "submissions": submissions,
+            "node_errors": (submissions[0].get("node_errors") or {})
+            if batch_count == 1 and submissions
+            else [item.get("node_errors") or {} for item in submissions],
             "input_image": input_image or None,
             "manual_paths": manual_paths,
             "outputs": self._manual_image_outputs(limit=24),
@@ -1811,18 +1854,25 @@ class NodeControlState:
     def _manual_image_latest_job(self, *, generation_status: dict, outputs: list[dict]) -> dict:
         job = self._read_manual_image_latest_job()
         prompt_id = str(job.get("prompt_id") or "").strip()
-        if not prompt_id:
+        prompt_ids = [
+            str(item or "").strip()
+            for item in list(job.get("prompt_ids") or [])
+            if str(item or "").strip()
+        ]
+        if prompt_id and prompt_id not in prompt_ids:
+            prompt_ids.insert(0, prompt_id)
+        if not prompt_ids:
             return {}
         session = generation_status.get("session") if isinstance(generation_status.get("session"), dict) else {}
         progress = generation_status.get("progress") if isinstance(generation_status.get("progress"), dict) else {}
         pending_prompt_ids = [str(item) for item in list(session.get("pending_prompt_ids") or [])]
         running_prompt_id = str(session.get("running_prompt_id") or "").strip()
         progress_prompt_id = str(progress.get("prompt_id") or "").strip()
-        queue_active = bool(session.get("queue_active"))
+        running_prompt_ids = {running_prompt_id, progress_prompt_id} - {""}
         status = "submitted"
-        if queue_active and (prompt_id == running_prompt_id or prompt_id == progress_prompt_id):
+        if any(item in running_prompt_ids for item in prompt_ids):
             status = "running"
-        elif prompt_id in pending_prompt_ids:
+        elif any(item in pending_prompt_ids for item in prompt_ids):
             status = "queued"
         submitted_at = str(job.get("submitted_at") or "").strip()
         completed_outputs = [item for item in outputs if str(item.get("modified_at") or "") >= submitted_at]
@@ -1833,7 +1883,7 @@ class NodeControlState:
         transparent_outputs = [
             item for item in completed_outputs if not self._manual_image_is_rgb_background_removal_fallback_output(output=item)
         ]
-        job_inactive = status == "submitted" or not queue_active
+        job_inactive = status not in {"running", "queued"}
         bg_removal_fallback_active = bool(transparent_background and rgb_fallback_outputs and not transparent_outputs and job_inactive)
         rgb_fallback_cleanup = None
         if transparent_background and transparent_outputs and rgb_fallback_outputs and job_inactive:
@@ -1984,6 +2034,7 @@ class NodeControlState:
             json_path = image_path.with_suffix(".json")
             if caption and not caption_path.exists():
                 caption_path.write_text(caption + "\n", encoding="utf-8")
+            output_seed = self._manual_image_seed_from_output(output=output)
             payload = {
                 "schema_version": "1.0",
                 "purpose": "lora_training_metadata",
@@ -1995,7 +2046,7 @@ class NodeControlState:
                 "mode": metadata.get("mode"),
                 "width": metadata.get("width"),
                 "height": metadata.get("height"),
-                "seed": metadata.get("seed"),
+                "seed": output_seed if output_seed is not None else metadata.get("seed"),
                 "steps": metadata.get("steps"),
                 "cfg": metadata.get("cfg"),
                 "denoise": metadata.get("denoise"),
@@ -2006,6 +2057,26 @@ class NodeControlState:
                 json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             written.append(image_path.relative_to(output_dir).with_suffix(".txt").as_posix())
         return {**metadata, "written": written}
+
+    @staticmethod
+    def _manual_image_seed_from_output(*, output: dict) -> int | None:
+        filename = str(output.get("filename") or Path(str(output.get("relative_path") or "")).name).strip()
+        stem = Path(filename).stem
+        marker_index = stem.rfind("seed")
+        if marker_index < 0:
+            return None
+        digits = []
+        for character in stem[marker_index + 4 :]:
+            if character.isdigit():
+                digits.append(character)
+                continue
+            break
+        if not digits:
+            return None
+        try:
+            return int("".join(digits))
+        except ValueError:
+            return None
 
     @staticmethod
     def _delete_manual_lora_sidecars(*, path: Path) -> None:
@@ -2040,6 +2111,14 @@ class NodeControlState:
             raise ValueError("manual_output_delete_failed") from exc
 
     def _manual_image_workflow_from_template(self, *, template: dict, payload: "ManualImageGenerationRequest", input_image: str) -> dict:
+        workflow, _ = self._manual_image_workflow_and_values_from_template(
+            template=template,
+            payload=payload,
+            input_image=input_image,
+        )
+        return workflow
+
+    def _manual_image_workflow_and_values_from_template(self, *, template: dict, payload: "ManualImageGenerationRequest", input_image: str) -> tuple[dict, dict]:
         variables = {item["name"]: item for item in list(template.get("variables") or []) if isinstance(item, dict) and item.get("name")}
         values = dict(template.get("defaults") or {})
         seed = self._coerce_manual_image_seed(payload.seed) if payload.seed is not None else values.get("seed")
@@ -2070,7 +2149,61 @@ class NodeControlState:
             if bool(variable.get("required")) and values.get(name) in (None, ""):
                 raise ValueError(f"manual_image_variable_required:{name}")
         api_workflow = json.loads(Path(str(template.get("api_workflow_path") or "")).read_text(encoding="utf-8"))
-        return self._substitute_template_placeholders(api_workflow, variables=values)
+        return self._substitute_template_placeholders(api_workflow, variables=values), values
+
+    def _manual_image_batch_item_payload(
+        self,
+        *,
+        template: dict,
+        payload: "ManualImageGenerationRequest",
+        batch_index: int,
+    ) -> "ManualImageGenerationRequest":
+        update: dict = {}
+        if bool(payload.randomize_seed):
+            update["seed"] = secrets.randbelow(2**63)
+        if bool(payload.randomize_reference_strengths):
+            variables = {item["name"]: item for item in list(template.get("variables") or []) if isinstance(item, dict) and item.get("name")}
+            defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+            template_variables = dict(payload.template_variables or {})
+            amount = self._manual_image_reference_strength_jitter_amount(payload.reference_strength_jitter)
+            for name in MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES:
+                if name not in variables:
+                    continue
+                base_value = template_variables.get(name, defaults.get(name, variables[name].get("default")))
+                if base_value in (None, ""):
+                    continue
+                template_variables[name] = self._jitter_manual_reference_strength(value=base_value, amount=amount)
+            update["template_variables"] = template_variables
+        if not update:
+            return payload
+        return payload.model_copy(update=update)
+
+    @staticmethod
+    def _manual_image_batch_count(value) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = 1
+        return min(max(parsed, 1), 25)
+
+    @staticmethod
+    def _manual_image_reference_strength_jitter_amount(value) -> float:
+        try:
+            amount = float(value)
+        except (TypeError, ValueError):
+            amount = 0.05
+        return min(max(amount, 0.0), 1.0)
+
+    @staticmethod
+    def _jitter_manual_reference_strength(*, value, amount: float) -> float:
+        try:
+            base = float(value)
+        except (TypeError, ValueError):
+            return value
+        if amount <= 0:
+            return round(min(max(base, 0.0), 1.0), 4)
+        delta = ((secrets.randbelow(2_000_001) / 1_000_000.0) - 1.0) * amount
+        return round(min(max(base + delta, 0.0), 1.0), 4)
 
     @staticmethod
     def _coerce_manual_image_seed(value) -> int | None:
@@ -6139,6 +6272,10 @@ class ManualImageGenerationRequest(BaseModel):
     steps: int | None = None
     cfg: float | None = None
     denoise: float | None = None
+    batch_count: int | str | None = 1
+    randomize_seed: bool | None = False
+    randomize_reference_strengths: bool | None = False
+    reference_strength_jitter: float | str | None = 0.05
     input_image: str | None = None
     reference_image_filename: str | None = None
     reference_image_data_base64: str | None = None

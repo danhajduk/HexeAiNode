@@ -182,6 +182,10 @@ export function ManualImageGenerationCard({
   const [steps, setSteps] = useState("4");
   const [cfg, setCfg] = useState("1.6");
   const [denoise, setDenoise] = useState("0.55");
+  const [batchCount, setBatchCount] = useState("1");
+  const [randomizeSeed, setRandomizeSeed] = useState(false);
+  const [randomizeReferenceStrengths, setRandomizeReferenceStrengths] = useState(false);
+  const [referenceStrengthJitter, setReferenceStrengthJitter] = useState("0.05");
   const [templateVariables, setTemplateVariables] = useState({});
   const [referenceFile, setReferenceFile] = useState(null);
   const [selectedReference, setSelectedReference] = useState(null);
@@ -277,6 +281,7 @@ export function ManualImageGenerationCard({
   const referenceStrengthVariables = asArray(selectedTemplate?.variables).filter((variable) =>
     isReferenceStrengthVariable(String(variable?.name || "").trim())
   );
+  const batchCountNumber = Math.min(Math.max(Number.parseInt(batchCount, 10) || 1, 1), 25);
   const canSubmit =
     Boolean(composedPrompt.trim()) &&
     sourceImageReady &&
@@ -336,6 +341,10 @@ export function ManualImageGenerationCard({
       steps: Number.parseInt(steps, 10) || 4,
       cfg: Number.parseFloat(cfg) || 1.6,
       denoise: Number.parseFloat(denoise) || 0.55,
+      batch_count: batchCountNumber,
+      randomize_seed: randomizeSeed,
+      randomize_reference_strengths: showAvatarReferences && randomizeReferenceStrengths,
+      reference_strength_jitter: Number.parseFloat(referenceStrengthJitter) || 0,
       input_image: referenceFile ? null : selectedReference?.input_image || null,
       reference_image_filename: referenceFile?.name || null,
       reference_image_data_base64: referenceData || null,
@@ -689,6 +698,31 @@ export function ManualImageGenerationCard({
               })}
             </div>
           ) : null}
+          {referenceStrengthVariables.length ? (
+            <div className="form-grid">
+              <label className="manual-lora-metadata-toggle">
+                <input
+                  type="checkbox"
+                  checked={randomizeReferenceStrengths}
+                  onChange={(event) => setRandomizeReferenceStrengths(event.target.checked)}
+                />
+                Randomize Face/Body
+              </label>
+              <label>
+                Variation
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={referenceStrengthJitter}
+                  onChange={(event) => setReferenceStrengthJitter(event.target.value)}
+                  disabled={!randomizeReferenceStrengths}
+                />
+              </label>
+            </div>
+          ) : null}
           {references.length ? (
             <div className="image-output-grid">
               {references.slice(0, 8).map((reference) => (
@@ -893,6 +927,25 @@ export function ManualImageGenerationCard({
             />
           </label>
           <label>
+            Images to Queue
+            <input
+              type="number"
+              min="1"
+              max="25"
+              step="1"
+              value={batchCount}
+              onChange={(event) => setBatchCount(event.target.value)}
+            />
+          </label>
+          <label className="manual-lora-metadata-toggle">
+            <input
+              type="checkbox"
+              checked={randomizeSeed}
+              onChange={(event) => setRandomizeSeed(event.target.checked)}
+            />
+            Randomize Seed
+          </label>
+          <label>
             Steps
             <input type="number" min="1" max="50" value={steps} onChange={(event) => setSteps(event.target.value)} />
           </label>
@@ -934,7 +987,7 @@ export function ManualImageGenerationCard({
         ) : null}
         <div className="row">
           <button className="btn btn-primary" type="submit" disabled={!canSubmit}>
-            {busy ? "Generating..." : "Generate"}
+            {busy ? "Generating..." : batchCountNumber > 1 ? `Queue ${batchCountNumber} Images` : "Generate"}
           </button>
           <button className="btn" type="button" onClick={onRefresh} disabled={busy}>
             Refresh Outputs
