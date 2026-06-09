@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "templates": [
+    {
+      "template_id": "template.weather.realvisxl.v1",
+      "template_name": "Weather RealVisXL",
+      "description": "Reusable normal-operation weather image workflow for forecast-driven scenes.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "weather-realvisxl/api_workflow.json",
+      "ui_workflow_path": "weather-realvisxl/ui_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Rendered scene prompt assembled from weather data."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress."
+        },
+        {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width."
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed. Use null for runtime randomization."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "low quality, blurry, distorted text, watermark",
+        "width": 1344,
+        "height": 768,
+        "seed": null
+      },
+      "model_requirements": {
+        "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "loras": ["sdxl_lightning_4step_lora.safetensors"],
+        "vae": null,
+        "controlnets": []
+      },
+      "output_scope": "normal",
+      "metadata": {
+        "preset_family": "realvisxl_lightning",
+        "domain": "weather"
+      }
+    }
+  ]
+}

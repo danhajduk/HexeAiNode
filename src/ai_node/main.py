@@ -241,6 +241,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to persisted image generation template registration state",
     )
     parser.add_argument(
+        "--comfyui-template-catalog-dir",
+        default=os.environ.get("HEXE_COMFYUI_TEMPLATE_CATALOG_DIR", "config/comfyui/templates"),
+        help="Directory containing ComfyUI workflow template catalog files",
+    )
+    parser.add_argument(
         "--budget-state-path",
         default=os.environ.get("HEXE_BUDGET_STATE_PATH", ".run/budget_state.json"),
         help="Path to persisted budget policy, grant usage, and reservation state",
@@ -360,6 +365,7 @@ def run(
     provider_capability_report_path: str = ".run/provider_capability_report.json",
     prompt_service_state_path: str = ".run/prompt_service_state.json",
     image_generation_template_state_path: str = ".run/image_generation_template_state.json",
+    comfyui_template_catalog_dir: str = "config/comfyui/templates",
     budget_state_path: str = ".run/budget_state.json",
     client_usage_db_path: str = ".run/client_usage.db",
     provider_capability_refresh_interval_seconds: int = 14400,
@@ -719,6 +725,7 @@ def run(
         node_ui_endpoint=resolved_node_ui_endpoint,
         node_software_version=node_software_version,
         protocol_version=protocol_version,
+        comfyui_template_catalog_dir=comfyui_template_catalog_dir,
         provider_refresh_interval_seconds=provider_capability_refresh_interval_seconds,
         mqtt_recovery_store=operational_mqtt_recovery_store,
         operational_mqtt_health_check_interval_seconds=operational_mqtt_health_check_interval_seconds,
@@ -778,6 +785,7 @@ def main() -> int:
         provider_capability_report_path=args.provider_capability_report_path,
         prompt_service_state_path=args.prompt_service_state_path,
         image_generation_template_state_path=args.image_generation_template_state_path,
+        comfyui_template_catalog_dir=args.comfyui_template_catalog_dir,
         budget_state_path=args.budget_state_path,
         client_usage_db_path=os.environ.get("HEXE_CLIENT_USAGE_DB_PATH", ".run/client_usage.db"),
         provider_capability_refresh_interval_seconds=args.provider_capability_refresh_interval_seconds,

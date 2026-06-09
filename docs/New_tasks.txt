@@ -47,6 +47,5 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 984: Add ComfyUI workflow template catalog and validation
 [TODO] Task 985: Route normal image generation through registered templates
 [TODO] Task 986: Surface image generation template registration in docs and node UI

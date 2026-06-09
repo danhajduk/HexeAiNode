@@ -58,6 +58,7 @@ Backend runtime:
 - `HEXE_COMFYUI_WEBUI_SESSION_FILE` default `.run/comfyui-webui-session.json`; manual session lock used to block vision reload while ComfyUI owns the GPU
 - `HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS` default `300`; continuous ComfyUI `/queue` idle time before the manual Web UI session auto-closes
 - `HEXE_COMFYUI_WEBUI_IDLE_CHECK_INTERVAL_SECONDS` default `15`; scheduler interval for evaluating manual Web UI idle auto-close
+- `HEXE_COMFYUI_TEMPLATE_CATALOG_DIR` default `config/comfyui/templates`; directory containing governed ComfyUI workflow template catalog files
 - `HEXE_COMFYUI_MANUAL_GPU_INPUT_DIR` default `runtime/manual/comfyui-gpu/input`
 - `HEXE_COMFYUI_MANUAL_GPU_OUTPUT_DIR` default `runtime/manual/comfyui-gpu/output`
 - `HEXE_COMFYUI_MANUAL_GPU_USER_DIR` default `runtime/manual/comfyui-gpu/user`

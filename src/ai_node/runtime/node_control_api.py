@@ -34,6 +34,7 @@ from ai_node.diagnostics.phase2_logger import Phase2DiagnosticsLogger
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.runtime.provider_resolver import ProviderResolutionRequest, ProviderResolver
 from ai_node.runtime.internal_scheduler import InternalScheduler
+from ai_node.runtime.comfyui_template_catalog import load_comfyui_template_catalog
 from ai_node.runtime.service_manager import (
     LOCAL_LLM_BUILTIN_DEFAULT_MODEL_ID,
     NullServiceManager,
@@ -643,6 +644,7 @@ class NodeControlState:
         node_ui_endpoint: str | None = None,
         node_software_version: str | None = None,
         protocol_version: str | None = None,
+        comfyui_template_catalog_dir: str | None = None,
         provider_refresh_interval_seconds: int = 900,
         mqtt_recovery_store=None,
         operational_mqtt_health_check_interval_seconds: int = 10,
@@ -688,6 +690,11 @@ class NodeControlState:
         self._node_ui_endpoint = node_ui_endpoint
         self._node_software_version = node_software_version
         self._protocol_version = protocol_version
+        self._comfyui_template_catalog_dir = str(
+            comfyui_template_catalog_dir
+            or os.environ.get("HEXE_COMFYUI_TEMPLATE_CATALOG_DIR")
+            or "config/comfyui/templates"
+        ).strip()
         self._provider_refresh_interval_seconds = max(int(provider_refresh_interval_seconds), 60)
         self._mqtt_recovery_store = mqtt_recovery_store
         self._operational_mqtt_health_check_interval_seconds = max(int(operational_mqtt_health_check_interval_seconds), 5)
@@ -1370,6 +1377,43 @@ class NodeControlState:
         index = self._image_generation_template_index(template_id=template_id)
         templates = self._image_generation_template_state.get("templates") if isinstance(self._image_generation_template_state, dict) else []
         return {"configured": True, "template": templates[index]}
+
+    def comfyui_template_catalog_payload(self) -> dict:
+        try:
+            catalog = load_comfyui_template_catalog(catalog_dir=self._comfyui_template_catalog_dir)
+        except ValueError as exc:
+            return {
+                "configured": True,
+                "catalog_dir": self._comfyui_template_catalog_dir,
+                "templates": [],
+                "summary": {"template_count": 0, "valid": False},
+                "errors": [str(exc)],
+            }
+        templates = list(catalog.get("templates") or [])
+        return {
+            **catalog,
+            "summary": {
+                "template_count": len(templates),
+                "valid": not bool(catalog.get("errors")),
+                "runtimes": sorted(
+                    {
+                        str(item.get("runtime_id") or "").strip()
+                        for item in templates
+                        if isinstance(item, dict) and str(item.get("runtime_id") or "").strip()
+                    }
+                ),
+            },
+        }
+
+    def get_comfyui_template_catalog_entry(self, *, template_id: str) -> dict:
+        normalized_id = str(template_id or "").strip()
+        if not normalized_id:
+            raise ValueError("template_id_required")
+        catalog = self.comfyui_template_catalog_payload()
+        for entry in list(catalog.get("templates") or []):
+            if isinstance(entry, dict) and str(entry.get("template_id") or "").strip() == normalized_id:
+                return {"configured": catalog.get("configured"), "template": entry}
+        raise ValueError("comfyui_template_not_found")
 
     def register_image_generation_template(
         self,
@@ -5216,6 +5260,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/execution/queues",
                 "/api/local-runtimes/assignments",
                 "/api/local-runtimes/assignments/{task_family}",
+                "/api/comfyui/templates",
+                "/api/comfyui/templates/{template_id}",
                 "/api/comfyui/gpu/presets",
                 "/api/comfyui/gpu/presets/{preset_id}",
                 "/api/execution/compare",
@@ -5824,6 +5870,17 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             requested_provider=requested_provider,
             requested_model=requested_model,
         )
+
+    @app.get("/api/comfyui/templates")
+    def get_comfyui_templates():
+        return state.comfyui_template_catalog_payload()
+
+    @app.get("/api/comfyui/templates/{template_id}")
+    def get_comfyui_template(template_id: str):
+        try:
+            return state.get_comfyui_template_catalog_entry(template_id=template_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/comfyui/gpu/presets")
     def get_comfyui_gpu_presets():

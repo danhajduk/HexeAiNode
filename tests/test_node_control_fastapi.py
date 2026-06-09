@@ -715,6 +715,31 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(preset_response.json()["preset"]["id"], "wide")
             self.assertEqual(missing_response.status_code, 404)
 
+    def test_comfyui_template_catalog_endpoints_return_weather_template(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            catalog_response = client.get("/api/comfyui/templates")
+            template_response = client.get("/api/comfyui/templates/template.weather.realvisxl.v1")
+            missing_response = client.get("/api/comfyui/templates/missing")
+
+            self.assertEqual(catalog_response.status_code, 200)
+            self.assertTrue(catalog_response.json()["summary"]["valid"])
+            self.assertEqual(catalog_response.json()["summary"]["template_count"], 1)
+            self.assertEqual(template_response.status_code, 200)
+            template = template_response.json()["template"]
+            self.assertEqual(template["template_id"], "template.weather.realvisxl.v1")
+            self.assertEqual(template["model_requirements"]["checkpoint"], "RealVisXL_V5.0_fp16.safetensors")
+            self.assertIn("positive_prompt", [item["name"] for item in template["variables"]])
+            self.assertEqual(missing_response.status_code, 404)
+
     def test_local_runtime_assignment_endpoints_return_catalog_and_task_assignment(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = NodeControlState(
