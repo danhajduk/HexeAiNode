@@ -63,14 +63,17 @@ function formatQueue(session) {
 }
 
 function formatProgress(progress) {
-  if (progress.available === false) {
-    return "unavailable";
-  }
   if (Number.isFinite(Number(progress.percent))) {
     return `${Number(progress.percent).toFixed(1)}%`;
   }
   if (progress.value !== null && progress.value !== undefined && progress.max !== null && progress.max !== undefined) {
     return `${progress.value}/${progress.max}`;
+  }
+  if (progress.fallback_status) {
+    return progress.fallback_status;
+  }
+  if (progress.available === false) {
+    return "unavailable";
   }
   return progress.active ? "working" : "idle";
 }
@@ -110,8 +113,31 @@ export function ManualImageGenerationCard({
   const generationProgress = objectValue(generationStatus.progress);
   const latestJob = objectValue(payload?.latest_job);
   const displayedLatestJob = latestJob.prompt_id || latestJob.status ? latestJob : objectValue(result);
+  const latestJobProgress = objectValue(displayedLatestJob.progress);
+  const latestJobStatus = formatLatestJob(displayedLatestJob);
+  const statusProgress =
+    generationProgress.available === false && latestJobProgress.available !== false ? latestJobProgress : generationProgress;
+  const progressActive =
+    busy ||
+    Boolean(generationSession.queue_active) ||
+    ["submitted", "queued", "running"].includes(latestJobStatus);
+  const effectiveProgress = {
+    ...statusProgress,
+    active: Boolean(statusProgress.active) || progressActive,
+    fallback_status:
+      Number.isFinite(Number(statusProgress.percent)) || (statusProgress.value !== null && statusProgress.value !== undefined)
+        ? null
+        : progressActive
+          ? latestJobStatus === "none"
+            ? "working"
+            : latestJobStatus
+          : latestJobStatus === "completed"
+            ? "completed"
+            : null,
+  };
   const manualPaths = payload?.manual_paths || {};
-  const progressPercent = Number(generationProgress.percent);
+  const progressPercent = Number(effectiveProgress.percent);
+  const displayedProgressPercent = Number.isFinite(progressPercent) ? progressPercent : latestJobStatus === "completed" ? 100 : null;
   const selectedTemplate = useMemo(
     () => templates.find((template) => template?.template_id === selectedTemplateId) || templates[0] || null,
     [templates, selectedTemplateId]
@@ -183,34 +209,62 @@ export function ManualImageGenerationCard({
   return (
     <article className="card operational-card-full-span">
       <CardHeader title="Manual Image Generation" subtitle="Prompt-driven ComfyUI generation for the manual session." />
-      <div className="state-grid">
-        <span>ComfyUI Runtime</span>
-        <StatusBadge value={serviceState(runtimeService)} />
-        <span>ComfyUI Web UI</span>
-        <StatusBadge value={serviceState(service)} />
-        <span>Manual Session</span>
-        <StatusBadge value={generationSession.state || (service.manual_session_active ? "active" : "inactive")} />
-        <span>Queue</span>
-        <code>{formatQueue(generationSession)}</code>
-        <span>Latest Job</span>
-        <StatusBadge value={busy ? "submitting" : formatLatestJob(displayedLatestJob)} />
-        <span>Current Prompt</span>
-        <code>{generationProgress.prompt_id || generationSession.running_prompt_id || displayedLatestJob.prompt_id || "none"}</code>
-        <span>Progress</span>
-        <div className="manual-generation-progress">
-          <code>{formatProgress(generationProgress)}</code>
-          {Number.isFinite(progressPercent) ? (
-            <div className="manual-generation-progress-track" aria-hidden="true">
-              <span style={{ width: `${Math.max(Math.min(progressPercent, 100), 0)}%` }} />
-            </div>
-          ) : null}
+      <div className="manual-generation-status-grid">
+        <div className="manual-generation-status-item">
+          <span>ComfyUI Runtime</span>
+          <StatusBadge value={serviceState(runtimeService)} />
         </div>
-        <span>Output</span>
-        <code>{manualPaths.output_dir || "not_configured"}</code>
-        <span>Last Submit</span>
-        <code>{displayedLatestJob.prompt_id || "none"}</code>
-        <span>Template</span>
-        <code>{selectedTemplate?.template_id || "not_configured"}</code>
+        <div className="manual-generation-status-item">
+          <span>ComfyUI Web UI</span>
+          <StatusBadge value={serviceState(service)} />
+        </div>
+        <div className="manual-generation-status-item">
+          <span>Manual Session</span>
+          <StatusBadge value={generationSession.state || (service.manual_session_active ? "active" : "inactive")} />
+        </div>
+        <div className="manual-generation-status-item">
+          <span>Queue</span>
+          <code>{formatQueue(generationSession)}</code>
+        </div>
+        <div className="manual-generation-status-item">
+          <span>Latest Job</span>
+          <StatusBadge value={busy ? "submitting" : latestJobStatus} />
+        </div>
+        <div className="manual-generation-status-item">
+          <span>Current Prompt</span>
+          <code>{effectiveProgress.prompt_id || generationSession.running_prompt_id || displayedLatestJob.prompt_id || "none"}</code>
+        </div>
+        <div className="manual-generation-status-item">
+          <span>Output</span>
+          <code>{manualPaths.output_dir || "not_configured"}</code>
+        </div>
+        <div className="manual-generation-status-item">
+          <span>Last Submit</span>
+          <code>{displayedLatestJob.prompt_id || "none"}</code>
+        </div>
+        <div className="manual-generation-status-item">
+          <span>Template</span>
+          <code>{selectedTemplate?.template_id || "not_configured"}</code>
+        </div>
+      </div>
+      <div className="manual-generation-progress-panel">
+        <div className="manual-generation-progress-heading">
+          <span>Progress</span>
+          <code>{formatProgress(effectiveProgress)}</code>
+        </div>
+        <div
+          className={`manual-generation-progress-track ${progressActive && displayedProgressPercent === null ? "is-active" : ""}`}
+          aria-hidden="true"
+        >
+          <span
+            style={{
+              width:
+                displayedProgressPercent !== null
+                  ? `${Math.max(Math.min(displayedProgressPercent, 100), 0)}%`
+                  : undefined,
+            }}
+          />
+        </div>
       </div>
       <form className="setup-form" onSubmit={handleSubmit}>
         <div className="form-grid two-column-form-grid">
