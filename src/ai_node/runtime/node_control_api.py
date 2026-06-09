@@ -1441,6 +1441,9 @@ class NodeControlState:
             generation_status = {}
         outputs = self._manual_image_outputs(limit=24)
         latest_job = self._manual_image_latest_job(generation_status=generation_status, outputs=outputs)
+        cleanup = latest_job.get("rgb_fallback_cleanup") if isinstance(latest_job.get("rgb_fallback_cleanup"), dict) else {}
+        if cleanup.get("deleted"):
+            outputs = self._manual_image_outputs(limit=24)
         references = self._manual_image_references(limit=48)
         catalog = self.comfyui_template_catalog_payload()
         templates = [
@@ -1832,6 +1835,17 @@ class NodeControlState:
         ]
         job_inactive = status == "submitted" or not queue_active
         bg_removal_fallback_active = bool(transparent_background and rgb_fallback_outputs and not transparent_outputs and job_inactive)
+        rgb_fallback_cleanup = None
+        if transparent_background and transparent_outputs and rgb_fallback_outputs and job_inactive:
+            rgb_fallback_cleanup = self._cleanup_manual_rgb_background_removal_fallback_outputs(outputs=rgb_fallback_outputs)
+            deleted = set(rgb_fallback_cleanup.get("deleted") or [])
+            if deleted:
+                completed_outputs = [
+                    item for item in completed_outputs if str(item.get("relative_path") or "").strip() not in deleted
+                ]
+                rgb_fallback_outputs = [
+                    item for item in rgb_fallback_outputs if str(item.get("relative_path") or "").strip() not in deleted
+                ]
         latest_output = transparent_outputs[0] if transparent_outputs else (completed_outputs[0] if completed_outputs else None)
         fallback = None
         if bg_removal_fallback_active:
@@ -1856,6 +1870,7 @@ class NodeControlState:
             "completed_output_count": len(completed_outputs),
             "latest_output": latest_output,
             "background_removal_fallback": fallback,
+            "rgb_fallback_cleanup": rgb_fallback_cleanup,
             "lora_metadata": lora_metadata,
         }
         if updated != job:
@@ -1881,6 +1896,37 @@ class NodeControlState:
         filename = str(output.get("filename") or Path(str(output.get("relative_path") or "")).name).strip()
         stem = Path(filename).stem
         return stem.endswith("_rgb") or "_rgb_" in stem
+
+    def _cleanup_manual_rgb_background_removal_fallback_outputs(self, *, outputs: list[dict]) -> dict:
+        output_dir = self._manual_image_output_dir()
+        deleted: list[str] = []
+        errors: list[dict] = []
+        for output in outputs:
+            relative_raw = str(output.get("relative_path") or "").strip()
+            if not relative_raw:
+                continue
+            safe_relative = self._safe_relative_path(relative_raw)
+            path = (output_dir / safe_relative).resolve()
+            if output_dir not in path.parents and path != output_dir:
+                errors.append({"relative_path": safe_relative.as_posix(), "error": "manual_output_path_invalid"})
+                continue
+            try:
+                path.unlink()
+                self._delete_manual_lora_sidecars(path=path)
+                deleted.append(safe_relative.as_posix())
+            except FileNotFoundError:
+                self._delete_manual_lora_sidecars(path=path)
+                deleted.append(safe_relative.as_posix())
+            except PermissionError:
+                try:
+                    self._delete_manual_image_output_via_container(relative_path=safe_relative.as_posix())
+                    self._delete_manual_lora_sidecars(path=path)
+                    deleted.append(safe_relative.as_posix())
+                except Exception as exc:
+                    errors.append({"relative_path": safe_relative.as_posix(), "error": str(exc)})
+            except Exception as exc:
+                errors.append({"relative_path": safe_relative.as_posix(), "error": str(exc)})
+        return {"deleted": deleted, "errors": errors}
 
     def _read_manual_image_latest_job(self) -> dict:
         try:

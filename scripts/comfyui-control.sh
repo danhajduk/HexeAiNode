@@ -27,11 +27,16 @@ export COMFYUI_GPU_PORT="${COMFYUI_GPU_PORT:-8188}"
 export COMFYUI_GPU_SOCKET_PATH="${COMFYUI_GPU_SOCKET_PATH:-$COMFYUI_SOCKET_DIR/comfyui-gpu.sock}"
 export COMFYUI_GPU_HEALTH_SOCKET="${COMFYUI_GPU_HEALTH_SOCKET:-$COMFYUI_SOCKET_DIR/comfyui-gpu-health.sock}"
 export COMFYUI_GPU_MODEL_DIR="${COMFYUI_GPU_MODEL_DIR:-$ROOT_DIR/runtime/models/comfyui-gpu}"
+export COMFYUI_GPU_CONTROLNET_DIR="${COMFYUI_GPU_CONTROLNET_DIR:-$COMFYUI_GPU_MODEL_DIR/controlnet}"
 export COMFYUI_GPU_INPUT_DIR="${COMFYUI_GPU_INPUT_DIR:-$ROOT_DIR/runtime/input/comfyui-gpu}"
 export COMFYUI_GPU_OUTPUT_DIR="${COMFYUI_GPU_OUTPUT_DIR:-$ROOT_DIR/runtime/output/comfyui-gpu}"
 export COMFYUI_GPU_USER_DIR="${COMFYUI_GPU_USER_DIR:-$ROOT_DIR/runtime/user/comfyui-gpu}"
 export COMFYUI_GPU_CHECKPOINT="${COMFYUI_GPU_CHECKPOINT:-RealVisXL_V5.0_fp16.safetensors}"
 export COMFYUI_GPU_LORA="${COMFYUI_GPU_LORA:-sdxl_lightning_4step_lora.safetensors}"
+export COMFYUI_GPU_CONTROLNET_OPENPOSE_FILE="${COMFYUI_GPU_CONTROLNET_OPENPOSE_FILE:-controlnet-openpose-sdxl-1.0.safetensors}"
+export COMFYUI_GPU_CONTROLNET_OPENPOSE_URL="${COMFYUI_GPU_CONTROLNET_OPENPOSE_URL:-https://huggingface.co/thibaud/controlnet-openpose-sdxl-1.0/resolve/main/OpenPoseXL2.safetensors}"
+export COMFYUI_GPU_CONTROLNET_CANNY_FILE="${COMFYUI_GPU_CONTROLNET_CANNY_FILE:-controlnet-canny-sdxl-1.0-fp16.safetensors}"
+export COMFYUI_GPU_CONTROLNET_CANNY_URL="${COMFYUI_GPU_CONTROLNET_CANNY_URL:-https://huggingface.co/diffusers/controlnet-canny-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors}"
 
 export COMFYUI_CPU_HOST="${COMFYUI_CPU_HOST:-$COMFYUI_HOST}"
 export COMFYUI_CPU_PORT="${COMFYUI_CPU_PORT:-8189}"
@@ -281,7 +286,7 @@ link_model_file() {
 
 prepare_gpu_runtime_dirs() {
   mkdir -p "$COMFYUI_GPU_MODEL_DIR/checkpoints" "$COMFYUI_GPU_MODEL_DIR/loras"
-  mkdir -p "$COMFYUI_GPU_INPUT_DIR" "$COMFYUI_GPU_OUTPUT_DIR" "$COMFYUI_GPU_USER_DIR" "$COMFYUI_CACHE_DIR" "$COMFYUI_SOCKET_DIR"
+  mkdir -p "$COMFYUI_GPU_CONTROLNET_DIR" "$COMFYUI_GPU_INPUT_DIR" "$COMFYUI_GPU_OUTPUT_DIR" "$COMFYUI_GPU_USER_DIR" "$COMFYUI_CACHE_DIR" "$COMFYUI_SOCKET_DIR"
   link_model_file "$COMFYUI_LEGACY_MODEL_DIR/checkpoints" "$COMFYUI_GPU_MODEL_DIR/checkpoints" "$COMFYUI_GPU_CHECKPOINT"
   link_model_file "$COMFYUI_LEGACY_MODEL_DIR/loras" "$COMFYUI_GPU_MODEL_DIR/loras" "$COMFYUI_GPU_LORA"
 }
@@ -347,6 +352,25 @@ wait_ready() {
   return 1
 }
 
+download_if_missing() {
+  local url="$1"
+  local target="$2"
+  if [[ -f "$target" ]]; then
+    echo "Already present: $target"
+    return
+  fi
+  mkdir -p "$(dirname "$target")"
+  echo "Downloading $(basename "$target")..."
+  curl --fail --location --continue-at - --output "$target.part" "$url"
+  mv "$target.part" "$target"
+}
+
+download_gpu_controlnet_models() {
+  prepare_gpu_runtime_dirs
+  download_if_missing "$COMFYUI_GPU_CONTROLNET_OPENPOSE_URL" "$COMFYUI_GPU_CONTROLNET_DIR/$COMFYUI_GPU_CONTROLNET_OPENPOSE_FILE"
+  download_if_missing "$COMFYUI_GPU_CONTROLNET_CANNY_URL" "$COMFYUI_GPU_CONTROLNET_DIR/$COMFYUI_GPU_CONTROLNET_CANNY_FILE"
+}
+
 each_target() {
   if [[ "$target" == "all" ]]; then
     printf 'gpu\ncpu\n'
@@ -365,6 +389,13 @@ case "$command" in
     else
       gate_gpu_on_vision_unload
     fi
+    ;;
+  download-controlnets|download-controlnet-models)
+    case "$target" in
+      gpu) download_gpu_controlnet_models ;;
+      cpu) echo "CPU ComfyUI uses the SD1.5 DreamShaper preset; SDXL ControlNet downloads are GPU-only." ;;
+      all) download_gpu_controlnet_models ;;
+    esac
     ;;
   build)
     prepare_runtime_dirs all
@@ -409,8 +440,8 @@ case "$command" in
     done
     ;;
   *)
-    echo "Usage: $0 [gpu|cpu|all] {prepare|gate|build|create|start|stop|restart|status|logs|ready}" >&2
-    echo "       $0 {prepare|gate|build|create|start|stop|restart|status|logs|ready}  # defaults to gpu" >&2
+    echo "Usage: $0 [gpu|cpu|all] {prepare|gate|download-controlnets|build|create|start|stop|restart|status|logs|ready}" >&2
+    echo "       $0 {prepare|gate|download-controlnets|build|create|start|stop|restart|status|logs|ready}  # defaults to gpu" >&2
     exit 2
     ;;
 esac

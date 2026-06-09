@@ -18,6 +18,24 @@ mkdir -p \
   "$CPU_BASE_DIR/temp" "$CPU_BASE_DIR/custom_nodes" \
   "$SOCKET_DIR"
 
+link_packaged_custom_nodes() {
+  local base_dir="$1"
+  local packaged_dir target
+  for packaged_dir in /opt/ComfyUI/custom_nodes/*; do
+    [[ -d "$packaged_dir" ]] || continue
+    target="$base_dir/custom_nodes/$(basename "$packaged_dir")"
+    if [[ -L "$target" && ! -e "$target" ]]; then
+      rm -f "$target"
+    fi
+    if [[ ! -e "$target" ]]; then
+      ln -s "$packaged_dir" "$target"
+    fi
+  done
+}
+
+link_packaged_custom_nodes "$GPU_BASE_DIR"
+link_packaged_custom_nodes "$CPU_BASE_DIR"
+
 rm -f "$GPU_SOCKET" "$GPU_HEALTH_SOCKET" "$CPU_SOCKET" "$CPU_HEALTH_SOCKET"
 
 start_proxy() {

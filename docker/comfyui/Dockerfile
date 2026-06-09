@@ -1,6 +1,7 @@
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
 ARG COMFYUI_REF=master
+ARG COMFYUI_CONTROLNET_AUX_REF=main
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PIP_NO_CACHE_DIR=1
@@ -11,6 +12,10 @@ RUN apt-get update \
         ca-certificates \
         curl \
         git \
+        libgl1 \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
         python3 \
         python3-pip \
         python3-venv \
@@ -24,6 +29,9 @@ WORKDIR /opt/ComfyUI
 
 RUN python3 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 \
     && python3 -m pip install -r requirements.txt
+
+RUN git clone --depth 1 --branch "${COMFYUI_CONTROLNET_AUX_REF}" https://github.com/Fannovel16/comfyui_controlnet_aux.git custom_nodes/comfyui_controlnet_aux \
+    && python3 -m pip install -r custom_nodes/comfyui_controlnet_aux/requirements.txt
 
 COPY docker/comfyui/run-dual.sh /opt/hexe/run-comfyui-dual.sh
 COPY docker/comfyui/socket-proxy.py /opt/hexe/comfyui-socket-proxy.py

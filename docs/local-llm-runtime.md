@@ -102,6 +102,7 @@ CPU ComfyUI target:
 ```bash
 scripts/comfyui-control.sh gpu prepare
 scripts/comfyui-control.sh gpu gate
+scripts/comfyui-control.sh gpu download-controlnets
 scripts/comfyui-control.sh gpu build
 scripts/comfyui-control.sh gpu ready
 scripts/comfyui-control.sh gpu status
@@ -122,6 +123,10 @@ container starts both runtime processes together. Both processes start with `--d
 startup checkpoint argument; checkpoints and LoRAs should be loaded by the request workflow unless a future explicit
 keep-warm policy is enabled. During directory preparation, the control script creates per-runtime model folders and
 symlinks the expected checkpoint/LoRA from the legacy `runtime/models/comfyui` folder when the file is already present.
+The ComfyUI image includes `comfyui_controlnet_aux` preprocessors for pose, edge, and depth extraction. The optional
+`download-controlnets` command downloads the default SDXL OpenPose and Canny ControlNet weights into
+`runtime/models/comfyui-gpu/controlnet`; OpenPose is useful for posture, while Canny is useful for visible body
+silhouette and clothing/outline preservation.
 ComfyUI no longer publishes host HTTP ports by default. The container keeps HTTP bound internally for ComfyUI itself,
 then exposes API and health access through Unix sockets under `/run/hexe/ai-node`. The health sockets serve `/health`;
 the API sockets forward regular ComfyUI HTTP API calls such as `/system_stats`, `/prompt`, and `/history`.
