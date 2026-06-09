@@ -272,6 +272,60 @@ class ExecutionQueueService:
                     return True
         return False
 
+    async def matching_work_snapshot(
+        self,
+        *,
+        queue: str,
+        task_families: set[str],
+        statuses: set[str] | None = None,
+    ) -> dict:
+        queue_key = self._normalize_queue_key(queue)
+        family_keys = {str(item or "").strip().lower() for item in task_families if str(item or "").strip()}
+        status_keys = {str(item or "").strip().lower() for item in (statuses or {"queued", "running"}) if str(item or "").strip()}
+        jobs = []
+        async with self._lock:
+            for job in self._jobs.values():
+                if str(job.get("queue") or "").strip().lower() != queue_key:
+                    continue
+                status_key = str(job.get("status") or "").strip().lower()
+                if status_key not in status_keys:
+                    continue
+                request = job.get("request") if isinstance(job.get("request"), dict) else {}
+                task_family = str(request.get("task_family") or "").strip().lower()
+                if task_family not in family_keys:
+                    continue
+                constraints = request.get("constraints") if isinstance(request.get("constraints"), dict) else {}
+                routing_policy = constraints.get("routing_policy") if isinstance(constraints.get("routing_policy"), dict) else {}
+                requested_provider = str(request.get("requested_provider") or "").strip().lower()
+                routing_mode = str(routing_policy.get("mode") or "").strip().lower()
+                jobs.append(
+                    {
+                        "job_id": job.get("job_id"),
+                        "job_name": job.get("job_name"),
+                        "status": status_key,
+                        "queue": queue_key,
+                        "importance": job.get("importance"),
+                        "task_id": request.get("task_id"),
+                        "task_family": task_family,
+                        "requested_provider": requested_provider or None,
+                        "routing_policy_mode": routing_mode or None,
+                        "cloud_reroute_candidate": bool(
+                            status_key == "queued"
+                            and requested_provider not in {"local", "local_vision"}
+                            and routing_mode not in {"local_only"}
+                        ),
+                    }
+                )
+        return {
+            "queue": queue_key,
+            "task_families": sorted(family_keys),
+            "statuses": sorted(status_keys),
+            "jobs": jobs,
+            "queued_count": sum(1 for item in jobs if item.get("status") == "queued"),
+            "active_count": sum(1 for item in jobs if item.get("status") == "running"),
+            "cloud_reroute_candidate_count": sum(1 for item in jobs if item.get("cloud_reroute_candidate")),
+        }
+
     def _ensure_dispatcher_locked(self, queue_key: str) -> None:
         task = self._dispatcher_tasks.get(queue_key)
         if task is not None and not task.done():

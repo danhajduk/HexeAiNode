@@ -129,6 +129,7 @@ the API sockets forward regular ComfyUI HTTP API calls such as `/system_stats`, 
 The node service can expose a temporary manual Web UI bridge when requested through service control:
 
 ```bash
+GET /api/services/comfyui-webui/preflight
 POST /api/services/start {"target":"comfyui_webui"}
 POST /api/services/stop {"target":"comfyui_webui"}
 ```
@@ -140,6 +141,12 @@ The node writes `.run/comfyui-webui-session.json` while a manual session is star
 the vision residency scheduler treats that marker as `blocked_by_manual_comfyui_webui` and will not reload vision during
 the manual GPU takeover. Stopping `comfyui_webui` closes the bridge, stops ComfyUI, waits for the runtime sockets to
 disappear, and only then clears the manual session marker.
+
+Before the manual bridge starts, the node checks the local execution queue for active or queued vision work
+(`task.vision_analysis`, image description, object detection, and document OCR). If any local vision work is present,
+manual ComfyUI takeover is rejected with `vision_work_pending` and the preflight payload lists the blocking jobs. The
+preflight also reports queued cloud-reroute candidates, but already-enqueued jobs are not rewritten automatically because
+the current queue runner cannot safely rebind an executable local runner into a cloud runner after admission.
 
 Example socket probes:
 

@@ -2690,6 +2690,67 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(service_manager.calls[-1]["vision_local_in_flight"], 0)
             self.assertFalse(service_manager.calls[-1]["gpu_comfyui_critical_in_flight"])
 
+    async def test_manual_comfyui_takeover_preflight_blocks_local_vision_work(self):
+        class _ManualComfyServiceManager:
+            def __init__(self):
+                self.calls = []
+
+            def get_status(self):
+                return {"comfyui_webui": {"state": "stopped"}}
+
+            def start(self, *, target: str):
+                self.calls.append({"action": "start", "target": target})
+                return {"target": target, "result": "started"}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            service_manager = _ManualComfyServiceManager()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=service_manager,
+            )
+            blocker = asyncio.Event()
+
+            async def _blocked_runner():
+                await blocker.wait()
+                return {"status": "ok"}
+
+            queued = await state._execution_queue.enqueue(
+                queue="local",
+                importance="normal",
+                job_name="vision-blocker",
+                request_payload={
+                    "task_id": "vision-blocker",
+                    "task_family": "task.vision_analysis",
+                    "constraints": {"routing_policy": {"mode": "local_only"}},
+                },
+                runner=_blocked_runner,
+            )
+            for _ in range(50):
+                status = await state._execution_queue.job_status(job_id=queued["job_id"])
+                if status.get("status") == "running":
+                    break
+                await asyncio.sleep(0.01)
+            self.assertEqual(status["status"], "running")
+
+            preflight = await state.manual_comfyui_takeover_preflight()
+
+            self.assertFalse(preflight["ready"])
+            self.assertEqual(preflight["reason"], "vision_work_pending")
+            self.assertEqual(preflight["vision_work"]["active_count"], 1)
+            with self.assertRaises(ValueError):
+                await state.start_service(target="comfyui_webui")
+            self.assertEqual(service_manager.calls, [])
+            blocker.set()
+            for _ in range(50):
+                status = await state._execution_queue.job_status(job_id=queued["job_id"])
+                if status.get("status") == "completed":
+                    break
+                await asyncio.sleep(0.01)
+            self.assertEqual(status["status"], "completed")
+
     async def test_vision_runtime_residency_job_passes_critical_gpu_comfyui_work(self):
         with tempfile.TemporaryDirectory() as tmp:
             service_manager = self._FakeServiceManager()

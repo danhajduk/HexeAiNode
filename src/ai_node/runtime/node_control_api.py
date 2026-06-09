@@ -3057,15 +3057,23 @@ class NodeControlState:
             "result": result.payload,
         }
 
-    def restart_service(self, *, target: str) -> dict:
+    async def restart_service(self, *, target: str) -> dict:
         if self._service_manager is None or not hasattr(self._service_manager, "restart"):
             raise ValueError("service manager is not configured")
+        if str(target or "").strip().lower() == "comfyui_webui":
+            if hasattr(self._service_manager, "stop"):
+                self._service_manager.stop(target=target)
+            await self._assert_manual_comfyui_takeover_ready()
+            result = self._service_manager.start(target=target)
+            return {"status": "ok", **result, "services": self._service_manager.get_status()}
         result = self._service_manager.restart(target=target)
         return {"status": "ok", **result, "services": self._service_manager.get_status()}
 
-    def start_service(self, *, target: str) -> dict:
+    async def start_service(self, *, target: str) -> dict:
         if self._service_manager is None or not hasattr(self._service_manager, "start"):
             raise ValueError("service manager is not configured")
+        if str(target or "").strip().lower() == "comfyui_webui":
+            await self._assert_manual_comfyui_takeover_ready()
         result = self._service_manager.start(target=target)
         return {"status": "ok", **result, "services": self._service_manager.get_status()}
 
@@ -3074,6 +3082,34 @@ class NodeControlState:
             raise ValueError("service manager is not configured")
         result = self._service_manager.stop(target=target)
         return {"status": "ok", **result, "services": self._service_manager.get_status()}
+
+    async def _assert_manual_comfyui_takeover_ready(self) -> dict:
+        preflight = await self.manual_comfyui_takeover_preflight()
+        if not preflight.get("ready"):
+            raise ValueError(json.dumps(preflight, sort_keys=True))
+        return preflight
+
+    async def manual_comfyui_takeover_preflight(self) -> dict:
+        if self._execution_queue is None or not hasattr(self._execution_queue, "matching_work_snapshot"):
+            return {"ready": True, "reason": "execution_queue_not_configured", "vision_work": None}
+        snapshot = await self._execution_queue.matching_work_snapshot(
+            queue="local",
+            task_families={"task.document_ocr", "task.image_description", "task.object_detection", "task.vision_analysis"},
+            statuses={"queued", "running"},
+        )
+        active_count = max(int(snapshot.get("active_count") or 0), 0)
+        queued_count = max(int(snapshot.get("queued_count") or 0), 0)
+        ready = active_count == 0 and queued_count == 0
+        return {
+            "ready": ready,
+            "reason": "vision_work_drained" if ready else "vision_work_pending",
+            "vision_work": snapshot,
+            "cloud_reroute": {
+                "automatic_reroute_enabled": False,
+                "candidate_count": max(int(snapshot.get("cloud_reroute_candidate_count") or 0), 0),
+                "reason": "queued_job_runner_rebind_not_supported",
+            },
+        }
 
     def update_provider_selection(
         self,
@@ -4846,6 +4882,9 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/execution/compare",
                 "/api/benchmarks/execution/v2",
                 "/api/services/status",
+                "/api/services/comfyui-webui/preflight",
+                "/api/services/start",
+                "/api/services/stop",
                 "/api/services/restart",
                 "/debug/providers",
                 "/debug/providers/models",
@@ -5432,10 +5471,14 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def get_services_status():
         return state.service_status_payload()
 
+    @app.get("/api/services/comfyui-webui/preflight")
+    async def get_comfyui_webui_preflight():
+        return await state.manual_comfyui_takeover_preflight()
+
     @app.post("/api/services/start")
-    def post_services_start(payload: ServiceRestartRequest):
+    async def post_services_start(payload: ServiceRestartRequest):
         try:
-            return state.start_service(target=payload.target)
+            return await state.start_service(target=payload.target)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -5447,9 +5490,9 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/services/restart")
-    def post_services_restart(payload: ServiceRestartRequest):
+    async def post_services_restart(payload: ServiceRestartRequest):
         try:
-            return state.restart_service(target=payload.target)
+            return await state.restart_service(target=payload.target)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -231,6 +231,48 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         release_first.set()
         await _wait_for_status(queue, job_id=first["job_id"], status="completed")
 
+    async def test_matching_work_snapshot_reports_local_vision_jobs_and_reroute_candidates(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
+        release_first = asyncio.Event()
+        running = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="running vision",
+            request_payload={
+                "task_id": "vision-running",
+                "task_family": "task.vision_analysis",
+                "constraints": {"routing_policy": {"mode": "local_only"}},
+            },
+            runner=lambda: _blocking_job(name="running", order=[], release=release_first),
+        )
+        await _wait_for_status(queue, job_id=running["job_id"], status="running")
+        await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="queued vision",
+            request_payload={
+                "task_id": "vision-queued",
+                "task_family": "task.vision_analysis",
+                "constraints": {"routing_policy": {"mode": "local_preferred"}},
+            },
+            runner=lambda: _completed({"ok": True}),
+        )
+
+        snapshot = await queue.matching_work_snapshot(
+            queue="local",
+            task_families={"task.vision_analysis"},
+            statuses={"queued", "running"},
+        )
+
+        self.assertEqual(snapshot["active_count"], 1)
+        self.assertEqual(snapshot["queued_count"], 1)
+        self.assertEqual(snapshot["cloud_reroute_candidate_count"], 1)
+        self.assertEqual([item["task_id"] for item in snapshot["jobs"]], ["vision-running", "vision-queued"])
+        self.assertFalse(snapshot["jobs"][0]["cloud_reroute_candidate"])
+        self.assertTrue(snapshot["jobs"][1]["cloud_reroute_candidate"])
+        release_first.set()
+        await _wait_for_status(queue, job_id=running["job_id"], status="completed")
+
     async def test_persists_completed_job_for_later_status_polling(self):
         with tempfile.TemporaryDirectory() as tmp:
             state_path = Path(tmp) / "execution_queue_jobs.json"
