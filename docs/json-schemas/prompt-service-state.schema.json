@@ -93,6 +93,51 @@
                   "null"
                 ]
               },
+              "image_template": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "allowed_parameter_overrides": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "template_id": {
+                        "type": "string"
+                      },
+                      "template_runtime": {
+                        "enum": [
+                          "comfyui_gpu",
+                          "comfyui_cpu"
+                        ],
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "template_version": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "template_id",
+                      "template_version",
+                      "template_runtime",
+                      "allowed_parameter_overrides"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
               "routing_policy": {
                 "oneOf": [
                   {
@@ -128,7 +173,8 @@
               "allowed_model_overrides",
               "routing_policy",
               "importance",
-              "capability_requirements"
+              "capability_requirements",
+              "image_template"
             ],
             "type": "object"
           },

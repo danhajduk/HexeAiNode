@@ -165,6 +165,9 @@
         },
         "capability_requirements": {
           "$ref": "#/$defs/promptCapabilityRequirements"
+        },
+        "image_template": {
+          "$ref": "#/$defs/promptImageTemplatePolicy"
         }
       }
     },
@@ -222,6 +225,52 @@
         "required_features": {
           "type": "array",
           "description": "V3 prompt-owned model feature requirements. Provider/model selection must choose a model with every listed feature.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "promptImageTemplatePolicy": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "template_id"
+      ],
+      "properties": {
+        "template_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "V3+ prompt-owned image generation template id, for example a reusable ComfyUI weather workflow."
+        },
+        "template_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "template_runtime": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "comfyui_gpu",
+            "comfyui_cpu",
+            null
+          ]
+        },
+        "allowed_parameter_overrides": {
+          "type": "array",
           "items": {
             "type": "string",
             "minLength": 1,

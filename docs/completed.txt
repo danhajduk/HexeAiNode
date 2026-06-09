@@ -553,3 +553,4 @@ Task 978: Add five-minute idle auto-close for manual ComfyUI sessions - Complete
 Task 979: Restore normal vision residency after manual ComfyUI auto-close - Completed on 06/09/2026 08:39
 Task 980: Store manual ComfyUI artifacts in separate manual runtime folders - Completed on 06/09/2026 08:41
 Task 981: Surface manual ComfyUI session state and controls in the node UI - Completed on 06/09/2026 08:43
+Task 982: Add V3+ prompt support for image generation template selection - Completed on 06/09/2026 08:46

@@ -9,7 +9,7 @@ from ai_node.persistence.prompt_service_state_store import (
     normalize_prompt_service_state,
     validate_prompt_service_state,
 )
-from ai_node.prompts.registration import normalize_prompt_constraints
+from ai_node.prompts.registration import create_prompt_service_registration, normalize_prompt_constraints
 
 
 class PromptServiceStateStoreTests(unittest.TestCase):
@@ -195,6 +195,67 @@ class PromptServiceStateStoreTests(unittest.TestCase):
         self.assertEqual(constraints["routing_policy"], {"mode": "local_preferred"})
         self.assertEqual(constraints["importance"], {"level": "normal"})
         self.assertEqual(constraints["capability_requirements"], {"required_features": ["structured_output"]})
+        self.assertIsNone(constraints["image_template"])
+
+    def test_normalize_v3_image_prompt_template_policy_survives_state_normalization(self):
+        payload = normalize_prompt_service_state(
+            {
+                "schema_version": "2.0",
+                "prompt_services": [
+                    {
+                        "prompt_id": "prompt.weather.image",
+                        "prompt_name": "Weather Image",
+                        "service_id": "weather-node",
+                        "owner_service": "weather-node",
+                        "task_family": "task.image_generation",
+                        "status": "active",
+                        "privacy_class": "internal",
+                        "access_scope": "service",
+                        "execution_policy": {"allow_direct_execution": True, "allow_version_pinning": True},
+                        "provider_preferences": {},
+                        "constraints": {
+                            "image_template": {
+                                "template_id": "weather.realistic_scene",
+                                "template_version": "v1",
+                                "template_runtime": "comfyui_gpu",
+                                "allowed_parameter_overrides": ["seed", "width", "height"],
+                            }
+                        },
+                        "metadata": {},
+                        "current_version": "v3.0.0",
+                        "versions": [{"version": "v3.0.0", "definition": {}, "metadata": {}, "created_at": "2026-06-09T00:00:00Z"}],
+                        "lifecycle_history": [{"state": "active", "reason": "created", "changed_at": "2026-06-09T00:00:00Z"}],
+                        "usage": {"execution_count": 0, "success_count": 0, "failure_count": 0, "denial_count": 0},
+                        "registered_at": "2026-06-09T00:00:00Z",
+                        "updated_at": "2026-06-09T00:00:00Z",
+                        "last_reviewed_at": None,
+                        "reviewed_by": None,
+                        "review_reason": None,
+                    }
+                ],
+                "probation": {"active_prompt_ids": [], "reasons": {}, "updated_at": "2026-06-09T00:00:00Z"},
+                "updated_at": "2026-06-09T00:00:00Z",
+            }
+        )
+
+        self.assertEqual(
+            payload["prompt_services"][0]["constraints"]["image_template"],
+            {
+                "template_id": "weather.realistic_scene",
+                "template_version": "v1",
+                "template_runtime": "comfyui_gpu",
+                "allowed_parameter_overrides": ["seed", "width", "height"],
+            },
+        )
+
+    def test_normalize_rejects_invalid_image_template_runtime(self):
+        with self.assertRaisesRegex(ValueError, "invalid_image_template_runtime"):
+            create_prompt_service_registration(
+                prompt_id="prompt.weather.image",
+                service_id="weather-node",
+                task_family="task.image_generation",
+                constraints={"image_template": {"template_id": "weather.realistic_scene", "template_runtime": "unknown"}},
+            )
 
     def test_normalize_preserves_review_due_and_access_policy(self):
         payload = normalize_prompt_service_state(

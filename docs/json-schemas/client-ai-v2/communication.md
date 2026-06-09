@@ -122,6 +122,15 @@ V3 prompt capability requirements:
 - Successful and non-success execution results that reached provider resolution include the effective requirements in
   `resolution_metadata.capability_requirements`.
 
+V3+ image generation template selection:
+
+- `constraints.image_template` optionally binds an image-generation prompt to a reusable registered image template.
+- `template_id` is required when the image template policy is present. `template_version` and `template_runtime` are
+  optional narrowers.
+- `allowed_parameter_overrides` lists template variables that execution requests may override. Requests may fill or
+  narrow the prompt-owned template policy, but must not broaden it.
+- Missing `constraints.image_template` normalizes to `null` and preserves V1/V2 behavior.
+
 Prompt `provider_preferences.default_provider` and `default_model` remain fallback defaults. They do not override a V3
 `local_preferred` or local-only effective routing policy; clients must send explicit `requested_provider` or
 `requested_model` when they intentionally want a single request to prefer a specific provider/model within the prompt's
@@ -889,7 +898,7 @@ POST /api/prompts/services
 
 V3 prompts should include prompt-owned `constraints.routing_policy`, `constraints.importance`, and
 `constraints.capability_requirements` in this registration payload so the AI Node persists and applies them during
-later direct executions.
+later direct executions. Image-generation prompts may also include prompt-owned `constraints.image_template`.
 
 V2-compatible prompts can include `output_contract` and `benchmark` metadata.
 This metadata describes the prompt contract, but it is not a valid top-level field for `/api/execution/direct`.
@@ -926,6 +935,32 @@ Example:
     "enabled": true,
     "mode": "execution_only",
     "owner_evaluates_results": true
+  }
+}
+```
+
+Image-generation template binding example:
+
+```json
+{
+  "prompt_id": "weather.image.realistic",
+  "service_id": "weather-node",
+  "task_family": "task.image_generation",
+  "version": "v3.0",
+  "constraints": {
+    "routing_policy": {
+      "mode": "local_preferred"
+    },
+    "image_template": {
+      "template_id": "weather.realistic_scene",
+      "template_version": "v1",
+      "template_runtime": "comfyui_gpu",
+      "allowed_parameter_overrides": ["seed", "width", "height"]
+    }
+  },
+  "definition": {
+    "prompt_template": "Create a realistic weather scene: {{weather_scene_prompt}}",
+    "template_variables": ["weather_scene_prompt"]
   }
 }
 ```

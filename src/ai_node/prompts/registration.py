@@ -10,6 +10,7 @@ VALID_PROMPT_PRIVACY_CLASSES = {"public", "internal", "restricted", "sensitive"}
 VALID_PROMPT_ACCESS_SCOPES = {"private", "service", "shared", "public"}
 VALID_PROMPT_ROUTING_POLICY_MODES = {"local_only", "local_preferred", "cloud_only", "cloud_fallback"}
 VALID_PROMPT_IMPORTANCE_LEVELS = {"background", "normal", "high", "critical"}
+VALID_IMAGE_TEMPLATE_RUNTIMES = {"comfyui_gpu", "comfyui_cpu"}
 
 
 def _now_iso() -> str:
@@ -104,6 +105,26 @@ def normalize_prompt_capability_requirements(value: object) -> dict | None:
     return {"required_features": required_features}
 
 
+def normalize_prompt_image_template(value: object) -> dict | None:
+    if value is None:
+        return None
+    payload = _normalize_mapping(value)
+    template_id = _optional_string(payload.get("template_id"))
+    if not template_id:
+        return None
+    template_version = _optional_string(payload.get("template_version"))
+    template_runtime = _optional_string(payload.get("template_runtime"))
+    if template_runtime and template_runtime not in VALID_IMAGE_TEMPLATE_RUNTIMES:
+        raise ValueError("invalid_image_template_runtime")
+    allowed_parameter_overrides = _normalize_string_list(payload.get("allowed_parameter_overrides"))
+    return {
+        "template_id": template_id,
+        "template_version": template_version,
+        "template_runtime": template_runtime,
+        "allowed_parameter_overrides": allowed_parameter_overrides,
+    }
+
+
 def normalize_prompt_constraints(value: object) -> dict:
     payload = _normalize_mapping(value)
     max_timeout_s = payload.get("max_timeout_s")
@@ -115,6 +136,7 @@ def normalize_prompt_constraints(value: object) -> dict:
         "routing_policy": normalize_prompt_routing_policy(payload.get("routing_policy")),
         "importance": normalize_prompt_importance_policy(payload.get("importance")),
         "capability_requirements": normalize_prompt_capability_requirements(payload.get("capability_requirements")),
+        "image_template": normalize_prompt_image_template(payload.get("image_template")),
     }
 
 
