@@ -289,6 +289,7 @@ describe("OperationalDashboard", () => {
                 {
                   template_id: "template.avatar_reference.realvisxl.v1",
                   template_name: "Avatar References RealVisXL",
+                  description: "Avatar workflow that applies prompt edits while conditioning on selected face and body reference images.",
                   metadata: { domain: "avatar", input_mode: "image" },
                   defaults: {
                     negative_prompt: "low quality, blurry",
@@ -342,6 +343,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("1 running / 2 pending");
     expect(markup).toContain("25.0%");
     expect(markup).toContain("Template");
+    expect(markup).toContain("Avatar workflow that applies prompt edits");
     expect(markup).toContain("Source Image");
     expect(markup).toContain("Avatar References");
     expect(markup).toContain("Prompt");

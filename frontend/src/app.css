@@ -757,6 +757,11 @@
   grid-column: 1 / -1;
 }
 
+.manual-generation-template-description {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .manual-generation-status-row {
   display: grid;
   gap: 10px;

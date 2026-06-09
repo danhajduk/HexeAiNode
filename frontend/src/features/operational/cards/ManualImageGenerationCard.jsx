@@ -104,6 +104,14 @@ function formatLatestJob(job) {
   return status || "none";
 }
 
+function formatTemplateIntent(value) {
+  return String(value || "")
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function ManualImageGenerationCard({
   payload = null,
   busy = false,
@@ -183,6 +191,8 @@ export function ManualImageGenerationCard({
   const effectiveTemplate = selectedTemplate;
   const effectiveMode = templateMode(effectiveTemplate) || mode;
   const templateDomain = String(effectiveTemplate?.metadata?.domain || "").trim();
+  const templateIntent = formatTemplateIntent(effectiveTemplate?.metadata?.edit_intent);
+  const templateReferenceRoles = asArray(effectiveTemplate?.metadata?.reference_roles).join(", ");
   const needsSourceImage = hasVariable(effectiveTemplate, "input_image");
   const needsFaceReference = hasVariable(effectiveTemplate, "face_reference_image");
   const needsBodyReference = hasVariable(effectiveTemplate, "body_reference_image");
@@ -468,10 +478,16 @@ export function ManualImageGenerationCard({
           </label>
         </div>
         <div className="state-grid">
+          <span>Description</span>
+          <p className="muted tiny manual-generation-template-description">
+            {effectiveTemplate?.description || "No template description available."}
+          </p>
           <span>Template ID</span>
           <code>{effectiveTemplate?.template_id || "not_configured"}</code>
           <span>Domain</span>
           <code>{templateDomain || "general"}</code>
+          <span>Intent</span>
+          <code>{templateIntent || effectiveMode}</code>
           <span>Required</span>
           <code>
             {[
@@ -481,6 +497,8 @@ export function ManualImageGenerationCard({
               needsSceneReference ? "scene" : null,
             ].filter(Boolean).join(", ") || "prompt"}
           </code>
+          <span>Reference Roles</span>
+          <code>{templateReferenceRoles || "none"}</code>
         </div>
       </article>
 
