@@ -112,6 +112,29 @@ function formatTemplateIntent(value) {
     .join(" ");
 }
 
+const DEFAULT_AVATAR_IDENTITY_PROMPT = [
+  "same woman as the reference images, preserve exact avatar identity, preserve exact face shape and body proportions, stylized photorealistic digital avatar",
+  "youthful adult woman with soft oval heart-shaped face, smooth fair warm skin tone, large almond-shaped vivid green eyes, dark defined lashes, arched dark eyebrows",
+  "small straight narrow nose with softly rounded tip, full soft lips with subtle cupid's bow, gentle confident smile, delicate jawline, softly pointed chin, symmetrical attractive face, high cheekbones, smooth cheeks",
+  "long thick dark brown to black wavy hair, deep side part slightly off center, voluminous waves falling over shoulders and down the back, glossy dark hair with soft highlights",
+  "wearing the same blue glowing headset earpiece with small black microphone boom on the right side of her head, keep headset visible, preserve headset shape and placement",
+  "curvy hourglass body shape, fuller bust, narrow waist, rounded hips, soft natural curves, feminine proportions, average height, full thighs, smooth legs, soft arms",
+  "preserve the same body mass and silhouette as the full body reference, do not make her skinny, do not make her athletic, do not change her waist-to-hip ratio",
+].join(", ");
+
+const DEFAULT_AVATAR_CLOTHING_PROMPT =
+  "wearing elegant black lace lingerie, balconette bra with delicate lace cups, thin adjustable shoulder straps, matching high-waisted lace panties, subtle scalloped lace edges, tasteful sensual styling, fitted to her curvy hourglass body";
+
+const DEFAULT_AVATAR_POSE_PROMPT =
+  "full body visible from head to feet, standing in a relaxed three-quarter pose, body angled 35 degrees to the right, weight on left leg, right knee softly bent forward, left hand resting on left hip, right arm relaxed along the outer thigh, shoulders relaxed, head turned slightly left toward camera, eyes looking directly at viewer, calm confident expression";
+
+const DEFAULT_AVATAR_QUALITY_PROMPT =
+  "transparent background, isolated character cutout, clean alpha edge, studio character reference, sharp face detail, sharp hands, detailed hair strands, consistent identity, consistent body shape, high quality";
+
+function joinPromptSections(sections) {
+  return sections.map((section) => String(section || "").trim()).filter(Boolean).join(", ");
+}
+
 export function ManualImageGenerationCard({
   payload = null,
   busy = false,
@@ -131,6 +154,10 @@ export function ManualImageGenerationCard({
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [mode, setMode] = useState("txt2img");
   const [prompt, setPrompt] = useState("");
+  const [avatarIdentityPrompt, setAvatarIdentityPrompt] = useState(DEFAULT_AVATAR_IDENTITY_PROMPT);
+  const [avatarClothingPrompt, setAvatarClothingPrompt] = useState(DEFAULT_AVATAR_CLOTHING_PROMPT);
+  const [avatarPosePrompt, setAvatarPosePrompt] = useState(DEFAULT_AVATAR_POSE_PROMPT);
+  const [avatarQualityPrompt, setAvatarQualityPrompt] = useState(DEFAULT_AVATAR_QUALITY_PROMPT);
   const [negativePrompt, setNegativePrompt] = useState("low quality, blurry, watermark, text");
   const [width, setWidth] = useState("1024");
   const [height, setHeight] = useState("1024");
@@ -201,6 +228,10 @@ export function ManualImageGenerationCard({
   const supportsDenoise = hasVariable(effectiveTemplate, "denoise");
   const showAvatarReferences = templateDomain === "avatar" || needsFaceReference || needsBodyReference;
   const showSceneReferences = templateDomain === "scene" || needsSceneReference;
+  const showAvatarPromptStructure = templateDomain === "avatar";
+  const composedPrompt = showAvatarPromptStructure
+    ? joinPromptSections([avatarIdentityPrompt, avatarClothingPrompt, avatarPosePrompt, avatarQualityPrompt])
+    : prompt;
   const sourceImageReady = !requiredVariable(effectiveTemplate, "input_image") || Boolean(referenceFile || selectedReference);
   const faceReferenceReady = !requiredVariable(effectiveTemplate, "face_reference_image") || Boolean(faceReference);
   const bodyReferenceReady = !requiredVariable(effectiveTemplate, "body_reference_image") || Boolean(bodyReference);
@@ -226,7 +257,7 @@ export function ManualImageGenerationCard({
     );
   });
   const canSubmit =
-    Boolean(prompt.trim()) &&
+    Boolean(composedPrompt.trim()) &&
     sourceImageReady &&
     faceReferenceReady &&
     bodyReferenceReady &&
@@ -276,7 +307,7 @@ export function ManualImageGenerationCard({
     onSubmit?.({
       template_id: effectiveTemplate?.template_id || null,
       mode: effectiveMode,
-      prompt,
+      prompt: composedPrompt,
       negative_prompt: negativePrompt,
       width: Number.parseInt(width, 10) || 1024,
       height: Number.parseInt(height, 10) || 1024,
@@ -384,6 +415,10 @@ export function ManualImageGenerationCard({
     if (!description) {
       return;
     }
+    if (showAvatarPromptStructure) {
+      setAvatarIdentityPrompt((current) => (current.trim() ? `${current.trim()}, ${description}` : description));
+      return;
+    }
     setPrompt((current) => (current.trim() ? `${current.trim()}\n${description}` : description));
   }
 
@@ -405,14 +440,18 @@ export function ManualImageGenerationCard({
     const result = await onImprovePrompt?.({
       template_id: effectiveTemplate?.template_id || null,
       mode: effectiveMode,
-      prompt,
+      prompt: composedPrompt,
       negative_prompt: negativePrompt,
       width: Number.parseInt(width, 10) || 1024,
       height: Number.parseInt(height, 10) || 1024,
       reference_image_provided: Boolean(referenceFile),
     });
     if (result?.prompt) {
-      setPrompt(String(result.prompt));
+      if (showAvatarPromptStructure) {
+        setAvatarQualityPrompt(String(result.prompt));
+      } else {
+        setPrompt(String(result.prompt));
+      }
     }
     if (result?.negative_prompt) {
       setNegativePrompt(String(result.negative_prompt));
@@ -738,10 +777,35 @@ export function ManualImageGenerationCard({
 
       <article className="card manual-generation-card-wide">
         <CardHeader title="Prompt" subtitle="Prompt text and template settings for the selected workflow." />
-        <label>
-          Prompt
-          <textarea rows={4} value={prompt} onChange={(event) => setPrompt(event.target.value)} />
-        </label>
+        {showAvatarPromptStructure ? (
+          <div className="manual-avatar-prompt-grid">
+            <label>
+              Identity / Body
+              <textarea rows={7} value={avatarIdentityPrompt} onChange={(event) => setAvatarIdentityPrompt(event.target.value)} />
+            </label>
+            <label>
+              Clothing
+              <textarea rows={4} value={avatarClothingPrompt} onChange={(event) => setAvatarClothingPrompt(event.target.value)} />
+            </label>
+            <label>
+              Pose
+              <textarea rows={4} value={avatarPosePrompt} onChange={(event) => setAvatarPosePrompt(event.target.value)} />
+            </label>
+            <label>
+              Background / Quality
+              <textarea rows={4} value={avatarQualityPrompt} onChange={(event) => setAvatarQualityPrompt(event.target.value)} />
+            </label>
+            <label className="manual-avatar-compiled-prompt">
+              Compiled Prompt
+              <textarea rows={5} value={composedPrompt} readOnly />
+            </label>
+          </div>
+        ) : (
+          <label>
+            Prompt
+            <textarea rows={4} value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+          </label>
+        )}
         <div className="row">
           <button className="btn" type="button" onClick={handleImprovePrompt} disabled={helperDisabled}>
             {promptHelperBusy ? "Drafting..." : "Draft / Improve Prompt"}

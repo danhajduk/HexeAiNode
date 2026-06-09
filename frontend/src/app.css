@@ -757,6 +757,20 @@
   grid-column: 1 / -1;
 }
 
+.manual-avatar-prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.manual-avatar-compiled-prompt {
+  grid-column: 1 / -1;
+}
+
+.manual-avatar-compiled-prompt textarea {
+  color: hsl(var(--sx-text-muted));
+}
+
 .manual-generation-template-description {
   margin: 0;
   overflow-wrap: anywhere;
@@ -1530,6 +1544,14 @@ h2 {
 
   .manual-generation-card-stack {
     grid-template-columns: 1fr;
+  }
+
+  .manual-avatar-prompt-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-avatar-compiled-prompt {
+    grid-column: auto;
   }
 
 
