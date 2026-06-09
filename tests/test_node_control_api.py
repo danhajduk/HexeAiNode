@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import tempfile
 import threading
@@ -16,6 +17,7 @@ from ai_node.runtime.node_control_api import (
     DirectExecutionAdmissionConfig,
     DirectExecutionAdmissionGuard,
     DirectExecutionBusyError,
+    ManualImageGenerationRequest,
     NodeControlState,
 )
 from ai_node.runtime.execution_queue import ExecutionQueueService
@@ -2512,6 +2514,47 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["latest_job"]["prompt_id"], "prompt-done")
         self.assertEqual(payload["latest_job"]["status"], "completed")
         self.assertEqual(payload["latest_job"]["completed_output_count"], 1)
+
+    def test_manual_image_workflow_generates_seed_when_blank(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow_path = Path(tmp) / "workflow.json"
+            workflow_path.write_text(
+                json.dumps(
+                    {
+                        "6": {
+                            "class_type": "KSampler",
+                            "inputs": {
+                                "seed": "{{seed}}",
+                                "steps": "{{steps}}",
+                                "cfg": "{{cfg}}",
+                            },
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+            )
+            workflow = state._manual_image_workflow_from_template(
+                template={
+                    "api_workflow_path": str(workflow_path),
+                    "variables": [
+                        {"name": "positive_prompt", "required": True},
+                        {"name": "seed", "required": False},
+                        {"name": "steps", "required": False},
+                        {"name": "cfg", "required": False},
+                    ],
+                    "defaults": {"seed": None, "steps": 4, "cfg": 1.6},
+                },
+                payload=ManualImageGenerationRequest(prompt="seed test", seed=None),
+                input_image="",
+            )
+
+        self.assertIsInstance(workflow["6"]["inputs"]["seed"], int)
+        self.assertGreaterEqual(workflow["6"]["inputs"]["seed"], 0)
 
     async def test_benchmark_v2_switches_local_models_before_timed_execution(self):
         class _LocalBenchmarkServiceManager:

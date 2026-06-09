@@ -3,6 +3,7 @@ import base64
 import binascii
 import json
 import os
+import secrets
 import socket
 import time
 from collections import deque
@@ -1574,13 +1575,16 @@ class NodeControlState:
     def _manual_image_workflow_from_template(self, *, template: dict, payload: "ManualImageGenerationRequest", input_image: str) -> dict:
         variables = {item["name"]: item for item in list(template.get("variables") or []) if isinstance(item, dict) and item.get("name")}
         values = dict(template.get("defaults") or {})
+        seed = int(payload.seed) if payload.seed is not None else values.get("seed")
+        if seed is None:
+            seed = secrets.randbelow(2**63)
         values.update(
             {
                 "positive_prompt": str(payload.prompt or "").strip(),
                 "negative_prompt": str(payload.negative_prompt or values.get("negative_prompt") or "").strip(),
                 "width": int(payload.width or values.get("width") or 1024),
                 "height": int(payload.height or values.get("height") or 1024),
-                "seed": int(payload.seed) if payload.seed is not None else values.get("seed"),
+                "seed": seed,
                 "steps": int(payload.steps or values.get("steps") or 4),
                 "cfg": float(payload.cfg if payload.cfg is not None else values.get("cfg") or 1.6),
                 "denoise": float(payload.denoise if payload.denoise is not None else values.get("denoise") or 0.55),
