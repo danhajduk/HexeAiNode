@@ -1162,3 +1162,57 @@ Implementation notes:
 - Add node UI surfaces to list registered image templates, show lifecycle state, inspect variables, and see prompt-template bindings.
 - Show template validation errors clearly during registration/update.
 - Include output folder policy in UI/docs so normal OP and manual ComfyUI artifacts remain separate.
+
+## Task 987
+Original task details:
+- Fix manual image generation progress reporting.
+
+Implementation notes:
+- The current ComfyUI `/progress` endpoint can return 404, so progress cannot depend on that endpoint alone.
+- Use queue state, latest prompt id, history/output completion, and fallback indeterminate state to make the node UI progress bar visibly track submitted/running/completed manual jobs.
+- Keep the current status grid and full-width progress layout.
+- Add tests for unavailable `/progress` plus queue/history/output fallback behavior.
+
+## Task 988
+Original task details:
+- Add an option to upload pictures for an avatar.
+- Add equivalent reference-image support for scenes/places.
+
+Implementation notes:
+- Add a manual reference library stored under the manual runtime folder, separate from normal operation outputs.
+- Support named avatar reference images and scene/place reference images.
+- Store enough metadata to distinguish face/body/reference/scene/place images.
+- Surface uploaded references in the Manual Image Generation UI and allow selecting them for generation.
+- Preserve privacy: keep reference files local to the node/manual runtime.
+
+## Task 989
+Original task details:
+- Use uploaded avatar pictures as references for face and body in avatar generation.
+
+Implementation notes:
+- Inspect ComfyUI node availability before binding to reference workflows.
+- Prefer real reference-conditioning nodes if available, such as CLIPVision/IPAdapter/ReferenceLatent/ControlNet/face landmarks.
+- If exact face/body reference nodes are not available, implement the durable reference-library plumbing and expose the limitation clearly in template metadata.
+- Add an avatar template variant that consumes selected face/body reference images when the runtime supports the required nodes.
+
+## Task 990
+Original task details:
+- Add an option to send a picture to vision and ask it to describe the avatar, scene, etc.
+- Support custom description prompts where useful.
+
+Implementation notes:
+- Add a local vision helper endpoint for uploaded/manual reference images.
+- Use the local vision runtime only unless a later privacy policy explicitly allows cloud fallback.
+- Support description modes such as avatar, face/body, scene/place, and custom.
+- Return a generated description that can be copied or inserted into the prompt field.
+- Ensure vision and ComfyUI GPU residency rules are respected.
+
+## Task 991
+Original task details:
+- Do the same for scenes/places.
+
+Implementation notes:
+- Add scene/place reference upload and selection.
+- Add a scene/place template or template variant that applies a prompt using selected scene/place references where supported.
+- Add local vision scene/place description prompts.
+- Keep scene/place reference files separate from avatar references and normal operation outputs.
