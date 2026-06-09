@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getTheme, setTheme } from "./theme/theme";
-import { apiAdminGet, apiAdminPost, apiGet, apiPost, getApiBase } from "./api";
+import { apiAdminGet, apiAdminPost, apiDelete, apiGet, apiPost, getApiBase } from "./api";
 import { buildDashboardUiState } from "./uiStateModel";
 import { CardHeader, SeverityIndicator, StatusBadge } from "./components/uiPrimitives";
 import { IdentityScreen } from "./features/node-ui/IdentityScreen";
@@ -917,6 +917,25 @@ export default function App() {
     try {
       const result = await apiPost("/api/manual-image-generation", payload);
       setManualImageGenerationResult(result);
+      await loadStatus();
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+    } finally {
+      setManualImageGenerationBusy(false);
+    }
+  }
+
+  async function onDeleteManualImageOutput(relativePath) {
+    const normalized = String(relativePath || "").trim();
+    if (!normalized || manualImageGenerationBusy) {
+      return;
+    }
+    setManualImageGenerationBusy(true);
+    setError("");
+    try {
+      const encodedPath = normalized.split("/").map((part) => encodeURIComponent(part)).join("/");
+      await apiDelete(`/api/manual-image-generation/outputs/${encodedPath}`);
       await loadStatus();
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
@@ -1852,6 +1871,7 @@ export default function App() {
       result: manualImageGenerationResult,
       apiBase: getApiBase(),
       onSubmit: onSubmitManualImageGeneration,
+      onDeleteOutput: onDeleteManualImageOutput,
       onRefresh: loadStatus,
     },
     operationalActions,

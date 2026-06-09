@@ -714,6 +714,11 @@
 .image-output-tile {
   display: grid;
   gap: 6px;
+}
+
+.image-output-tile a {
+  display: grid;
+  gap: 6px;
   color: inherit;
   text-decoration: none;
 }

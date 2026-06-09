@@ -2556,6 +2556,60 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(workflow["6"]["inputs"]["seed"], int)
         self.assertGreaterEqual(workflow["6"]["inputs"]["seed"], 0)
 
+    def test_delete_manual_image_output_stays_inside_manual_output_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "manual-output"
+            image_path = output_dir / "hexe" / "sample.png"
+            image_path.parent.mkdir(parents=True)
+            image_path.write_bytes(b"png")
+            outside_path = Path(tmp) / "outside.png"
+            outside_path.write_bytes(b"keep")
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+            )
+            with patch.object(state, "_manual_image_output_dir", return_value=output_dir.resolve()):
+                result = state.delete_manual_image_output(relative_path="hexe/sample.png")
+                with self.assertRaises(ValueError):
+                    state.delete_manual_image_output(relative_path="../outside.png")
+                self.assertFalse(image_path.exists())
+                self.assertTrue(outside_path.exists())
+
+        self.assertTrue(result["deleted"])
+
+    def test_delete_manual_image_output_uses_container_fallback_on_permission_error(self):
+        class _ManualImageServiceManager:
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "running", "container_name": "hexe-ai-node-comfyui"},
+                    "comfyui_webui": {"state": "running", "runtime": "gpu"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "manual-output"
+            image_path = output_dir / "hexe" / "sample.png"
+            image_path.parent.mkdir(parents=True)
+            image_path.write_bytes(b"png")
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ManualImageServiceManager(),
+            )
+            with (
+                patch.object(state, "_manual_image_output_dir", return_value=output_dir.resolve()),
+                patch.object(Path, "unlink", side_effect=PermissionError),
+                patch("subprocess.run") as run_command,
+            ):
+                result = state.delete_manual_image_output(relative_path="hexe/sample.png")
+
+        self.assertTrue(result["deleted"])
+        run_command.assert_called_once_with(
+            ["docker", "exec", "hexe-ai-node-comfyui", "rm", "-f", "--", "/runtime/gpu/output/hexe/sample.png"],
+            check=True,
+        )
+
     async def test_benchmark_v2_switches_local_models_before_timed_execution(self):
         class _LocalBenchmarkServiceManager:
             def __init__(self):

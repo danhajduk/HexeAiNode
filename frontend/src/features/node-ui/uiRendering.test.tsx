@@ -285,6 +285,13 @@ describe("OperationalDashboard", () => {
                 prompt_id: "prompt-running",
               },
               manual_paths: { output_dir: "runtime/manual/comfyui-gpu/output" },
+              outputs: [
+                {
+                  relative_path: "hexe/sample.png",
+                  filename: "sample.png",
+                  url: "/api/manual-image-generation/outputs/hexe/sample.png",
+                },
+              ],
             },
           },
         })}
@@ -298,6 +305,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("1 running / 2 pending");
     expect(markup).toContain("25.0%");
     expect(markup).toContain("Reference Image");
+    expect(markup).toContain("Delete");
     expect(markup).toContain('step="8"');
     expect(markup).not.toContain("Runtime Health");
   });

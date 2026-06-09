@@ -78,6 +78,18 @@ export async function apiPost(path, body, extraHeaders = {}) {
   return payload;
 }
 
+export async function apiDelete(path, extraHeaders = {}) {
+  const response = await fetch(`${getApiBase()}${path}`, {
+    method: "DELETE",
+    headers: requestHeaders(extraHeaders),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw buildApiError(response, payload);
+  }
+  return payload;
+}
+
 export async function apiAdminGet(path) {
   return apiGet(path, adminHeaders());
 }

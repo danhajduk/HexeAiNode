@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import socket
+import subprocess
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -1571,6 +1572,47 @@ class NodeControlState:
         if not path.exists() or not path.is_file():
             raise ValueError("manual_output_not_found")
         return FileResponse(path)
+
+    def delete_manual_image_output(self, *, relative_path: str) -> dict:
+        output_dir = self._manual_image_output_dir()
+        safe_relative = self._safe_relative_path(relative_path)
+        path = (output_dir / safe_relative).resolve()
+        if output_dir not in path.parents and path != output_dir:
+            raise ValueError("manual_output_path_invalid")
+        if not path.exists() or not path.is_file():
+            raise ValueError("manual_output_not_found")
+        try:
+            path.unlink()
+        except PermissionError:
+            self._delete_manual_image_output_via_container(relative_path=safe_relative.as_posix())
+        return {
+            "deleted": True,
+            "relative_path": safe_relative.as_posix(),
+            "outputs": self._manual_image_outputs(limit=24),
+        }
+
+    def _delete_manual_image_output_via_container(self, *, relative_path: str) -> None:
+        services = self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        runtime = str(webui.get("runtime") or "gpu").strip().lower() if isinstance(webui, dict) else "gpu"
+        runtime_key = "comfyui_cpu" if runtime == "cpu" else "comfyui_gpu"
+        runtime_service = services.get(runtime_key) if isinstance(services, dict) else {}
+        container_name = (
+            str(runtime_service.get("container_name") or "").strip()
+            if isinstance(runtime_service, dict)
+            else ""
+        )
+        if not container_name and isinstance(webui, dict):
+            container_name = str(webui.get("container_name") or "").strip()
+        if not container_name:
+            raise ValueError("manual_output_delete_container_unavailable")
+        container_runtime = "cpu" if runtime == "cpu" else "gpu"
+        container_path = f"/runtime/{container_runtime}/output/{relative_path}"
+        docker_bin = str(os.environ.get("DOCKER_BIN") or "docker").strip() or "docker"
+        try:
+            subprocess.run([docker_bin, "exec", container_name, "rm", "-f", "--", container_path], check=True)
+        except subprocess.CalledProcessError as exc:
+            raise ValueError("manual_output_delete_failed") from exc
 
     def _manual_image_workflow_from_template(self, *, template: dict, payload: "ManualImageGenerationRequest", input_image: str) -> dict:
         variables = {item["name"]: item for item in list(template.get("variables") or []) if isinstance(item, dict) and item.get("name")}
@@ -6392,6 +6434,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def get_manual_image_generation_output(relative_path: str):
         try:
             return state.manual_image_output_response(relative_path=relative_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.delete("/api/manual-image-generation/outputs/{relative_path:path}")
+    def delete_manual_image_generation_output(relative_path: str):
+        try:
+            return state.delete_manual_image_output(relative_path=relative_path)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

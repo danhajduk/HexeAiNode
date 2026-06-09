@@ -86,6 +86,7 @@ export function ManualImageGenerationCard({
   result = null,
   apiBase = "",
   onSubmit,
+  onDeleteOutput,
   onRefresh,
 }) {
   const templates = asArray(payload?.templates);
@@ -291,16 +292,15 @@ export function ManualImageGenerationCard({
       {outputs.length ? (
         <div className="image-output-grid">
           {outputs.map((output) => (
-            <a
-              className="image-output-tile"
-              href={`${apiBase}${output.url}`}
-              target="_blank"
-              rel="noreferrer"
-              key={output.relative_path}
-            >
-              <img src={`${apiBase}${output.url}`} alt={output.filename || output.relative_path} />
-              <span>{output.filename || output.relative_path}</span>
-            </a>
+            <div className="image-output-tile" key={output.relative_path}>
+              <a href={`${apiBase}${output.url}`} target="_blank" rel="noreferrer">
+                <img src={`${apiBase}${output.url}`} alt={output.filename || output.relative_path} />
+                <span>{output.filename || output.relative_path}</span>
+              </a>
+              <button className="btn btn-danger" type="button" onClick={() => onDeleteOutput?.(output.relative_path)} disabled={busy}>
+                Delete
+              </button>
+            </div>
           ))}
         </div>
       ) : (
