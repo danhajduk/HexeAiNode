@@ -753,6 +753,7 @@ describe("OperationalDashboard", () => {
     expect(generationMarkup).toContain("Scene");
     expect(generationMarkup).toContain("Compiled Prompt");
     expect(generationMarkup).toContain("Generate Avatar");
+    expect(generationMarkup).toContain("Reload Profile Defaults");
     expect(generationMarkup).toContain("same Jane Avatar face identity");
     expect(generationMarkup).toContain("transparent background");
   });

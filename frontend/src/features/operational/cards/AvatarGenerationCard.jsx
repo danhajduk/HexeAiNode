@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { CardHeader, StatusBadge } from "../../../components/uiPrimitives";
 
@@ -247,6 +247,84 @@ function selectedReferenceOption(options, inputImage) {
   return options.find((option) => option.inputImage === inputImage) || null;
 }
 
+function referencePairKey(filename) {
+  return String(filename || "")
+    .trim()
+    .replace(/\.[^.]+$/, "")
+    .replace(/^avatar_body_depth_/, "")
+    .replace(/^avatar_body_/, "")
+    .toLowerCase();
+}
+
+function pairedBodyDepthInputImage(profile, bodyInputImage) {
+  const bodyOption = selectedReferenceOption(bodyReferenceOptions(profile), bodyInputImage);
+  const bodyKey = referencePairKey(bodyOption?.filename);
+  if (!bodyKey) {
+    return "";
+  }
+  const depthOption = bodyDepthMapOptions(profile).find((option) => referencePairKey(option.filename) === bodyKey);
+  return depthOption?.inputImage || "";
+}
+
+function pairedBodyReferenceInputImage(profile, depthInputImage) {
+  const depthOption = selectedReferenceOption(bodyDepthMapOptions(profile), depthInputImage);
+  const depthKey = referencePairKey(depthOption?.filename);
+  if (!depthKey) {
+    return "";
+  }
+  const bodyOption = bodyReferenceOptions(profile).find((option) => referencePairKey(option.filename) === depthKey);
+  return bodyOption?.inputImage || "";
+}
+
+function generationReferenceValue(value, options, { allowEmpty = false } = {}) {
+  const normalized = String(value || "").trim();
+  if (normalized && options.some((option) => option.inputImage === normalized)) {
+    return normalized;
+  }
+  if (allowEmpty) {
+    return "";
+  }
+  return options[0]?.inputImage || "";
+}
+
+function avatarGenerationProfileSignature(profile) {
+  if (!profile?.profile_id) {
+    return "";
+  }
+  return JSON.stringify({
+    profile_id: profile.profile_id,
+    extraction_updated_at: objectValue(profile.extraction).created_at || profile.updated_at || "",
+    face_profile_updated_at: objectValue(faceProfile(profile)).created_at || objectValue(faceProfile(profile)).updated_at || "",
+    body_depth_updated_at: objectValue(bodyDepthProfile(profile)).updated_at || "",
+    face: faceReferenceOptions(profile).map((option) => option.inputImage),
+    body: bodyReferenceOptions(profile).map((option) => option.inputImage),
+    depth: bodyDepthMapOptions(profile).map((option) => option.inputImage),
+    pose: poseReferenceOptions(profile).map((option) => option.inputImage),
+  });
+}
+
+function reconcileGenerationEditorState(profile, current, defaults) {
+  const faceOptions = faceReferenceOptions(profile);
+  const bodyOptions = bodyReferenceOptions(profile);
+  const depthOptions = bodyDepthMapOptions(profile);
+  const poseOptions = poseReferenceOptions(profile);
+  const next = { ...defaults, ...objectValue(current) };
+  if (next.template_id === AVATAR_PROFILE_TEMPLATE_ID && !depthOptions.length) {
+    next.template_id = AVATAR_BODY_REFERENCE_TEMPLATE_ID;
+  }
+  if (![AVATAR_PROFILE_TEMPLATE_ID, AVATAR_BODY_REFERENCE_TEMPLATE_ID].includes(next.template_id)) {
+    next.template_id = defaults.template_id;
+  }
+  next.face_reference_image = generationReferenceValue(next.face_reference_image, faceOptions);
+  next.body_reference_image = generationReferenceValue(next.body_reference_image, bodyOptions);
+  next.body_depth_image = generationReferenceValue(next.body_depth_image, depthOptions, { allowEmpty: true });
+  next.pose_reference_image = generationReferenceValue(next.pose_reference_image, poseOptions, { allowEmpty: true });
+  if (next.template_id === AVATAR_PROFILE_TEMPLATE_ID && !next.body_depth_image) {
+    next.body_depth_image = pairedBodyDepthInputImage(profile, next.body_reference_image) || depthOptions[0]?.inputImage || "";
+  }
+  return next;
+}
+
 function buildAvatarGenerationPrompt(editor) {
   const parts = [
     "full body portrait, head to toe, complete body visible",
@@ -461,6 +539,8 @@ export function AvatarGenerationCard({
   const [activeReferenceAction, setActiveReferenceAction] = useState("");
   const [editorState, setEditorState] = useState(() => extractionEditorState(routeProfile));
   const [generationState, setGenerationState] = useState(() => generationEditorState(routeProfile));
+  const generationProfileIdRef = useRef("");
+  const generationProfileSignature = avatarGenerationProfileSignature(routeProfile);
   const latestProfile = result?.profile || profiles[0] || null;
   const canSave = Boolean(characterName.trim()) && Boolean(faceFile) && Boolean(bodyFile) && !busy;
   const detailMode = Boolean(routeProfileId);
@@ -468,16 +548,59 @@ export function AvatarGenerationCard({
   useEffect(() => {
     if (routeProfile) {
       setEditorState(extractionEditorState(routeProfile));
-      setGenerationState(generationEditorState(routeProfile));
     }
   }, [routeProfile]);
+
+  useEffect(() => {
+    if (!routeProfile) {
+      return;
+    }
+    const profileId = String(routeProfile.profile_id || "").trim();
+    const previousProfileId = generationProfileIdRef.current;
+    generationProfileIdRef.current = profileId;
+    const defaults = generationEditorState(routeProfile);
+    setGenerationState((current) =>
+      previousProfileId !== profileId
+        ? defaults
+        : reconcileGenerationEditorState(routeProfile, current, defaults)
+    );
+  }, [generationProfileSignature]);
 
   function updateEditorField(name, value) {
     setEditorState((current) => ({ ...current, [name]: value }));
   }
 
   function updateGenerationField(name, value) {
-    setGenerationState((current) => ({ ...current, [name]: value }));
+    setGenerationState((current) => {
+      const next = { ...current, [name]: value };
+      if (name === "body_reference_image") {
+        const pairedDepth = pairedBodyDepthInputImage(routeProfile, value);
+        if (pairedDepth) {
+          next.body_depth_image = pairedDepth;
+        }
+      }
+      if (name === "body_depth_image") {
+        const pairedBody = pairedBodyReferenceInputImage(routeProfile, value);
+        if (pairedBody) {
+          next.body_reference_image = pairedBody;
+        }
+      }
+      if (name === "template_id" && value === AVATAR_PROFILE_TEMPLATE_ID && !next.body_depth_image) {
+        next.body_depth_image =
+          pairedBodyDepthInputImage(routeProfile, next.body_reference_image) ||
+          bodyDepthMapOptions(routeProfile)[0]?.inputImage ||
+          "";
+      }
+      return next;
+    });
+  }
+
+  function resetGenerationDefaults() {
+    if (!routeProfile) {
+      return;
+    }
+    setGenerationState(generationEditorState(routeProfile));
+    setLocalStatus("generation_defaults_loaded");
   }
 
   async function saveProfile(event) {
@@ -1274,6 +1397,9 @@ export function AvatarGenerationCard({
             <div className="row">
               <button className="btn btn-primary" type="submit" disabled={!canSubmitGeneration}>
                 {activeReferenceAction === "generate:avatar" || generationBusy ? "Generating..." : "Generate Avatar"}
+              </button>
+              <button className="btn" type="button" disabled={busy || generationBusy} onClick={resetGenerationDefaults}>
+                Reload Profile Defaults
               </button>
               {generationResult?.prompt_id ? <code>{`Prompt ${generationResult.prompt_id}`}</code> : null}
             </div>
