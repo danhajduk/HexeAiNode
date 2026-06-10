@@ -592,6 +592,7 @@ describe("OperationalDashboard", () => {
                 style_lighting: "head and shoulders portrait, clean studio lighting",
               },
               negative_prompt: "blurry",
+              assistant_reply: "I softened the expression and kept the headset detail.",
               conversation: [{ role: "user", content: "make the smile softer" }],
               preview_history: [
                 {
@@ -645,6 +646,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Adjustment Request");
     expect(markup).toContain("Refine Prompt");
     expect(markup).toContain("Create Preview");
+    expect(markup).toContain("LLM Reply");
+    expect(markup).toContain("I softened the expression and kept the headset detail.");
     expect(markup.indexOf("Adjustment Request")).toBeLessThan(markup.indexOf("General"));
     expect(markup.indexOf("Create Preview")).toBeLessThan(markup.indexOf("Compiled Head / Face Prompt"));
     expect(markup).toContain("Latest Preview");

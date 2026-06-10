@@ -2171,22 +2171,35 @@ class NodeControlState:
         if not current_prompt:
             current_prompt = self._avatar_profile_default_head_prompt(profile=metadata)
         current_negative = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
-        prompt, negative_prompt, model_id = self._avatar_profile_head_prompt_from_local_llm(
+        prompt, refined_prompt_parts, negative_prompt, assistant_reply, model_id = self._avatar_profile_head_prompt_from_local_llm(
             profile=metadata,
             current_prompt=current_prompt,
+            current_prompt_parts=prompt_parts,
             current_negative_prompt=current_negative,
             user_message=user_message,
         )
         now = datetime.now(timezone.utc).isoformat()
         conversation = list(workspace.get("conversation") or [])
         conversation.append({"role": "user", "content": user_message, "created_at": now})
-        conversation.append({"role": "assistant", "content": prompt, "negative_prompt": negative_prompt, "model_id": model_id, "created_at": now})
+        conversation.append(
+            {
+                "role": "assistant",
+                "content": assistant_reply or prompt,
+                "reply": assistant_reply,
+                "prompt": prompt,
+                "prompt_parts": refined_prompt_parts,
+                "negative_prompt": negative_prompt,
+                "model_id": model_id,
+                "created_at": now,
+            }
+        )
         updated_workspace = {
             **workspace,
             "section": "head_face",
             "prompt": prompt,
-            "prompt_parts": prompt_parts,
+            "prompt_parts": refined_prompt_parts,
             "negative_prompt": negative_prompt,
+            "assistant_reply": assistant_reply,
             "updated_at": now,
             "local_llm_model_id": model_id,
             "conversation": conversation[-50:],
@@ -2206,7 +2219,9 @@ class NodeControlState:
             "profile": saved_profile,
             "workspace": saved_profile.get("prompt_workspaces", {}).get("head_face", {}),
             "prompt": prompt,
+            "prompt_parts": refined_prompt_parts,
             "negative_prompt": negative_prompt,
+            "assistant_reply": assistant_reply,
             "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
         }
 
@@ -3894,9 +3909,10 @@ class NodeControlState:
         *,
         profile: dict,
         current_prompt: str,
+        current_prompt_parts: dict,
         current_negative_prompt: str,
         user_message: str,
-    ) -> tuple[str, str, str]:
+    ) -> tuple[str, dict, str, str, str]:
         services = self.service_status_payload().get("services", {})
         local_llm = services.get("local_llm") if isinstance(services, dict) else {}
         socket_path = str(local_llm.get("socket_path") or "") if isinstance(local_llm, dict) else ""
@@ -3917,8 +3933,15 @@ class NodeControlState:
             },
             "section": "head_face",
             "current_prompt": current_prompt,
+            "current_prompt_parts": current_prompt_parts,
             "current_negative_prompt": current_negative_prompt,
             "user_request": user_message,
+            "required_json_schema": {
+                "prompt_parts": list(AVATAR_HEAD_FACE_PROMPT_PART_ORDER),
+                "prompt": "compiled SDXL positive prompt string from prompt_parts",
+                "negative_prompt": "compiled SDXL negative prompt string",
+                "reply": "short plain-language reply to the user explaining the change",
+            },
         }
         response = self._uds_json_request(
             socket_path=socket_path,
@@ -3931,16 +3954,22 @@ class NodeControlState:
                         "role": "system",
                         "content": (
                             "/no_think You refine SDXL/ComfyUI prompts for an avatar head and face design workspace. "
-                            "Return only JSON with keys prompt and negative_prompt. "
+                            "Return strict JSON only. Do not wrap it in markdown. "
+                            "The JSON object must contain keys prompt_parts, prompt, negative_prompt, and reply. "
+                            "prompt_parts must be an object with these string keys: "
+                            f"{', '.join(AVATAR_HEAD_FACE_PROMPT_PART_ORDER)}. "
+                            "Update only the prompt_parts needed to satisfy the user request, then compile prompt from all prompt_parts. "
+                            "reply must be one short user-facing sentence. "
                             "Preserve stable profile facts unless the user explicitly changes them. "
                             "Focus on head, face, hair, expression, skin, eyes, makeup/accessories, portrait framing, lighting, and style. "
-                            "Do not write explanations or markdown."
+                            "Do not include any text outside the JSON object."
                         ),
                     },
                     {"role": "user", "content": "/no_think " + json.dumps(request_payload, sort_keys=True)},
                 ],
                 "temperature": 0.4,
-                "max_tokens": 550,
+                "max_tokens": 900,
+                "response_format": {"type": "json_object"},
                 "stream": False,
             },
             host="local-llm",
@@ -3953,9 +3982,25 @@ class NodeControlState:
             message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
             content = str(message.get("content") or message.get("reasoning_content") or choices[0].get("text") or "").strip()
         parsed = self._parse_manual_image_prompt_helper_content(content)
-        prompt = str(parsed.get("prompt") or content or current_prompt).strip()
-        negative_prompt = str(parsed.get("negative_prompt") or current_negative_prompt).strip()
-        return prompt, negative_prompt, model_id
+        parsed_prompt_parts = parsed.get("prompt_parts") if isinstance(parsed.get("prompt_parts"), dict) else None
+        if not isinstance(parsed_prompt_parts, dict):
+            raise ValueError("avatar_head_prompt_parts_required")
+        missing_prompt_parts = [key for key in AVATAR_HEAD_FACE_PROMPT_PART_ORDER if key not in parsed_prompt_parts]
+        if missing_prompt_parts:
+            raise ValueError("avatar_head_prompt_parts_incomplete")
+        prompt = str(parsed.get("prompt") or "").strip()
+        if "negative_prompt" not in parsed:
+            raise ValueError("avatar_head_prompt_strict_json_required")
+        negative_prompt = str(parsed.get("negative_prompt") or "").strip()
+        assistant_reply = str(parsed.get("reply") or "").strip()
+        if not prompt or not assistant_reply:
+            raise ValueError("avatar_head_prompt_strict_json_required")
+        refined_prompt_parts = self._avatar_profile_normalized_head_prompt_parts(
+            profile=profile,
+            prompt_parts={**current_prompt_parts, **parsed_prompt_parts},
+            fallback_prompt=current_prompt,
+        )
+        return prompt, refined_prompt_parts, negative_prompt, assistant_reply, model_id
 
     def _selected_avatar_profile_path(self) -> Path:
         return self._avatar_profile_root() / "selected_profile.json"

@@ -3868,7 +3868,22 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                             "content": json.dumps(
                                 {
                                     "prompt": "stylized realistic head portrait, black wavy hair, soft smile, blue headset",
+                                    "prompt_parts": {
+                                        "general": "head portrait",
+                                        "hair": "black wavy hair",
+                                        "eyes": "expressive detailed eyes",
+                                        "eyebrows": "natural eyebrows",
+                                        "nose": "defined nose",
+                                        "cheeks": "soft cheeks",
+                                        "mouth": "soft smile",
+                                        "jaw_chin": "clear jaw and chin shape",
+                                        "ears": "natural ears",
+                                        "skin": "light skin, natural skin texture",
+                                        "expression": "soft smile",
+                                        "style_lighting": "head and shoulders portrait, blue headset, soft studio lighting",
+                                    },
                                     "negative_prompt": "blurry, distorted face",
+                                    "reply": "I softened the smile and added the blue headset.",
                                 }
                             )
                         }
@@ -3893,15 +3908,22 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "head_prompt_refined")
         self.assertEqual(result["prompt"], "stylized realistic head portrait, black wavy hair, soft smile, blue headset")
         self.assertEqual(result["negative_prompt"], "blurry, distorted face")
+        self.assertEqual(result["assistant_reply"], "I softened the smile and added the blue headset.")
+        self.assertEqual(result["prompt_parts"]["hair"], "black wavy hair")
         workspace = metadata["prompt_workspaces"]["head_face"]
         self.assertEqual(workspace["prompt"], result["prompt"])
-        self.assertEqual(workspace["prompt_parts"]["hair"], "black hair")
+        self.assertEqual(workspace["prompt_parts"]["hair"], "black wavy hair")
         self.assertEqual(workspace["prompt_parts"]["nose"], "defined nose")
         self.assertEqual(workspace["prompt_parts"]["cheeks"], "soft cheeks")
+        self.assertEqual(workspace["assistant_reply"], result["assistant_reply"])
         self.assertEqual(workspace["negative_prompt"], result["negative_prompt"])
         self.assertEqual(workspace["local_llm_model_id"], "local-model")
         self.assertEqual(len(workspace["conversation"]), 2)
-        self.assertIn("blue headset", request.call_args.kwargs["body"]["messages"][1]["content"])
+        request_body = request.call_args.kwargs["body"]
+        self.assertEqual(request_body["response_format"], {"type": "json_object"})
+        self.assertIn("current_prompt_parts", request_body["messages"][1]["content"])
+        self.assertIn("prompt_parts", request_body["messages"][1]["content"])
+        self.assertIn("blue headset", request_body["messages"][1]["content"])
 
     def test_avatar_generation_records_head_preview_history(self):
         class _AvatarProfileServiceManager:

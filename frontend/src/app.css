@@ -989,6 +989,26 @@
   text-overflow: ellipsis;
 }
 
+.avatar-head-face-assistant-reply {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid hsl(var(--sx-border) / 0.75);
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-panel) / 0.55);
+}
+
+.avatar-head-face-assistant-reply span {
+  color: hsl(var(--sx-text-muted));
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.avatar-head-face-assistant-reply p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .avatar-head-face-prompt-parts {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

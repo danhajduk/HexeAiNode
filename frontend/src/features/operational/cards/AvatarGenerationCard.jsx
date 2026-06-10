@@ -599,6 +599,19 @@ function headFacePromptParts(profile) {
   return defaults;
 }
 
+function latestHeadAssistantReply(profile) {
+  const workspace = promptWorkspace(profile, "head_face");
+  const savedReply = compactPromptText(workspace.assistant_reply);
+  if (savedReply) {
+    return savedReply;
+  }
+  const assistant = asArray(workspace.conversation)
+    .slice()
+    .reverse()
+    .find((message) => message?.role === "assistant");
+  return compactPromptText(assistant?.reply || assistant?.content);
+}
+
 export function AvatarGenerationCard({
   payload = null,
   manualImageGenerationPayload = null,
@@ -656,6 +669,7 @@ export function AvatarGenerationCard({
   const [headPromptParts, setHeadPromptParts] = useState(() => headFacePromptParts(routeProfile));
   const [headNegativePrompt, setHeadNegativePrompt] = useState(() => promptWorkspace(routeProfile, "head_face").negative_prompt || "");
   const [headInstruction, setHeadInstruction] = useState("");
+  const [headAssistantReply, setHeadAssistantReply] = useState(() => latestHeadAssistantReply(routeProfile));
   const generationProfileIdRef = useRef("");
   const generationProfileSignature = avatarGenerationProfileSignature(routeProfile);
   const latestProfile = result?.profile || profiles[0] || null;
@@ -679,6 +693,7 @@ export function AvatarGenerationCard({
       const workspace = promptWorkspace(routeProfile, "head_face");
       setHeadPromptParts(headFacePromptParts(routeProfile));
       setHeadNegativePrompt(String(workspace.negative_prompt || ""));
+      setHeadAssistantReply(latestHeadAssistantReply(routeProfile));
       setHeadInstruction("");
     }
   }, [routeProfile]);
@@ -894,11 +909,19 @@ export function AvatarGenerationCard({
         negative_prompt: headNegativePrompt,
         user_message: userMessage,
       });
-      if (result?.prompt) {
-        setHeadPromptParts((current) => ({ ...current, general: String(result.prompt) }));
+      if (result?.prompt_parts && typeof result.prompt_parts === "object") {
+        setHeadPromptParts((current) =>
+          HEAD_FACE_PROMPT_PARTS.reduce(
+            (parts, part) => ({ ...parts, [part.id]: String(result.prompt_parts?.[part.id] ?? current[part.id] ?? "") }),
+            {}
+          )
+        );
       }
       if (result?.negative_prompt !== undefined) {
         setHeadNegativePrompt(String(result.negative_prompt || ""));
+      }
+      if (result?.assistant_reply !== undefined) {
+        setHeadAssistantReply(String(result.assistant_reply || ""));
       }
       if (result) {
         setHeadInstruction("");
@@ -1207,6 +1230,12 @@ export function AvatarGenerationCard({
                     {activeReferenceAction === "preview:head_face" ? "Requesting..." : "Create Preview"}
                   </button>
                 </div>
+                {headAssistantReply ? (
+                  <div className="avatar-head-face-assistant-reply">
+                    <span>LLM Reply</span>
+                    <p>{headAssistantReply}</p>
+                  </div>
+                ) : null}
                 <div className="avatar-head-face-prompt-parts">
                   {HEAD_FACE_PROMPT_PARTS.map((part) => (
                     <label
