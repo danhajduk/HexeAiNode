@@ -60,9 +60,42 @@
     }
   },
   "8": {
+    "class_type": "LoadBackgroundRemovalModel",
+    "inputs": {
+      "bg_removal_name": "{{bg_removal_model}}"
+    }
+  },
+  "9": {
+    "class_type": "RemoveBackground",
+    "inputs": {
+      "image": ["7", 0],
+      "bg_removal_model": ["8", 0]
+    }
+  },
+  "10": {
+    "class_type": "InvertMask",
+    "inputs": {
+      "mask": ["9", 0]
+    }
+  },
+  "11": {
+    "class_type": "JoinImageWithAlpha",
+    "inputs": {
+      "image": ["7", 0],
+      "alpha": ["10", 0]
+    }
+  },
+  "12": {
     "class_type": "SaveImage",
     "inputs": {
       "images": ["7", 0],
+      "filename_prefix": "hexe/avatar_head_face_preview/{{avatar_name}}_seed{{seed}}_rgb"
+    }
+  },
+  "13": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["11", 0],
       "filename_prefix": "hexe/avatar_head_face_preview/{{avatar_name}}_seed{{seed}}"
     }
   }

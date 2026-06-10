@@ -27,6 +27,12 @@
           "description": "Filesystem-safe avatar name used in output filenames."
         },
         {
+          "name": "bg_removal_model",
+          "type": "string",
+          "required": false,
+          "description": "Local background-removal model used to produce the transparent preview PNG."
+        },
+        {
           "name": "width",
           "type": "integer",
           "required": false,
@@ -66,6 +72,7 @@
       "defaults": {
         "negative_prompt": "low quality, blurry, distorted face, asymmetrical eyes, extra limbs, full body, cropped head, text, watermark, child, teen, underage",
         "avatar_name": "avatar_head_face_preview",
+        "bg_removal_model": "birefnet.safetensors",
         "width": 512,
         "height": 512,
         "seed": null,
@@ -88,8 +95,13 @@
             "EmptyLatentImage",
             "KSampler",
             "VAEDecode",
+            "LoadBackgroundRemovalModel",
+            "RemoveBackground",
+            "InvertMask",
+            "JoinImageWithAlpha",
             "SaveImage"
-          ]
+          ],
+          "background_removal": "birefnet.safetensors"
         }
       },
       "output_scope": "manual",
@@ -98,7 +110,7 @@
         "input_mode": "text",
         "edit_intent": "avatar_head_face_preview",
         "reference_roles": [],
-        "transparent_background": false
+        "transparent_background": true
       }
     },
     {

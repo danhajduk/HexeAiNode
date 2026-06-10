@@ -4248,7 +4248,7 @@ class NodeControlState:
             output_path = None
             if seed:
                 prefix = f"hexe/avatar_head_face_preview/{avatar_name}_seed{seed}"
-                output_path = self._avatar_body_depth_profile_output_for_prefix(output_dir=output_dir, prefix=prefix)
+                output_path = self._avatar_head_face_preview_output_for_prefix(output_dir=output_dir, prefix=prefix)
             if not output_path:
                 if existing_is_placeholder and existing_filename and (preview_dir / existing_filename).is_file():
                     updated_history.append(preview)
@@ -4347,6 +4347,23 @@ class NodeControlState:
         updated_metadata["updated_at"] = now
         (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return updated_metadata
+
+    @staticmethod
+    def _avatar_head_face_preview_output_for_prefix(*, output_dir: Path, prefix) -> Path | None:
+        relative = str(prefix or "").strip().strip("/")
+        if not relative:
+            return None
+        prefix_path = (output_dir / relative).resolve()
+        if output_dir not in prefix_path.parents:
+            return None
+        candidates = sorted(prefix_path.parent.glob(f"{prefix_path.name}*.png"), key=lambda path: path.stat().st_mtime, reverse=True)
+        for candidate in candidates:
+            if not candidate.is_file():
+                continue
+            if "_rgb" in candidate.stem:
+                continue
+            return candidate.resolve()
+        return None
 
     def _refresh_avatar_body_depth_profile_job(self, *, profile_dir: Path, metadata: dict) -> dict:
         job = self._read_avatar_body_depth_profile_job(profile_dir=profile_dir)

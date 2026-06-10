@@ -3358,6 +3358,44 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["24"]["inputs"]["images"], ["19", 0])
         self.assertEqual(workflow["24"]["inputs"]["filename_prefix"], "hexe/avatar_body_depth_transparent/Jane_seed1003")
 
+    def test_manual_avatar_head_face_preview_template_adds_alpha_background_removal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            template = state.get_comfyui_template_catalog_entry(
+                template_id="template.avatar_head_face_preview.realvisxl.v1"
+            )["template"]
+
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id="template.avatar_head_face_preview.realvisxl.v1",
+                    mode="txt2img",
+                    prompt="head portrait, black hair",
+                    seed=1211,
+                    template_variables={"avatar_name": "Jane_Avatar"},
+                ),
+                input_image="",
+            )
+
+        self.assertTrue(template["metadata"]["transparent_background"])
+        self.assertEqual(workflow["8"]["class_type"], "LoadBackgroundRemovalModel")
+        self.assertEqual(workflow["8"]["inputs"]["bg_removal_name"], "birefnet.safetensors")
+        self.assertEqual(workflow["9"]["class_type"], "RemoveBackground")
+        self.assertEqual(workflow["9"]["inputs"]["image"], ["7", 0])
+        self.assertEqual(workflow["10"]["class_type"], "InvertMask")
+        self.assertEqual(workflow["10"]["inputs"]["mask"], ["9", 0])
+        self.assertEqual(workflow["11"]["class_type"], "JoinImageWithAlpha")
+        self.assertEqual(workflow["11"]["inputs"]["alpha"], ["10", 0])
+        self.assertEqual(workflow["12"]["inputs"]["images"], ["7", 0])
+        self.assertEqual(workflow["12"]["inputs"]["filename_prefix"], "hexe/avatar_head_face_preview/Jane_Avatar_seed1211_rgb")
+        self.assertEqual(workflow["13"]["inputs"]["images"], ["11", 0])
+        self.assertEqual(workflow["13"]["inputs"]["filename_prefix"], "hexe/avatar_head_face_preview/Jane_Avatar_seed1211")
+
     def test_manual_image_prompt_helper_uses_local_llm_socket(self):
         class _PromptHelperServiceManager:
             def get_status(self):
@@ -3920,7 +3958,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             placeholder_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / placeholder_preview["filename"]
             placeholder_bytes = placeholder_path.read_text(encoding="utf-8")
             preview_output = output_dir / "hexe" / "avatar_head_face_preview" / "Jane_Avatar_seed1211_00001_.png"
+            rgb_preview_output = output_dir / "hexe" / "avatar_head_face_preview" / "Jane_Avatar_seed1211_rgb_00001_.png"
             preview_output.parent.mkdir(parents=True, exist_ok=True)
+            rgb_preview_output.write_bytes(b"rgb-preview-image")
             preview_output.write_bytes(b"preview-image")
             refreshed = state.avatar_generation_status()["profiles"][0]
             refreshed_history = refreshed["prompt_workspaces"]["head_face"]["preview_history"]
