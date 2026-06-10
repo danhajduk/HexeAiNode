@@ -16,6 +16,8 @@ from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionU
 from ai_node.persistence.image_generation_template_store import ImageGenerationTemplateStateStore
 from ai_node.runtime.node_control_api import (
     AvatarBodyDepthProfileGenerateRequest,
+    AvatarFaceProfileExtractRequest,
+    AvatarPrimaryFaceRequest,
     AvatarProfileExtractionUpdateRequest,
     AvatarProfileReferenceUploadRequest,
     AvatarProfileSaveRequest,
@@ -3411,7 +3413,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             def get_status(self):
                 return {
                     "comfyui_webui": {
-                        "state": "running",
+                        "state": "stopped",
                         "runtime": "gpu",
                         "manual_paths": {"input_dir": self.input_dir},
                     },
@@ -3499,7 +3501,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             def get_status(self):
                 return {
                     "comfyui_webui": {
-                        "state": "running",
+                        "state": "stopped",
                         "runtime": "gpu",
                         "manual_paths": {"input_dir": self.input_dir},
                     },
@@ -3824,6 +3826,199 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(reference_path.exists())
         self.assertEqual(deleted["profile"]["references"]["body_depth"], [])
 
+    def test_avatar_generation_sets_primary_face_reference_for_pulid(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "stopped",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(
+                payload=AvatarProfileSaveRequest(
+                    name="Jane Avatar",
+                    face_image_filename="face.png",
+                    face_image_data_base64=base64.b64encode(b"base-face").decode("ascii"),
+                    body_image_filename="body.png",
+                    body_image_data_base64=base64.b64encode(b"body-image").decode("ascii"),
+                )
+            )
+            uploaded = state.upload_avatar_profile_reference(
+                profile_id="Jane_Avatar",
+                payload=AvatarProfileReferenceUploadRequest(
+                    role="face",
+                    name="Three Quarter Face",
+                    filename="face_3q.png",
+                    data_base64=base64.b64encode(b"face-ref").decode("ascii"),
+                ),
+            )
+            selected = state.set_avatar_profile_primary_face(
+                profile_id="Jane_Avatar",
+                payload=AvatarPrimaryFaceRequest(filename=uploaded["reference"]["filename"]),
+            )
+
+        profile = selected["profile"]
+        self.assertEqual(profile["primary_face_reference_filename"], uploaded["reference"]["filename"])
+        self.assertEqual(profile["primary_face_input_image"], uploaded["reference"]["input_image"])
+        self.assertEqual(profile["pulid_face_reference_image"], uploaded["reference"]["input_image"])
+        self.assertTrue(profile["references"]["face"][0]["primary"])
+
+    def test_avatar_generation_face_extract_blocks_when_comfyui_webui_running(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_session_active": True,
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "comfyui_gpu": {"state": "running"},
+                    "vision_llm": {"state": "running", "socket_path": "/tmp/vision.sock"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(
+                payload=AvatarProfileSaveRequest(
+                    name="Jane Avatar",
+                    face_image_filename="face.png",
+                    face_image_data_base64=base64.b64encode(b"base-face").decode("ascii"),
+                    body_image_filename="body.png",
+                    body_image_data_base64=base64.b64encode(b"body-image").decode("ascii"),
+                )
+            )
+
+            with self.assertRaisesRegex(ValueError, "vision_blocked_by_manual_comfyui_webui"):
+                state.extract_avatar_face_profile(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarFaceProfileExtractRequest(),
+                )
+
+    def test_avatar_generation_extracts_combined_face_profile_from_references(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "stopped",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "comfyui_gpu": {"state": "stopped"},
+                    "vision_llm": {"state": "running", "socket_path": "/tmp/vision.sock", "default_model_id": "vision-model"},
+                    "local_llm": {"state": "running", "socket_path": "/tmp/local.sock", "default_model_id": "local-model"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(
+                payload=AvatarProfileSaveRequest(
+                    name="Jane Avatar",
+                    face_image_filename="face.png",
+                    face_image_data_base64=base64.b64encode(b"base-face").decode("ascii"),
+                    body_image_filename="body.png",
+                    body_image_data_base64=base64.b64encode(b"body-image").decode("ascii"),
+                )
+            )
+            first = state.upload_avatar_profile_reference(
+                profile_id="Jane_Avatar",
+                payload=AvatarProfileReferenceUploadRequest(
+                    role="face",
+                    name="Front Face",
+                    filename="front.png",
+                    data_base64=base64.b64encode(b"front-face").decode("ascii"),
+                ),
+            )
+            second = state.upload_avatar_profile_reference(
+                profile_id="Jane_Avatar",
+                payload=AvatarProfileReferenceUploadRequest(
+                    role="face",
+                    name="Side Face",
+                    filename="side.png",
+                    data_base64=base64.b64encode(b"side-face").decode("ascii"),
+                ),
+            )
+            state.set_avatar_profile_primary_face(
+                profile_id="Jane_Avatar",
+                payload=AvatarPrimaryFaceRequest(filename=first["reference"]["filename"]),
+            )
+
+            def _fake_vision(*, image_bytes, mime_type, image_name, prompt, max_tokens=450, timeout_s=10):
+                return f"face observations for {image_name}", "vision-model"
+
+            def _fake_uds_request(*, socket_path: str, method: str, path: str, body: dict, **kwargs):
+                return {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "schema_version": "1.0",
+                                        "stable_identity": {"face_shape": "oval", "eyes": "green almond eyes"},
+                                        "identity_prompt": "same Jane face, oval face, green almond eyes",
+                                        "face_prompt": "oval face, green almond eyes, defined brows",
+                                        "hair_prompt": "dark wavy hair",
+                                        "negative_prompt_terms": ["different person", "changed face"],
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                }
+
+            with patch.object(state, "_vision_describe_image_bytes", side_effect=_fake_vision), patch.object(
+                state,
+                "_uds_json_request",
+                side_effect=_fake_uds_request,
+            ):
+                result = state.extract_avatar_face_profile(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarFaceProfileExtractRequest(
+                        source_filenames=[first["reference"]["filename"], second["reference"]["filename"]]
+                    ),
+                )
+
+        face_profile = result["face_profile"]
+        profile = result["profile"]
+        self.assertEqual(face_profile["reference_count"], 2)
+        self.assertEqual(face_profile["vision_model_id"], "vision-model")
+        self.assertEqual(face_profile["local_llm_model_id"], "local-model")
+        self.assertEqual(face_profile["structured"]["identity_prompt"], "same Jane face, oval face, green almond eyes")
+        self.assertEqual(profile["face_profile"]["structured"]["face_prompt"], "oval face, green almond eyes, defined brows")
+        self.assertEqual(profile["extraction"]["structured"]["prompt_sections"]["face"], "oval face, green almond eyes, defined brows")
+
     def test_avatar_generation_body_depth_profile_submits_preprocess_workflow(self):
         class _AvatarBodyDepthServiceManager:
             def __init__(self, input_dir: Path, output_dir: Path):
@@ -4094,7 +4289,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             def get_status(self):
                 return {
                     "comfyui_webui": {
-                        "state": "running",
+                        "state": "stopped",
                         "runtime": "gpu",
                         "manual_paths": {"input_dir": self.input_dir},
                     },
@@ -4209,7 +4404,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             def get_status(self):
                 return {
                     "comfyui_webui": {
-                        "state": "running",
+                        "state": "stopped",
                         "runtime": "gpu",
                         "manual_paths": {"input_dir": self.input_dir},
                     },

@@ -110,6 +110,22 @@ roles are `body_depth`, `body_depth_map`, `face`, and `pose`; files are stored i
 `avatar_profiles/{profile_id}/refs/{role}/` and returned on the profile payload
 under `references`.
 
+The Face profile tab stores any number of `face` references. A saved face reference
+can be marked as the PuLID primary with
+`POST /api/avatar-generation/profiles/{profile_id}/face/primary`; the selected file
+is exposed as `primary_face_reference_filename`, `primary_face_input_image`, and
+`pulid_face_reference_image` on the profile payload. If no primary is selected,
+PuLID falls back to the profile's original face image.
+
+The same tab can extract a combined face profile with
+`POST /api/avatar-generation/profiles/{profile_id}/face/extract`. The node sends
+the selected face references to the vision runtime, asks the local LLM to merge the
+observations into reusable identity JSON, stores the result under `face_profile`,
+and mirrors the prompt-ready face fields into `extraction.structured`. Face-profile
+extraction refuses to run while the manual ComfyUI Web UI/session or GPU ComfyUI
+runtime is active, because those GPU workloads cannot coexist with the vision
+runtime.
+
 The Body Depth profile tab can submit a lightweight ComfyUI preprocessing job with
 `POST /api/avatar-generation/profiles/{profile_id}/body-depth/generate`. For each
 raw `body_depth` reference, the node runs:

@@ -2203,6 +2203,10 @@ class NodeControlState:
             },
             "updated_at": now,
         }
+        if role == "face" and Path(str(metadata.get("primary_face_reference_filename") or "")).name == safe_asset_name:
+            updated_metadata.pop("primary_face_reference_filename", None)
+            updated_metadata.pop("primary_face_reference", None)
+            updated_metadata.pop("primary_face_input_image", None)
         (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         selected_profile_id = self._selected_avatar_profile_id()
         return {
@@ -2213,7 +2217,114 @@ class NodeControlState:
             "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
         }
 
+    def set_avatar_profile_primary_face(self, *, profile_id: str, payload: "AvatarPrimaryFaceRequest") -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        filename = Path(str(payload.filename or "")).name
+        if not filename:
+            raise ValueError("avatar_primary_face_filename_required")
+        path = (profile_dir / "refs" / "face" / filename).resolve()
+        if profile_dir not in path.parents or not path.exists() or not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            raise ValueError("avatar_face_reference_not_found")
+        reference = self._avatar_profile_reference_payload(path=path)
+        now = datetime.now(timezone.utc).isoformat()
+        primary = {
+            "filename": reference["filename"],
+            "name": reference.get("name"),
+            "input_image": reference.get("input_image"),
+            "url": reference.get("url"),
+            "updated_at": now,
+        }
+        updated_metadata = {
+            **metadata,
+            "primary_face_reference_filename": reference["filename"],
+            "primary_face_reference": primary,
+            "primary_face_input_image": reference.get("input_image"),
+            "updated_at": now,
+        }
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        return {
+            "status": "primary_face_selected",
+            "primary_face_reference": saved_profile.get("primary_face_reference"),
+            "profile": saved_profile,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    def extract_avatar_face_profile(self, *, profile_id: str, payload: "AvatarFaceProfileExtractRequest") -> dict:
+        self._assert_avatar_vision_not_blocked_by_comfyui()
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        profile = self._avatar_profile_payload(profile_dir=profile_dir)
+        sources = self._avatar_face_profile_sources(profile_dir=profile_dir, metadata=metadata, source_filenames=payload.source_filenames)
+        if not sources:
+            raise ValueError("avatar_face_references_not_found")
+        descriptions: list[dict] = []
+        vision_model_id = None
+        prompt = self._avatar_face_reference_vision_prompt()
+        for source in sources[:15]:
+            path = source["path"]
+            description, model_id = self._vision_describe_image_bytes(
+                image_bytes=path.read_bytes(),
+                mime_type=self._image_mime_type(path.suffix),
+                image_name=path.name,
+                prompt=prompt,
+                max_tokens=1100,
+                timeout_s=45,
+            )
+            vision_model_id = vision_model_id or model_id
+            descriptions.append(
+                {
+                    "filename": source.get("filename"),
+                    "name": source.get("name"),
+                    "input_image": source.get("input_image"),
+                    "description": description,
+                }
+            )
+        structured, llm_model_id = self._avatar_face_profile_json_from_local_llm(
+            profile=profile,
+            descriptions=descriptions,
+            primary_face_input_image=str(profile.get("primary_face_input_image") or profile.get("face_input_image") or ""),
+            primary_face_filename=str(profile.get("primary_face_reference_filename") or profile.get("face_image") or ""),
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        face_profile = {
+            "schema_version": "1.0",
+            "status": "extracted",
+            "created_at": now,
+            "vision_model_id": vision_model_id,
+            "local_llm_model_id": llm_model_id,
+            "reference_count": len(descriptions),
+            "primary_face_input_image": str(profile.get("primary_face_input_image") or profile.get("face_input_image") or ""),
+            "primary_face_reference_filename": str(profile.get("primary_face_reference_filename") or ""),
+            "references": descriptions,
+            "combined_description": "\n\n".join(
+                f"{item.get('filename')}: {item.get('description')}" for item in descriptions if item.get("description")
+            ),
+            "structured": structured,
+        }
+        updated_metadata = self._merge_avatar_face_profile_into_metadata(
+            metadata=metadata,
+            face_profile=face_profile,
+            now=now,
+        )
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        return {
+            "status": "face_profile_extracted",
+            "profile": saved_profile,
+            "face_profile": face_profile,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
     def extract_avatar_profile_data(self, *, profile_id: str) -> dict:
+        self._assert_avatar_vision_not_blocked_by_comfyui()
         profile_dir = self._avatar_profile_dir(profile_id=profile_id)
         profile = self._avatar_profile_payload(profile_dir=profile_dir)
         if not profile:
@@ -2333,6 +2444,286 @@ class NodeControlState:
             "extraction": extraction,
             "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
         }
+
+    def _assert_avatar_vision_not_blocked_by_comfyui(self) -> None:
+        services = self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        session = webui.get("session") if isinstance(webui, dict) and isinstance(webui.get("session"), dict) else {}
+        webui_state = str(webui.get("state") or "").strip().lower() if isinstance(webui, dict) else ""
+        manual_active = bool(webui.get("manual_session_active") or session.get("manual_session_active")) if isinstance(webui, dict) else False
+        if webui_state in {"running", "starting"} or manual_active:
+            raise ValueError("vision_blocked_by_manual_comfyui_webui")
+        comfyui_gpu = services.get("comfyui_gpu") if isinstance(services, dict) else {}
+        comfyui_gpu_state = str(comfyui_gpu.get("state") or "").strip().lower() if isinstance(comfyui_gpu, dict) else ""
+        if comfyui_gpu_state in {"running", "starting"}:
+            raise ValueError("vision_blocked_by_comfyui_gpu")
+
+    def _avatar_face_profile_sources(self, *, profile_dir: Path, metadata: dict, source_filenames: list[str] | None) -> list[dict]:
+        selected = {
+            Path(str(item or "")).name
+            for item in list(source_filenames or [])
+            if str(item or "").strip()
+        }
+        references = self._avatar_profile_references(profile_dir=profile_dir).get("face", [])
+        sources: list[dict] = []
+        for reference in references:
+            filename = Path(str(reference.get("filename") or "")).name
+            if not filename or (selected and filename not in selected):
+                continue
+            path = (profile_dir / "refs" / "face" / filename).resolve()
+            if profile_dir not in path.parents or not path.exists() or not path.is_file():
+                continue
+            sources.append({**reference, "path": path})
+        if sources or selected:
+            return sources
+        face_image = Path(str(metadata.get("face_image") or "")).name
+        if not face_image:
+            return []
+        face_path = (profile_dir / face_image).resolve()
+        if profile_dir not in face_path.parents or not face_path.exists() or not face_path.is_file():
+            return []
+        profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
+        return [
+            {
+                "profile_id": profile_id,
+                "role": "face",
+                "name": "Profile Face",
+                "filename": face_image,
+                "input_image": f"avatar_profiles/{profile_id}/{face_image}",
+                "path": face_path,
+            }
+        ]
+
+    @staticmethod
+    def _avatar_face_reference_vision_prompt() -> str:
+        return (
+            "Analyze this adult avatar face reference for reusable identity control. "
+            "Return dense, concrete, non-repetitive observations. Describe only visible traits and mark unclear traits uncertain. "
+            "Cover face shape and proportions; forehead, temples, cheeks, cheekbones, jaw, chin; skin tone and texture; "
+            "eye color, size, shape, spacing, eyelids, gaze; eyebrow thickness, arch, placement; nose bridge, tip, nostrils; "
+            "lip fullness, mouth shape, smile line; ears and neck if visible; hairline, hair color, part, length, texture, volume, styling; "
+            "expression, makeup, distinctive marks, scars, moles, piercings, accessories, crop/framing, lighting/quality, and identity-preservation notes. "
+            "Separate stable identity traits from removable styling or accessories."
+        )
+
+    def _avatar_face_profile_json_from_local_llm(
+        self,
+        *,
+        profile: dict,
+        descriptions: list[dict],
+        primary_face_input_image: str,
+        primary_face_filename: str,
+    ) -> tuple[dict, str]:
+        combined_description = "\n\n".join(
+            f"{item.get('filename')}: {item.get('description')}" for item in descriptions if item.get("description")
+        )
+        services = self.service_status_payload().get("services", {})
+        local_llm = services.get("local_llm") if isinstance(services, dict) else {}
+        socket_path = str(local_llm.get("socket_path") or "") if isinstance(local_llm, dict) else ""
+        model_id = str(local_llm.get("model_id") or local_llm.get("default_model_id") or "local").strip() if isinstance(local_llm, dict) else "local"
+        state = str(local_llm.get("state") or "").strip().lower() if isinstance(local_llm, dict) else ""
+        request_payload = {
+            "profile_name": profile.get("name") or profile.get("profile_id"),
+            "primary_face_filename": primary_face_filename,
+            "primary_face_input_image": primary_face_input_image,
+            "face_reference_observations": descriptions,
+        }
+        if not socket_path or state not in {"running", "healthy"}:
+            return self._fallback_avatar_face_profile_structured(
+                profile=profile,
+                descriptions=descriptions,
+                combined_description=combined_description,
+                primary_face_input_image=primary_face_input_image,
+                primary_face_filename=primary_face_filename,
+                model_id=model_id,
+                error=f"local_llm_unavailable:{state or 'not_running'}",
+            ), "local_rules"
+        request_body = {
+            "model": model_id,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "/no_think Combine multiple avatar face-reference observations into strict reusable JSON for SDXL/ComfyUI identity prompts. "
+                        "Return only JSON, no markdown. Required keys: schema_version, profile_name, primary_face_filename, primary_face_input_image, "
+                        "stable_identity, identity_prompt, face_prompt, hair_prompt, expression_prompt, removable_styling, accessories, reference_quality_notes, negative_prompt_terms. "
+                        "stable_identity must include face_shape, skin, eyes, brows, nose, lips, cheekbones, jaw_chin, hairline_hair, visible_age_range, distinctive_marks, and identity_preservation. "
+                        "identity_prompt and face_prompt must be prompt-ready strings that preserve traits seen consistently across references. "
+                        "Do not invent traits not supported by the references. Mark disagreements or occlusions as uncertain in reference_quality_notes. "
+                        "negative_prompt_terms must avoid bad identity outcomes, never anatomy-erasing terms like no face, no eyes, no skin, no hair."
+                    ),
+                },
+                {"role": "user", "content": "/no_think " + json.dumps(request_payload, sort_keys=True)},
+            ],
+            "temperature": 0.1,
+            "max_tokens": 1000,
+            "stream": False,
+        }
+        try:
+            response = self._uds_json_request(
+                socket_path=socket_path,
+                method="POST",
+                path="/v1/chat/completions",
+                body=request_body,
+                host="local-llm",
+                error_label="local_llm_avatar_face_profile_extract_failed",
+                timeout_s=75,
+            )
+        except Exception as exc:
+            return self._fallback_avatar_face_profile_structured(
+                profile=profile,
+                descriptions=descriptions,
+                combined_description=combined_description,
+                primary_face_input_image=primary_face_input_image,
+                primary_face_filename=primary_face_filename,
+                model_id=model_id,
+                error=str(exc),
+            ), "local_rules"
+        choices = response.get("choices") if isinstance(response.get("choices"), list) else []
+        content = ""
+        if choices and isinstance(choices[0], dict):
+            message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
+            content = str(message.get("content") or message.get("reasoning_content") or choices[0].get("text") or "").strip()
+        parsed = self._parse_manual_image_prompt_helper_content(content)
+        if not parsed:
+            parsed = {}
+        return self._normalize_avatar_face_profile_structured(
+            parsed=parsed,
+            profile=profile,
+            descriptions=descriptions,
+            combined_description=combined_description,
+            primary_face_input_image=primary_face_input_image,
+            primary_face_filename=primary_face_filename,
+        ), model_id
+
+    @classmethod
+    def _fallback_avatar_face_profile_structured(
+        cls,
+        *,
+        profile: dict,
+        descriptions: list[dict],
+        combined_description: str,
+        primary_face_input_image: str,
+        primary_face_filename: str,
+        model_id: str,
+        error: str,
+    ) -> dict:
+        return cls._normalize_avatar_face_profile_structured(
+            parsed={
+                "profile_name": profile.get("name") or profile.get("profile_id"),
+                "primary_face_filename": primary_face_filename,
+                "primary_face_input_image": primary_face_input_image,
+                "stable_identity": {"description": combined_description},
+                "identity_prompt": combined_description,
+                "face_prompt": combined_description,
+                "hair_prompt": "",
+                "expression_prompt": "",
+                "reference_quality_notes": {
+                    "structured_source": "vision_descriptions_local_rules",
+                    "local_llm_model_id": model_id,
+                    "local_llm_error": error,
+                },
+            },
+            profile=profile,
+            descriptions=descriptions,
+            combined_description=combined_description,
+            primary_face_input_image=primary_face_input_image,
+            primary_face_filename=primary_face_filename,
+        )
+
+    @classmethod
+    def _normalize_avatar_face_profile_structured(
+        cls,
+        *,
+        parsed: dict,
+        profile: dict,
+        descriptions: list[dict],
+        combined_description: str,
+        primary_face_input_image: str,
+        primary_face_filename: str,
+    ) -> dict:
+        source = parsed if isinstance(parsed, dict) else {}
+        stable_identity = cls._avatar_profile_dict_value(source.get("stable_identity"))
+        if not stable_identity:
+            stable_identity = {"description": combined_description}
+        identity_prompt = str(source.get("identity_prompt") or "").strip() or cls._avatar_profile_compact_text(stable_identity) or combined_description
+        face_prompt = str(source.get("face_prompt") or "").strip() or identity_prompt
+        negative_terms = cls._avatar_profile_negative_terms(source.get("negative_prompt_terms") or ["different person", "changed face", "blurred face", "distorted face", "inconsistent identity"])
+        return {
+            "schema_version": str(source.get("schema_version") or "1.0"),
+            "profile_name": str(source.get("profile_name") or profile.get("name") or profile.get("profile_id") or "avatar").strip(),
+            "primary_face_filename": str(source.get("primary_face_filename") or primary_face_filename).strip(),
+            "primary_face_input_image": str(source.get("primary_face_input_image") or primary_face_input_image).strip(),
+            "reference_count": len(descriptions),
+            "stable_identity": stable_identity,
+            "identity_prompt": identity_prompt,
+            "face_prompt": face_prompt,
+            "hair_prompt": str(source.get("hair_prompt") or "").strip(),
+            "expression_prompt": str(source.get("expression_prompt") or "").strip(),
+            "removable_styling": cls._avatar_profile_dict_value(source.get("removable_styling")),
+            "accessories": cls._avatar_profile_dict_value(source.get("accessories")),
+            "reference_quality_notes": cls._avatar_profile_dict_value(source.get("reference_quality_notes")),
+            "negative_prompt_terms": negative_terms,
+            "negative_identity_prompt": ", ".join(negative_terms),
+        }
+
+    @classmethod
+    def _merge_avatar_face_profile_into_metadata(cls, *, metadata: dict, face_profile: dict, now: str) -> dict:
+        structured_face = face_profile.get("structured") if isinstance(face_profile.get("structured"), dict) else {}
+        face_description = str(structured_face.get("face_prompt") or face_profile.get("combined_description") or "").strip()
+        existing_extraction = metadata.get("extraction") if isinstance(metadata.get("extraction"), dict) else {}
+        extraction = dict(existing_extraction)
+        if face_description:
+            extraction["face_description"] = face_description
+        existing_structured = extraction.get("structured") if isinstance(extraction.get("structured"), dict) else {}
+        if existing_structured:
+            permanent_identity = cls._avatar_profile_dict_value(existing_structured.get("permanent_identity"))
+            permanent_identity["face"] = structured_face.get("stable_identity") or face_description
+            permanent_identity["identity_prompt"] = structured_face.get("identity_prompt") or permanent_identity.get("identity_prompt") or face_description
+            prompt_sections = cls._avatar_profile_dict_value(existing_structured.get("prompt_sections"))
+            prompt_sections["identity"] = structured_face.get("identity_prompt") or prompt_sections.get("identity") or ""
+            prompt_sections["face"] = structured_face.get("face_prompt") or prompt_sections.get("face") or ""
+            if structured_face.get("hair_prompt"):
+                prompt_sections["hair"] = structured_face.get("hair_prompt")
+            existing_structured = {
+                **existing_structured,
+                "permanent_identity": permanent_identity,
+                "identity_prompt": prompt_sections.get("identity") or permanent_identity.get("identity_prompt") or "",
+                "prompt_sections": prompt_sections,
+            }
+            extraction["structured"] = existing_structured
+            extraction["updated_at"] = now
+        elif face_description:
+            extraction = {
+                "schema_version": "1.0",
+                "status": "face_extracted",
+                "created_at": now,
+                "updated_at": now,
+                "face_description": face_description,
+                "body_description": str(existing_extraction.get("body_description") or ""),
+                "structured": {
+                    "schema_version": "2.0",
+                    "profile_name": metadata.get("name") or metadata.get("profile_id") or "avatar",
+                    "identity_prompt": structured_face.get("identity_prompt") or face_description,
+                    "permanent_identity": {
+                        "face": structured_face.get("stable_identity") or face_description,
+                        "identity_prompt": structured_face.get("identity_prompt") or face_description,
+                    },
+                    "prompt_sections": {
+                        "identity": structured_face.get("identity_prompt") or face_description,
+                        "face": structured_face.get("face_prompt") or face_description,
+                        "hair": structured_face.get("hair_prompt") or "",
+                        "body_shape": "",
+                        "pose": "",
+                        "clothing": "",
+                        "accessories": cls._avatar_profile_compact_text(structured_face.get("accessories")),
+                        "preservation": "",
+                        "negative": structured_face.get("negative_identity_prompt") or "",
+                    },
+                    "negative_prompt_terms": structured_face.get("negative_prompt_terms") or [],
+                },
+            }
+        return {**metadata, "face_profile": face_profile, "extraction": extraction, "updated_at": now}
 
     def _avatar_profile_json_from_local_llm(self, *, profile: dict, face_description: str, body_description: str) -> tuple[dict, str]:
         services = self.service_status_payload().get("services", {})
@@ -2775,6 +3166,22 @@ class NodeControlState:
         profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
         face_image = Path(str(metadata.get("face_image") or "face.png")).name
         body_image = Path(str(metadata.get("body_image") or "body.png")).name
+        references = self._avatar_profile_references(profile_dir=profile_dir)
+        primary_face_filename = Path(str(metadata.get("primary_face_reference_filename") or "")).name
+        primary_face_reference = None
+        if primary_face_filename:
+            for reference in references.get("face", []):
+                if Path(str(reference.get("filename") or "")).name == primary_face_filename:
+                    reference["primary"] = True
+                    primary_face_reference = reference
+                    break
+        primary_face_input_image = (
+            str(primary_face_reference.get("input_image") or "").strip()
+            if isinstance(primary_face_reference, dict)
+            else str(metadata.get("primary_face_input_image") or "").strip()
+        )
+        if not primary_face_input_image:
+            primary_face_input_image = f"avatar_profiles/{profile_id}/{face_image}"
         return {
             **metadata,
             "profile_id": profile_id,
@@ -2785,7 +3192,11 @@ class NodeControlState:
             "body_input_image": f"avatar_profiles/{profile_id}/{body_image}",
             "face_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{face_image}",
             "body_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{body_image}",
-            "references": self._avatar_profile_references(profile_dir=profile_dir),
+            "primary_face_reference": primary_face_reference,
+            "primary_face_reference_filename": primary_face_filename or None,
+            "primary_face_input_image": primary_face_input_image,
+            "pulid_face_reference_image": primary_face_input_image,
+            "references": references,
             "body_depth_job": self._read_avatar_body_depth_profile_job(profile_dir=profile_dir),
         }
 
@@ -8484,6 +8895,14 @@ class AvatarProfileReferenceUploadRequest(BaseModel):
     data_base64: str
 
 
+class AvatarPrimaryFaceRequest(BaseModel):
+    filename: str
+
+
+class AvatarFaceProfileExtractRequest(BaseModel):
+    source_filenames: list[str] | None = None
+
+
 class AvatarBodyDepthProfileGenerateRequest(BaseModel):
     source_filenames: list[str] | None = None
     width: int | None = 768
@@ -9376,6 +9795,20 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def post_avatar_generation_profile_reference(profile_id: str, payload: AvatarProfileReferenceUploadRequest):
         try:
             return state.upload_avatar_profile_reference(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/face/primary")
+    def post_avatar_generation_profile_primary_face(profile_id: str, payload: AvatarPrimaryFaceRequest):
+        try:
+            return state.set_avatar_profile_primary_face(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/face/extract")
+    def post_avatar_generation_profile_face_extract(profile_id: str, payload: AvatarFaceProfileExtractRequest):
+        try:
+            return state.extract_avatar_face_profile(profile_id=profile_id, payload=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
