@@ -16,6 +16,7 @@ from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionU
 from ai_node.persistence.image_generation_template_store import ImageGenerationTemplateStateStore
 from ai_node.runtime.node_control_api import (
     AvatarProfileExtractionUpdateRequest,
+    AvatarProfileReferenceUploadRequest,
     AvatarProfileSaveRequest,
     DirectExecutionAdmissionConfig,
     DirectExecutionAdmissionGuard,
@@ -3754,6 +3755,73 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(deleted["selected_profile_id"])
         self.assertEqual(status["profiles"], [])
         self.assertIsNone(status["selected_profile_id"])
+
+    def test_avatar_generation_uploads_and_deletes_profile_references(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(
+                payload=AvatarProfileSaveRequest(
+                    name="Jane Avatar",
+                    face_image_filename="face.png",
+                    face_image_data_base64=base64.b64encode(b"face-image").decode("ascii"),
+                    body_image_filename="body.png",
+                    body_image_data_base64=base64.b64encode(b"body-image").decode("ascii"),
+                )
+            )
+
+            uploaded = state.upload_avatar_profile_reference(
+                profile_id="Jane_Avatar",
+                payload=AvatarProfileReferenceUploadRequest(
+                    role="body_depth",
+                    name="Standing Body",
+                    filename="standing.webp",
+                    data_base64=base64.b64encode(b"body-depth-reference").decode("ascii"),
+                ),
+            )
+            reference = uploaded["reference"]
+            profile = uploaded["profile"]
+            reference_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "body_depth" / reference["filename"]
+            response = state.avatar_profile_reference_response(
+                profile_id="Jane_Avatar",
+                role="body_depth",
+                asset_name=reference["filename"],
+            )
+            saved_bytes = reference_path.read_bytes()
+            deleted = state.delete_avatar_profile_reference(
+                profile_id="Jane_Avatar",
+                role="body_depth",
+                asset_name=reference["filename"],
+            )
+
+        self.assertEqual(uploaded["status"], "uploaded")
+        self.assertEqual(reference["role"], "body_depth")
+        self.assertEqual(reference["name"], "Standing Body")
+        self.assertEqual(reference["url"], f"/api/avatar-generation/profiles/Jane_Avatar/references/body_depth/{reference['filename']}")
+        self.assertEqual(saved_bytes, b"body-depth-reference")
+        self.assertEqual(profile["references"]["body_depth"][0]["filename"], reference["filename"])
+        self.assertEqual(str(response.path), str(reference_path))
+        self.assertTrue(deleted["deleted"])
+        self.assertFalse(reference_path.exists())
+        self.assertEqual(deleted["profile"]["references"]["body_depth"], [])
 
     def test_avatar_generation_updates_extracted_profile_data(self):
         class _AvatarProfileServiceManager:

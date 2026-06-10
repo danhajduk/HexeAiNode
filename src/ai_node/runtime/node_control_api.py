@@ -1982,6 +1982,94 @@ class NodeControlState:
             "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
         }
 
+    def upload_avatar_profile_reference(self, *, profile_id: str, payload: "AvatarProfileReferenceUploadRequest") -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
+        role = self._avatar_profile_reference_role(payload.role)
+        display_name = str(payload.name or Path(str(payload.filename or "")).stem or role).strip()
+        safe_name = self._safe_filename_component(display_name)
+        raw_name = Path(str(payload.filename or f"{safe_name}.png")).name
+        suffix = Path(raw_name).suffix.lower()
+        if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+            suffix = ".png"
+        reference_dir = (profile_dir / "refs" / role).resolve()
+        if self._avatar_profile_root() not in reference_dir.parents:
+            raise ValueError("avatar_profile_reference_path_invalid")
+        reference_dir.mkdir(parents=True, exist_ok=True)
+        target_name = f"{safe_name}_{role}_{int(time.time())}{suffix}"
+        target_path = (reference_dir / target_name).resolve()
+        data = self._decode_avatar_profile_reference_image(payload.data_base64, role=role)
+        target_path.write_bytes(data)
+        now = datetime.now(timezone.utc).isoformat()
+        reference = {
+            "profile_id": profile_id,
+            "role": role,
+            "name": display_name or safe_name,
+            "filename": target_name,
+            "input_image": f"avatar_profiles/{profile_id}/refs/{role}/{target_name}",
+            "url": f"/api/avatar-generation/profiles/{profile_id}/references/{role}/{target_name}",
+            "created_at": now,
+        }
+        target_path.with_suffix(target_path.suffix + ".json").write_text(
+            json.dumps(reference, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        existing = metadata.get("reference_counts") if isinstance(metadata.get("reference_counts"), dict) else {}
+        updated_metadata = {
+            **metadata,
+            "reference_counts": {
+                **existing,
+                role: len(self._avatar_profile_references(profile_dir=profile_dir).get(role, [])),
+            },
+            "updated_at": now,
+        }
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        return {
+            "status": "uploaded",
+            "reference": self._avatar_profile_reference_payload(path=target_path),
+            "profile": saved_profile,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    def delete_avatar_profile_reference(self, *, profile_id: str, role: str, asset_name: str) -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        role = self._avatar_profile_reference_role(role)
+        safe_asset_name = Path(str(asset_name or "")).name
+        path = (profile_dir / "refs" / role / safe_asset_name).resolve()
+        if profile_dir not in path.parents or not path.exists() or not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            raise ValueError("avatar_profile_reference_not_found")
+        path.unlink()
+        sidecar = path.with_suffix(path.suffix + ".json")
+        if sidecar.exists() and sidecar.is_file():
+            sidecar.unlink()
+        now = datetime.now(timezone.utc).isoformat()
+        existing = metadata.get("reference_counts") if isinstance(metadata.get("reference_counts"), dict) else {}
+        updated_metadata = {
+            **metadata,
+            "reference_counts": {
+                **existing,
+                role: len(self._avatar_profile_references(profile_dir=profile_dir).get(role, [])),
+            },
+            "updated_at": now,
+        }
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        return {
+            "deleted": True,
+            "role": role,
+            "filename": safe_asset_name,
+            "profile": self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id),
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
     def extract_avatar_profile_data(self, *, profile_id: str) -> dict:
         profile_dir = self._avatar_profile_dir(profile_id=profile_id)
         profile = self._avatar_profile_payload(profile_dir=profile_dir)
@@ -2506,6 +2594,16 @@ class NodeControlState:
             raise ValueError("avatar_profile_asset_not_found")
         return FileResponse(path)
 
+    def avatar_profile_reference_response(self, *, profile_id: str, role: str, asset_name: str) -> FileResponse:
+        root = self._avatar_profile_root()
+        safe_profile_id = self._safe_filename_component(profile_id)
+        safe_role = self._avatar_profile_reference_role(role)
+        safe_asset_name = Path(str(asset_name or "")).name
+        path = (root / safe_profile_id / "refs" / safe_role / safe_asset_name).resolve()
+        if root not in path.parents or not path.exists() or not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            raise ValueError("avatar_profile_reference_not_found")
+        return FileResponse(path)
+
     def _avatar_profile_root(self) -> Path:
         return (self._manual_image_input_dir() / "avatar_profiles").resolve()
 
@@ -2543,6 +2641,7 @@ class NodeControlState:
             "body_input_image": f"avatar_profiles/{profile_id}/{body_image}",
             "face_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{face_image}",
             "body_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{body_image}",
+            "references": self._avatar_profile_references(profile_dir=profile_dir),
         }
 
     def _avatar_profile_metadata(self, *, profile_dir: Path) -> dict:
@@ -2628,6 +2727,78 @@ class NodeControlState:
             encoding="utf-8",
         )
         return target_name
+
+    @classmethod
+    def _avatar_profile_reference_role(cls, value: str | None) -> str:
+        role = cls._safe_filename_component(value or "reference")
+        aliases = {
+            "body": "body_depth",
+            "bodydepth": "body_depth",
+            "body_depths": "body_depth",
+            "depth": "body_depth",
+            "faces": "face",
+            "pose": "pose",
+            "poses": "pose",
+            "openpose": "pose",
+        }
+        role = aliases.get(role, role)
+        if role not in {"body_depth", "face", "pose"}:
+            raise ValueError("avatar_profile_reference_role_invalid")
+        return role
+
+    @staticmethod
+    def _decode_avatar_profile_reference_image(data_base64: str, *, role: str) -> bytes:
+        encoded = str(data_base64 or "")
+        if not encoded:
+            raise ValueError(f"avatar_profile_{role}_reference_required")
+        if "," in encoded and encoded.split(",", 1)[0].lower().startswith("data:"):
+            encoded = encoded.split(",", 1)[1]
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(f"invalid_avatar_profile_{role}_reference_data") from exc
+        if not data:
+            raise ValueError(f"avatar_profile_{role}_reference_empty")
+        if len(data) > 20 * 1024 * 1024:
+            raise ValueError(f"avatar_profile_{role}_reference_too_large")
+        return data
+
+    def _avatar_profile_references(self, *, profile_dir: Path) -> dict:
+        references = {"body_depth": [], "face": [], "pose": []}
+        refs_root = profile_dir / "refs"
+        if not refs_root.exists() or not refs_root.is_dir():
+            return references
+        for role in references:
+            role_dir = refs_root / role
+            if not role_dir.exists() or not role_dir.is_dir():
+                continue
+            items = []
+            for path in role_dir.iterdir():
+                if not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+                    continue
+                items.append(self._avatar_profile_reference_payload(path=path))
+            items.sort(key=lambda item: str(item.get("created_at") or item.get("filename") or ""), reverse=True)
+            references[role] = items
+        return references
+
+    def _avatar_profile_reference_payload(self, *, path: Path) -> dict:
+        sidecar = path.with_suffix(path.suffix + ".json")
+        try:
+            metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+        except Exception:
+            metadata = {}
+        role = self._avatar_profile_reference_role(metadata.get("role") or path.parent.name)
+        profile_id = self._safe_filename_component(metadata.get("profile_id") or path.parent.parent.parent.name)
+        filename = Path(str(metadata.get("filename") or path.name)).name
+        return {
+            **(metadata if isinstance(metadata, dict) else {}),
+            "profile_id": profile_id,
+            "role": role,
+            "filename": filename,
+            "name": str((metadata if isinstance(metadata, dict) else {}).get("name") or Path(filename).stem),
+            "input_image": f"avatar_profiles/{profile_id}/refs/{role}/{filename}",
+            "url": f"/api/avatar-generation/profiles/{profile_id}/references/{role}/{filename}",
+        }
 
     def _manual_vision_image_payload(self, *, payload: "ManualImageVisionDescribeRequest") -> tuple[bytes, str, str]:
         if payload.reference_relative_path:
@@ -7841,6 +8012,13 @@ class AvatarProfileExtractionUpdateRequest(BaseModel):
     structured: dict | None = None
 
 
+class AvatarProfileReferenceUploadRequest(BaseModel):
+    role: str
+    name: str | None = None
+    filename: str | None = None
+    data_base64: str
+
+
 class ExecutionAuthorizeRequest(BaseModel):
     prompt_id: str
     task_family: str
@@ -8719,6 +8897,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @app.post("/api/avatar-generation/profiles/{profile_id}/references")
+    def post_avatar_generation_profile_reference(profile_id: str, payload: AvatarProfileReferenceUploadRequest):
+        try:
+            return state.upload_avatar_profile_reference(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post("/api/avatar-generation/profiles/{profile_id}/extract")
     def post_avatar_generation_profile_extract(profile_id: str):
         try:
@@ -8737,6 +8922,20 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def delete_avatar_generation_profile(profile_id: str):
         try:
             return state.delete_avatar_profile(profile_id=profile_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/avatar-generation/profiles/{profile_id}/references/{role}/{asset_name}")
+    def get_avatar_generation_profile_reference(profile_id: str, role: str, asset_name: str):
+        try:
+            return state.avatar_profile_reference_response(profile_id=profile_id, role=role, asset_name=asset_name)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.delete("/api/avatar-generation/profiles/{profile_id}/references/{role}/{asset_name}")
+    def delete_avatar_generation_profile_reference(profile_id: str, role: str, asset_name: str):
+        try:
+            return state.delete_avatar_profile_reference(profile_id=profile_id, role=role, asset_name=asset_name)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

@@ -104,6 +104,12 @@ Edited extraction data can be saved back through
 `PUT /api/avatar-generation/profiles/{profile_id}/extraction`. The node runs the
 edited JSON through the same schema normalizer before writing it to the profile.
 
+Additional avatar analysis references can be uploaded under the selected profile
+with `POST /api/avatar-generation/profiles/{profile_id}/references`. Supported
+roles are `body_depth`, `face`, and `pose`; files are stored in
+`avatar_profiles/{profile_id}/refs/{role}/` and returned on the profile payload
+under `references`.
+
 ## Required Models And Nodes
 
 - Checkpoint: `RealVisXL_V5.0_fp16.safetensors`
