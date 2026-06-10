@@ -132,9 +132,9 @@ current head/face prompt plus the user's adjustment request to the local LLM. Th
 LLM returns updated prompt JSON, and the node persists both the prompt and the
 conversation. `POST /api/avatar-generation/profiles/{profile_id}/head-face/previews`
 submits `template.avatar_head_face_preview.realvisxl.v1` through the manual
-ComfyUI runtime and records the prompt id, template id, seed, prompt snapshot, and
-negative prompt in preview history. The profile keeps only the latest 10 head/face
-preview history entries.
+ComfyUI runtime as a quick `512x512`, 4-step preview and records the prompt id,
+template id, seed, prompt snapshot, and negative prompt in preview history. The
+profile keeps only the latest 10 head/face preview history entries.
 
 The extracted profile schema is versioned as `2.0` and separates stable identity
 from editable generation choices:

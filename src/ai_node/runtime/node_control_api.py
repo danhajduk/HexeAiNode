@@ -2198,8 +2198,8 @@ class NodeControlState:
         defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
         if not negative_prompt:
             negative_prompt = str(defaults.get("negative_prompt") or "").strip()
-        width = int(defaults.get("width") or 768)
-        height = int(defaults.get("height") or 768)
+        width = int(defaults.get("width") or 512)
+        height = int(defaults.get("height") or 512)
         steps = int(defaults.get("steps") or 4)
         cfg = float(defaults.get("cfg") or 1.2)
         denoise = float(defaults.get("denoise") or 1.0)

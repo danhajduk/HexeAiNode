@@ -66,8 +66,8 @@
       "defaults": {
         "negative_prompt": "low quality, blurry, distorted face, asymmetrical eyes, extra limbs, full body, cropped head, text, watermark, child, teen, underage",
         "avatar_name": "avatar_head_face_preview",
-        "width": 768,
-        "height": 768,
+        "width": 512,
+        "height": 512,
         "seed": null,
         "steps": 4,
         "cfg": 1.2,

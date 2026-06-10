@@ -24,8 +24,8 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
         self.assertEqual(head_face_template["model_requirements"]["checkpoint"], "RealVisXL_V5.0_fp16.safetensors")
         self.assertEqual(head_face_template["model_requirements"]["loras"], ["sdxl_lightning_4step_lora.safetensors"])
         self.assertEqual(head_face_template["metadata"]["edit_intent"], "avatar_head_face_preview")
-        self.assertEqual(head_face_template["defaults"]["width"], 768)
-        self.assertEqual(head_face_template["defaults"]["height"], 768)
+        self.assertEqual(head_face_template["defaults"]["width"], 512)
+        self.assertEqual(head_face_template["defaults"]["height"], 512)
         self.assertEqual(head_face_template["defaults"]["cfg"], 1.2)
         template = templates_by_id["template.avatar_body_depth_reference_transparent.realvisxl.v1"]
         self.assertEqual(template["template_name"], "Simple Avatar Generation")

@@ -3883,8 +3883,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             async def _submit_manual_image_generation(*, payload):
                 self.assertEqual(payload.template_id, "template.avatar_head_face_preview.realvisxl.v1")
                 self.assertEqual(payload.negative_prompt, "blurry")
-                self.assertEqual(payload.width, 768)
-                self.assertEqual(payload.height, 768)
+                self.assertEqual(payload.width, 512)
+                self.assertEqual(payload.height, 512)
                 self.assertTrue(payload.randomize_seed)
                 self.assertEqual(payload.template_variables["avatar_name"], "Jane_Avatar")
                 prompt_index = int(str(payload.prompt).rsplit(" ", 1)[-1])
