@@ -2055,20 +2055,6 @@ class NodeControlState:
         profile_id = self._safe_filename_component(display_name)
         profile_dir = self._avatar_profile_root() / profile_id
         profile_dir.mkdir(parents=True, exist_ok=True)
-        face_filename = self._write_avatar_profile_image(
-            profile_dir=profile_dir,
-            profile_id=profile_id,
-            role="face",
-            filename=payload.face_image_filename,
-            data_base64=payload.face_image_data_base64,
-        )
-        body_filename = self._write_avatar_profile_image(
-            profile_dir=profile_dir,
-            profile_id=profile_id,
-            role="body",
-            filename=payload.body_image_filename,
-            data_base64=payload.body_image_data_base64,
-        )
         now = datetime.now(timezone.utc).isoformat()
         existing = {}
         profile_path = profile_dir / "profile.json"
@@ -2078,18 +2064,46 @@ class NodeControlState:
             except Exception:
                 existing = {}
         existing = existing if isinstance(existing, dict) else {}
+        existing_face = Path(str(existing.get("face_image") or "")).name
+        existing_body = Path(str(existing.get("body_image") or "")).name
+        face_filename = existing_face if existing_face and (profile_dir / existing_face).is_file() else None
+        body_filename = existing_body if existing_body and (profile_dir / existing_body).is_file() else None
+        if payload.face_image_data_base64:
+            face_filename = self._write_avatar_profile_image(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                role="face",
+                filename=payload.face_image_filename,
+                data_base64=payload.face_image_data_base64,
+            )
+        if payload.body_image_data_base64:
+            body_filename = self._write_avatar_profile_image(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                role="body",
+                filename=payload.body_image_filename,
+                data_base64=payload.body_image_data_base64,
+            )
         metadata = {
             "schema_version": "1.0",
             "profile_id": profile_id,
             "name": display_name,
             "description": str(payload.description or "").strip(),
-            "face_image": face_filename,
-            "body_image": body_filename,
-            "face_input_image": f"avatar_profiles/{profile_id}/{face_filename}",
-            "body_input_image": f"avatar_profiles/{profile_id}/{body_filename}",
+            "gender": str(payload.gender or "").strip(),
+            "skin_color": str(payload.skin_color or "").strip(),
+            "hair_color": str(payload.hair_color or "").strip(),
+            "character_type": str(payload.character_type or "").strip(),
+            "visual_style": str(payload.visual_style or "").strip(),
+            "initial_data": str(payload.initial_data or "").strip(),
             "created_at": existing.get("created_at") or now,
             "updated_at": now,
         }
+        if face_filename:
+            metadata["face_image"] = face_filename
+            metadata["face_input_image"] = f"avatar_profiles/{profile_id}/{face_filename}"
+        if body_filename:
+            metadata["body_image"] = body_filename
+            metadata["body_input_image"] = f"avatar_profiles/{profile_id}/{body_filename}"
         profile_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         profile = self._avatar_profile_payload(profile_dir=profile_dir)
         return {
@@ -3550,8 +3564,10 @@ class NodeControlState:
             return {}
         metadata = self._refresh_avatar_body_depth_profile_job(profile_dir=profile_dir, metadata=metadata)
         profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
-        face_image = Path(str(metadata.get("face_image") or "face.png")).name
-        body_image = Path(str(metadata.get("body_image") or "body.png")).name
+        face_image = Path(str(metadata.get("face_image") or "")).name
+        body_image = Path(str(metadata.get("body_image") or "")).name
+        face_exists = bool(face_image) and (profile_dir / face_image).is_file()
+        body_exists = bool(body_image) and (profile_dir / body_image).is_file()
         references = self._avatar_profile_references(profile_dir=profile_dir)
         primary_face_filename = Path(str(metadata.get("primary_face_reference_filename") or "")).name
         primary_face_reference = None
@@ -3566,18 +3582,18 @@ class NodeControlState:
             if isinstance(primary_face_reference, dict)
             else str(metadata.get("primary_face_input_image") or "").strip()
         )
-        if not primary_face_input_image:
+        if not primary_face_input_image and face_exists:
             primary_face_input_image = f"avatar_profiles/{profile_id}/{face_image}"
         return {
             **metadata,
             "profile_id": profile_id,
             "selected": bool(selected_profile_id and selected_profile_id == profile_id),
-            "face_image": face_image,
-            "body_image": body_image,
-            "face_input_image": f"avatar_profiles/{profile_id}/{face_image}",
-            "body_input_image": f"avatar_profiles/{profile_id}/{body_image}",
-            "face_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{face_image}",
-            "body_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{body_image}",
+            "face_image": face_image if face_exists else None,
+            "body_image": body_image if body_exists else None,
+            "face_input_image": f"avatar_profiles/{profile_id}/{face_image}" if face_exists else "",
+            "body_input_image": f"avatar_profiles/{profile_id}/{body_image}" if body_exists else "",
+            "face_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{face_image}" if face_exists else "",
+            "body_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{body_image}" if body_exists else "",
             "primary_face_reference": primary_face_reference,
             "primary_face_reference_filename": primary_face_filename or None,
             "primary_face_input_image": primary_face_input_image,
@@ -9262,6 +9278,12 @@ class ManualImageVisionDescribeRequest(BaseModel):
 class AvatarProfileSaveRequest(BaseModel):
     name: str
     description: str | None = None
+    gender: str | None = None
+    skin_color: str | None = None
+    hair_color: str | None = None
+    character_type: str | None = None
+    visual_style: str | None = None
+    initial_data: str | None = None
     face_image_filename: str | None = None
     face_image_data_base64: str | None = None
     body_image_filename: str | None = None

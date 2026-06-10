@@ -102,27 +102,20 @@ The Avatar Generation profile detail page includes a `Generation` tab that assem
 ## Avatar Profiles
 
 The node UI includes an `Avatar Generation` menu with two tabs: `Create Profile`
-and `Saved Profiles`. Profile creation stores one face image, one body image, an
-editable character description, and the character name under the manual ComfyUI
-input folder:
+and `Saved Profiles`. Profile creation starts with typed character basics:
+character name, gender, skin color, hair color, character type (`human`,
+`humanlike`, or `non-human`), visual style (`cartoon`, `manga`, `semi-real`, or
+`real`), and freeform initial data. This first step does not upload source
+images, generate assets, or run vision extraction.
 
 ```text
 runtime/manual/comfyui-gpu/input/avatar_profiles/<avatar_name>/
 ```
 
-Each saved profile writes `profile.json`, a face image, and a body image. The JSON
-includes ComfyUI input paths such as `avatar_profiles/<avatar_name>/face.png` and
-`avatar_profiles/<avatar_name>/body.png`, so later body-depth, pose, and final-avatar
-flows can reuse the profile assets without mixing them into normal operation output.
-
-Saved profile cards support selecting the active profile, deleting the profile, and
-extracting reusable profile data. Extraction reads the saved face and body images,
-sends each one to the local vision runtime for detailed observations, then sends the
-combined observations plus any manual description to the local LLM. The local LLM
-returns structured JSON stored under `profile.json` as `extraction.structured` for
-future prompt assembly. If the local LLM request times out or fails, extraction
-falls back to a vision-only schema `2.0` profile and records the fallback reason
-under `source_quality_notes`.
+Each saved profile writes `profile.json`. Metadata-only profiles intentionally omit
+`face_image`, `body_image`, and ComfyUI input paths until later reference assets
+are added through the profile detail tabs. Saved profile cards support selecting,
+opening, and deleting profiles without requiring extracted image data first.
 
 The extracted profile schema is versioned as `2.0` and separates stable identity
 from editable generation choices:
@@ -164,14 +157,15 @@ is exposed as `primary_face_reference_filename`, `primary_face_input_image`, and
 `pulid_face_reference_image` on the profile payload. If no primary is selected,
 PuLID falls back to the profile's original face image.
 
-The same tab can extract a combined face profile with
-`POST /api/avatar-generation/profiles/{profile_id}/face/extract`. The node sends
-the selected face references to the vision runtime, asks the local LLM to merge the
-observations into reusable identity JSON, stores the result under `face_profile`,
-and mirrors the prompt-ready face fields into `extraction.structured`. Face-profile
-extraction refuses to run while the manual ComfyUI Web UI/session or GPU ComfyUI
-runtime is active, because those GPU workloads cannot coexist with the vision
-runtime.
+The legacy API can still extract a combined face profile with
+`POST /api/avatar-generation/profiles/{profile_id}/face/extract`, but the node UI
+no longer presents image extraction as part of profile creation. When called
+directly, the endpoint sends selected face references to the vision runtime, asks
+the local LLM to merge the observations into reusable identity JSON, stores the
+result under `face_profile`, and mirrors the prompt-ready face fields into
+`extraction.structured`. Face-profile extraction refuses to run while the manual
+ComfyUI Web UI/session or GPU ComfyUI runtime is active, because those GPU
+workloads cannot coexist with the vision runtime.
 
 Face extraction keeps the full per-reference observations for review, but the
 prompt fields are compacted before they are stored. If the local LLM merge fails,

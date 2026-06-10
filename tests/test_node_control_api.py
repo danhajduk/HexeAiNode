@@ -3719,6 +3719,58 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["profiles"][0]["profile_id"], "Jane_Avatar")
         self.assertEqual(status["profiles"][0]["description"], "editable avatar description")
 
+    def test_avatar_generation_saves_profile_with_basic_character_information(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir)),
+            )
+
+            result = state.save_avatar_profile(
+                payload=AvatarProfileSaveRequest(
+                    name="Jane Avatar",
+                    gender="female",
+                    skin_color="warm olive",
+                    hair_color="black",
+                    character_type="humanlike",
+                    visual_style="semi-real",
+                    initial_data="reserved, observant, late twenties",
+                )
+            )
+
+            profile = result["profile"]
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(result["status"], "saved")
+        self.assertEqual(profile["profile_id"], "Jane_Avatar")
+        self.assertEqual(profile["gender"], "female")
+        self.assertEqual(profile["skin_color"], "warm olive")
+        self.assertEqual(profile["hair_color"], "black")
+        self.assertEqual(profile["character_type"], "humanlike")
+        self.assertEqual(profile["visual_style"], "semi-real")
+        self.assertEqual(profile["initial_data"], "reserved, observant, late twenties")
+        self.assertEqual(profile["face_url"], "")
+        self.assertEqual(profile["body_url"], "")
+        self.assertNotIn("face_image", metadata)
+        self.assertNotIn("body_image", metadata)
+
     def test_avatar_generation_selects_and_deletes_profile(self):
         class _AvatarProfileServiceManager:
             def __init__(self, input_dir: str):

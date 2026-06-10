@@ -505,19 +505,16 @@ export function AvatarGenerationCard({
   onSaveProfile,
   onSelectProfile,
   onDeleteProfile,
-  onExtractProfile,
   onUpdateProfileExtraction,
   onUploadProfileReference,
   onDeleteProfileReference,
   onSetPrimaryFace,
-  onExtractFaceProfile,
   onGenerateBodyDepthProfile,
   onSubmitGeneration,
   generationBusy = false,
   generationResult = null,
   onBackToProfiles,
   onRefresh,
-  visionBusy = false,
 }) {
   const profiles = asArray(payload?.profiles);
   const selectedProfileId = String(payload?.selected_profile_id || "").trim();
@@ -530,8 +527,11 @@ export function AvatarGenerationCard({
     AVATAR_PROFILE_DETAIL_TABS.some((tab) => tab.id === initialDetailTab) ? initialDetailTab : "profile"
   );
   const [characterName, setCharacterName] = useState("");
-  const [faceFile, setFaceFile] = useState(null);
-  const [bodyFile, setBodyFile] = useState(null);
+  const [gender, setGender] = useState("");
+  const [skinColor, setSkinColor] = useState("");
+  const [hairColor, setHairColor] = useState("");
+  const [characterType, setCharacterType] = useState("human");
+  const [visualStyle, setVisualStyle] = useState("semi-real");
   const [bodyDepthFiles, setBodyDepthFiles] = useState([]);
   const [faceAnalysisFiles, setFaceAnalysisFiles] = useState([]);
   const [poseFiles, setPoseFiles] = useState([]);
@@ -545,7 +545,7 @@ export function AvatarGenerationCard({
   const generationProfileIdRef = useRef("");
   const generationProfileSignature = avatarGenerationProfileSignature(routeProfile);
   const latestProfile = result?.profile || profiles[0] || null;
-  const canSave = Boolean(characterName.trim()) && Boolean(faceFile) && Boolean(bodyFile) && !busy;
+  const canSave = Boolean(characterName.trim()) && !busy;
   const detailMode = Boolean(routeProfileId);
 
   useEffect(() => {
@@ -612,14 +612,15 @@ export function AvatarGenerationCard({
       return;
     }
     setLocalStatus("");
-    const [faceData, bodyData] = await Promise.all([fileToDataUrl(faceFile), fileToDataUrl(bodyFile)]);
     const saveResult = await onSaveProfile?.({
       name: characterName.trim(),
       description: description.trim(),
-      face_image_filename: faceFile?.name || "face.png",
-      face_image_data_base64: faceData,
-      body_image_filename: bodyFile?.name || "body.png",
-      body_image_data_base64: bodyData,
+      gender: gender.trim(),
+      skin_color: skinColor.trim(),
+      hair_color: hairColor.trim(),
+      character_type: characterType.trim(),
+      visual_style: visualStyle.trim(),
+      initial_data: description.trim(),
     });
     if (saveResult?.profile) {
       setLocalStatus("saved");
@@ -730,25 +731,6 @@ export function AvatarGenerationCard({
       const result = await onSetPrimaryFace?.(routeProfile.profile_id, filename);
       if (result) {
         setLocalStatus("primary_face_selected");
-      }
-    } finally {
-      setActiveReferenceAction("");
-    }
-  }
-
-  async function extractFaceProfile() {
-    if (!routeProfile?.profile_id || busy || visionBusy) {
-      return;
-    }
-    const sources = profileReferences(routeProfile, "face").map((reference) => String(reference.filename || "").trim()).filter(Boolean);
-    setActiveReferenceAction("extract:face");
-    setLocalStatus("");
-    try {
-      const result = await onExtractFaceProfile?.(routeProfile.profile_id, {
-        source_filenames: sources.length ? sources : null,
-      });
-      if (result) {
-        setLocalStatus("face_profile_extracted");
       }
     } finally {
       setActiveReferenceAction("");
@@ -959,6 +941,20 @@ export function AvatarGenerationCard({
 
         {activeDetailTab === "profile" ? (
           <form className="setup-form avatar-extraction-form" onSubmit={saveExtractionEdits}>
+            <div className="state-grid compact-grid">
+              <span>Gender</span>
+              <code>{routeProfile.gender || "unset"}</code>
+              <span>Skin</span>
+              <code>{routeProfile.skin_color || "unset"}</code>
+              <span>Hair</span>
+              <code>{routeProfile.hair_color || "unset"}</code>
+              <span>Type</span>
+              <code>{routeProfile.character_type || "unset"}</code>
+              <span>Style</span>
+              <code>{routeProfile.visual_style || "unset"}</code>
+              <span>Initial Data</span>
+              <code>{routeProfile.initial_data || routeProfile.description || "unset"}</code>
+            </div>
             <div className="avatar-profile-images avatar-profile-detail-images">
               {routeProfile.face_url ? (
                 <a href={profileImageUrl(apiBase, routeProfile.face_url)} target="_blank" rel="noreferrer">
@@ -1108,9 +1104,6 @@ export function AvatarGenerationCard({
                   }}
                 />
               </label>
-              <button className="btn" type="button" disabled={busy || visionBusy} onClick={extractFaceProfile}>
-                {activeReferenceAction === "extract:face" ? "Extracting..." : "Extract Face Profile"}
-              </button>
             </div>
             <div className="state-grid compact-grid">
               <span>Queued</span>
@@ -1465,25 +1458,54 @@ export function AvatarGenerationCard({
               />
             </label>
             <label>
-              Face Image
-              <input type="file" accept="image/*" onChange={(event) => setFaceFile(event.target.files?.[0] || null)} />
+              Gender
+              <input
+                type="text"
+                value={gender}
+                onChange={(event) => setGender(event.target.value)}
+                placeholder="female, male, nonbinary"
+              />
             </label>
             <label>
-              Body Image
-              <input type="file" accept="image/*" onChange={(event) => setBodyFile(event.target.files?.[0] || null)} />
+              Skin Color
+              <input
+                type="text"
+                value={skinColor}
+                onChange={(event) => setSkinColor(event.target.value)}
+                placeholder="warm brown, pale olive"
+              />
             </label>
-            <div className="state-grid compact-grid avatar-profile-file-state">
-              <span>Face</span>
-              <code>{faceFile?.name || "none"}</code>
-              <span>Body</span>
-              <code>{bodyFile?.name || "none"}</code>
-            </div>
+            <label>
+              Hair Color
+              <input
+                type="text"
+                value={hairColor}
+                onChange={(event) => setHairColor(event.target.value)}
+                placeholder="black, silver, auburn"
+              />
+            </label>
+            <label>
+              Character Type
+              <select value={characterType} onChange={(event) => setCharacterType(event.target.value)}>
+                <option value="human">Human</option>
+                <option value="humanlike">Humanlike</option>
+                <option value="non-human">Non-human</option>
+              </select>
+            </label>
+            <label>
+              Visual Style
+              <select value={visualStyle} onChange={(event) => setVisualStyle(event.target.value)}>
+                <option value="cartoon">Cartoon</option>
+                <option value="manga">Manga</option>
+                <option value="semi-real">Semi-real</option>
+                <option value="real">Real</option>
+              </select>
+            </label>
+            <label className="avatar-generation-wide-field">
+              Initial Data
+              <textarea rows={8} value={description} onChange={(event) => setDescription(event.target.value)} />
+            </label>
           </div>
-
-          <label>
-            Character Description
-            <textarea rows={10} value={description} onChange={(event) => setDescription(event.target.value)} />
-          </label>
 
           <div className="row">
             <button className="btn btn-primary" type="submit" disabled={!canSave}>
@@ -1534,6 +1556,18 @@ export function AvatarGenerationCard({
                     ) : null}
                   </div>
                   {profile.description ? <p className="muted tiny">{profile.description}</p> : null}
+                  <div className="state-grid compact-grid">
+                    <span>Gender</span>
+                    <code>{profile.gender || "unset"}</code>
+                    <span>Skin</span>
+                    <code>{profile.skin_color || "unset"}</code>
+                    <span>Hair</span>
+                    <code>{profile.hair_color || "unset"}</code>
+                    <span>Type</span>
+                    <code>{profile.character_type || "unset"}</code>
+                    <span>Style</span>
+                    <code>{profile.visual_style || "unset"}</code>
+                  </div>
                   {profile.extraction?.structured ? (
                     <details className="avatar-profile-json">
                       <summary>Extracted JSON</summary>
@@ -1544,24 +1578,14 @@ export function AvatarGenerationCard({
                     <button
                       className="btn"
                       type="button"
-                      disabled={busy || !hasExtraction(profile)}
+                      disabled={busy}
                       onClick={() => runProfileAction("selected", profile.profile_id, onSelectProfile)}
                     >
-                      {!hasExtraction(profile)
-                        ? "Extract First"
-                        : activeProfileAction === `selected:${profile.profile_id}`
-                          ? "Selecting..."
-                          : profile.selected || profile.profile_id === selectedProfileId
-                            ? "Open"
-                            : "Select"}
-                    </button>
-                    <button
-                      className="btn"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => runProfileAction("extracted", profile.profile_id, onExtractProfile)}
-                    >
-                      {activeProfileAction === `extracted:${profile.profile_id}` ? "Extracting..." : "Extract Data"}
+                      {activeProfileAction === `selected:${profile.profile_id}`
+                        ? "Selecting..."
+                        : profile.selected || profile.profile_id === selectedProfileId
+                          ? "Open"
+                          : "Select"}
                     </button>
                     <button
                       className="btn btn-danger"

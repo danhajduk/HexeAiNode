@@ -453,9 +453,12 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Create Profile");
     expect(markup).toContain("Saved Profiles");
     expect(markup).toContain("Character Name");
-    expect(markup).toContain("Face Image");
-    expect(markup).toContain("Body Image");
-    expect(markup).toContain("Character Description");
+    expect(markup).toContain("Gender");
+    expect(markup).toContain("Skin Color");
+    expect(markup).toContain("Hair Color");
+    expect(markup).toContain("Character Type");
+    expect(markup).toContain("Visual Style");
+    expect(markup).toContain("Initial Data");
     expect(markup).toContain("Save Profile");
     expect(markup).not.toContain("Describe With Vision");
     expect(markup).not.toContain("Body Depth");
@@ -509,8 +512,9 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Jane Avatar");
     expect(markup).toContain("selected");
     expect(markup).toContain("Open");
-    expect(markup).toContain("Extract First");
-    expect(markup).toContain("Extract Data");
+    expect(markup).toContain("Select");
+    expect(markup).not.toContain("Extract First");
+    expect(markup).not.toContain("Extract Data");
     expect(markup).toContain("Delete");
     expect(markup).toContain("Extracted JSON");
     expect(markup).toContain("same Jane Avatar identity");
@@ -731,7 +735,7 @@ describe("OperationalDashboard", () => {
     expect(bodyMarkup).toContain("Depth Maps");
     expect(bodyMarkup).toContain("avatar_body_depth_standing_body.png");
     expect(faceMarkup).toContain("Upload Face Images");
-    expect(faceMarkup).toContain("Extract Face Profile");
+    expect(faceMarkup).not.toContain("Extract Face Profile");
     expect(faceMarkup).toContain("PuLID Face");
     expect(faceMarkup).toContain("Face Closeup");
     expect(faceMarkup).toContain("primary");
