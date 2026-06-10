@@ -3,6 +3,7 @@ import base64
 import binascii
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -2371,6 +2372,7 @@ class NodeControlState:
             max_tokens=1700,
             timeout_s=60,
         )
+        body_description = self._clean_avatar_profile_body_description(body_description)
         structured, llm_model_id = self._avatar_profile_json_from_local_llm(
             profile=profile,
             face_description=face_description,
@@ -2514,8 +2516,9 @@ class NodeControlState:
         primary_face_input_image: str,
         primary_face_filename: str,
     ) -> tuple[dict, str]:
+        compact_descriptions = self._avatar_face_profile_compact_observations(descriptions)
         combined_description = "\n\n".join(
-            f"{item.get('filename')}: {item.get('description')}" for item in descriptions if item.get("description")
+            f"{item.get('filename')}: {item.get('description')}" for item in compact_descriptions if item.get("description")
         )
         services = self.service_status_payload().get("services", {})
         local_llm = services.get("local_llm") if isinstance(services, dict) else {}
@@ -2526,7 +2529,7 @@ class NodeControlState:
             "profile_name": profile.get("name") or profile.get("profile_id"),
             "primary_face_filename": primary_face_filename,
             "primary_face_input_image": primary_face_input_image,
-            "face_reference_observations": descriptions,
+            "face_reference_observations": compact_descriptions,
         }
         if not socket_path or state not in {"running", "healthy"}:
             return self._fallback_avatar_face_profile_structured(
@@ -2623,6 +2626,10 @@ class NodeControlState:
                     "local_llm_model_id": model_id,
                     "local_llm_error": error,
                 },
+                **cls._avatar_face_profile_prompt_fields_from_descriptions(
+                    profile=profile,
+                    descriptions=descriptions,
+                ),
             },
             profile=profile,
             descriptions=descriptions,
@@ -2646,8 +2653,14 @@ class NodeControlState:
         stable_identity = cls._avatar_profile_dict_value(source.get("stable_identity"))
         if not stable_identity:
             stable_identity = {"description": combined_description}
-        identity_prompt = str(source.get("identity_prompt") or "").strip() or cls._avatar_profile_compact_text(stable_identity) or combined_description
-        face_prompt = str(source.get("face_prompt") or "").strip() or identity_prompt
+        identity_prompt = cls._avatar_profile_prompt_sized_text(
+            str(source.get("identity_prompt") or "").strip() or cls._avatar_profile_compact_text(stable_identity) or combined_description,
+            max_chars=900,
+        )
+        face_prompt = cls._avatar_profile_prompt_sized_text(
+            str(source.get("face_prompt") or "").strip() or identity_prompt,
+            max_chars=700,
+        )
         negative_terms = cls._avatar_profile_negative_terms(source.get("negative_prompt_terms") or ["different person", "changed face", "blurred face", "distorted face", "inconsistent identity"])
         return {
             "schema_version": str(source.get("schema_version") or "1.0"),
@@ -2658,13 +2671,107 @@ class NodeControlState:
             "stable_identity": stable_identity,
             "identity_prompt": identity_prompt,
             "face_prompt": face_prompt,
-            "hair_prompt": str(source.get("hair_prompt") or "").strip(),
-            "expression_prompt": str(source.get("expression_prompt") or "").strip(),
+            "hair_prompt": cls._avatar_profile_prompt_sized_text(str(source.get("hair_prompt") or "").strip(), max_chars=350),
+            "expression_prompt": cls._avatar_profile_prompt_sized_text(str(source.get("expression_prompt") or "").strip(), max_chars=250),
             "removable_styling": cls._avatar_profile_dict_value(source.get("removable_styling")),
             "accessories": cls._avatar_profile_dict_value(source.get("accessories")),
             "reference_quality_notes": cls._avatar_profile_dict_value(source.get("reference_quality_notes")),
             "negative_prompt_terms": negative_terms,
             "negative_identity_prompt": ", ".join(negative_terms),
+        }
+
+    @classmethod
+    def _avatar_face_profile_compact_observations(cls, descriptions: list[dict], *, max_per_reference: int = 1100) -> list[dict]:
+        compact = []
+        for item in descriptions:
+            if not isinstance(item, dict):
+                continue
+            description = str(item.get("description") or "")
+            trait_text = cls._avatar_profile_trait_text(
+                description,
+                keywords=(
+                    "face",
+                    "forehead",
+                    "temple",
+                    "cheek",
+                    "jaw",
+                    "chin",
+                    "skin",
+                    "eye",
+                    "eyelid",
+                    "brow",
+                    "nose",
+                    "lip",
+                    "mouth",
+                    "hair",
+                    "expression",
+                    "makeup",
+                    "mark",
+                    "mole",
+                    "scar",
+                    "piercing",
+                    "accessor",
+                    "identity",
+                ),
+                max_items=18,
+            )
+            compact.append(
+                {
+                    "filename": item.get("filename"),
+                    "name": item.get("name"),
+                    "input_image": item.get("input_image"),
+                    "description": cls._avatar_profile_prompt_sized_text(trait_text or description, max_chars=max_per_reference),
+                }
+            )
+        return compact
+
+    @classmethod
+    def _avatar_face_profile_prompt_fields_from_descriptions(cls, *, profile: dict, descriptions: list[dict]) -> dict:
+        combined = "\n".join(str(item.get("description") or "") for item in descriptions if isinstance(item, dict))
+        field_specs = {
+            "face_shape": ("face shape", "oval", "round", "forehead", "temple", "proportion", "symmetr"),
+            "skin": ("skin tone", "skin texture", "fair", "light", "medium", "smooth", "freckle"),
+            "eyes": ("eye", "eyelid", "gaze", "almond", "green"),
+            "brows": ("eyebrow", "brow", "arch"),
+            "nose": ("nose", "nostril", "bridge"),
+            "lips": ("lip", "mouth", "smile line"),
+            "cheekbones": ("cheek", "cheekbone"),
+            "jaw_chin": ("jaw", "chin"),
+            "hairline_hair": ("hairline", "hair color", "hair", "part", "wavy", "volume"),
+            "expression": ("expression", "makeup"),
+            "distinctive_marks": ("distinctive", "mark", "mole", "scar", "piercing", "accessor"),
+        }
+        stable_identity = {}
+        for field, keywords in field_specs.items():
+            text = cls._avatar_profile_trait_text(combined, keywords=keywords, max_items=4)
+            if text:
+                stable_identity[field] = cls._avatar_profile_prompt_sized_text(text, max_chars=220)
+        if not stable_identity:
+            stable_identity["description"] = cls._avatar_profile_prompt_sized_text(combined, max_chars=700)
+        face_parts = [
+            stable_identity.get("face_shape"),
+            stable_identity.get("skin"),
+            stable_identity.get("eyes"),
+            stable_identity.get("brows"),
+            stable_identity.get("nose"),
+            stable_identity.get("lips"),
+            stable_identity.get("cheekbones"),
+            stable_identity.get("jaw_chin"),
+        ]
+        identity_prompt = cls._avatar_profile_join_prompt_parts(
+            ["same avatar identity", *face_parts, stable_identity.get("hairline_hair"), stable_identity.get("expression")],
+            max_chars=850,
+        )
+        face_prompt = cls._avatar_profile_join_prompt_parts(face_parts, max_chars=650) or identity_prompt
+        hair_prompt = cls._avatar_profile_prompt_sized_text(stable_identity.get("hairline_hair") or "", max_chars=300)
+        expression_prompt = cls._avatar_profile_prompt_sized_text(stable_identity.get("expression") or "", max_chars=220)
+        return {
+            "stable_identity": stable_identity,
+            "identity_prompt": identity_prompt,
+            "face_prompt": face_prompt,
+            "hair_prompt": hair_prompt,
+            "expression_prompt": expression_prompt,
+            "negative_prompt_terms": ["different person", "changed face", "blurred face", "distorted face", "inconsistent identity"],
         }
 
     @classmethod
@@ -2877,6 +2984,7 @@ class NodeControlState:
         face_description: str,
         body_description: str,
     ) -> dict:
+        body_description = cls._clean_avatar_profile_body_description(body_description)
         source = parsed if isinstance(parsed, dict) else {}
         profile_name = str(source.get("profile_name") or profile.get("name") or profile.get("profile_id") or "avatar").strip()
         permanent_identity = cls._avatar_profile_dict_value(source.get("permanent_identity"))
@@ -2898,6 +3006,7 @@ class NodeControlState:
         body_profile = cls._avatar_profile_dict_value(source.get("body_profile") or source.get("body"))
         if not body_profile.get("body_prompt"):
             body_profile["body_prompt"] = cls._avatar_profile_compact_text(body_profile) or body_description
+        body_profile["body_prompt"] = cls._clean_avatar_profile_body_description(body_profile.get("body_prompt"))
         cls._populate_avatar_profile_body_sections(body_profile=body_profile, body_description=body_description)
 
         removable_clothing = cls._avatar_profile_dict_value(source.get("removable_clothing") or source.get("clothing_reference"))
@@ -3046,6 +3155,161 @@ class NodeControlState:
             seen.add(normalized)
             parts.append(text)
         return " ".join(parts)
+
+    @classmethod
+    def _avatar_profile_trait_text(cls, text: str, *, keywords: tuple[str, ...], max_items: int = 8) -> str:
+        candidates: list[str] = []
+        sections = cls._avatar_profile_markdown_sections(text)
+        for heading, body in sections:
+            candidate = f"{heading}: {body}".strip()
+            candidates.append(candidate)
+        for raw_line in str(text or "").splitlines():
+            line = raw_line.strip()
+            if line:
+                candidates.append(line)
+        parts = []
+        seen = set()
+        for candidate in candidates:
+            cleaned = cls._avatar_profile_clean_prompt_fragment(candidate)
+            if not cleaned:
+                continue
+            lowered = cleaned.lower()
+            if not any(keyword in lowered for keyword in keywords):
+                continue
+            if cls._avatar_profile_low_value_observation(lowered):
+                continue
+            normalized = " ".join(lowered.split())
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            parts.append(cleaned)
+            if len(parts) >= max_items:
+                break
+        return cls._avatar_profile_join_prompt_parts(parts, max_chars=900)
+
+    @staticmethod
+    def _avatar_profile_low_value_observation(lowered: str) -> bool:
+        if not lowered:
+            return True
+        low_value_fragments = (
+            "high-quality",
+            "image quality",
+            "suitable for",
+            "intended for",
+            "no visible signs of digital",
+            "no visible artifacts",
+            "no visible crop marks",
+            "no visible lighting marks",
+            "no visible health",
+            "health damage",
+            "health deform",
+            "health asymmetr",
+        )
+        return any(fragment in lowered for fragment in low_value_fragments)
+
+    @classmethod
+    def _avatar_profile_clean_prompt_fragment(cls, value: str) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        text = re.sub(r"^[\w .()_-]+\.(?:png|jpe?g|webp):\s*", "", text, flags=re.IGNORECASE)
+        text = text.lstrip("-*# ").strip()
+        text = text.replace("**", "").replace("__", "")
+        text = re.sub(r"\s+", " ", text)
+        text = text.strip(" -;,.")
+        return text
+
+    @classmethod
+    def _avatar_profile_prompt_sized_text(cls, value: str, *, max_chars: int) -> str:
+        text = cls._avatar_profile_clean_prompt_fragment(value)
+        if len(text) <= max_chars:
+            return text
+        shortened = text[:max_chars].rsplit(",", 1)[0].rsplit(".", 1)[0].strip()
+        if len(shortened) < max_chars * 0.5:
+            shortened = text[:max_chars].strip()
+        return shortened.strip(" -;,.")
+
+    @classmethod
+    def _avatar_profile_join_prompt_parts(cls, parts, *, max_chars: int = 900) -> str:
+        joined = []
+        seen = set()
+        for part in parts:
+            text = cls._avatar_profile_clean_prompt_fragment(part)
+            if not text:
+                continue
+            normalized = " ".join(text.lower().split())
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            candidate = ", ".join([*joined, text]) if joined else text
+            if len(candidate) > max_chars:
+                break
+            joined.append(text)
+        return ", ".join(joined)
+
+    @classmethod
+    def _clean_avatar_profile_body_description(cls, value: str) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        cleaned_lines = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                if cleaned_lines and cleaned_lines[-1]:
+                    cleaned_lines.append("")
+                continue
+            bullet = cls._avatar_profile_bullet_label(line)
+            if bullet:
+                heading, body = bullet
+                body = cls._avatar_profile_clean_body_clause_text(body, heading=heading)
+                if not body:
+                    continue
+                is_markdown_label = line.lstrip().startswith(("-", "*")) or line.lstrip().startswith("**")
+                prefix = "- " if line.lstrip().startswith(("-", "*")) else ""
+                if is_markdown_label:
+                    cleaned_lines.append(f"{prefix}**{heading}**: {body}")
+                else:
+                    cleaned_lines.append(f"{heading}: {body}")
+                continue
+            cleaned_lines.append(cls._avatar_profile_clean_body_clause_text(line, heading=""))
+        while cleaned_lines and not cleaned_lines[-1]:
+            cleaned_lines.pop()
+        return "\n".join(line for line in cleaned_lines if line is not None).strip()
+
+    @classmethod
+    def _avatar_profile_clean_body_clause_text(cls, text: str, *, heading: str) -> str:
+        source = str(text or "").strip()
+        if not source:
+            return ""
+        heading_lower = str(heading or "").lower()
+        clauses = [
+            cls._avatar_profile_clean_prompt_fragment(item)
+            for item in re.split(r"[,;]\s+|(?<=[.!?])\s+", source)
+        ]
+        cleaned = []
+        seen = set()
+        noisy_count = 0
+        for clause in clauses:
+            lowered = clause.lower()
+            if not clause:
+                continue
+            if any(fragment in lowered for fragment in ("health", "damage", "deformit")):
+                noisy_count += 1
+                continue
+            normalized = " ".join(lowered.split())
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            cleaned.append(clause)
+        if "body-preservation" in heading_lower and (noisy_count or len(cleaned) > 8):
+            return "Preserve visible silhouette, body proportions, posture, and pose; treat hidden or covered traits as uncertain."
+        if len(cleaned) > 12:
+            cleaned = cleaned[:12]
+        result = ", ".join(cleaned).strip()
+        if len(cleaned) == 1 and source.rstrip().endswith((".", "!", "?")) and not result.endswith((".", "!", "?")):
+            result += "."
+        return result or source
 
     @classmethod
     def _avatar_profile_compact_text(cls, value) -> str:

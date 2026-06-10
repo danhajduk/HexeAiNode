@@ -126,6 +126,14 @@ extraction refuses to run while the manual ComfyUI Web UI/session or GPU ComfyUI
 runtime is active, because those GPU workloads cannot coexist with the vision
 runtime.
 
+Face extraction keeps the full per-reference observations for review, but the
+prompt fields are compacted before they are stored. If the local LLM merge fails,
+the fallback now builds bounded `identity_prompt`, `face_prompt`, `hair_prompt`,
+and `expression_prompt` fields from visible face traits instead of copying all raw
+vision notes into the prompt. Body extraction also deduplicates repeated
+preservation clauses and removes low-value health/damage/deformity loops before
+saving `body_description` and `body_profile.body_prompt`.
+
 The Body Depth profile tab can submit a lightweight ComfyUI preprocessing job with
 `POST /api/avatar-generation/profiles/{profile_id}/body-depth/generate`. For each
 raw `body_depth` reference, the node runs:

@@ -4019,6 +4019,100 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(profile["face_profile"]["structured"]["face_prompt"], "oval face, green almond eyes, defined brows")
         self.assertEqual(profile["extraction"]["structured"]["prompt_sections"]["face"], "oval face, green almond eyes, defined brows")
 
+    def test_avatar_generation_face_extract_fallback_stays_prompt_sized(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "stopped",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "comfyui_gpu": {"state": "stopped"},
+                    "vision_llm": {"state": "running", "socket_path": "/tmp/vision.sock", "default_model_id": "vision-model"},
+                    "local_llm": {"state": "running", "socket_path": "/tmp/local.sock", "default_model_id": "local-model"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(
+                payload=AvatarProfileSaveRequest(
+                    name="Jane Avatar",
+                    face_image_filename="face.png",
+                    face_image_data_base64=base64.b64encode(b"base-face").decode("ascii"),
+                    body_image_filename="body.png",
+                    body_image_data_base64=base64.b64encode(b"body-image").decode("ascii"),
+                )
+            )
+            first = state.upload_avatar_profile_reference(
+                profile_id="Jane_Avatar",
+                payload=AvatarProfileReferenceUploadRequest(
+                    role="face",
+                    name="Front Face",
+                    filename="front.png",
+                    data_base64=base64.b64encode(b"front-face").decode("ascii"),
+                ),
+            )
+            second = state.upload_avatar_profile_reference(
+                profile_id="Jane_Avatar",
+                payload=AvatarProfileReferenceUploadRequest(
+                    role="face",
+                    name="Side Face",
+                    filename="side.png",
+                    data_base64=base64.b64encode(b"side-face").decode("ascii"),
+                ),
+            )
+
+            def _fake_vision(*, image_bytes, mime_type, image_name, prompt, max_tokens=450, timeout_s=10):
+                return (
+                    "### Face Shape and Proportions\n"
+                    "- Oval face with balanced symmetry, defined cheekbones, angular jaw, and softly rounded chin.\n"
+                    "### Eyes\n"
+                    "- Large green almond-shaped eyes with even spacing and defined eyelids.\n"
+                    "### Eyebrows\n"
+                    "- Thick arched eyebrows placed symmetrically.\n"
+                    "### Nose\n"
+                    "- Straight nose bridge with rounded tip and small nostrils.\n"
+                    "### Lips\n"
+                    "- Full well-defined lips with a soft natural mouth curve.\n"
+                    "### Hair\n"
+                    "- Dark brown long wavy hair with natural volume.\n"
+                    "### Lighting/Quality\n"
+                    "- High-quality image suitable for identity control.\n"
+                ), "vision-model"
+
+            with patch.object(state, "_vision_describe_image_bytes", side_effect=_fake_vision), patch.object(
+                state,
+                "_uds_json_request",
+                side_effect=TimeoutError("merge timed out"),
+            ):
+                result = state.extract_avatar_face_profile(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarFaceProfileExtractRequest(
+                        source_filenames=[first["reference"]["filename"], second["reference"]["filename"]]
+                    ),
+                )
+
+        structured = result["face_profile"]["structured"]
+        self.assertEqual(result["face_profile"]["local_llm_model_id"], "local_rules")
+        self.assertLess(len(structured["identity_prompt"]), 900)
+        self.assertLess(len(structured["face_prompt"]), 700)
+        self.assertIn("same avatar identity", structured["identity_prompt"])
+        self.assertIn("green", structured["face_prompt"])
+        self.assertNotIn("front.png", structured["identity_prompt"])
+        self.assertNotIn("suitable for identity control", structured["identity_prompt"])
+        self.assertEqual(structured["reference_quality_notes"]["structured_source"], "vision_descriptions_local_rules")
+        self.assertEqual(structured["reference_quality_notes"]["local_llm_model_id"], "local-model")
+
     def test_avatar_generation_body_depth_profile_submits_preprocess_workflow(self):
         class _AvatarBodyDepthServiceManager:
             def __init__(self, input_dir: Path, output_dir: Path):
@@ -4440,7 +4534,19 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             )
             responses = [
                 {"choices": [{"message": {"content": "face: oval face and dark hair"}}]},
-                {"choices": [{"message": {"content": "body: full body hourglass silhouette"}}]},
+                {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": (
+                                    "body: full body hourglass silhouette\n"
+                                    "- **Body-Preservation Notes**: No visible marks, no visible health damage, "
+                                    "no visible marks, no visible health deformities, no visible asymmetries."
+                                )
+                            }
+                        }
+                    ]
+                },
                 TimeoutError("timed out"),
             ]
 
@@ -4459,6 +4565,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(result["extraction"]["structured"]["prompt_sections"], dict)
         self.assertEqual(result["extraction"]["structured"]["prompt_sections"]["identity"], "manual note")
         self.assertIn("full body hourglass", result["extraction"]["structured"]["prompt_sections"]["body_shape"])
+        self.assertNotIn("health damage", result["extraction"]["structured"]["prompt_sections"]["body_shape"])
+        self.assertLessEqual(result["extraction"]["structured"]["prompt_sections"]["body_shape"].count("No visible marks"), 1)
         self.assertEqual(
             result["extraction"]["structured"]["source_quality_notes"]["structured_source"],
             "vision_descriptions_local_rules",
