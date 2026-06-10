@@ -2053,10 +2053,17 @@ class NodeControlState:
                 {
                     "role": "system",
                     "content": (
-                        "/no_think Convert avatar reference observations into reusable JSON for future image prompts. "
-                        "Return only JSON, no markdown. Include keys: profile_name, identity_prompt, negative_identity_prompt, "
-                        "face, hair, body, pose_reference, clothing_reference, accessories, preservation_notes, prompt_sections. "
-                        "Keep values specific, compact, and useful for SDXL/ComfyUI prompt assembly."
+                        "/no_think Convert avatar reference observations into strict reusable JSON for future SDXL/ComfyUI prompts. "
+                        "Return only JSON, no markdown. Use schema_version '2.0'. "
+                        "Required keys: schema_version, profile_name, permanent_identity, body_profile, removable_clothing, accessories, pose_reference, preservation_notes, prompt_sections, negative_prompt_terms. "
+                        "permanent_identity must include stable face, skin, eyes, brows, nose, lips, cheekbones, jaw_chin, hair, visible_age_range, expression, and identity_prompt. "
+                        "body_profile must describe stable proportions, silhouette, build, bust_waist_hip_relationship, limbs, hands_feet, and body_prompt. "
+                        "removable_clothing must describe only currently worn clothing and must not be mixed into identity unless it is truly permanent. "
+                        "accessories must separate permanent_accessories from removable_accessories and mark uncertain items as uncertain. "
+                        "pose_reference must describe current pose separately from body shape. "
+                        "prompt_sections must be an object with identity, face, hair, body_shape, pose, clothing, accessories, preservation, and negative keys. "
+                        "negative_prompt_terms must be an array of bad outcomes to avoid. Never include terms that erase normal anatomy or identity such as no face, no eyes, no skin, no nose, no lips, no hair, or no expression. "
+                        "Keep values specific, compact, and avoid inventing accessories not supported by the observations."
                     ),
                 },
                 {
@@ -2079,14 +2086,35 @@ class NodeControlState:
             "max_tokens": 1200,
             "stream": False,
         }
-        response = self._uds_json_request(
-            socket_path=socket_path,
-            method="POST",
+        try:
+            response = self._uds_json_request(
+                socket_path=socket_path,
+                method="POST",
             path="/v1/chat/completions",
             body=request_body,
             host="local-llm",
             error_label="local_llm_avatar_profile_extract_failed",
+            timeout_s=60,
         )
+        except Exception as exc:
+            if self._logger:
+                self._logger.warning(
+                    "avatar profile local LLM extraction failed; using vision-only fallback",
+                    extra={"error": str(exc), "model_id": model_id},
+                )
+            parsed = self._fallback_avatar_profile_parsed(
+                profile=profile,
+                face_description=face_description,
+                body_description=body_description,
+                model_id=model_id,
+                error=str(exc),
+            )
+            return self._normalize_avatar_profile_structured_data(
+                parsed=parsed,
+                profile=profile,
+                face_description=face_description,
+                body_description=body_description,
+            ), "local_rules"
         choices = response.get("choices") if isinstance(response.get("choices"), list) else []
         content = ""
         if choices and isinstance(choices[0], dict):
@@ -2096,12 +2124,210 @@ class NodeControlState:
         if not parsed:
             parsed = {
                 "profile_name": profile.get("name"),
-                "identity_prompt": str(profile.get("description") or "").strip(),
-                "face": {"description": face_description},
-                "body": {"description": body_description},
+                "permanent_identity": {"identity_prompt": str(profile.get("description") or "").strip(), "face": face_description},
+                "body_profile": {"body_prompt": body_description},
                 "raw_response": content,
             }
-        return parsed, model_id
+        return self._normalize_avatar_profile_structured_data(
+            parsed=parsed,
+            profile=profile,
+            face_description=face_description,
+            body_description=body_description,
+        ), model_id
+
+    @classmethod
+    def _fallback_avatar_profile_parsed(
+        cls,
+        *,
+        profile: dict,
+        face_description: str,
+        body_description: str,
+        model_id: str,
+        error: str,
+    ) -> dict:
+        profile_name = str(profile.get("name") or profile.get("profile_id") or "avatar").strip()
+        manual_description = str(profile.get("description") or "").strip()
+        identity_prompt = manual_description or face_description
+        return {
+            "schema_version": "2.0",
+            "profile_name": profile_name,
+            "permanent_identity": {
+                "face": face_description,
+                "identity_prompt": identity_prompt,
+            },
+            "body_profile": {
+                "description": body_description,
+                "body_prompt": body_description,
+            },
+            "removable_clothing": {
+                "description": "Not separated by local LLM; review the body description before using clothing as a reusable identity trait."
+            },
+            "accessories": {
+                "description": "Not separated by local LLM; review the face and body descriptions for permanent versus removable accessories."
+            },
+            "pose_reference": {
+                "description": "Not separated by local LLM; review the body description for pose details."
+            },
+            "preservation_notes": {
+                "notes": "Generated from local vision descriptions because local LLM profile structuring was unavailable."
+            },
+            "source_quality_notes": {
+                "structured_source": "vision_descriptions_local_rules",
+                "local_llm_model_id": model_id,
+                "local_llm_error": error,
+            },
+        }
+
+    @classmethod
+    def _normalize_avatar_profile_structured_data(
+        cls,
+        *,
+        parsed: dict,
+        profile: dict,
+        face_description: str,
+        body_description: str,
+    ) -> dict:
+        source = parsed if isinstance(parsed, dict) else {}
+        profile_name = str(source.get("profile_name") or profile.get("name") or profile.get("profile_id") or "avatar").strip()
+        permanent_identity = cls._avatar_profile_dict_value(source.get("permanent_identity"))
+        legacy_face = cls._avatar_profile_dict_value(source.get("face"))
+        legacy_hair = source.get("hair")
+        if legacy_face and not permanent_identity.get("face"):
+            permanent_identity["face"] = legacy_face
+        if legacy_hair and not permanent_identity.get("hair"):
+            permanent_identity["hair"] = legacy_hair
+        if not permanent_identity.get("face"):
+            permanent_identity["face"] = face_description
+        if not permanent_identity.get("identity_prompt"):
+            permanent_identity["identity_prompt"] = (
+                str(source.get("identity_prompt") or "").strip()
+                or cls._avatar_profile_compact_text(permanent_identity)
+                or str(profile.get("description") or "").strip()
+            )
+
+        body_profile = cls._avatar_profile_dict_value(source.get("body_profile") or source.get("body"))
+        if not body_profile.get("body_prompt"):
+            body_profile["body_prompt"] = cls._avatar_profile_compact_text(body_profile) or body_description
+
+        removable_clothing = cls._avatar_profile_dict_value(source.get("removable_clothing") or source.get("clothing_reference"))
+        accessories = cls._avatar_profile_dict_value(source.get("accessories"))
+        pose_reference = cls._avatar_profile_dict_value(source.get("pose_reference"))
+        preservation_notes = cls._avatar_profile_dict_value(source.get("preservation_notes"))
+        if not preservation_notes:
+            notes = source.get("preservation_notes")
+            preservation_notes = {"notes": str(notes or "").strip()} if notes else {}
+
+        prompt_sections = cls._avatar_profile_dict_value(source.get("prompt_sections"))
+        prompt_sections = {
+            "identity": str(prompt_sections.get("identity") or permanent_identity.get("identity_prompt") or "").strip(),
+            "face": str(prompt_sections.get("face") or cls._avatar_profile_compact_text(permanent_identity.get("face"))).strip(),
+            "hair": str(prompt_sections.get("hair") or cls._avatar_profile_compact_text(permanent_identity.get("hair"))).strip(),
+            "body_shape": str(prompt_sections.get("body_shape") or body_profile.get("body_prompt") or "").strip(),
+            "pose": str(prompt_sections.get("pose") or cls._avatar_profile_compact_text(pose_reference)).strip(),
+            "clothing": str(prompt_sections.get("clothing") or cls._avatar_profile_compact_text(removable_clothing)).strip(),
+            "accessories": str(prompt_sections.get("accessories") or cls._avatar_profile_compact_text(accessories)).strip(),
+            "preservation": str(prompt_sections.get("preservation") or cls._avatar_profile_compact_text(preservation_notes)).strip(),
+            "negative": "",
+        }
+        negative_terms = cls._avatar_profile_negative_terms(
+            source.get("negative_prompt_terms") or source.get("negative_identity_prompt") or prompt_sections.get("negative")
+        )
+        prompt_sections["negative"] = ", ".join(negative_terms)
+        identity_prompt = prompt_sections["identity"] or str(permanent_identity.get("identity_prompt") or "").strip()
+
+        return {
+            "schema_version": "2.0",
+            "profile_name": profile_name,
+            "identity_prompt": identity_prompt,
+            "permanent_identity": permanent_identity,
+            "body_profile": body_profile,
+            "removable_clothing": removable_clothing,
+            "accessories": accessories,
+            "pose_reference": pose_reference,
+            "preservation_notes": preservation_notes,
+            "prompt_sections": prompt_sections,
+            "negative_prompt_terms": negative_terms,
+            "negative_identity_prompt": ", ".join(negative_terms),
+            "source_quality_notes": cls._avatar_profile_dict_value(source.get("source_quality_notes")),
+        }
+
+    @classmethod
+    def _avatar_profile_dict_value(cls, value) -> dict:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str) and value.strip():
+            return {"description": value.strip()}
+        return {}
+
+    @classmethod
+    def _avatar_profile_compact_text(cls, value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, list):
+            return ", ".join(cls._avatar_profile_compact_text(item) for item in value if cls._avatar_profile_compact_text(item))
+        if isinstance(value, dict):
+            parts = []
+            for key, item in value.items():
+                text = cls._avatar_profile_compact_text(item)
+                if text:
+                    parts.append(f"{key}: {text}")
+            return "; ".join(parts)
+        return str(value).strip()
+
+    @classmethod
+    def _avatar_profile_negative_terms(cls, value) -> list[str]:
+        if isinstance(value, str):
+            candidates = [item.strip() for item in value.replace("\n", ",").split(",")]
+        elif isinstance(value, list):
+            candidates = [str(item or "").strip() for item in value]
+        else:
+            candidates = []
+        if not candidates:
+            candidates = [
+                "different person",
+                "changed face",
+                "changed body proportions",
+                "different body shape",
+                "blurred face",
+                "distorted face",
+                "distorted hands",
+                "extra limbs",
+                "cropped body",
+                "out of frame",
+                "watermark",
+                "text",
+            ]
+        unsafe_fragments = (
+            "no face",
+            "no facial",
+            "no skin",
+            "no eyes",
+            "no nose",
+            "no lips",
+            "no hair",
+            "no eyebrows",
+            "no expression",
+            "faceless",
+            "missing face",
+            "missing eyes",
+            "missing nose",
+            "missing lips",
+            "missing hair",
+        )
+        cleaned = []
+        seen = set()
+        for candidate in candidates:
+            normalized = " ".join(candidate.split())
+            lowered = normalized.lower()
+            if not normalized or any(fragment in lowered for fragment in unsafe_fragments):
+                continue
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            cleaned.append(normalized)
+        return cleaned or ["different person", "changed face", "changed body proportions", "blurred face", "distorted hands"]
 
     def avatar_profile_asset_response(self, *, profile_id: str, asset_name: str) -> FileResponse:
         root = self._avatar_profile_root()
@@ -3473,6 +3699,7 @@ class NodeControlState:
         body: dict | None = None,
         host: str = "comfyui",
         error_label: str = "comfyui_request_failed",
+        timeout_s: float = 10,
     ) -> dict:
         payload = json.dumps(body or {}).encode("utf-8") if body is not None else b""
         headers = [
@@ -3484,7 +3711,7 @@ class NodeControlState:
             headers.extend(["Content-Type: application/json", f"Content-Length: {len(payload)}"])
         request = ("\r\n".join(headers) + "\r\n\r\n").encode("utf-8") + payload
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(10)
+            client.settimeout(timeout_s)
             client.connect(socket_path)
             client.sendall(request)
             chunks: list[bytes] = []

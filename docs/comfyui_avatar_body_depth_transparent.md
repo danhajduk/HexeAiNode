@@ -73,8 +73,27 @@ extracting reusable profile data. Extraction reads the saved face and body image
 sends each one to the local vision runtime for detailed observations, then sends the
 combined observations plus any manual description to the local LLM. The local LLM
 returns structured JSON stored under `profile.json` as `extraction.structured` for
-future prompt assembly. Vision and local LLM calls use the existing runtimes only
-when they are already available; profile management does not start them implicitly.
+future prompt assembly. If the local LLM request times out or fails, extraction
+falls back to a vision-only schema `2.0` profile and records the fallback reason
+under `source_quality_notes`.
+
+The extracted profile schema is versioned as `2.0` and separates stable identity
+from editable generation choices:
+
+- `permanent_identity`
+- `body_profile`
+- `removable_clothing`
+- `accessories`
+- `pose_reference`
+- `preservation_notes`
+- `prompt_sections`
+- `negative_prompt_terms`
+
+The node normalizes the LLM output before saving it. `prompt_sections` is always
+stored as a JSON object, and negative prompt terms that would erase normal anatomy
+or identity, such as `no eyes`, `no face`, or `no hair`, are filtered out. Vision
+and local LLM calls use the existing runtimes only when they are already available;
+profile management does not start them implicitly.
 
 ## Required Models And Nodes
 

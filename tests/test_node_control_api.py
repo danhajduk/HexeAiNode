@@ -3797,11 +3797,18 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             structured = {
+                "schema_version": "2.0",
                 "profile_name": "Jane Avatar",
-                "identity_prompt": "same Jane Avatar identity",
-                "face": {"shape": "oval"},
-                "body": {"shape": "curvy"},
-                "prompt_sections": {"identity": "same Jane Avatar identity"},
+                "permanent_identity": {
+                    "face": {"shape": "oval"},
+                    "identity_prompt": "same Jane Avatar identity",
+                },
+                "body_profile": {"shape": "curvy", "body_prompt": "curvy body profile"},
+                "removable_clothing": {"current": "black dress"},
+                "accessories": {"permanent_accessories": ["blue headset"]},
+                "pose_reference": {"current_pose": "hands on hips"},
+                "prompt_sections": "identity, body, pose",
+                "negative_prompt_terms": ["different person", "no eyes", "changed body proportions"],
             }
             responses = [
                 {"choices": [{"message": {"content": "face: oval face and dark hair"}}]},
@@ -3816,12 +3823,88 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             metadata = json.loads(profile_path.read_text(encoding="utf-8"))
 
         self.assertEqual(request.call_count, 3)
+        self.assertEqual(request.call_args_list[2].kwargs["timeout_s"], 60)
         self.assertEqual(result["extraction"]["vision_model_id"], "vision-model")
         self.assertEqual(result["extraction"]["local_llm_model_id"], "local-model")
         self.assertEqual(result["extraction"]["structured"]["identity_prompt"], "same Jane Avatar identity")
+        self.assertEqual(result["extraction"]["structured"]["schema_version"], "2.0")
+        self.assertIsInstance(result["extraction"]["structured"]["prompt_sections"], dict)
+        self.assertEqual(result["extraction"]["structured"]["prompt_sections"]["identity"], "same Jane Avatar identity")
+        self.assertEqual(result["extraction"]["structured"]["body_profile"]["shape"], "curvy")
+        self.assertEqual(result["extraction"]["structured"]["removable_clothing"]["current"], "black dress")
+        self.assertEqual(result["extraction"]["structured"]["negative_prompt_terms"], ["different person", "changed body proportions"])
         self.assertEqual(metadata["extraction"]["face_description"], "face: oval face and dark hair")
         self.assertEqual(metadata["extraction"]["body_description"], "body: full body hourglass silhouette")
-        self.assertEqual(metadata["extraction"]["structured"]["body"]["shape"], "curvy")
+        self.assertNotIn("no eyes", metadata["extraction"]["structured"]["negative_identity_prompt"])
+
+    def test_avatar_generation_extract_falls_back_when_local_llm_times_out(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "vision_llm": {
+                        "state": "running",
+                        "socket_path": "/tmp/vision.sock",
+                        "default_model_id": "vision-model",
+                    },
+                    "local_llm": {
+                        "state": "running",
+                        "socket_path": "/tmp/local.sock",
+                        "model_id": "local-model",
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(
+                payload=AvatarProfileSaveRequest(
+                    name="Jane Avatar",
+                    description="manual note",
+                    face_image_filename="face.png",
+                    face_image_data_base64=base64.b64encode(b"face-image").decode("ascii"),
+                    body_image_filename="body.png",
+                    body_image_data_base64=base64.b64encode(b"body-image").decode("ascii"),
+                )
+            )
+            responses = [
+                {"choices": [{"message": {"content": "face: oval face and dark hair"}}]},
+                {"choices": [{"message": {"content": "body: full body hourglass silhouette"}}]},
+                TimeoutError("timed out"),
+            ]
+
+            with patch.object(state, "_uds_json_request", side_effect=responses) as request:
+                result = state.extract_avatar_profile_data(profile_id="Jane_Avatar")
+
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(request.call_count, 3)
+        self.assertEqual(request.call_args_list[2].kwargs["timeout_s"], 60)
+        self.assertEqual(result["extraction"]["local_llm_model_id"], "local_rules")
+        self.assertEqual(result["extraction"]["structured"]["schema_version"], "2.0")
+        self.assertIsInstance(result["extraction"]["structured"]["prompt_sections"], dict)
+        self.assertEqual(result["extraction"]["structured"]["prompt_sections"]["identity"], "manual note")
+        self.assertIn("full body hourglass", result["extraction"]["structured"]["prompt_sections"]["body_shape"])
+        self.assertEqual(
+            result["extraction"]["structured"]["source_quality_notes"]["structured_source"],
+            "vision_descriptions_local_rules",
+        )
+        self.assertEqual(result["extraction"]["structured"]["source_quality_notes"]["local_llm_model_id"], "local-model")
+        self.assertIn("timed out", result["extraction"]["structured"]["source_quality_notes"]["local_llm_error"])
+        self.assertEqual(metadata["extraction"]["structured"]["schema_version"], "2.0")
 
     def test_manual_image_vision_describe_uses_local_vision_socket(self):
         class _VisionServiceManager:
