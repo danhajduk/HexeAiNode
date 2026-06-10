@@ -3999,7 +3999,17 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             rgb_preview_output = output_dir / "hexe" / "avatar_head_face_preview" / "Jane_Avatar_seed1211_rgb_00001_.png"
             preview_output.parent.mkdir(parents=True, exist_ok=True)
             rgb_preview_output.write_bytes(b"rgb-preview-image")
+            rgb_preview_output.with_suffix(".txt").write_text("rgb caption\n", encoding="utf-8")
+            rgb_preview_output.with_suffix(".json").write_text("{}\n", encoding="utf-8")
             preview_output.write_bytes(b"preview-image")
+            bg_source = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / "head_face_1211_seed1211_rgb_source.png"
+            bg_source.write_bytes(b"rgb-source-image")
+            bg_source.with_suffix(".json").write_text("{}\n", encoding="utf-8")
+            pending_metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+            pending_metadata["prompt_workspaces"]["head_face"]["preview_history"][-1]["background_removal_source_image"] = (
+                "avatar_profiles/Jane_Avatar/refs/head_face/preview/head_face_1211_seed1211_rgb_source.png"
+            )
+            profile_path.write_text(json.dumps(pending_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             refreshed = state.avatar_generation_status()["profiles"][0]
             refreshed_history = refreshed["prompt_workspaces"]["head_face"]["preview_history"]
             imported_preview = refreshed_history[-1]
@@ -4007,6 +4017,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             imported_bytes = imported_path.read_bytes()
             imported_reference = refreshed["references"]["head_face"][0]
             placeholder_still_exists = placeholder_path.exists()
+            rgb_output_still_exists = rgb_preview_output.exists()
+            rgb_output_caption_still_exists = rgb_preview_output.with_suffix(".txt").exists()
+            rgb_output_sidecar_still_exists = rgb_preview_output.with_suffix(".json").exists()
+            bg_source_still_exists = bg_source.exists()
+            bg_source_sidecar_still_exists = bg_source.with_suffix(".json").exists()
 
         preview_history = metadata["prompt_workspaces"]["head_face"]["preview_history"]
         self.assertEqual(result["status"], "preview_submitted")
@@ -4033,6 +4048,19 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(Path(imported_preview["filename"]).suffix, ".png")
         self.assertEqual(imported_bytes, b"preview-image")
         self.assertEqual(imported_reference["url"], imported_preview["url"])
+        self.assertFalse(rgb_output_still_exists)
+        self.assertFalse(rgb_output_caption_still_exists)
+        self.assertFalse(rgb_output_sidecar_still_exists)
+        self.assertFalse(bg_source_still_exists)
+        self.assertFalse(bg_source_sidecar_still_exists)
+        self.assertEqual(
+            imported_preview["rgb_cleanup"]["deleted"],
+            [
+                "hexe/avatar_head_face_preview/Jane_Avatar_seed1211_rgb_00001_.png",
+                "avatar_profiles/Jane_Avatar/refs/head_face/preview/head_face_1211_seed1211_rgb_source.png",
+            ],
+        )
+        self.assertEqual(imported_preview["rgb_cleanup"]["errors"], [])
 
     def test_avatar_generation_imports_head_preview_rgb_fallback_when_alpha_output_missing(self):
         class _AvatarProfileServiceManager:

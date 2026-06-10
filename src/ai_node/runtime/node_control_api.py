@@ -4443,6 +4443,14 @@ class NodeControlState:
             relative_name = f"preview/{filename}"
             source_output = output_path.relative_to(output_dir).as_posix() if output_dir in output_path.parents else str(output_path)
             rgb_fallback = self._avatar_head_face_preview_is_rgb_fallback_path(path=output_path)
+            rgb_cleanup = None
+            if not rgb_fallback and seed:
+                rgb_cleanup = self._cleanup_avatar_head_face_preview_rgb_outputs(
+                    output_dir=output_dir,
+                    prefix=f"hexe/avatar_head_face_preview/{avatar_name}_seed{seed}",
+                    preview=preview,
+                    profile_dir=profile_dir,
+                )
             sidecar = self._avatar_head_face_preview_sidecar(
                 profile_id=profile_id,
                 preview=preview,
@@ -4471,6 +4479,7 @@ class NodeControlState:
                     "rgb_fallback": rgb_fallback,
                     "imported_at": now,
                     "source_output": sidecar["source_output"],
+                    "rgb_cleanup": rgb_cleanup,
                 }
             )
             changed = True
@@ -4496,6 +4505,49 @@ class NodeControlState:
         updated_metadata["updated_at"] = now
         (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return updated_metadata
+
+    def _cleanup_avatar_head_face_preview_rgb_outputs(
+        self,
+        *,
+        output_dir: Path,
+        prefix: str,
+        preview: dict,
+        profile_dir: Path,
+    ) -> dict:
+        deleted = []
+        errors = []
+        relative = str(prefix or "").strip().strip("/")
+        if relative:
+            prefix_path = (output_dir / relative).resolve()
+            if output_dir in prefix_path.parents:
+                for path in sorted(prefix_path.parent.glob(f"{prefix_path.name}_rgb*.png")):
+                    if not path.is_file():
+                        continue
+                    if not self._avatar_head_face_preview_is_rgb_fallback_path(path=path):
+                        continue
+                    try:
+                        rel = path.relative_to(output_dir).as_posix() if output_dir in path.parents else str(path)
+                        path.unlink()
+                        deleted.append(rel)
+                        for sidecar in (path.with_suffix(".txt"), path.with_suffix(".json")):
+                            if sidecar.exists() and sidecar.is_file():
+                                sidecar.unlink()
+                    except Exception as exc:
+                        errors.append({"path": str(path), "error": str(exc)})
+        source_image = str(preview.get("background_removal_source_image") or "").strip()
+        if source_image:
+            input_dir = self._manual_image_input_dir()
+            source_path = (input_dir / source_image).resolve()
+            try:
+                if profile_dir in source_path.parents and source_path.exists() and source_path.is_file():
+                    source_path.unlink()
+                    deleted.append(source_image)
+                    for sidecar in (source_path.with_suffix(".txt"), source_path.with_suffix(".json")):
+                        if sidecar.exists() and sidecar.is_file():
+                            sidecar.unlink()
+            except Exception as exc:
+                errors.append({"path": source_image, "error": str(exc)})
+        return {"deleted": deleted, "errors": errors}
 
     def _submit_avatar_head_face_background_removal_if_needed(
         self,
