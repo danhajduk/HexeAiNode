@@ -645,6 +645,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Adjustment Request");
     expect(markup).toContain("Refine Prompt");
     expect(markup).toContain("Create Preview");
+    expect(markup.indexOf("Adjustment Request")).toBeLessThan(markup.indexOf("General"));
+    expect(markup.indexOf("Create Preview")).toBeLessThan(markup.indexOf("Compiled Head / Face Prompt"));
     expect(markup).toContain("Latest Preview");
     expect(markup).toContain("Preview History");
     expect(markup).toContain("head_face_2_seed1211.png");

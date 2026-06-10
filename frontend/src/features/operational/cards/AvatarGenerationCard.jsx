@@ -1181,6 +1181,23 @@ export function AvatarGenerationCard({
                   <span>Previews</span>
                   <code>{headPreviewHistory.length}</code>
                 </div>
+                <label className="avatar-generation-wide-field">
+                  Adjustment Request
+                  <textarea
+                    rows={5}
+                    value={headInstruction}
+                    onChange={(event) => setHeadInstruction(event.target.value)}
+                    placeholder="Tell the local LLM what to change about the head, face, hair, expression, or portrait style."
+                  />
+                </label>
+                <div className="row">
+                  <button className="btn btn-primary" type="submit" disabled={busy || !headInstruction.trim()}>
+                    {activeReferenceAction === "refine:head_face" ? "Refining..." : "Refine Prompt"}
+                  </button>
+                  <button className="btn" type="button" disabled={busy || !headPrompt.trim()} onClick={createHeadPreview}>
+                    {activeReferenceAction === "preview:head_face" ? "Requesting..." : "Create Preview"}
+                  </button>
+                </div>
                 <div className="avatar-head-face-prompt-parts">
                   {HEAD_FACE_PROMPT_PARTS.map((part) => (
                     <label
@@ -1204,23 +1221,6 @@ export function AvatarGenerationCard({
                   Negative Prompt
                   <textarea rows={4} value={headNegativePrompt} onChange={(event) => setHeadNegativePrompt(event.target.value)} />
                 </label>
-                <label className="avatar-generation-wide-field">
-                  Adjustment Request
-                  <textarea
-                    rows={5}
-                    value={headInstruction}
-                    onChange={(event) => setHeadInstruction(event.target.value)}
-                    placeholder="Tell the local LLM what to change about the head, face, hair, expression, or portrait style."
-                  />
-                </label>
-                <div className="row">
-                  <button className="btn btn-primary" type="submit" disabled={busy || !headInstruction.trim()}>
-                    {activeReferenceAction === "refine:head_face" ? "Refining..." : "Refine Prompt"}
-                  </button>
-                  <button className="btn" type="button" disabled={busy || !headPrompt.trim()} onClick={createHeadPreview}>
-                    {activeReferenceAction === "preview:head_face" ? "Requesting..." : "Create Preview"}
-                  </button>
-                </div>
               </form>
 
               <aside className="avatar-head-face-latest-preview">
