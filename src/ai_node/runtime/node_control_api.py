@@ -4361,7 +4361,8 @@ class NodeControlState:
             existing_input = str(preview.get("input_image") or "").strip()
             existing_filename = Path(str(preview.get("filename") or "")).name
             existing_is_placeholder = bool(preview.get("placeholder"))
-            if existing_input and existing_filename and (preview_dir / existing_filename).is_file() and not existing_is_placeholder:
+            existing_is_rgb_fallback = bool(preview.get("rgb_fallback")) or str(preview.get("source_output") or "").find("_rgb") >= 0
+            if existing_input and existing_filename and (preview_dir / existing_filename).is_file() and not existing_is_placeholder and not existing_is_rgb_fallback:
                 if str(preview.get("status") or "").strip() not in {"completed", "completed_with_fallback"}:
                     updated_history.append({**preview, "status": "completed"})
                     changed = True
@@ -4412,6 +4413,21 @@ class NodeControlState:
                 )
                 changed = True
                 continue
+            if self._avatar_head_face_preview_is_rgb_fallback_path(path=output_path):
+                submitted_preview = self._submit_avatar_head_face_background_removal_if_needed(
+                    profile_dir=profile_dir,
+                    profile_id=profile_id,
+                    preview=preview,
+                    rgb_output_path=output_path,
+                    avatar_name=avatar_name,
+                )
+                if submitted_preview:
+                    updated_history.append(submitted_preview)
+                    changed = True
+                    continue
+                if existing_input and existing_filename and (preview_dir / existing_filename).is_file() and not existing_is_placeholder:
+                    updated_history.append(preview)
+                    continue
             if existing_is_placeholder and existing_filename:
                 existing_path = (preview_dir / existing_filename).resolve()
                 if profile_dir in existing_path.parents and existing_path.exists() and existing_path.is_file():
@@ -4480,6 +4496,103 @@ class NodeControlState:
         updated_metadata["updated_at"] = now
         (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return updated_metadata
+
+    def _submit_avatar_head_face_background_removal_if_needed(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        preview: dict,
+        rgb_output_path: Path | None,
+        avatar_name: str,
+    ) -> dict | None:
+        if preview.get("background_removal_prompt_id") or preview.get("background_removal_submitted_at"):
+            return None
+        if not rgb_output_path or not rgb_output_path.is_file():
+            return None
+        seed = str(preview.get("seed") or "").strip()
+        if not seed:
+            return None
+        services = self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        socket_path = str(webui.get("socket_path") or "") if isinstance(webui, dict) else ""
+        if not socket_path:
+            return None
+        input_dir = self._manual_image_input_dir()
+        source_dir = profile_dir / "refs" / "head_face" / "preview"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        source_name = f"{self._safe_filename_component(preview.get('preview_id') or f'head_face_{seed}')}_seed{seed}_rgb_source.png"
+        source_path = (source_dir / source_name).resolve()
+        if profile_dir not in source_path.parents:
+            raise ValueError("avatar_head_face_preview_path_invalid")
+        shutil.copyfile(rgb_output_path, source_path)
+        input_image = source_path.relative_to(input_dir).as_posix()
+        bg_removal_model = "birefnet.safetensors"
+        try:
+            template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID)["template"]
+            defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+            bg_removal_model = str(defaults.get("bg_removal_model") or bg_removal_model).strip() or bg_removal_model
+        except Exception:
+            pass
+        self._free_manual_image_runtime_models(socket_path=socket_path)
+        workflow = self._avatar_head_face_background_removal_workflow(
+            input_image=input_image,
+            bg_removal_model=bg_removal_model,
+            output_prefix=f"hexe/avatar_head_face_preview/{avatar_name}_seed{seed}",
+        )
+        response = self._uds_json_request(
+            socket_path=socket_path,
+            method="POST",
+            path="/prompt",
+            body={"client_id": "hexe-node-avatar-head-face-bg", "prompt": workflow},
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        return {
+            **preview,
+            "status": "background_removal_submitted",
+            "background_removal_prompt_id": response.get("prompt_id"),
+            "background_removal_number": response.get("number"),
+            "background_removal_submitted_at": now,
+            "background_removal_source_image": input_image,
+        }
+
+    @staticmethod
+    def _avatar_head_face_background_removal_workflow(*, input_image: str, bg_removal_model: str, output_prefix: str) -> dict:
+        return {
+            "1": {
+                "class_type": "LoadImage",
+                "inputs": {"image": input_image},
+            },
+            "2": {
+                "class_type": "LoadBackgroundRemovalModel",
+                "inputs": {"bg_removal_name": bg_removal_model},
+            },
+            "3": {
+                "class_type": "RemoveBackground",
+                "inputs": {
+                    "image": ["1", 0],
+                    "bg_removal_model": ["2", 0],
+                },
+            },
+            "4": {
+                "class_type": "InvertMask",
+                "inputs": {"mask": ["3", 0]},
+            },
+            "5": {
+                "class_type": "JoinImageWithAlpha",
+                "inputs": {
+                    "image": ["1", 0],
+                    "alpha": ["4", 0],
+                },
+            },
+            "6": {
+                "class_type": "SaveImage",
+                "inputs": {
+                    "images": ["5", 0],
+                    "filename_prefix": output_prefix,
+                },
+            },
+        }
 
     @staticmethod
     def _avatar_head_face_preview_output_for_prefix(*, output_dir: Path, prefix) -> Path | None:

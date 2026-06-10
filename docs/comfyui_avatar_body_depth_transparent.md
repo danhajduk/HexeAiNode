@@ -10,7 +10,7 @@ This workflow generates a new transparent avatar image from a prompt, a face ref
 
 PuLID owns face/ID preservation, while the body reference controls pose, silhouette, and proportions. This is stronger than the older latent-only face reference path, but it is still not a trained identity LoRA or a true pose-from-text model.
 
-`Avatar Head Face Preview` is the quick head/face workspace preview path. It samples a `512x512`, 4-step RealVisXL portrait from the current prompt, saves an RGB fallback under `hexe/avatar_head_face_preview/*_rgb`, removes the background with BiRefNet, joins the alpha mask, and saves the transparent preview under `hexe/avatar_head_face_preview/`.
+`Avatar Head Face Preview` is the quick head/face workspace preview path. It samples a `512x512`, 4-step RealVisXL portrait from the current prompt and first saves an RGB image under `hexe/avatar_head_face_preview/*_rgb`. When that RGB file appears, the node unloads ComfyUI generation models through `/free`, submits a small second-pass BiRefNet background-removal workflow, joins the alpha mask, and saves the transparent preview under `hexe/avatar_head_face_preview/`.
 
 `Avatar Profile Generation` is the preferred final-generation path after an avatar profile has a body depth profile. It uses the profile's selected PuLID face image, a saved `refs/body_depth_map/*` depth map, and a saved `refs/pose/*` OpenPose or pose-control image directly, which avoids rerunning Depth Anything during each final image generation and lets the selected pose image guide the composition.
 

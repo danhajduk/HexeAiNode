@@ -4,7 +4,7 @@
     {
       "template_id": "template.avatar_head_face_preview.realvisxl.v1",
       "template_name": "Avatar Head Face Preview",
-      "description": "Text-only RealVisXL SDXL preview workflow for an avatar profile's head and face prompt workspace.",
+      "description": "Text-only RealVisXL SDXL RGB preview workflow for an avatar profile's head and face prompt workspace. The node submits background removal as a second pass after unloading generation models.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-head-face-preview-realvisxl/api_workflow.json",
       "variables": [
@@ -30,7 +30,7 @@
           "name": "bg_removal_model",
           "type": "string",
           "required": false,
-          "description": "Local background-removal model used to produce the transparent preview PNG."
+          "description": "Local background-removal model used by the node's second-pass transparent preview job."
         },
         {
           "name": "width",
@@ -95,13 +95,10 @@
             "EmptyLatentImage",
             "KSampler",
             "VAEDecode",
-            "LoadBackgroundRemovalModel",
-            "RemoveBackground",
-            "InvertMask",
-            "JoinImageWithAlpha",
             "SaveImage"
           ],
-          "background_removal": "birefnet.safetensors"
+          "background_removal": "birefnet.safetensors",
+          "background_removal_mode": "second_pass_after_model_unload"
         }
       },
       "output_scope": "manual",

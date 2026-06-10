@@ -3358,7 +3358,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["24"]["inputs"]["images"], ["19", 0])
         self.assertEqual(workflow["24"]["inputs"]["filename_prefix"], "hexe/avatar_body_depth_transparent/Jane_seed1003")
 
-    def test_manual_avatar_head_face_preview_template_adds_alpha_background_removal(self):
+    def test_manual_avatar_head_face_preview_template_saves_rgb_first_phase(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = NodeControlState(
                 lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
@@ -3383,18 +3383,24 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertTrue(template["metadata"]["transparent_background"])
-        self.assertEqual(workflow["8"]["class_type"], "LoadBackgroundRemovalModel")
-        self.assertEqual(workflow["8"]["inputs"]["bg_removal_name"], "birefnet.safetensors")
-        self.assertEqual(workflow["9"]["class_type"], "RemoveBackground")
-        self.assertEqual(workflow["9"]["inputs"]["image"], ["7", 0])
-        self.assertEqual(workflow["10"]["class_type"], "InvertMask")
-        self.assertEqual(workflow["10"]["inputs"]["mask"], ["9", 0])
-        self.assertEqual(workflow["11"]["class_type"], "JoinImageWithAlpha")
-        self.assertEqual(workflow["11"]["inputs"]["alpha"], ["10", 0])
-        self.assertEqual(workflow["12"]["inputs"]["images"], ["7", 0])
-        self.assertEqual(workflow["12"]["inputs"]["filename_prefix"], "hexe/avatar_head_face_preview/Jane_Avatar_seed1211_rgb")
-        self.assertEqual(workflow["13"]["inputs"]["images"], ["11", 0])
-        self.assertEqual(workflow["13"]["inputs"]["filename_prefix"], "hexe/avatar_head_face_preview/Jane_Avatar_seed1211")
+        self.assertNotIn("LoadBackgroundRemovalModel", [node.get("class_type") for node in workflow.values()])
+        self.assertNotIn("RemoveBackground", [node.get("class_type") for node in workflow.values()])
+        self.assertEqual(workflow["8"]["class_type"], "SaveImage")
+        self.assertEqual(workflow["8"]["inputs"]["images"], ["7", 0])
+        self.assertEqual(workflow["8"]["inputs"]["filename_prefix"], "hexe/avatar_head_face_preview/Jane_Avatar_seed1211_rgb")
+
+        bg_workflow = NodeControlState._avatar_head_face_background_removal_workflow(
+            input_image="avatar_profiles/Jane_Avatar/refs/head_face/preview/source.png",
+            bg_removal_model="birefnet.safetensors",
+            output_prefix="hexe/avatar_head_face_preview/Jane_Avatar_seed1211",
+        )
+        self.assertEqual(bg_workflow["1"]["class_type"], "LoadImage")
+        self.assertEqual(bg_workflow["1"]["inputs"]["image"], "avatar_profiles/Jane_Avatar/refs/head_face/preview/source.png")
+        self.assertEqual(bg_workflow["2"]["class_type"], "LoadBackgroundRemovalModel")
+        self.assertEqual(bg_workflow["2"]["inputs"]["bg_removal_name"], "birefnet.safetensors")
+        self.assertEqual(bg_workflow["3"]["class_type"], "RemoveBackground")
+        self.assertEqual(bg_workflow["3"]["inputs"]["image"], ["1", 0])
+        self.assertEqual(bg_workflow["6"]["inputs"]["filename_prefix"], "hexe/avatar_head_face_preview/Jane_Avatar_seed1211")
 
     def test_manual_image_prompt_helper_uses_local_llm_socket(self):
         class _PromptHelperServiceManager:
@@ -3936,6 +3942,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     "comfyui_webui": {
                         "state": "running",
                         "runtime": "gpu",
+                        "socket_path": "/tmp/comfyui.sock",
                         "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
                     }
                 }
@@ -4038,6 +4045,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     "comfyui_webui": {
                         "state": "running",
                         "runtime": "gpu",
+                        "socket_path": "/tmp/comfyui.sock",
                         "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
                     }
                 }
@@ -4080,22 +4088,33 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             rgb_preview_output.parent.mkdir(parents=True, exist_ok=True)
             rgb_preview_output.write_bytes(b"rgb-preview-image")
 
-            refreshed = state.avatar_generation_status()["profiles"][0]
+            def _uds_json_request(*, socket_path, method, path, body=None, **kwargs):
+                if path == "/queue":
+                    return {"queue_running": [], "queue_pending": []}
+                if path == "/free":
+                    return {}
+                if path == "/prompt":
+                    self.assertEqual(body["client_id"], "hexe-node-avatar-head-face-bg")
+                    workflow = body["prompt"]
+                    self.assertTrue(workflow["1"]["inputs"]["image"].startswith("avatar_profiles/Jane_Avatar/refs/head_face/preview/head_face_"))
+                    self.assertTrue(workflow["1"]["inputs"]["image"].endswith("_seed1211_rgb_source.png"))
+                    self.assertEqual(workflow["6"]["inputs"]["filename_prefix"], "hexe/avatar_head_face_preview/Jane_Avatar_seed1211")
+                    return {"prompt_id": "prompt-bg-removal", "number": 44}
+                return {}
+
+            with patch.object(state, "_uds_json_request", side_effect=_uds_json_request) as request:
+                refreshed = state.avatar_generation_status()["profiles"][0]
             imported_preview = refreshed["prompt_workspaces"]["head_face"]["preview_history"][-1]
-            imported_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / imported_preview["filename"]
-            imported_bytes = imported_path.read_bytes()
-            imported_sidecar = json.loads(imported_path.with_suffix(imported_path.suffix + ".json").read_text(encoding="utf-8"))
+            bg_source_path = input_dir / imported_preview["background_removal_source_image"]
+            bg_source_bytes = bg_source_path.read_bytes()
             placeholder_still_exists = placeholder_path.exists()
 
-        self.assertEqual(imported_preview["status"], "completed_with_fallback")
-        self.assertFalse(imported_preview["placeholder"])
-        self.assertFalse(imported_preview["background_removed"])
-        self.assertTrue(imported_preview["rgb_fallback"])
-        self.assertEqual(imported_preview["source_output"], "hexe/avatar_head_face_preview/Jane_Avatar_seed1211_rgb_00001_.png")
-        self.assertEqual(imported_bytes, b"rgb-preview-image")
-        self.assertFalse(placeholder_still_exists)
-        self.assertFalse(imported_sidecar["background_removed"])
-        self.assertTrue(imported_sidecar["rgb_fallback"])
+        self.assertEqual(imported_preview["status"], "background_removal_submitted")
+        self.assertTrue(imported_preview["placeholder"])
+        self.assertEqual(imported_preview["background_removal_prompt_id"], "prompt-bg-removal")
+        self.assertEqual(bg_source_bytes, b"rgb-preview-image")
+        self.assertTrue(placeholder_still_exists)
+        self.assertEqual([call.kwargs["path"] for call in request.call_args_list], ["/queue", "/free", "/prompt"])
 
     def test_avatar_generation_trims_existing_head_preview_history_to_nine(self):
         class _AvatarProfileServiceManager:
