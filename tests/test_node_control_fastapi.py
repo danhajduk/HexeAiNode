@@ -741,6 +741,51 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertIn("positive_prompt", [item["name"] for item in template["variables"]])
             self.assertEqual(missing_response.status_code, 404)
 
+    def test_manual_image_pose_helper_endpoint_returns_pose_reference(self):
+        class _PoseHelperServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "local_llm": {"state": "stopped", "socket_path": ""},
+                    "vision_llm": {"state": "stopped", "socket_path": ""},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                service_manager=_PoseHelperServiceManager(str(input_dir)),
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
+            client = TestClient(app)
+
+            response = client.post(
+                "/api/manual-image-generation/pose-helper",
+                json={
+                    "pose_text": "hands on hips, wide stance, full body",
+                    "avatar_name": "Jane",
+                    "width": 512,
+                    "height": 768,
+                },
+            )
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["provider"], "local_rules")
+            self.assertIn("hands", payload["pose_prompt"])
+            self.assertTrue(payload["body_reference_image"].startswith("references/avatar/Jane_pose_"))
+            reference_path = state._manual_image_reference_root() / payload["reference"]["relative_path"]
+            self.assertTrue(reference_path.exists())
+
     def test_local_runtime_assignment_endpoints_return_catalog_and_task_assignment(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = NodeControlState(

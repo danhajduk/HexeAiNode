@@ -1,1 +1,0 @@
-[TODO] Task 992: Implement local text-to-pose helper for manual avatar generation

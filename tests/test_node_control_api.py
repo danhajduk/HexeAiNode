@@ -19,6 +19,7 @@ from ai_node.runtime.node_control_api import (
     DirectExecutionAdmissionGuard,
     DirectExecutionBusyError,
     ManualImageGenerationRequest,
+    ManualImagePoseHelperRequest,
     ManualImagePromptHelperRequest,
     ManualImageReferenceUploadRequest,
     ManualImageVisionDescribeRequest,
@@ -3214,6 +3215,140 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.call_args.kwargs["path"], "/v1/chat/completions")
         messages = request.call_args.kwargs["body"]["messages"]
         self.assertTrue(all("/no_think" in item["content"] for item in messages))
+
+    def test_manual_image_pose_helper_uses_local_llm_and_writes_pose_reference(self):
+        class _PoseHelperServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "local_llm": {
+                        "state": "running",
+                        "socket_path": "/tmp/local-llm.sock",
+                        "model_id": "qwen3-8b-q4_k_m",
+                    },
+                    "vision_llm": {
+                        "state": "stopped",
+                        "socket_path": "",
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_PoseHelperServiceManager(str(input_dir)),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            llm_response = {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "body_angle": "three-quarter body angle facing left",
+                                    "camera_framing": "full body visible from head to feet",
+                                    "head_turn": "head turned toward camera",
+                                    "gaze": "eyes looking toward viewer",
+                                    "shoulders": "relaxed shoulders",
+                                    "hips": "hips angled naturally",
+                                    "left_arm": "left elbow angled outward",
+                                    "right_arm": "right arm relaxed along the thigh",
+                                    "left_hand": "left hand resting on left hip",
+                                    "right_hand": "right hand near the thigh",
+                                    "legs": "standing stance with right knee softly bent",
+                                    "weight_distribution": "weight mostly on the left leg",
+                                    "pose_prompt": "full body visible from head to feet, left hand resting on left hip, right knee softly bent",
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+            with patch.object(state, "_uds_json_request", return_value=llm_response) as request:
+                result = state.manual_image_pose_helper(
+                    payload=ManualImagePoseHelperRequest(
+                        pose_text="three-quarter left pose with left hand on hip and right knee bent",
+                        avatar_name="Jane",
+                        width=512,
+                        height=768,
+                    )
+                )
+
+            reference = result["reference"]
+            reference_path = state._manual_image_reference_root() / reference["relative_path"]
+            sidecar_path = reference_path.with_suffix(reference_path.suffix + ".json")
+            metadata = json.loads(sidecar_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(result["provider"], "local_llm")
+            self.assertEqual(result["model_id"], "qwen3-8b-q4_k_m")
+            self.assertEqual(result["pose_plan"]["left_hand"], "left hand resting on left hip")
+            self.assertIn("left hand resting on left hip", result["pose_prompt"])
+            self.assertEqual(reference["category"], "avatar")
+            self.assertEqual(reference["role"], "pose")
+            self.assertTrue(reference["input_image"].startswith("references/avatar/Jane_pose_"))
+            self.assertEqual(result["body_reference_image"], reference["input_image"])
+            self.assertTrue(reference_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+            self.assertEqual(metadata["source"], "manual_pose_helper")
+            self.assertEqual(metadata["pose_plan"]["left_hand"], "left hand resting on left hip")
+            self.assertEqual(result["references"][0]["relative_path"], reference["relative_path"])
+            request.assert_called_once()
+            self.assertEqual(request.call_args.kwargs["host"], "local-llm")
+            self.assertEqual(request.call_args.kwargs["path"], "/v1/chat/completions")
+
+    def test_manual_image_pose_helper_falls_back_without_starting_vision_or_llm(self):
+        class _PoseFallbackServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "local_llm": {
+                        "state": "stopped",
+                        "socket_path": "",
+                    },
+                    "vision_llm": {
+                        "state": "stopped",
+                        "socket_path": "",
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_PoseFallbackServiceManager(str(input_dir)),
+            )
+            with patch.object(state, "_uds_json_request", side_effect=AssertionError("unexpected socket call")):
+                result = state.manual_image_pose_helper(
+                    payload=ManualImagePoseHelperRequest(
+                        pose_text="arms crossed, wide stance, looking away",
+                        avatar_name="Jane",
+                        generate_reference=True,
+                    )
+                )
+
+        self.assertEqual(result["provider"], "local_rules")
+        self.assertIsNone(result["model_id"])
+        self.assertIn("crossing the torso", result["pose_plan"]["left_arm"])
+        self.assertIn("wide stance", result["pose_plan"]["legs"])
+        self.assertIn("looking away", result["pose_plan"]["gaze"])
+        self.assertTrue(result["body_reference_image"].startswith("references/avatar/Jane_pose_"))
 
     def test_manual_image_reference_upload_stores_local_reference(self):
         class _ReferenceServiceManager:

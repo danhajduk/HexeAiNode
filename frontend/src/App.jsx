@@ -186,6 +186,7 @@ export default function App() {
   const [manualImageGenerationBusy, setManualImageGenerationBusy] = useState(false);
   const [manualImageGenerationResult, setManualImageGenerationResult] = useState(null);
   const [manualImagePromptHelperBusy, setManualImagePromptHelperBusy] = useState(false);
+  const [manualImagePoseHelperBusy, setManualImagePoseHelperBusy] = useState(false);
   const [manualImageVisionBusy, setManualImageVisionBusy] = useState(false);
   const [runningAdminAction, setRunningAdminAction] = useState("");
   const [adminActionState, setAdminActionState] = useState("");
@@ -999,6 +1000,25 @@ export default function App() {
       return null;
     } finally {
       setManualImagePromptHelperBusy(false);
+    }
+  }
+
+  async function onBuildManualImagePose(payload) {
+    if (manualImagePoseHelperBusy) {
+      return null;
+    }
+    setManualImagePoseHelperBusy(true);
+    setError("");
+    try {
+      const result = await apiPost("/api/manual-image-generation/pose-helper", payload);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setManualImagePoseHelperBusy(false);
     }
   }
 
@@ -1943,11 +1963,13 @@ export default function App() {
       payload: manualImageGenerationPayload,
       busy: manualImageGenerationBusy,
       promptHelperBusy: manualImagePromptHelperBusy,
+      poseHelperBusy: manualImagePoseHelperBusy,
       visionBusy: manualImageVisionBusy,
       result: manualImageGenerationResult,
       apiBase: getApiBase(),
       onSubmit: onSubmitManualImageGeneration,
       onImprovePrompt: onImproveManualImagePrompt,
+      onBuildPose: onBuildManualImagePose,
       onUploadReference: onUploadManualImageReference,
       onDeleteReference: onDeleteManualImageReference,
       onDescribeReference: onDescribeManualImageReference,

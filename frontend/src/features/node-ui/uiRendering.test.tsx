@@ -354,6 +354,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Prompt");
     expect(markup).toContain("Outputs");
     expect(markup).toContain("Upload Reference");
+    expect(markup).toContain("Pose Text");
+    expect(markup).toContain("Build Pose Guide");
     expect(markup).toContain("Vision Mode");
     expect(markup).toContain("Scene");
     expect(markup).toContain("Describe");

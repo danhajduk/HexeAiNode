@@ -247,6 +247,14 @@ next to completed images: a same-name `.txt` caption file and a `.json` metadata
 Manual image submissions can queue up to 25 separate ComfyUI prompts, optionally randomize each seed, and optionally
 jitter avatar face/body reference strengths around the configured slider values by a bounded variation amount.
 
+The manual image UI also includes a local text-to-pose helper backed by `POST /api/manual-image-generation/pose-helper`.
+The helper accepts a natural-language pose description, normalizes it into body angle, head/gaze, hand, arm, leg, and
+weight-distribution fields, and writes a simple local PNG pose guide under `manual_paths.input_dir/references/avatar/`.
+When the local text LLM socket is running, it is used to parse the pose into JSON. If the text LLM is unavailable, the
+node falls back to deterministic local parsing and still creates a guide. The helper does not call the vision runtime or
+cloud providers, so it preserves the manual ComfyUI and vision residency boundary. The generated guide is a coarse
+body-depth reference for the active avatar body-depth template; it is not a true text-to-OpenPose model.
+
 On the RTX 3060 12 GB node, ComfyUI should be treated as exclusive GPU work for real generation. With both llama.cpp
 runtimes loaded, only about 2.5 GB VRAM remains, which is not enough for typical SDXL, FLUX, or Stable Diffusion 3.5
 workflows. Stop `hexe-ai-node-llamacpp-vision` before lightweight generation, and stop both llama.cpp containers before

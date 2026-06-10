@@ -159,11 +159,13 @@ export function ManualImageGenerationCard({
   payload = null,
   busy = false,
   promptHelperBusy = false,
+  poseHelperBusy = false,
   visionBusy = false,
   result = null,
   apiBase = "",
   onSubmit,
   onImprovePrompt,
+  onBuildPose,
   onUploadReference,
   onDeleteReference,
   onDescribeReference,
@@ -203,6 +205,8 @@ export function ManualImageGenerationCard({
   const [visionMode, setVisionMode] = useState("avatar");
   const [visionPrompt, setVisionPrompt] = useState("");
   const [visionDescription, setVisionDescription] = useState("");
+  const [poseHelperText, setPoseHelperText] = useState(DEFAULT_AVATAR_POSE_PROMPT);
+  const [poseHelperResult, setPoseHelperResult] = useState(null);
   const outputs = asArray(payload?.outputs);
   const references = asArray(payload?.references);
   const service = payload?.service || {};
@@ -426,6 +430,32 @@ export function ManualImageGenerationCard({
     });
     if (result?.description) {
       setVisionDescription(String(result.description));
+    }
+  }
+
+  async function buildPoseGuide() {
+    const poseText = poseHelperText.trim();
+    if (!poseText || poseHelperBusy || busy) {
+      return;
+    }
+    const result = await onBuildPose?.({
+      template_id: effectiveTemplate?.template_id || null,
+      pose_text: poseText,
+      current_pose_prompt: avatarPosePrompt,
+      avatar_name: libraryName || faceReference?.name || bodyReference?.name || "avatar",
+      width: Number.parseInt(width, 10) || 768,
+      height: Number.parseInt(height, 10) || 1152,
+      generate_reference: true,
+    });
+    if (!result) {
+      return;
+    }
+    setPoseHelperResult(result);
+    if (result.pose_prompt) {
+      setAvatarPosePrompt(String(result.pose_prompt));
+    }
+    if (result.reference) {
+      setBodyReference(result.reference);
     }
   }
 
@@ -678,6 +708,33 @@ export function ManualImageGenerationCard({
             </button>
             {faceReference ? <code>{`Face: ${faceReference.name || faceReference.filename}`}</code> : null}
             {bodyReference ? <code>{`Body: ${bodyReference.name || bodyReference.filename}`}</code> : null}
+          </div>
+          <div className="manual-pose-helper-panel">
+            <label>
+              Pose Text
+              <textarea rows={3} value={poseHelperText} onChange={(event) => setPoseHelperText(event.target.value)} />
+            </label>
+            <div className="row">
+              <button className="btn" type="button" onClick={buildPoseGuide} disabled={busy || poseHelperBusy || !poseHelperText.trim()}>
+                {poseHelperBusy ? "Building..." : "Build Pose Guide"}
+              </button>
+              {poseHelperResult?.provider ? <StatusBadge value={poseHelperResult.provider} /> : null}
+              {poseHelperResult?.reference ? <code>{`Pose: ${poseHelperResult.reference.name || poseHelperResult.reference.filename}`}</code> : null}
+            </div>
+            {poseHelperResult?.pose_plan ? (
+              <div className="state-grid manual-pose-plan-grid">
+                <span>Body</span>
+                <code>{poseHelperResult.pose_plan.body_angle || "none"}</code>
+                <span>Hands</span>
+                <code>
+                  {[poseHelperResult.pose_plan.left_hand, poseHelperResult.pose_plan.right_hand].filter(Boolean).join(" / ") || "none"}
+                </code>
+                <span>Legs</span>
+                <code>{poseHelperResult.pose_plan.legs || "none"}</code>
+                <span>Reference</span>
+                <code>{poseHelperResult.body_reference_image || "none"}</code>
+              </div>
+            ) : null}
           </div>
           {referenceStrengthVariables.length ? (
             <div className="form-grid">

@@ -563,3 +563,4 @@ Task 988: Add avatar and scene reference image libraries to manual image generat
 Task 989: Use avatar reference images in avatar generation templates when supported by ComfyUI - Completed on 06/09/2026 11:03
 Task 990: Add local vision description helper for uploaded avatar and scene images - Completed on 06/09/2026 11:06
 Task 991: Add scene/place prompt-reference workflow support - Completed on 06/09/2026 11:10
+Task 992: Implement local text-to-pose helper for manual avatar generation - Completed on 06/09/2026 17:06

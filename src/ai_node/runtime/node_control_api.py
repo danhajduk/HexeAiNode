@@ -5,8 +5,10 @@ import json
 import os
 import secrets
 import socket
+import struct
 import subprocess
 import time
+import zlib
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -1659,6 +1661,53 @@ class NodeControlState:
             "negative_prompt": negative_prompt,
         }
 
+    def manual_image_pose_helper(self, *, payload: "ManualImagePoseHelperRequest") -> dict:
+        pose_text = str(payload.pose_text or "").strip()
+        if not pose_text:
+            raise ValueError("manual_pose_text_required")
+        template_id = str(payload.template_id or MANUAL_IMAGE_DEFAULT_TEMPLATE_ID).strip()
+        template_defaults: dict = {}
+        try:
+            template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
+            template_defaults = dict(template.get("defaults") or {})
+        except Exception:
+            template = {}
+        width = self._coerce_manual_pose_dimension(payload.width, default=template_defaults.get("width"), fallback=768)
+        height = self._coerce_manual_pose_dimension(payload.height, default=template_defaults.get("height"), fallback=1152)
+        llm_plan, provider, model_id = self._manual_pose_plan_from_local_llm(payload=payload, template=template)
+        plan = self._normalize_manual_pose_plan(pose_text=pose_text, parsed=llm_plan)
+        pose_prompt = str(llm_plan.get("pose_prompt") or "").strip() if isinstance(llm_plan, dict) else ""
+        if not pose_prompt:
+            pose_prompt = self._manual_pose_prompt_from_plan(plan=plan)
+        reference = None
+        if payload.generate_reference is not False:
+            services = self.service_status_payload().get("services", {})
+            webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+            manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
+            reference = self._write_manual_pose_reference(
+                manual_paths=manual_paths if isinstance(manual_paths, dict) else {},
+                avatar_name=payload.avatar_name,
+                pose_text=pose_text,
+                pose_prompt=pose_prompt,
+                plan=plan,
+                width=width,
+                height=height,
+            )
+        return {
+            "status": "ok",
+            "provider": provider,
+            "model_id": model_id,
+            "template_id": template_id,
+            "width": width,
+            "height": height,
+            "pose_text": pose_text,
+            "pose_plan": plan,
+            "pose_prompt": pose_prompt,
+            "reference": reference,
+            "body_reference_image": reference.get("input_image") if isinstance(reference, dict) else None,
+            "references": self._manual_image_references(limit=48),
+        }
+
     def upload_manual_image_reference(self, *, payload: "ManualImageReferenceUploadRequest") -> dict:
         services = self.service_status_payload().get("services", {})
         webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
@@ -1820,6 +1869,391 @@ class NodeControlState:
         if normalized in {"face", "body", "avatar"}:
             return "Describe this avatar for an image-generation prompt. Include face, hair, body/pose, clothing, visible style, scene context, and details useful for preserving identity. Be concise."
         return "Describe this image for an image-generation prompt. Include subject, scene, lighting, composition, style, and important visual details. Be concise."
+
+    def _manual_pose_plan_from_local_llm(self, *, payload: "ManualImagePoseHelperRequest", template: dict) -> tuple[dict, str, str | None]:
+        services = self.service_status_payload().get("services", {})
+        local_llm = services.get("local_llm") if isinstance(services, dict) else {}
+        socket_path = str(local_llm.get("socket_path") or "") if isinstance(local_llm, dict) else ""
+        state = str(local_llm.get("state") or "").strip().lower() if isinstance(local_llm, dict) else ""
+        model_id = str(local_llm.get("model_id") or local_llm.get("default_model_id") or "local").strip() if isinstance(local_llm, dict) else "local"
+        if not socket_path or state not in {"running", "healthy"}:
+            return {}, "local_rules", None
+        request_body = {
+            "model": model_id,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "/no_think You convert avatar pose descriptions into a compact JSON pose plan for SDXL body-depth reference generation. "
+                        "Return only JSON with keys body_angle, camera_framing, head_turn, gaze, shoulders, hips, left_arm, right_arm, left_hand, right_hand, legs, weight_distribution, and pose_prompt. "
+                        "Keep the pose adult, non-graphic, full-body, and physically plausible. Do not include markdown."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "/no_think "
+                        + json.dumps(
+                            {
+                                "template_id": payload.template_id or template.get("template_id") or MANUAL_IMAGE_DEFAULT_TEMPLATE_ID,
+                                "template_description": template.get("description"),
+                                "pose_text": str(payload.pose_text or "").strip(),
+                                "current_pose_prompt": str(payload.current_pose_prompt or "").strip(),
+                                "width": payload.width,
+                                "height": payload.height,
+                            },
+                            sort_keys=True,
+                        )
+                    ),
+                },
+            ],
+            "temperature": 0.2,
+            "max_tokens": 450,
+            "stream": False,
+        }
+        try:
+            response = self._uds_json_request(
+                socket_path=socket_path,
+                method="POST",
+                path="/v1/chat/completions",
+                body=request_body,
+                host="local-llm",
+                error_label="local_llm_pose_helper_failed",
+            )
+        except Exception as exc:
+            if hasattr(self._logger, "debug"):
+                self._logger.debug("manual pose helper local LLM unavailable: %s", exc)
+            return {}, "local_rules", None
+        choices = response.get("choices") if isinstance(response.get("choices"), list) else []
+        content = ""
+        if choices and isinstance(choices[0], dict):
+            message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
+            content = str(message.get("content") or message.get("reasoning_content") or choices[0].get("text") or "").strip()
+        parsed = self._parse_manual_image_prompt_helper_content(content)
+        return parsed, "local_llm", model_id
+
+    @classmethod
+    def _normalize_manual_pose_plan(cls, *, pose_text: str, parsed: dict | None) -> dict:
+        fallback = cls._fallback_manual_pose_plan(pose_text=pose_text)
+        source = parsed.get("pose_plan") if isinstance(parsed, dict) and isinstance(parsed.get("pose_plan"), dict) else parsed
+        source = source if isinstance(source, dict) else {}
+        keys = (
+            "body_angle",
+            "camera_framing",
+            "head_turn",
+            "gaze",
+            "shoulders",
+            "hips",
+            "left_arm",
+            "right_arm",
+            "left_hand",
+            "right_hand",
+            "legs",
+            "weight_distribution",
+        )
+        plan = {}
+        for key in keys:
+            value = str(source.get(key) or fallback.get(key) or "").strip()
+            plan[key] = value
+        plan["source_text"] = pose_text
+        return plan
+
+    @staticmethod
+    def _fallback_manual_pose_plan(*, pose_text: str) -> dict:
+        text = str(pose_text or "").strip()
+        lower = text.lower()
+        facing_left = any(term in lower for term in ("left profile", "facing left", "turned left", "to the left"))
+        facing_right = any(term in lower for term in ("right profile", "facing right", "turned right", "to the right"))
+        back_view = any(term in lower for term in ("from behind", "back view", "back turned"))
+        front_view = any(term in lower for term in ("front view", "facing camera", "front-facing", "straight on"))
+        sitting = any(term in lower for term in ("sitting", "seated", "kneeling"))
+        wide_stance = any(term in lower for term in ("wide stance", "feet apart", "power stance"))
+        crossed_arms = "arms crossed" in lower or "crossed arms" in lower
+        hands_on_hips = "hands on hips" in lower or "hand on hip" in lower
+        hand_in_hair = "hand in hair" in lower or "touching hair" in lower
+        raised_arm = any(term in lower for term in ("arm raised", "hand raised", "above her head", "overhead"))
+        behind_back = "behind her back" in lower or "hands behind" in lower
+        looking_down = "looking down" in lower or "gaze down" in lower
+        looking_away = "looking away" in lower or "gaze away" in lower
+        if back_view:
+            body_angle = "back view with torso turned slightly for readable silhouette"
+        elif front_view:
+            body_angle = "front-facing full-body pose"
+        elif facing_left:
+            body_angle = "three-quarter body angle facing left"
+        elif facing_right:
+            body_angle = "three-quarter body angle facing right"
+        else:
+            body_angle = "three-quarter body angle, torso angled about 35 degrees"
+        if crossed_arms:
+            left_arm = "left arm crossing the torso"
+            right_arm = "right arm crossing the torso"
+            left_hand = "left hand near the opposite upper arm"
+            right_hand = "right hand near the opposite upper arm"
+        elif hands_on_hips:
+            left_arm = "left elbow angled outward"
+            right_arm = "right elbow angled outward"
+            left_hand = "left hand resting on left hip"
+            right_hand = "right hand resting on right hip"
+        elif hand_in_hair:
+            left_arm = "left arm lifted with elbow bent"
+            right_arm = "right arm relaxed along the outer thigh"
+            left_hand = "left hand touching the hair near the temple"
+            right_hand = "right hand relaxed near the thigh"
+        elif raised_arm:
+            left_arm = "left arm raised overhead with a soft bend"
+            right_arm = "right arm relaxed along the outer thigh"
+            left_hand = "left hand above the head"
+            right_hand = "right hand relaxed near the thigh"
+        elif behind_back:
+            left_arm = "left arm angled behind the back"
+            right_arm = "right arm angled behind the back"
+            left_hand = "left hand hidden behind the lower back"
+            right_hand = "right hand hidden behind the lower back"
+        else:
+            left_arm = "left arm bent softly"
+            right_arm = "right arm relaxed along the outer thigh"
+            left_hand = "left hand resting near the hip"
+            right_hand = "right hand relaxed near the thigh"
+        if sitting:
+            legs = "seated or kneeling lower-body pose with knees bent and feet visible where possible"
+            weight = "weight supported by the seat or bent legs"
+        elif wide_stance:
+            legs = "standing wide stance with both feet planted and knees softly bent"
+            weight = "balanced weight through both legs"
+        else:
+            legs = "standing full-body stance, left leg supporting weight, right knee softly bent forward"
+            weight = "weight mostly on the left leg"
+        return {
+            "body_angle": body_angle,
+            "camera_framing": "full body visible from head to feet with no crop",
+            "head_turn": "head turned slightly toward the camera",
+            "gaze": "eyes looking downward" if looking_down else ("eyes looking away from camera" if looking_away else "eyes looking toward the viewer"),
+            "shoulders": "shoulders relaxed and readable",
+            "hips": "hips angled naturally with a clear waist and hip line",
+            "left_arm": left_arm,
+            "right_arm": right_arm,
+            "left_hand": left_hand,
+            "right_hand": right_hand,
+            "legs": legs,
+            "weight_distribution": weight,
+        }
+
+    @staticmethod
+    def _manual_pose_prompt_from_plan(*, plan: dict) -> str:
+        ordered_keys = (
+            "camera_framing",
+            "body_angle",
+            "weight_distribution",
+            "legs",
+            "shoulders",
+            "hips",
+            "left_arm",
+            "left_hand",
+            "right_arm",
+            "right_hand",
+            "head_turn",
+            "gaze",
+        )
+        parts = [str(plan.get(key) or "").strip() for key in ordered_keys]
+        parts.extend(["clear readable full-body pose", "strong body silhouette", "hands visible when not intentionally hidden"])
+        return ", ".join(part for part in parts if part)
+
+    @staticmethod
+    def _coerce_manual_pose_dimension(value, *, default, fallback: int) -> int:
+        try:
+            parsed = int(value if value not in (None, "") else default)
+        except (TypeError, ValueError):
+            parsed = int(fallback)
+        return min(max(parsed, 256), 1536)
+
+    def _write_manual_pose_reference(
+        self,
+        *,
+        manual_paths: dict,
+        avatar_name: str | None,
+        pose_text: str,
+        pose_prompt: str,
+        plan: dict,
+        width: int,
+        height: int,
+    ) -> dict:
+        references_root = self._manual_image_reference_root(manual_paths=manual_paths)
+        target_dir = references_root / "avatar"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = self._safe_filename_component(avatar_name or "pose")
+        target_name = f"{safe_name}_pose_{int(time.time())}.png"
+        target_path = target_dir / target_name
+        target_path.write_bytes(self._manual_pose_guide_png_bytes(width=width, height=height, plan=plan))
+        metadata = {
+            "category": "avatar",
+            "role": "pose",
+            "name": f"{safe_name} pose guide",
+            "filename": target_name,
+            "input_image": f"references/avatar/{target_name}",
+            "source": "manual_pose_helper",
+            "pose_text": pose_text,
+            "pose_prompt": pose_prompt,
+            "pose_plan": plan,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        target_path.with_suffix(target_path.suffix + ".json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        return self._manual_image_reference_payload(path=target_path, metadata=metadata)
+
+    @classmethod
+    def _manual_pose_guide_png_bytes(cls, *, width: int, height: int, plan: dict) -> bytes:
+        w = min(max(int(width), 256), 1536)
+        h = min(max(int(height), 256), 1536)
+        pixels = bytearray()
+        background = (248, 247, 244, 255)
+        for _ in range(w * h):
+            pixels.extend(background)
+
+        def put_pixel(x: int, y: int, color: tuple[int, int, int, int]) -> None:
+            if x < 0 or y < 0 or x >= w or y >= h:
+                return
+            offset = (y * w + x) * 4
+            pixels[offset : offset + 4] = bytes(color)
+
+        def draw_disc(cx: float, cy: float, radius: int, color: tuple[int, int, int, int]) -> None:
+            left = int(cx) - radius
+            right = int(cx) + radius
+            top = int(cy) - radius
+            bottom = int(cy) + radius
+            radius_sq = radius * radius
+            for yy in range(top, bottom + 1):
+                for xx in range(left, right + 1):
+                    if (xx - int(cx)) ** 2 + (yy - int(cy)) ** 2 <= radius_sq:
+                        put_pixel(xx, yy, color)
+
+        def draw_line(start: tuple[float, float], end: tuple[float, float], color: tuple[int, int, int, int], thickness: int = 7) -> None:
+            x1, y1 = start
+            x2, y2 = end
+            steps = max(abs(int(x2 - x1)), abs(int(y2 - y1)), 1)
+            for step in range(steps + 1):
+                t = step / steps
+                draw_disc(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, thickness, color)
+
+        text = " ".join(str(value or "").lower() for value in plan.values())
+        angle_text = str(plan.get("body_angle") or "").lower()
+        direction = -1 if "left" in angle_text else 1
+        if "front-facing" in angle_text or "front view" in angle_text:
+            direction = 0
+        torso_shift = int(w * 0.045) * direction
+        head = (w * 0.5 - torso_shift * 0.35, h * 0.13)
+        neck = (w * 0.5 - torso_shift * 0.2, h * 0.22)
+        shoulder_center = (w * 0.5 - torso_shift, h * 0.27)
+        hip_center = (w * 0.5 + torso_shift, h * 0.52)
+        shoulder_half = w * (0.13 if direction else 0.16)
+        hip_half = w * 0.1
+        left_shoulder = (shoulder_center[0] - shoulder_half, shoulder_center[1])
+        right_shoulder = (shoulder_center[0] + shoulder_half, shoulder_center[1])
+        left_hip = (hip_center[0] - hip_half, hip_center[1])
+        right_hip = (hip_center[0] + hip_half, hip_center[1])
+
+        ink = (36, 39, 42, 255)
+        accent = (92, 118, 180, 255)
+        joint = (25, 25, 25, 255)
+        guide = (202, 204, 210, 255)
+        for y in (int(h * 0.08), int(h * 0.95)):
+            draw_line((w * 0.18, y), (w * 0.82, y), guide, 2)
+        draw_disc(*head, int(min(w, h) * 0.045), accent)
+        draw_line(head, neck, ink, 5)
+        draw_line(left_shoulder, right_shoulder, ink, 6)
+        draw_line(left_shoulder, left_hip, ink, 7)
+        draw_line(right_shoulder, right_hip, ink, 7)
+        draw_line(left_hip, right_hip, ink, 6)
+
+        if "crossing the torso" in text or "crossed" in text:
+            left_elbow = (w * 0.44, h * 0.39)
+            left_wrist = (w * 0.58, h * 0.36)
+            right_elbow = (w * 0.56, h * 0.39)
+            right_wrist = (w * 0.42, h * 0.36)
+        elif "overhead" in text or "above the head" in text or "raised" in text:
+            left_elbow = (left_shoulder[0] - w * 0.04, h * 0.17)
+            left_wrist = (w * 0.45, h * 0.06)
+            right_elbow = (right_shoulder[0] + w * 0.04, h * 0.43)
+            right_wrist = (right_hip[0] + w * 0.08, h * 0.63)
+        elif "hair" in text or "temple" in text:
+            left_elbow = (left_shoulder[0] - w * 0.05, h * 0.21)
+            left_wrist = (head[0] - w * 0.04, head[1] - h * 0.01)
+            right_elbow = (right_shoulder[0] + w * 0.04, h * 0.43)
+            right_wrist = (right_hip[0] + w * 0.08, h * 0.63)
+        elif "behind" in text:
+            left_elbow = (left_shoulder[0] - w * 0.03, h * 0.4)
+            left_wrist = (hip_center[0] - w * 0.03, h * 0.55)
+            right_elbow = (right_shoulder[0] + w * 0.03, h * 0.4)
+            right_wrist = (hip_center[0] + w * 0.03, h * 0.55)
+        elif "hip" in text:
+            left_elbow = (left_shoulder[0] - w * 0.09, h * 0.39)
+            left_wrist = left_hip
+            right_elbow = (right_shoulder[0] + w * 0.09, h * 0.39)
+            right_wrist = right_hip
+        else:
+            left_elbow = (left_shoulder[0] - w * 0.04, h * 0.42)
+            left_wrist = (left_hip[0] - w * 0.04, h * 0.58)
+            right_elbow = (right_shoulder[0] + w * 0.04, h * 0.46)
+            right_wrist = (right_hip[0] + w * 0.07, h * 0.64)
+        for start, elbow, wrist in ((left_shoulder, left_elbow, left_wrist), (right_shoulder, right_elbow, right_wrist)):
+            draw_line(start, elbow, ink, 5)
+            draw_line(elbow, wrist, ink, 5)
+
+        if "seated" in text or "sitting" in text or "kneeling" in text:
+            left_knee = (left_hip[0] - w * 0.11, h * 0.66)
+            right_knee = (right_hip[0] + w * 0.12, h * 0.66)
+            left_ankle = (left_knee[0] - w * 0.03, h * 0.83)
+            right_ankle = (right_knee[0] + w * 0.03, h * 0.83)
+        elif "wide stance" in text or "feet apart" in text:
+            left_knee = (left_hip[0] - w * 0.09, h * 0.72)
+            right_knee = (right_hip[0] + w * 0.09, h * 0.72)
+            left_ankle = (left_knee[0] - w * 0.08, h * 0.93)
+            right_ankle = (right_knee[0] + w * 0.08, h * 0.93)
+        else:
+            left_knee = (left_hip[0] - w * 0.03, h * 0.72)
+            right_knee = (right_hip[0] + w * 0.08, h * 0.71)
+            left_ankle = (left_knee[0] - w * 0.02, h * 0.93)
+            right_ankle = (right_knee[0] + w * 0.05, h * 0.91)
+        for hip, knee, ankle in ((left_hip, left_knee, left_ankle), (right_hip, right_knee, right_ankle)):
+            draw_line(hip, knee, ink, 6)
+            draw_line(knee, ankle, ink, 6)
+        for point in (
+            head,
+            neck,
+            left_shoulder,
+            right_shoulder,
+            left_elbow,
+            right_elbow,
+            left_wrist,
+            right_wrist,
+            left_hip,
+            right_hip,
+            left_knee,
+            right_knee,
+            left_ankle,
+            right_ankle,
+        ):
+            draw_disc(*point, 8, joint)
+        return cls._rgba_png_bytes(width=w, height=h, pixels=bytes(pixels))
+
+    @staticmethod
+    def _rgba_png_bytes(*, width: int, height: int, pixels: bytes) -> bytes:
+        def chunk(kind: bytes, data: bytes) -> bytes:
+            return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+        rows = []
+        stride = width * 4
+        for y in range(height):
+            rows.append(b"\x00" + pixels[y * stride : (y + 1) * stride])
+        compressed = zlib.compress(b"".join(rows), level=6)
+        return (
+            b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", compressed)
+            + chunk(b"IEND", b"")
+        )
 
     @staticmethod
     def _image_mime_type(suffix: str) -> str:
@@ -6296,6 +6730,16 @@ class ManualImagePromptHelperRequest(BaseModel):
     reference_image_provided: bool | None = False
 
 
+class ManualImagePoseHelperRequest(BaseModel):
+    template_id: str | None = None
+    pose_text: str
+    current_pose_prompt: str | None = None
+    avatar_name: str | None = None
+    width: int | None = None
+    height: int | None = None
+    generate_reference: bool | None = True
+
+
 class ManualImageReferenceUploadRequest(BaseModel):
     category: str = "avatar"
     role: str | None = "reference"
@@ -7120,6 +7564,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def post_manual_image_generation_prompt_helper(payload: ManualImagePromptHelperRequest):
         try:
             return state.manual_image_prompt_helper(payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/manual-image-generation/pose-helper")
+    def post_manual_image_generation_pose_helper(payload: ManualImagePoseHelperRequest):
+        try:
+            return state.manual_image_pose_helper(payload=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
