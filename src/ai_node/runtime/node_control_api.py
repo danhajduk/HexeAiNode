@@ -69,6 +69,7 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
 )
 
 MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"
+AVATAR_BODY_DEPTH_PROFILE_CLIENT_ID = "hexe-node-avatar-body-depth"
 
 MANUAL_IMAGE_PROGRESS_NODE_LABELS = {
     "CheckpointLoaderSimple": ("loading", "Load checkpoint"),
@@ -1901,6 +1902,148 @@ class NodeControlState:
             "profiles": profiles,
         }
 
+    async def generate_avatar_body_depth_profile(self, *, profile_id: str, payload: "AvatarBodyDepthProfileGenerateRequest") -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
+        sources = self._avatar_body_depth_profile_sources(
+            profile_dir=profile_dir,
+            metadata=metadata,
+            source_filenames=payload.source_filenames,
+        )
+        if not sources:
+            raise ValueError("avatar_body_depth_sources_not_found")
+
+        service = await self.start_service(target="comfyui_webui")
+        services = service.get("services") if isinstance(service.get("services"), dict) else self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        runtime_service = services.get("comfyui_gpu") if isinstance(services, dict) else {}
+        runtime_service = runtime_service if isinstance(runtime_service, dict) else {}
+        socket_path = str(webui.get("socket_path") or "") if isinstance(webui, dict) else ""
+        if not socket_path:
+            raise ValueError("manual_comfyui_socket_unavailable")
+
+        width = self._coerce_manual_pose_dimension(payload.width, default=768, fallback=768)
+        height = self._coerce_manual_pose_dimension(payload.height, default=1152, fallback=1152)
+        depth_resolution = self._coerce_manual_pose_dimension(payload.depth_resolution, default=1024, fallback=1024)
+        depth_model = str(payload.depth_model or "depth_anything_v2_vits.pth").strip() or "depth_anything_v2_vits.pth"
+        bg_removal_model = str(payload.bg_removal_model or "birefnet.safetensors").strip() or "birefnet.safetensors"
+        replace_source_images = payload.replace_source_images is not False
+        submitted_at = datetime.now(timezone.utc).isoformat()
+        job_token = str(int(time.time()))
+        preflight_memory_cleanup = self._free_manual_image_runtime_models(socket_path=socket_path)
+        if self._service_manager is not None and hasattr(self._service_manager, "ensure_comfyui_progress_listener"):
+            try:
+                self._service_manager.ensure_comfyui_progress_listener(client_id=AVATAR_BODY_DEPTH_PROFILE_CLIENT_ID)
+            except Exception as exc:
+                self._logger.debug("avatar body depth progress listener unavailable: %s", exc)
+
+        submissions: list[dict] = []
+        job_items: list[dict] = []
+        for index, source in enumerate(sources, start=1):
+            source_stem = self._safe_filename_component(Path(str(source.get("filename") or f"body_{index}")).stem)
+            item_token = f"{job_token}_{index:02d}"
+            target_body_filename = f"avatar_body_{source_stem}_{item_token}.png"
+            target_depth_filename = f"avatar_body_depth_{source_stem}_{item_token}.png"
+            output_base = f"hexe/avatar_profile_body_depth/{profile_id}"
+            nobg_output_prefix = f"{output_base}/{Path(target_body_filename).stem}"
+            depth_output_prefix = f"{output_base}/{Path(target_depth_filename).stem}"
+            workflow = self._avatar_body_depth_profile_workflow(
+                source_input_image=str(source.get("input_image") or ""),
+                width=width,
+                height=height,
+                depth_resolution=depth_resolution,
+                depth_model=depth_model,
+                bg_removal_model=bg_removal_model,
+                nobg_output_prefix=nobg_output_prefix,
+                depth_output_prefix=depth_output_prefix,
+            )
+            response = self._uds_json_request(
+                socket_path=socket_path,
+                method="POST",
+                path="/prompt",
+                body={"client_id": AVATAR_BODY_DEPTH_PROFILE_CLIENT_ID, "prompt": workflow},
+            )
+            submissions.append(
+                {
+                    "index": index,
+                    "prompt_id": response.get("prompt_id"),
+                    "number": response.get("number"),
+                    "node_errors": response.get("node_errors") or {},
+                }
+            )
+            job_items.append(
+                {
+                    "index": index,
+                    "source_role": source.get("role"),
+                    "source_name": source.get("name"),
+                    "source_filename": source.get("filename"),
+                    "source_input_image": source.get("input_image"),
+                    "target_body_filename": target_body_filename,
+                    "target_depth_filename": target_depth_filename,
+                    "nobg_output_prefix": nobg_output_prefix,
+                    "depth_output_prefix": depth_output_prefix,
+                    "imported": False,
+                }
+            )
+
+        prompt_ids = [str(item.get("prompt_id") or "").strip() for item in submissions if str(item.get("prompt_id") or "").strip()]
+        job = {
+            "schema_version": "1.0",
+            "status": "submitted",
+            "profile_id": profile_id,
+            "prompt_id": prompt_ids[0] if prompt_ids else None,
+            "prompt_ids": prompt_ids,
+            "submissions": submissions,
+            "submitted_at": submitted_at,
+            "source_count": len(job_items),
+            "replace_source_images": replace_source_images,
+            "settings": {
+                "width": width,
+                "height": height,
+                "depth_resolution": depth_resolution,
+                "depth_model": depth_model,
+                "bg_removal_model": bg_removal_model,
+            },
+            "runtime_pid": runtime_service.get("pid"),
+            "runtime_started_at": runtime_service.get("started_at"),
+            "runtime_restart_count": runtime_service.get("restart_count"),
+            "preflight_memory_cleanup": preflight_memory_cleanup,
+            "items": job_items,
+        }
+        self._write_avatar_body_depth_profile_job(profile_dir=profile_dir, payload=job)
+        now = datetime.now(timezone.utc).isoformat()
+        updated_metadata = {
+            **metadata,
+            "body_depth_profile": {
+                "status": "submitted",
+                "job_id": job_token,
+                "source_count": len(job_items),
+                "generated_count": 0,
+                "width": width,
+                "height": height,
+                "depth_resolution": depth_resolution,
+                "updated_at": now,
+            },
+            "updated_at": now,
+        }
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        return {
+            "status": "submitted",
+            "profile_id": profile_id,
+            "prompt_id": prompt_ids[0] if prompt_ids else None,
+            "prompt_ids": prompt_ids,
+            "submitted_count": len(submissions),
+            "submissions": submissions,
+            "job": self._read_avatar_body_depth_profile_job(profile_dir=profile_dir),
+            "profile": profile,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
     def save_avatar_profile(self, *, payload: "AvatarProfileSaveRequest") -> dict:
         display_name = str(payload.name or "").strip()
         if not display_name:
@@ -2628,6 +2771,7 @@ class NodeControlState:
         metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
         if not metadata:
             return {}
+        metadata = self._refresh_avatar_body_depth_profile_job(profile_dir=profile_dir, metadata=metadata)
         profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
         face_image = Path(str(metadata.get("face_image") or "face.png")).name
         body_image = Path(str(metadata.get("body_image") or "body.png")).name
@@ -2642,6 +2786,7 @@ class NodeControlState:
             "face_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{face_image}",
             "body_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{body_image}",
             "references": self._avatar_profile_references(profile_dir=profile_dir),
+            "body_depth_job": self._read_avatar_body_depth_profile_job(profile_dir=profile_dir),
         }
 
     def _avatar_profile_metadata(self, *, profile_dir: Path) -> dict:
@@ -2736,13 +2881,17 @@ class NodeControlState:
             "bodydepth": "body_depth",
             "body_depths": "body_depth",
             "depth": "body_depth",
+            "depth_map": "body_depth_map",
+            "depth_maps": "body_depth_map",
+            "body_depth_maps": "body_depth_map",
+            "bodydepthmap": "body_depth_map",
             "faces": "face",
             "pose": "pose",
             "poses": "pose",
             "openpose": "pose",
         }
         role = aliases.get(role, role)
-        if role not in {"body_depth", "face", "pose"}:
+        if role not in {"body_depth", "body_depth_map", "face", "pose"}:
             raise ValueError("avatar_profile_reference_role_invalid")
         return role
 
@@ -2764,7 +2913,7 @@ class NodeControlState:
         return data
 
     def _avatar_profile_references(self, *, profile_dir: Path) -> dict:
-        references = {"body_depth": [], "face": [], "pose": []}
+        references = {"body_depth": [], "body_depth_map": [], "face": [], "pose": []}
         refs_root = profile_dir / "refs"
         if not refs_root.exists() or not refs_root.is_dir():
             return references
@@ -2799,6 +2948,322 @@ class NodeControlState:
             "input_image": f"avatar_profiles/{profile_id}/refs/{role}/{filename}",
             "url": f"/api/avatar-generation/profiles/{profile_id}/references/{role}/{filename}",
         }
+
+    def _avatar_body_depth_profile_sources(self, *, profile_dir: Path, metadata: dict, source_filenames: list[str] | None) -> list[dict]:
+        selected = {
+            Path(str(item or "")).name
+            for item in list(source_filenames or [])
+            if str(item or "").strip()
+        }
+        references = self._avatar_profile_references(profile_dir=profile_dir).get("body_depth", [])
+        sources: list[dict] = []
+        for reference in references:
+            filename = Path(str(reference.get("filename") or "")).name
+            if not filename or (selected and filename not in selected):
+                continue
+            if not selected and bool(reference.get("background_removed")):
+                continue
+            path = (profile_dir / "refs" / "body_depth" / filename).resolve()
+            if profile_dir not in path.parents or not path.exists() or not path.is_file():
+                continue
+            sources.append({**reference, "path": path, "role": "body_depth"})
+        if sources or selected:
+            return sources
+
+        body_image = Path(str(metadata.get("body_image") or "")).name
+        if not body_image:
+            return []
+        body_path = (profile_dir / body_image).resolve()
+        if profile_dir not in body_path.parents or not body_path.exists() or not body_path.is_file():
+            return []
+        profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
+        return [
+            {
+                "profile_id": profile_id,
+                "role": "body",
+                "name": "Profile Body",
+                "filename": body_image,
+                "input_image": f"avatar_profiles/{profile_id}/{body_image}",
+                "path": body_path,
+            }
+        ]
+
+    @staticmethod
+    def _avatar_body_depth_profile_workflow(
+        *,
+        source_input_image: str,
+        width: int,
+        height: int,
+        depth_resolution: int,
+        depth_model: str,
+        bg_removal_model: str,
+        nobg_output_prefix: str,
+        depth_output_prefix: str,
+    ) -> dict:
+        return {
+            "1": {
+                "class_type": "LoadImage",
+                "inputs": {"image": source_input_image},
+            },
+            "2": {
+                "class_type": "ResizeAndPadImage",
+                "inputs": {
+                    "image": ["1", 0],
+                    "target_width": int(width),
+                    "target_height": int(height),
+                    "padding_color": "black",
+                    "interpolation": "lanczos",
+                },
+            },
+            "3": {
+                "class_type": "LoadBackgroundRemovalModel",
+                "inputs": {"bg_removal_name": bg_removal_model},
+            },
+            "4": {
+                "class_type": "RemoveBackground",
+                "inputs": {
+                    "image": ["2", 0],
+                    "bg_removal_model": ["3", 0],
+                },
+            },
+            "5": {
+                "class_type": "InvertMask",
+                "inputs": {"mask": ["4", 0]},
+            },
+            "6": {
+                "class_type": "JoinImageWithAlpha",
+                "inputs": {
+                    "image": ["2", 0],
+                    "alpha": ["5", 0],
+                },
+            },
+            "7": {
+                "class_type": "SaveImage",
+                "inputs": {
+                    "images": ["6", 0],
+                    "filename_prefix": nobg_output_prefix,
+                },
+            },
+            "8": {
+                "class_type": "DepthAnythingV2Preprocessor",
+                "inputs": {
+                    "image": ["6", 0],
+                    "ckpt_name": depth_model,
+                    "resolution": int(depth_resolution),
+                },
+            },
+            "9": {
+                "class_type": "SaveImage",
+                "inputs": {
+                    "images": ["8", 0],
+                    "filename_prefix": depth_output_prefix,
+                },
+            },
+        }
+
+    def _read_avatar_body_depth_profile_job(self, *, profile_dir: Path) -> dict:
+        try:
+            payload = json.loads((profile_dir / "body_depth_job.json").read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _write_avatar_body_depth_profile_job(self, *, profile_dir: Path, payload: dict) -> None:
+        (profile_dir / "body_depth_job.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    def _refresh_avatar_body_depth_profile_job(self, *, profile_dir: Path, metadata: dict) -> dict:
+        job = self._read_avatar_body_depth_profile_job(profile_dir=profile_dir)
+        if not job or str(job.get("status") or "") in {"completed", "failed"}:
+            return metadata
+        prompt_ids = [
+            str(item or "").strip()
+            for item in list(job.get("prompt_ids") or [])
+            if str(item or "").strip()
+        ]
+        services = self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        runtime_service = services.get("comfyui_gpu") if isinstance(services, dict) else {}
+        generation_status = {}
+        if self._service_manager is not None and hasattr(self._service_manager, "comfyui_webui_generation_status"):
+            try:
+                generation_status = self._service_manager.comfyui_webui_generation_status()
+            except Exception:
+                generation_status = {}
+        session = generation_status.get("session") if isinstance(generation_status.get("session"), dict) else {}
+        running_prompt_id = str(session.get("running_prompt_id") or "").strip()
+        pending_prompt_ids = [str(item) for item in list(session.get("pending_prompt_ids") or [])]
+        if running_prompt_id in prompt_ids:
+            status = "running"
+        elif any(item in pending_prompt_ids for item in prompt_ids):
+            status = "queued"
+        else:
+            status = "submitted"
+
+        imported_count = 0
+        missing_outputs = []
+        updated_items = []
+        output_dir = self._manual_image_output_dir()
+        for item in list(job.get("items") or []):
+            if not isinstance(item, dict):
+                continue
+            if bool(item.get("imported")):
+                imported_count += 1
+                updated_items.append(item)
+                continue
+            nobg_output = self._avatar_body_depth_profile_output_for_prefix(output_dir=output_dir, prefix=item.get("nobg_output_prefix"))
+            depth_output = self._avatar_body_depth_profile_output_for_prefix(output_dir=output_dir, prefix=item.get("depth_output_prefix"))
+            if not nobg_output or not depth_output:
+                missing_outputs.append(item.get("source_filename"))
+                updated_items.append(item)
+                continue
+            self._import_avatar_body_depth_profile_outputs(
+                profile_dir=profile_dir,
+                metadata=metadata,
+                item=item,
+                nobg_output=nobg_output,
+                depth_output=depth_output,
+                replace_source_images=bool(job.get("replace_source_images", True)),
+                settings=job.get("settings") if isinstance(job.get("settings"), dict) else {},
+            )
+            imported_count += 1
+            updated_items.append(
+                {
+                    **item,
+                    "imported": True,
+                    "imported_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        submitted_epoch = self._manual_image_parse_epoch(job.get("submitted_at"))
+        submitted_age_seconds = (time.time() - submitted_epoch) if submitted_epoch is not None else None
+        job_inactive = status not in {"running", "queued"}
+        source_count = len(updated_items)
+        if imported_count >= source_count and source_count:
+            status = "completed"
+        elif job_inactive and missing_outputs and submitted_age_seconds is not None and submitted_age_seconds > 300:
+            status = "failed"
+        updated_job = {
+            **job,
+            "status": status,
+            "items": updated_items,
+            "imported_count": imported_count,
+            "missing_outputs": [item for item in missing_outputs if item],
+            "queue_active": bool(session.get("queue_active")),
+            "running_count": int(session.get("running_count") or 0),
+            "pending_count": int(session.get("pending_count") or 0),
+            "runtime_pid": (runtime_service if isinstance(runtime_service, dict) else {}).get("pid"),
+            "webui_state": (webui if isinstance(webui, dict) else {}).get("state"),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if updated_job != job:
+            self._write_avatar_body_depth_profile_job(profile_dir=profile_dir, payload=updated_job)
+        references = self._avatar_profile_references(profile_dir=profile_dir)
+        now = datetime.now(timezone.utc).isoformat()
+        body_depth_profile = {
+            **(metadata.get("body_depth_profile") if isinstance(metadata.get("body_depth_profile"), dict) else {}),
+            "status": status,
+            "source_count": source_count,
+            "generated_count": imported_count,
+            "body_reference_count": len(references.get("body_depth", [])),
+            "depth_map_count": len(references.get("body_depth_map", [])),
+            "updated_at": now,
+        }
+        existing_counts = metadata.get("reference_counts") if isinstance(metadata.get("reference_counts"), dict) else {}
+        updated_metadata = {
+            **metadata,
+            "body_depth_profile": body_depth_profile,
+            "reference_counts": {
+                **existing_counts,
+                "body_depth": len(references.get("body_depth", [])),
+                "body_depth_map": len(references.get("body_depth_map", [])),
+                "face": len(references.get("face", [])),
+                "pose": len(references.get("pose", [])),
+            },
+            "updated_at": now,
+        }
+        if updated_metadata != metadata:
+            (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return updated_metadata
+
+    @staticmethod
+    def _avatar_body_depth_profile_output_for_prefix(*, output_dir: Path, prefix) -> Path | None:
+        relative = str(prefix or "").strip().strip("/")
+        if not relative:
+            return None
+        prefix_path = (output_dir / relative).resolve()
+        if output_dir not in prefix_path.parents:
+            return None
+        candidates = sorted(prefix_path.parent.glob(f"{prefix_path.name}*.png"), key=lambda path: path.stat().st_mtime, reverse=True)
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate.resolve()
+        return None
+
+    def _import_avatar_body_depth_profile_outputs(
+        self,
+        *,
+        profile_dir: Path,
+        metadata: dict,
+        item: dict,
+        nobg_output: Path,
+        depth_output: Path,
+        replace_source_images: bool,
+        settings: dict,
+    ) -> None:
+        profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
+        now = datetime.now(timezone.utc).isoformat()
+        body_filename = Path(str(item.get("target_body_filename") or f"avatar_body_{int(time.time())}.png")).name
+        depth_filename = Path(str(item.get("target_depth_filename") or f"avatar_body_depth_{int(time.time())}.png")).name
+        body_dir = profile_dir / "refs" / "body_depth"
+        depth_dir = profile_dir / "refs" / "body_depth_map"
+        body_dir.mkdir(parents=True, exist_ok=True)
+        depth_dir.mkdir(parents=True, exist_ok=True)
+        body_path = (body_dir / body_filename).resolve()
+        depth_path = (depth_dir / depth_filename).resolve()
+        if profile_dir not in body_path.parents or profile_dir not in depth_path.parents:
+            raise ValueError("avatar_body_depth_profile_path_invalid")
+        shutil.copyfile(nobg_output, body_path)
+        shutil.copyfile(depth_output, depth_path)
+        source_filename = Path(str(item.get("source_filename") or "")).name
+        source_name = str(item.get("source_name") or Path(source_filename).stem or "Body").strip()
+        body_metadata = {
+            "profile_id": profile_id,
+            "role": "body_depth",
+            "name": f"{source_name} No BG",
+            "filename": body_filename,
+            "input_image": f"avatar_profiles/{profile_id}/refs/body_depth/{body_filename}",
+            "url": f"/api/avatar-generation/profiles/{profile_id}/references/body_depth/{body_filename}",
+            "source": "avatar_body_depth_profile_generation",
+            "source_reference_filename": source_filename,
+            "source_input_image": item.get("source_input_image"),
+            "background_removed": True,
+            "depth_map_filename": depth_filename,
+            "settings": settings,
+            "created_at": now,
+        }
+        depth_metadata = {
+            "profile_id": profile_id,
+            "role": "body_depth_map",
+            "name": f"{source_name} Depth Map",
+            "filename": depth_filename,
+            "input_image": f"avatar_profiles/{profile_id}/refs/body_depth_map/{depth_filename}",
+            "url": f"/api/avatar-generation/profiles/{profile_id}/references/body_depth_map/{depth_filename}",
+            "source": "avatar_body_depth_profile_generation",
+            "source_reference_filename": source_filename,
+            "source_body_filename": body_filename,
+            "source_input_image": item.get("source_input_image"),
+            "settings": settings,
+            "created_at": now,
+        }
+        body_path.with_suffix(body_path.suffix + ".json").write_text(json.dumps(body_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        depth_path.with_suffix(depth_path.suffix + ".json").write_text(json.dumps(depth_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if replace_source_images and str(item.get("source_role") or "") == "body_depth" and source_filename and source_filename != body_filename:
+            source_path = (profile_dir / "refs" / "body_depth" / source_filename).resolve()
+            if profile_dir in source_path.parents and source_path.exists() and source_path.is_file():
+                source_path.unlink()
+            source_sidecar = source_path.with_suffix(source_path.suffix + ".json")
+            if source_sidecar.exists() and source_sidecar.is_file():
+                source_sidecar.unlink()
 
     def _manual_vision_image_payload(self, *, payload: "ManualImageVisionDescribeRequest") -> tuple[bytes, str, str]:
         if payload.reference_relative_path:
@@ -8019,6 +8484,16 @@ class AvatarProfileReferenceUploadRequest(BaseModel):
     data_base64: str
 
 
+class AvatarBodyDepthProfileGenerateRequest(BaseModel):
+    source_filenames: list[str] | None = None
+    width: int | None = 768
+    height: int | None = 1152
+    depth_resolution: int | None = 1024
+    depth_model: str | None = "depth_anything_v2_vits.pth"
+    bg_removal_model: str | None = "birefnet.safetensors"
+    replace_source_images: bool | None = True
+
+
 class ExecutionAuthorizeRequest(BaseModel):
     prompt_id: str
     task_family: str
@@ -8901,6 +9376,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def post_avatar_generation_profile_reference(profile_id: str, payload: AvatarProfileReferenceUploadRequest):
         try:
             return state.upload_avatar_profile_reference(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/body-depth/generate")
+    async def post_avatar_generation_profile_body_depth(profile_id: str, payload: AvatarBodyDepthProfileGenerateRequest):
+        try:
+            return await state.generate_avatar_body_depth_profile(profile_id=profile_id, payload=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

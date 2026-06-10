@@ -15,6 +15,7 @@ from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
 from ai_node.persistence.image_generation_template_store import ImageGenerationTemplateStateStore
 from ai_node.runtime.node_control_api import (
+    AvatarBodyDepthProfileGenerateRequest,
     AvatarProfileExtractionUpdateRequest,
     AvatarProfileReferenceUploadRequest,
     AvatarProfileSaveRequest,
@@ -3822,6 +3823,210 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(deleted["deleted"])
         self.assertFalse(reference_path.exists())
         self.assertEqual(deleted["profile"]["references"]["body_depth"], [])
+
+    def test_avatar_generation_body_depth_profile_submits_preprocess_workflow(self):
+        class _AvatarBodyDepthServiceManager:
+            def __init__(self, input_dir: Path, output_dir: Path):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+                self.listener_calls = []
+
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "running", "pid": 123, "restart_count": 0},
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "socket_path": "/tmp/comfyui.sock",
+                        "manual_paths": {
+                            "input_dir": str(self.input_dir),
+                            "output_dir": str(self.output_dir),
+                        },
+                    },
+                }
+
+            def ensure_comfyui_progress_listener(self, *, client_id: str | None = None):
+                self.listener_calls.append(client_id)
+                return {"started": True, "client_id": client_id}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            service_manager = _AvatarBodyDepthServiceManager(input_dir=input_dir, output_dir=output_dir)
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=service_manager,
+            )
+
+            async def _fake_start_service(*, target: str):
+                return {"status": "ok", "services": service_manager.get_status()}
+
+            request_bodies: list[dict] = []
+
+            def _fake_uds_request(*, socket_path: str, method: str, path: str, body: dict):
+                request_bodies.append(body)
+                return {"prompt_id": "prompt-body-depth", "number": 1, "node_errors": {}}
+
+            state.start_service = _fake_start_service
+            state.save_avatar_profile(
+                payload=AvatarProfileSaveRequest(
+                    name="Jane Avatar",
+                    face_image_filename="face.png",
+                    face_image_data_base64=base64.b64encode(b"face-image").decode("ascii"),
+                    body_image_filename="body.png",
+                    body_image_data_base64=base64.b64encode(b"body-image").decode("ascii"),
+                )
+            )
+            uploaded = state.upload_avatar_profile_reference(
+                profile_id="Jane_Avatar",
+                payload=AvatarProfileReferenceUploadRequest(
+                    role="body_depth",
+                    name="Standing Body",
+                    filename="standing.png",
+                    data_base64=base64.b64encode(b"standing-body").decode("ascii"),
+                ),
+            )
+            with patch.object(state, "_free_manual_image_runtime_models", return_value={"attempted": False}), patch.object(
+                state,
+                "_uds_json_request",
+                side_effect=_fake_uds_request,
+            ):
+                result = asyncio.run(
+                    state.generate_avatar_body_depth_profile(
+                        profile_id="Jane_Avatar",
+                        payload=AvatarBodyDepthProfileGenerateRequest(
+                            source_filenames=[uploaded["reference"]["filename"]],
+                            width=512,
+                            height=768,
+                            depth_resolution=1024,
+                        ),
+                    )
+                )
+
+        workflow = request_bodies[0]["prompt"]
+        self.assertEqual(result["status"], "submitted")
+        self.assertEqual(result["prompt_id"], "prompt-body-depth")
+        self.assertEqual(service_manager.listener_calls, ["hexe-node-avatar-body-depth"])
+        self.assertEqual(workflow["1"]["class_type"], "LoadImage")
+        self.assertEqual(workflow["1"]["inputs"]["image"], uploaded["reference"]["input_image"])
+        self.assertEqual(workflow["2"]["inputs"]["target_width"], 512)
+        self.assertEqual(workflow["2"]["inputs"]["target_height"], 768)
+        self.assertEqual(workflow["4"]["class_type"], "RemoveBackground")
+        self.assertEqual(workflow["6"]["class_type"], "JoinImageWithAlpha")
+        self.assertEqual(workflow["8"]["class_type"], "DepthAnythingV2Preprocessor")
+        self.assertEqual(workflow["8"]["inputs"]["image"], ["6", 0])
+        self.assertIn("avatar_body_", workflow["7"]["inputs"]["filename_prefix"])
+        self.assertIn("avatar_body_depth_", workflow["9"]["inputs"]["filename_prefix"])
+
+    def test_avatar_generation_body_depth_profile_imports_outputs_and_replaces_raw_refs(self):
+        class _AvatarBodyDepthImportServiceManager:
+            def __init__(self, input_dir: Path, output_dir: Path):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "running", "pid": 123, "restart_count": 0},
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {
+                            "input_dir": str(self.input_dir),
+                            "output_dir": str(self.output_dir),
+                        },
+                    },
+                }
+
+            def comfyui_webui_generation_status(self):
+                return {
+                    "session": {"queue_active": False, "running_count": 0, "pending_count": 0},
+                    "progress": {"available": False},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            service_manager = _AvatarBodyDepthImportServiceManager(input_dir=input_dir, output_dir=output_dir)
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=service_manager,
+            )
+            state.save_avatar_profile(
+                payload=AvatarProfileSaveRequest(
+                    name="Jane Avatar",
+                    face_image_filename="face.png",
+                    face_image_data_base64=base64.b64encode(b"face-image").decode("ascii"),
+                    body_image_filename="body.png",
+                    body_image_data_base64=base64.b64encode(b"body-image").decode("ascii"),
+                )
+            )
+            uploaded = state.upload_avatar_profile_reference(
+                profile_id="Jane_Avatar",
+                payload=AvatarProfileReferenceUploadRequest(
+                    role="body_depth",
+                    name="Standing Body",
+                    filename="standing.png",
+                    data_base64=base64.b64encode(b"standing-body").decode("ascii"),
+                ),
+            )
+            profile_dir = input_dir / "avatar_profiles" / "Jane_Avatar"
+            raw_path = profile_dir / "refs" / "body_depth" / uploaded["reference"]["filename"]
+            output_body_prefix = "hexe/avatar_profile_body_depth/Jane_Avatar/avatar_body_standing_123_01"
+            output_depth_prefix = "hexe/avatar_profile_body_depth/Jane_Avatar/avatar_body_depth_standing_123_01"
+            body_output = output_dir / f"{output_body_prefix}_00001_.png"
+            depth_output = output_dir / f"{output_depth_prefix}_00001_.png"
+            body_output.parent.mkdir(parents=True, exist_ok=True)
+            depth_output.parent.mkdir(parents=True, exist_ok=True)
+            body_output.write_bytes(b"no-bg-body")
+            depth_output.write_bytes(b"depth-map")
+            state._write_avatar_body_depth_profile_job(
+                profile_dir=profile_dir,
+                payload={
+                    "schema_version": "1.0",
+                    "status": "submitted",
+                    "profile_id": "Jane_Avatar",
+                    "prompt_id": "prompt-import",
+                    "prompt_ids": ["prompt-import"],
+                    "submitted_at": "2026-06-09T12:00:00+00:00",
+                    "replace_source_images": True,
+                    "settings": {"width": 512, "height": 768, "depth_resolution": 1024},
+                    "items": [
+                        {
+                            "source_role": "body_depth",
+                            "source_name": "Standing Body",
+                            "source_filename": uploaded["reference"]["filename"],
+                            "source_input_image": uploaded["reference"]["input_image"],
+                            "target_body_filename": "avatar_body_standing_123_01.png",
+                            "target_depth_filename": "avatar_body_depth_standing_123_01.png",
+                            "nobg_output_prefix": output_body_prefix,
+                            "depth_output_prefix": output_depth_prefix,
+                            "imported": False,
+                        }
+                    ],
+                },
+            )
+
+            status = state.avatar_generation_status()
+            profile = status["profiles"][0]
+            body_refs = profile["references"]["body_depth"]
+            depth_refs = profile["references"]["body_depth_map"]
+            body_bytes = (profile_dir / "refs" / "body_depth" / body_refs[0]["filename"]).read_bytes()
+            depth_bytes = (profile_dir / "refs" / "body_depth_map" / depth_refs[0]["filename"]).read_bytes()
+            raw_exists = raw_path.exists()
+
+        self.assertEqual(profile["body_depth_profile"]["status"], "completed")
+        self.assertEqual(profile["body_depth_profile"]["generated_count"], 1)
+        self.assertEqual(profile["body_depth_profile"]["depth_map_count"], 1)
+        self.assertFalse(raw_exists)
+        self.assertEqual(body_refs[0]["filename"], "avatar_body_standing_123_01.png")
+        self.assertTrue(body_refs[0]["background_removed"])
+        self.assertEqual(depth_refs[0]["filename"], "avatar_body_depth_standing_123_01.png")
+        self.assertEqual(body_bytes, b"no-bg-body")
+        self.assertEqual(depth_bytes, b"depth-map")
 
     def test_avatar_generation_updates_extracted_profile_data(self):
         class _AvatarProfileServiceManager:

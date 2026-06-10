@@ -106,9 +106,26 @@ edited JSON through the same schema normalizer before writing it to the profile.
 
 Additional avatar analysis references can be uploaded under the selected profile
 with `POST /api/avatar-generation/profiles/{profile_id}/references`. Supported
-roles are `body_depth`, `face`, and `pose`; files are stored in
+roles are `body_depth`, `body_depth_map`, `face`, and `pose`; files are stored in
 `avatar_profiles/{profile_id}/refs/{role}/` and returned on the profile payload
 under `references`.
+
+The Body Depth profile tab can submit a lightweight ComfyUI preprocessing job with
+`POST /api/avatar-generation/profiles/{profile_id}/body-depth/generate`. For each
+raw `body_depth` reference, the node runs:
+
+```text
+LoadImage -> ResizeAndPadImage -> RemoveBackground -> JoinImageWithAlpha
+          -> SaveImage avatar_body_*.png
+          -> DepthAnythingV2Preprocessor -> SaveImage avatar_body_depth_*.png
+```
+
+When the ComfyUI outputs appear, the node imports them back into the avatar
+profile. The original raw body reference is replaced by a transparent
+`avatar_body_*.png` reference with `background_removed: true`, while the generated
+depth map is stored separately under `refs/body_depth_map/`. The profile JSON also
+stores a `body_depth_profile` summary with status, generated count, body-reference
+count, and depth-map count.
 
 ## Required Models And Nodes
 
