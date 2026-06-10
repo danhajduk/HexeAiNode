@@ -4116,8 +4116,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
     def test_avatar_generation_body_cleanup_reduces_average_filler_and_keeps_markdown_headings(self):
         raw_body = (
             "- **Height Impression**: Average height, standing posture.\n"
+            "- ****Shoulder-to-waist-to-hip ratio**: The shoulders are slightly wider than average, with a straight and straightened torso.\n"
             "- **Hip Width**: Average hip width, slightly wider than the waist.\n"
-            "- **Bust/Breasts**: Average bust size, slightly rounded, positioned centrally.\n"
+            "- ****Bust/Breasts**: The bust is slightly fuller than average, with a round and \u4e30\u6ee1\u7684shape.\n"
             "- **Body-Preservation Notes**: No visible marks, no visible health damage, no visible health deformities, "
             "no visible health marks, no visible health stance."
         )
@@ -4125,11 +4126,15 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         cleaned = NodeControlState._clean_avatar_profile_body_description(raw_body)
 
         self.assertIn("- **Height Impression**: height, standing posture", cleaned)
+        self.assertIn("- **Shoulder-to-waist-to-hip ratio**: The shoulders are slightly wider, with a straight torso", cleaned)
         self.assertIn("- **Hip Width**: hip width, slightly wider than the waist", cleaned)
-        self.assertIn("- **Bust/Breasts**: bust size, slightly rounded, positioned centrally", cleaned)
+        self.assertIn("- **Bust/Breasts**: The bust is slightly fuller, with a round shape", cleaned)
         self.assertIn("- **Body-Preservation Notes**: Preserve visible silhouette", cleaned)
         self.assertNotIn("****:", cleaned)
         self.assertNotIn("health damage", cleaned)
+        self.assertNotIn("straightened", cleaned)
+        self.assertNotIn("than average", cleaned)
+        self.assertNotRegex(cleaned, r"[\u0080-\uffff]")
 
     def test_avatar_generation_body_depth_profile_submits_preprocess_workflow(self):
         class _AvatarBodyDepthServiceManager:

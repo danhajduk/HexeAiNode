@@ -3152,6 +3152,10 @@ class NodeControlState:
         candidate = str(line or "").strip()
         if candidate.startswith(("- ", "* ")):
             candidate = candidate[2:].strip()
+        malformed_bold = re.match(r"^\*{2,}(.+?)\*{2}:\s*(.*)$", candidate)
+        if malformed_bold:
+            heading, body = malformed_bold.groups()
+            return heading.strip().strip("*"), body.strip()
         if candidate.startswith("**") and "**:" in candidate:
             heading, body = candidate[2:].split("**:", 1)
             return heading.strip(), body.strip()
@@ -3236,6 +3240,7 @@ class NodeControlState:
         if not text:
             return ""
         text = re.sub(r"^[\w .()_-]+\.(?:png|jpe?g|webp):\s*", "", text, flags=re.IGNORECASE)
+        text = cls._avatar_profile_strip_non_english_fragments(text)
         text = text.lstrip("-*# ").strip()
         text = text.replace("**", "").replace("__", "")
         text = re.sub(r"\s+", " ", text)
@@ -3323,6 +3328,8 @@ class NodeControlState:
         source = str(text or "").strip()
         if not source:
             return ""
+        source = cls._avatar_profile_strip_non_english_fragments(source)
+        source = cls._avatar_profile_collapse_awkward_body_phrases(source)
         source = cls._avatar_profile_reduce_average_filler(source)
         heading_lower = str(heading or "").lower()
         clauses = [
@@ -3340,6 +3347,7 @@ class NodeControlState:
                 noisy_count += 1
                 continue
             clause = cls._avatar_profile_reduce_average_filler(clause)
+            clause = cls._avatar_profile_collapse_awkward_body_phrases(clause)
             lowered = clause.lower()
             normalized = " ".join(lowered.split())
             if normalized in seen:
@@ -3356,10 +3364,49 @@ class NodeControlState:
         return result or source
 
     @staticmethod
+    def _avatar_profile_strip_non_english_fragments(text: str) -> str:
+        cleaned = re.sub(r"[\u0080-\uffff]+", "", str(text or ""))
+        cleaned = re.sub(r"\band\s+shape\b", "shape", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\band\s+butt\b", "butt", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        return cleaned.strip()
+
+    @staticmethod
+    def _avatar_profile_collapse_awkward_body_phrases(text: str) -> str:
+        cleaned = str(text or "").strip()
+        replacements = {
+            r"\bstraight and straightened\b": "straight",
+            r"\bstraightened and straight\b": "straight",
+            r"\brounded and rounded\b": "rounded",
+            r"\bfuller and fuller\b": "fuller",
+            r"\bmore rounded and butt\b": "more rounded butt",
+            r"\bround and shape\b": "round shape",
+            r"\brounded and shape\b": "rounded shape",
+        }
+        for pattern, replacement in replacements.items():
+            cleaned = re.sub(pattern, replacement, cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        return cleaned.strip()
+
+    @staticmethod
     def _avatar_profile_reduce_average_filler(clause: str) -> str:
         text = str(clause or "").strip()
         if not text:
             return ""
+        text = re.sub(
+            r"\b(slightly|moderately|visibly)\s+([a-z-]+(?:er|ter))\s+than\s+average\b",
+            r"\1 \2",
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r"\b(slightly|moderately|visibly)\s+(fuller|slimmer|rounder|thicker|thinner|longer|shorter|wider|narrower)\s+than\s+average\b",
+            r"\1 \2",
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(r"\baverage\s+(waist|height impression|skin tone)\b", r"neutral \1", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bis average\b", "appears neutral", text, flags=re.IGNORECASE)
         lowered = text.lower()
         if not lowered.startswith("average "):
             return text
