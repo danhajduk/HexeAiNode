@@ -89,6 +89,11 @@ from editable generation choices:
 - `prompt_sections`
 - `negative_prompt_terms`
 
+Extraction asks the vision runtime for dense face and body observations. The body
+profile is expected to keep visible stable anatomy details, including shoulders,
+torso, waist, hips, hands, fingers, legs, feet, bust/breasts, and buttocks/glutes,
+while marking hidden or cropped traits as uncertain instead of inventing them.
+
 The node normalizes the LLM output before saving it. `prompt_sections` is always
 stored as a JSON object, and negative prompt terms that would erase normal anatomy
 or identity, such as `no eyes`, `no face`, or `no hair`, are filtered out. Vision

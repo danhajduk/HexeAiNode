@@ -1847,6 +1847,7 @@ class NodeControlState:
         image_name: str,
         prompt: str,
         max_tokens: int = 450,
+        timeout_s: float = 10,
     ) -> tuple[str, str]:
         services = self.service_status_payload().get("services", {})
         vision_llm = services.get("vision_llm") if isinstance(services, dict) else {}
@@ -1879,6 +1880,7 @@ class NodeControlState:
             },
             host="vision-llm",
             error_label="vision_describe_failed",
+            timeout_s=timeout_s,
         )
         choices = response.get("choices") if isinstance(response.get("choices"), list) else []
         content = ""
@@ -1995,20 +1997,37 @@ class NodeControlState:
             mime_type=self._image_mime_type(face_path.suffix),
             image_name=face_path.name,
             prompt=(
-                "Analyze this avatar face reference for reusable image-generation identity data. "
-                "Capture face shape, visible age range, skin tone, eye shape/color, eyebrows, nose, lips, cheekbones, jaw/chin, hair color/style, expression, distinctive marks, accessories, and identity-preservation notes."
+                "Analyze this adult avatar face reference for reusable image-generation identity data. "
+                "Return dense, non-repetitive, concrete visual observations for preserving the same face across future generations. "
+                "Use compact bullet-style detail. Avoid generic praise, beauty/charm language, and application-suitability commentary. "
+                "Describe face shape and proportions; forehead, temples, cheeks, cheekbones, jaw, chin; skin tone and skin texture; "
+                "eye color, size, shape, spacing, eyelids, and gaze; eyebrow thickness, arch, and placement; nose bridge, tip, and nostrils; "
+                "lip fullness, mouth shape, and smile line; ears and neck if visible; hairline, hair color, part, length, texture, volume, and styling; "
+                "expression, makeup, distinctive marks, scars, moles, piercings, accessories, and identity-preservation notes. "
+                "Separate stable identity traits from removable accessories or styling. Mark unclear or occluded traits as uncertain instead of guessing."
             ),
-            max_tokens=700,
+            max_tokens=1200,
+            timeout_s=45,
         )
         body_description, _ = self._vision_describe_image_bytes(
             image_bytes=body_path.read_bytes(),
             mime_type=self._image_mime_type(body_path.suffix),
             image_name=body_path.name,
             prompt=(
-                "Analyze this avatar full-body/body reference for reusable image-generation data. "
-                "Capture body proportions, silhouette, height impression, build, bust/waist/hip relationship, limbs, posture, pose angle, hand/arm placement, legs/feet, clothing, accessories, and body-preservation notes."
+                "Analyze this adult avatar full-body/body reference for reusable image-generation body identity data. "
+                "Return a very detailed, non-repetitive, non-erotic, anatomy-preserving description that can help keep the same body shape in future generations. "
+                "Use compact bullet-style detail. Avoid generic praise, health/damage/deformity claims, and repeated preservation statements. "
+                "Do not estimate exact measurements; use relative visible descriptions only. "
+                "Separate stable body shape from temporary pose, crop, clothing, and accessories. "
+                "Describe height impression, shoulder width and slope, neck length, torso length, ribcage, abdomen, waist definition, hip width, pelvis shape, and overall silhouette. "
+                "Describe bust/breasts by visible relative size, shape, position, symmetry, spacing, and silhouette; describe buttocks/glutes by visible width, roundness, projection, and placement. "
+                "For clothed or covered regions, describe only visible silhouette and mark hidden details as occluded or uncertain. "
+                "Describe arms, elbows, wrists, hands, finger length/shape, hand size, legs, leg length, thighs, knees, calves, ankles, feet, and foot stance. "
+                "Describe skin tone, skin texture, visible marks, body asymmetries, posture, pose angle, head/shoulder/hip orientation, hand and arm placement, leg and foot placement, clothing, accessories, and body-preservation notes. "
+                "If a trait is hidden by clothing, cropped out, or unclear, mark it as occluded or uncertain instead of inventing it."
             ),
-            max_tokens=800,
+            max_tokens=1700,
+            timeout_s=60,
         )
         structured, llm_model_id = self._avatar_profile_json_from_local_llm(
             profile=profile,
@@ -2057,11 +2076,15 @@ class NodeControlState:
                         "Return only JSON, no markdown. Use schema_version '2.0'. "
                         "Required keys: schema_version, profile_name, permanent_identity, body_profile, removable_clothing, accessories, pose_reference, preservation_notes, prompt_sections, negative_prompt_terms. "
                         "permanent_identity must include stable face, skin, eyes, brows, nose, lips, cheekbones, jaw_chin, hair, visible_age_range, expression, and identity_prompt. "
-                        "body_profile must describe stable proportions, silhouette, build, bust_waist_hip_relationship, limbs, hands_feet, and body_prompt. "
+                        "body_profile must be a JSON object with separate keys: proportions, silhouette, build, shoulders_neck, torso_waist_abdomen, bust_breasts, hips_pelvis, buttocks_glutes, arms_hands_fingers, legs_feet, skin_texture_marks, and body_prompt. "
+                        "Do not return body_profile as a single markdown body_prompt only. "
+                        "body_prompt must be a dense, non-repetitive, prompt-ready paragraph, not markdown, preserving all visible stable body details including hands, legs, bust/breasts, hips, and buttocks/glutes while marking occluded traits as uncertain. "
+                        "Avoid exact measurements, health/damage/deformity claims, and repeated preservation phrases unless directly visible and useful. "
                         "removable_clothing must describe only currently worn clothing and must not be mixed into identity unless it is truly permanent. "
                         "accessories must separate permanent_accessories from removable_accessories and mark uncertain items as uncertain. "
-                        "pose_reference must describe current pose separately from body shape. "
+                        "pose_reference must describe current pose separately from body shape, including head_turn, body_angle, shoulders, arms_hands, legs_feet, and crop/framing when visible. "
                         "prompt_sections must be an object with identity, face, hair, body_shape, pose, clothing, accessories, preservation, and negative keys. "
+                        "prompt_sections.body_shape must preserve the detailed body_profile rather than reducing it to a short summary. "
                         "negative_prompt_terms must be an array of bad outcomes to avoid. Never include terms that erase normal anatomy or identity such as no face, no eyes, no skin, no nose, no lips, no hair, or no expression. "
                         "Keep values specific, compact, and avoid inventing accessories not supported by the observations."
                     ),
@@ -2082,7 +2105,7 @@ class NodeControlState:
                     ),
                 },
             ],
-            "temperature": 0.2,
+            "temperature": 0.1,
             "max_tokens": 1200,
             "stream": False,
         }
@@ -2090,12 +2113,12 @@ class NodeControlState:
             response = self._uds_json_request(
                 socket_path=socket_path,
                 method="POST",
-            path="/v1/chat/completions",
-            body=request_body,
-            host="local-llm",
-            error_label="local_llm_avatar_profile_extract_failed",
-            timeout_s=60,
-        )
+                path="/v1/chat/completions",
+                body=request_body,
+                host="local-llm",
+                error_label="local_llm_avatar_profile_extract_failed",
+                timeout_s=90,
+            )
         except Exception as exc:
             if self._logger:
                 self._logger.warning(
@@ -2208,6 +2231,7 @@ class NodeControlState:
         body_profile = cls._avatar_profile_dict_value(source.get("body_profile") or source.get("body"))
         if not body_profile.get("body_prompt"):
             body_profile["body_prompt"] = cls._avatar_profile_compact_text(body_profile) or body_description
+        cls._populate_avatar_profile_body_sections(body_profile=body_profile, body_description=body_description)
 
         removable_clothing = cls._avatar_profile_dict_value(source.get("removable_clothing") or source.get("clothing_reference"))
         accessories = cls._avatar_profile_dict_value(source.get("accessories"))
@@ -2258,6 +2282,103 @@ class NodeControlState:
         if isinstance(value, str) and value.strip():
             return {"description": value.strip()}
         return {}
+
+    @classmethod
+    def _populate_avatar_profile_body_sections(cls, *, body_profile: dict, body_description: str) -> None:
+        source_text = cls._avatar_profile_compact_text(body_profile.get("body_prompt")) or body_description
+        sections = cls._avatar_profile_markdown_sections(source_text)
+        if not sections:
+            return
+        field_keywords = {
+            "proportions": ("height", "proportion"),
+            "silhouette": ("silhouette",),
+            "build": ("build",),
+            "shoulders_neck": ("shoulder", "neck", "clavicle"),
+            "torso_waist_abdomen": ("torso", "ribcage", "abdomen", "waist"),
+            "bust_breasts": ("bust", "breast"),
+            "hips_pelvis": ("hip", "pelvis"),
+            "buttocks_glutes": ("buttock", "glute"),
+            "arms_hands_fingers": ("arm", "elbow", "wrist", "hand", "finger"),
+            "legs_feet": ("leg", "thigh", "knee", "calf", "ankle", "foot", "feet"),
+            "skin_texture_marks": ("skin", "mark", "scar", "mole", "asymmetr"),
+        }
+        for field, keywords in field_keywords.items():
+            if cls._avatar_profile_compact_text(body_profile.get(field)):
+                continue
+            text = cls._avatar_profile_sections_for_keywords(sections=sections, keywords=keywords)
+            if text:
+                body_profile[field] = text
+
+    @classmethod
+    def _avatar_profile_markdown_sections(cls, text: str) -> list[tuple[str, str]]:
+        sections: list[tuple[str, str]] = []
+        current_heading = ""
+        current_lines: list[str] = []
+        for raw_line in str(text or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                if current_lines and current_lines[-1]:
+                    current_lines.append("")
+                continue
+            bullet_label = cls._avatar_profile_bullet_label(line)
+            if bullet_label:
+                heading, body = bullet_label
+                if current_heading and current_lines:
+                    sections.append((current_heading, "\n".join(current_lines).strip()))
+                if body:
+                    sections.append((heading, body))
+                    current_heading = ""
+                    current_lines = []
+                else:
+                    current_heading = heading
+                    current_lines = []
+                continue
+            heading = ""
+            if line.startswith("#"):
+                heading = line.lstrip("#").strip()
+            elif line.endswith(":") and len(line) <= 80:
+                heading = line[:-1].strip()
+            if heading:
+                if current_heading and current_lines:
+                    sections.append((current_heading, "\n".join(current_lines).strip()))
+                current_heading = heading
+                current_lines = []
+                continue
+            if current_heading:
+                current_lines.append(line.lstrip("-* ").strip())
+        if current_heading and current_lines:
+            sections.append((current_heading, "\n".join(current_lines).strip()))
+        return sections
+
+    @classmethod
+    def _avatar_profile_bullet_label(cls, line: str) -> tuple[str, str] | None:
+        candidate = line.lstrip("-* ").strip()
+        if candidate.startswith("**") and "**:" in candidate:
+            heading, body = candidate[2:].split("**:", 1)
+            return heading.strip(), body.strip()
+        if ":" not in candidate:
+            return None
+        heading, body = candidate.split(":", 1)
+        heading = heading.strip()
+        if not heading or len(heading) > 80:
+            return None
+        return heading, body.strip()
+
+    @classmethod
+    def _avatar_profile_sections_for_keywords(cls, *, sections: list[tuple[str, str]], keywords: tuple[str, ...]) -> str:
+        parts = []
+        seen = set()
+        for heading, body in sections:
+            lowered = heading.lower()
+            if not any(keyword in lowered for keyword in keywords):
+                continue
+            text = body.strip()
+            normalized = " ".join(text.lower().split())
+            if not text or normalized in seen:
+                continue
+            seen.add(normalized)
+            parts.append(text)
+        return " ".join(parts)
 
     @classmethod
     def _avatar_profile_compact_text(cls, value) -> str:

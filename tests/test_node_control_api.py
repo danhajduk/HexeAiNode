@@ -3803,7 +3803,15 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     "face": {"shape": "oval"},
                     "identity_prompt": "same Jane Avatar identity",
                 },
-                "body_profile": {"shape": "curvy", "body_prompt": "curvy body profile"},
+                "body_profile": {
+                    "shape": "curvy",
+                    "body_prompt": (
+                        "- **Bust/Breasts**: Visible rounded bust silhouette.\n"
+                        "- **Buttocks/Glutes**: Visible rounded glute silhouette.\n"
+                        "- **Arms**: Slender arms and long fingers.\n"
+                        "- **Legs**: Long legs with tapered calves."
+                    ),
+                },
                 "removable_clothing": {"current": "black dress"},
                 "accessories": {"permanent_accessories": ["blue headset"]},
                 "pose_reference": {"current_pose": "hands on hips"},
@@ -3823,7 +3831,27 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             metadata = json.loads(profile_path.read_text(encoding="utf-8"))
 
         self.assertEqual(request.call_count, 3)
-        self.assertEqual(request.call_args_list[2].kwargs["timeout_s"], 60)
+        face_request = request.call_args_list[0].kwargs
+        body_request = request.call_args_list[1].kwargs
+        llm_request = request.call_args_list[2].kwargs
+        face_prompt = face_request["body"]["messages"][0]["content"][0]["text"]
+        body_prompt = body_request["body"]["messages"][0]["content"][0]["text"]
+        llm_system_prompt = llm_request["body"]["messages"][0]["content"]
+        self.assertEqual(face_request["body"]["max_tokens"], 1200)
+        self.assertEqual(face_request["timeout_s"], 45)
+        self.assertIn("eyelids", face_prompt)
+        self.assertIn("skin texture", face_prompt)
+        self.assertEqual(body_request["body"]["max_tokens"], 1700)
+        self.assertEqual(body_request["timeout_s"], 60)
+        self.assertIn("bust/breasts", body_prompt)
+        self.assertIn("buttocks/glutes", body_prompt)
+        self.assertIn("finger length", body_prompt)
+        self.assertIn("legs", body_prompt)
+        self.assertEqual(llm_request["timeout_s"], 90)
+        self.assertIn("bust_breasts", llm_system_prompt)
+        self.assertIn("buttocks_glutes", llm_system_prompt)
+        self.assertIn("arms_hands_fingers", llm_system_prompt)
+        self.assertIn("legs_feet", llm_system_prompt)
         self.assertEqual(result["extraction"]["vision_model_id"], "vision-model")
         self.assertEqual(result["extraction"]["local_llm_model_id"], "local-model")
         self.assertEqual(result["extraction"]["structured"]["identity_prompt"], "same Jane Avatar identity")
@@ -3831,6 +3859,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(result["extraction"]["structured"]["prompt_sections"], dict)
         self.assertEqual(result["extraction"]["structured"]["prompt_sections"]["identity"], "same Jane Avatar identity")
         self.assertEqual(result["extraction"]["structured"]["body_profile"]["shape"], "curvy")
+        self.assertEqual(result["extraction"]["structured"]["body_profile"]["bust_breasts"], "Visible rounded bust silhouette.")
+        self.assertEqual(result["extraction"]["structured"]["body_profile"]["buttocks_glutes"], "Visible rounded glute silhouette.")
+        self.assertEqual(result["extraction"]["structured"]["body_profile"]["arms_hands_fingers"], "Slender arms and long fingers.")
+        self.assertEqual(result["extraction"]["structured"]["body_profile"]["legs_feet"], "Long legs with tapered calves.")
         self.assertEqual(result["extraction"]["structured"]["removable_clothing"]["current"], "black dress")
         self.assertEqual(result["extraction"]["structured"]["negative_prompt_terms"], ["different person", "changed body proportions"])
         self.assertEqual(metadata["extraction"]["face_description"], "face: oval face and dark hair")
@@ -3892,7 +3924,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             metadata = json.loads(profile_path.read_text(encoding="utf-8"))
 
         self.assertEqual(request.call_count, 3)
-        self.assertEqual(request.call_args_list[2].kwargs["timeout_s"], 60)
+        self.assertEqual(request.call_args_list[0].kwargs["timeout_s"], 45)
+        self.assertEqual(request.call_args_list[1].kwargs["timeout_s"], 60)
+        self.assertEqual(request.call_args_list[2].kwargs["timeout_s"], 90)
         self.assertEqual(result["extraction"]["local_llm_model_id"], "local_rules")
         self.assertEqual(result["extraction"]["structured"]["schema_version"], "2.0")
         self.assertIsInstance(result["extraction"]["structured"]["prompt_sections"], dict)
