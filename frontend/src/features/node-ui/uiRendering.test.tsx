@@ -585,6 +585,66 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("rounded bust silhouette");
   });
 
+  it("shows explicit upload buttons on avatar body, face, and pose tabs", () => {
+    const profilePayload = {
+      selected_profile_id: "Jane_Avatar",
+      profiles: [
+        {
+          profile_id: "Jane_Avatar",
+          name: "Jane Avatar",
+          selected: true,
+          extraction: {
+            structured: {
+              identity_prompt: "same Jane Avatar identity",
+            },
+          },
+        },
+      ],
+    };
+
+    const bodyMarkup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "avatar_generation",
+          avatarGenerationProps: {
+            routeProfileId: "Jane_Avatar",
+            initialDetailTab: "body_depth",
+            payload: profilePayload,
+          },
+        })}
+      />
+    );
+    const faceMarkup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "avatar_generation",
+          avatarGenerationProps: {
+            routeProfileId: "Jane_Avatar",
+            initialDetailTab: "face",
+            payload: profilePayload,
+          },
+        })}
+      />
+    );
+    const poseMarkup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "avatar_generation",
+          avatarGenerationProps: {
+            routeProfileId: "Jane_Avatar",
+            initialDetailTab: "poses",
+            payload: profilePayload,
+          },
+        })}
+      />
+    );
+
+    expect(bodyMarkup).toContain("Upload Body Images");
+    expect(faceMarkup).toContain("Upload Face Images");
+    expect(poseMarkup).toContain("Upload Pose Images");
+    expect(poseMarkup).toContain("Pose Notes");
+  });
+
   it("shows friendly task kind and schedule names and sorts the legend by duration", () => {
     const markup = renderToStaticMarkup(
       <OperationalDashboard

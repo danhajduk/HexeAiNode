@@ -894,6 +894,20 @@
   max-width: 760px;
 }
 
+.avatar-upload-control {
+  display: inline-flex;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.avatar-upload-control input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 @media (max-width: 760px) {
   .avatar-profile-card {
     grid-template-columns: 1fr;

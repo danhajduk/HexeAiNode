@@ -53,6 +53,10 @@ function formattedJson(value) {
   return JSON.stringify(objectValue(value), null, 2);
 }
 
+function selectedFileNames(files) {
+  return asArray(files).map((file) => file?.name).filter(Boolean).join(", ") || "none";
+}
+
 function extractionEditorState(profile) {
   const extraction = objectValue(profile?.extraction);
   const structured = objectValue(extraction.structured);
@@ -136,6 +140,7 @@ export function AvatarGenerationCard({
   result = null,
   apiBase = "",
   initialTab = "profile",
+  initialDetailTab = "profile",
   routeProfileId = "",
   onSaveProfile,
   onSelectProfile,
@@ -152,7 +157,9 @@ export function AvatarGenerationCard({
     [profiles, routeProfileId]
   );
   const [activeTab, setActiveTab] = useState(initialTab === "saved_profiles" ? "saved_profiles" : "profile");
-  const [activeDetailTab, setActiveDetailTab] = useState("profile");
+  const [activeDetailTab, setActiveDetailTab] = useState(
+    AVATAR_PROFILE_DETAIL_TABS.some((tab) => tab.id === initialDetailTab) ? initialDetailTab : "profile"
+  );
   const [characterName, setCharacterName] = useState("");
   const [faceFile, setFaceFile] = useState(null);
   const [bodyFile, setBodyFile] = useState(null);
@@ -361,38 +368,48 @@ export function AvatarGenerationCard({
 
         {activeDetailTab === "body_depth" ? (
           <section className="setup-form avatar-reference-upload-panel">
-            <label>
-              Body Depth Images
-              <input type="file" accept="image/*" multiple onChange={(event) => setBodyDepthFiles(Array.from(event.target.files || []))} />
+            <label className="avatar-upload-control">
+              <span className="btn btn-primary">Upload Body Images</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(event) => setBodyDepthFiles(Array.from(event.target.files || []))}
+              />
             </label>
             <div className="state-grid compact-grid">
               <span>Queued</span>
               <code>{bodyDepthFiles.length}</code>
               <span>Files</span>
-              <code>{bodyDepthFiles.map((file) => file.name).join(", ") || "none"}</code>
+              <code>{selectedFileNames(bodyDepthFiles)}</code>
             </div>
           </section>
         ) : null}
 
         {activeDetailTab === "face" ? (
           <section className="setup-form avatar-reference-upload-panel">
-            <label>
-              Face Analysis Images
-              <input type="file" accept="image/*" multiple onChange={(event) => setFaceAnalysisFiles(Array.from(event.target.files || []))} />
+            <label className="avatar-upload-control">
+              <span className="btn btn-primary">Upload Face Images</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(event) => setFaceAnalysisFiles(Array.from(event.target.files || []))}
+              />
             </label>
             <div className="state-grid compact-grid">
               <span>Queued</span>
               <code>{faceAnalysisFiles.length}</code>
               <span>Files</span>
-              <code>{faceAnalysisFiles.map((file) => file.name).join(", ") || "none"}</code>
+              <code>{selectedFileNames(faceAnalysisFiles)}</code>
             </div>
           </section>
         ) : null}
 
         {activeDetailTab === "poses" ? (
           <section className="setup-form avatar-reference-upload-panel">
-            <label>
-              Pose Images
+            <label className="avatar-upload-control">
+              <span className="btn btn-primary">Upload Pose Images</span>
               <input type="file" accept="image/*" multiple onChange={(event) => setPoseFiles(Array.from(event.target.files || []))} />
             </label>
             <label>
