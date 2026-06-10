@@ -11,6 +11,7 @@ export type OperationalSection =
   | "diagnostics";
 export type UiModeRoute = "identity" | "setup" | "operational";
 export type UiRouteIntent = "auto" | "setup" | "provider_openai" | "provider_local" | "dashboard" | "diagnostics";
+export type AvatarGenerationDetailTab = "profile" | "head_face" | "upper_torso" | "lower_torso" | "full_body";
 
 const OPERATIONAL_SECTIONS: OperationalSection[] = [
   "overview",
@@ -24,6 +25,33 @@ const OPERATIONAL_SECTIONS: OperationalSection[] = [
   "local_llm",
   "diagnostics",
 ];
+
+const AVATAR_GENERATION_DETAIL_TAB_TOKENS: Record<AvatarGenerationDetailTab, string> = {
+  profile: "Profile",
+  head_face: "Face",
+  upper_torso: "UpperTorso",
+  lower_torso: "LowerTorso",
+  full_body: "FullBody",
+};
+
+const AVATAR_GENERATION_DETAIL_TAB_ALIASES: Record<string, AvatarGenerationDetailTab> = {
+  profile: "profile",
+  face: "head_face",
+  head: "head_face",
+  headface: "head_face",
+  head_face: "head_face",
+  "head-face": "head_face",
+  head_face_tab: "head_face",
+  uppertorso: "upper_torso",
+  upper_torso: "upper_torso",
+  "upper-torso": "upper_torso",
+  lowertorso: "lower_torso",
+  lower_torso: "lower_torso",
+  "lower-torso": "lower_torso",
+  fullbody: "full_body",
+  full_body: "full_body",
+  "full-body": "full_body",
+};
 
 export function buildSetupRoute(provider?: "openai" | "local" | null): string {
   if (provider === "openai") {
@@ -42,25 +70,50 @@ export function buildOperationalRoute(section?: OperationalSection | null): stri
   return `#/dashboard/${section}`;
 }
 
-export function buildAvatarGenerationProfileRoute(profileId: string): string {
+export function buildAvatarGenerationProfileRoute(
+  profileId: string,
+  detailTab?: AvatarGenerationDetailTab | null,
+): string {
   const normalized = String(profileId || "").trim();
-  return normalized
-    ? `${buildOperationalRoute("avatar_generation")}/${encodeURIComponent(normalized)}`
-    : buildOperationalRoute("avatar_generation");
+  if (!normalized) {
+    return buildOperationalRoute("avatar_generation");
+  }
+  const normalizedTab = detailTab && AVATAR_GENERATION_DETAIL_TAB_TOKENS[detailTab] ? detailTab : null;
+  const tabSegment = normalizedTab ? `/${AVATAR_GENERATION_DETAIL_TAB_TOKENS[normalizedTab]}` : "";
+  return `${buildOperationalRoute("avatar_generation")}/${encodeURIComponent(normalized)}${tabSegment}`;
 }
 
-export function resolveAvatarGenerationProfileId(routeHash?: string | null): string {
+function avatarGenerationRouteSegments(routeHash?: string | null): string[] {
   const normalized = String(routeHash || "").trim();
   const prefix = `${buildOperationalRoute("avatar_generation")}/`;
   if (!normalized.toLowerCase().startsWith(prefix.toLowerCase())) {
+    return [];
+  }
+  return normalized
+    .slice(prefix.length)
+    .split(/[?#]/)[0]
+    .split("/")
+    .filter(Boolean);
+}
+
+export function resolveAvatarGenerationProfileId(routeHash?: string | null): string {
+  const segments = avatarGenerationRouteSegments(routeHash);
+  if (!segments.length) {
     return "";
   }
-  const rawProfileId = normalized.slice(prefix.length).split(/[/?#]/)[0] || "";
+  const rawProfileId = segments[0] || "";
   try {
     return decodeURIComponent(rawProfileId);
   } catch {
     return rawProfileId;
   }
+}
+
+export function resolveAvatarGenerationDetailTab(routeHash?: string | null): AvatarGenerationDetailTab {
+  const segments = avatarGenerationRouteSegments(routeHash);
+  const rawTab = segments[1] || "";
+  const normalized = rawTab.trim().toLowerCase();
+  return AVATAR_GENERATION_DETAIL_TAB_ALIASES[normalized] || "profile";
 }
 
 export function resolveOperationalSection(routeHash?: string | null): OperationalSection {

@@ -537,6 +537,7 @@ export function AvatarGenerationCard({
   onGenerateBodyDepthProfile,
   onRefineHeadPrompt,
   onCreateHeadPreview,
+  onSelectDetailTab,
   onSubmitGeneration,
   generationBusy = false,
   generationResult = null,
@@ -580,6 +581,12 @@ export function AvatarGenerationCard({
   const detailMode = Boolean(routeProfileId);
 
   useEffect(() => {
+    if (AVATAR_PROFILE_DETAIL_TABS.some((tab) => tab.id === initialDetailTab)) {
+      setActiveDetailTab(initialDetailTab);
+    }
+  }, [initialDetailTab]);
+
+  useEffect(() => {
     if (routeProfile) {
       setEditorState(extractionEditorState(routeProfile));
       const workspace = promptWorkspace(routeProfile, "head_face");
@@ -606,6 +613,14 @@ export function AvatarGenerationCard({
 
   function updateEditorField(name, value) {
     setEditorState((current) => ({ ...current, [name]: value }));
+  }
+
+  function selectDetailTab(tabId) {
+    setActiveDetailTab(tabId);
+    const profileId = String(routeProfile?.profile_id || routeProfileId || "").trim();
+    if (profileId && onSelectDetailTab) {
+      onSelectDetailTab(profileId, tabId);
+    }
   }
 
   function updateGenerationField(name, value) {
@@ -1014,7 +1029,7 @@ export function AvatarGenerationCard({
             <button
               className={activeDetailTab === tab.id ? "btn btn-primary" : "btn"}
               key={tab.id}
-              onClick={() => setActiveDetailTab(tab.id)}
+              onClick={() => selectDetailTab(tab.id)}
               role="tab"
               type="button"
               aria-selected={activeDetailTab === tab.id}

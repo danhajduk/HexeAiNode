@@ -7,6 +7,7 @@ import {
   buildSetupRoute,
   isProviderSetupRoute,
   isSetupRoute,
+  resolveAvatarGenerationDetailTab,
   resolveAvatarGenerationProfileId,
   resolveDefaultRouteHashForMode,
   resolveOperationalSection,
@@ -92,6 +93,7 @@ describe("uiRoutes", () => {
     expect(buildOperationalRoute("manual_image")).toBe("#/dashboard/manual_image");
     expect(buildOperationalRoute("avatar_generation")).toBe("#/dashboard/avatar_generation");
     expect(buildAvatarGenerationProfileRoute("Jane Avatar")).toBe("#/dashboard/avatar_generation/Jane%20Avatar");
+    expect(buildAvatarGenerationProfileRoute("Hexe", "head_face")).toBe("#/dashboard/avatar_generation/Hexe/Face");
     expect(buildOperationalRoute("diagnostics")).toBe("#/dashboard/diagnostics");
   });
 
@@ -101,7 +103,11 @@ describe("uiRoutes", () => {
     expect(resolveOperationalSection("#/dashboard/avatar_generation")).toBe("avatar_generation");
     expect(resolveOperationalSection("#/dashboard/avatar_generation/Jane_Avatar")).toBe("avatar_generation");
     expect(resolveAvatarGenerationProfileId("#/dashboard/avatar_generation/Jane%20Avatar")).toBe("Jane Avatar");
+    expect(resolveAvatarGenerationProfileId("#/dashboard/avatar_generation/Hexe/Face")).toBe("Hexe");
     expect(resolveAvatarGenerationProfileId("#/dashboard/avatar_generation")).toBe("");
+    expect(resolveAvatarGenerationDetailTab("#/dashboard/avatar_generation/Hexe/Face")).toBe("head_face");
+    expect(resolveAvatarGenerationDetailTab("#/dashboard/avatar_generation/Hexe/Profile")).toBe("profile");
+    expect(resolveAvatarGenerationDetailTab("#/dashboard/avatar_generation")).toBe("profile");
     expect(resolveOperationalSection("#/dashboard/clients")).toBe("clients");
     expect(resolveOperationalSection("#/dashboard/scheduled")).toBe("scheduled");
     expect(resolveOperationalSection("#/dashboard")).toBe("overview");

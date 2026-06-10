@@ -11,6 +11,7 @@ import {
   buildAvatarGenerationProfileRoute,
   buildSetupRoute,
   resolveDefaultRouteHashForMode,
+  resolveAvatarGenerationDetailTab,
   resolveAvatarGenerationProfileId,
   resolveOperationalSection,
   shouldArmSetupCompletionRedirect,
@@ -2069,6 +2070,7 @@ export default function App() {
   const enabledProviderSummary = uiState.capabilitySummary.enabledProviders.join(", ");
   const currentOperationalSection = resolveOperationalSection(routeHash);
   const avatarGenerationProfileId = resolveAvatarGenerationProfileId(routeHash);
+  const avatarGenerationDetailTab = resolveAvatarGenerationDetailTab(routeHash);
   const operationalSections = [
     ["overview", "Overview"],
     ["capabilities", "Capabilities"],
@@ -2274,6 +2276,7 @@ export default function App() {
       result: avatarGenerationResult,
       apiBase: getApiBase(),
       routeProfileId: avatarGenerationProfileId,
+      initialDetailTab: avatarGenerationDetailTab,
       onSaveProfile: onSaveAvatarProfile,
       onSelectProfile: onSelectAvatarProfile,
       onDeleteProfile: onDeleteAvatarProfile,
@@ -2286,6 +2289,9 @@ export default function App() {
       onGenerateBodyDepthProfile: onGenerateAvatarBodyDepthProfile,
       onRefineHeadPrompt: onRefineAvatarHeadPrompt,
       onCreateHeadPreview: onCreateAvatarHeadPreview,
+      onSelectDetailTab: (profileId, detailTab) => {
+        window.location.hash = buildAvatarGenerationProfileRoute(profileId, detailTab);
+      },
       onSubmitGeneration: onSubmitManualImageGeneration,
       generationBusy: manualImageGenerationBusy,
       generationResult: manualImageGenerationResult,
