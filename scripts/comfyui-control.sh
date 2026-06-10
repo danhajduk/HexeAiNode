@@ -40,6 +40,10 @@ export COMFYUI_GPU_CONTROLNET_CANNY_FILE="${COMFYUI_GPU_CONTROLNET_CANNY_FILE:-c
 export COMFYUI_GPU_CONTROLNET_CANNY_URL="${COMFYUI_GPU_CONTROLNET_CANNY_URL:-https://huggingface.co/diffusers/controlnet-canny-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors}"
 export COMFYUI_GPU_CONTROLNET_DEPTH_FILE="${COMFYUI_GPU_CONTROLNET_DEPTH_FILE:-controlnet-depth-sdxl-1.0-fp16.safetensors}"
 export COMFYUI_GPU_CONTROLNET_DEPTH_URL="${COMFYUI_GPU_CONTROLNET_DEPTH_URL:-https://huggingface.co/diffusers/controlnet-depth-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors}"
+export COMFYUI_GPU_PULID_MODEL_FILE="${COMFYUI_GPU_PULID_MODEL_FILE:-ip-adapter_pulid_sdxl_fp16.safetensors}"
+export COMFYUI_GPU_PULID_MODEL_URL="${COMFYUI_GPU_PULID_MODEL_URL:-https://huggingface.co/huchenlei/ipadapter_pulid/resolve/main/ip-adapter_pulid_sdxl_fp16.safetensors}"
+export COMFYUI_GPU_INSIGHTFACE_MODEL_NAME="${COMFYUI_GPU_INSIGHTFACE_MODEL_NAME:-antelopev2}"
+export COMFYUI_GPU_INSIGHTFACE_MODEL_URL="${COMFYUI_GPU_INSIGHTFACE_MODEL_URL:-https://huggingface.co/MonsterMMORPG/tools/resolve/main/antelopev2.zip}"
 
 export COMFYUI_CPU_HOST="${COMFYUI_CPU_HOST:-$COMFYUI_HOST}"
 export COMFYUI_CPU_PORT="${COMFYUI_CPU_PORT:-8189}"
@@ -293,7 +297,7 @@ link_model_file() {
 
 prepare_gpu_runtime_dirs() {
   mkdir -p "$COMFYUI_GPU_MODEL_DIR/checkpoints" "$COMFYUI_GPU_MODEL_DIR/loras"
-  mkdir -p "$COMFYUI_GPU_CONTROLNET_DIR" "$COMFYUI_GPU_INPUT_DIR" "$COMFYUI_GPU_OUTPUT_DIR" "$COMFYUI_GPU_USER_DIR" "$COMFYUI_GPU_CUSTOM_NODES_DIR" "$COMFYUI_ASSET_DIR" "$COMFYUI_CONTROLNET_AUX_CKPTS_DIR" "$COMFYUI_CONTROLNET_AUX_TEMP_DIR" "$COMFYUI_SOCKET_DIR"
+  mkdir -p "$COMFYUI_GPU_CONTROLNET_DIR" "$COMFYUI_GPU_MODEL_DIR/pulid" "$COMFYUI_GPU_MODEL_DIR/insightface/models/$COMFYUI_GPU_INSIGHTFACE_MODEL_NAME" "$COMFYUI_GPU_INPUT_DIR" "$COMFYUI_GPU_OUTPUT_DIR" "$COMFYUI_GPU_USER_DIR" "$COMFYUI_GPU_CUSTOM_NODES_DIR" "$COMFYUI_ASSET_DIR" "$COMFYUI_CONTROLNET_AUX_CKPTS_DIR" "$COMFYUI_CONTROLNET_AUX_TEMP_DIR" "$COMFYUI_SOCKET_DIR"
   link_model_file "$COMFYUI_LEGACY_MODEL_DIR/checkpoints" "$COMFYUI_GPU_MODEL_DIR/checkpoints" "$COMFYUI_GPU_CHECKPOINT"
   link_model_file "$COMFYUI_LEGACY_MODEL_DIR/loras" "$COMFYUI_GPU_MODEL_DIR/loras" "$COMFYUI_GPU_LORA"
 }
@@ -372,11 +376,66 @@ download_if_missing() {
   mv "$target.part" "$target"
 }
 
+download_zip_model_if_missing() {
+  local url="$1"
+  local target_dir="$2"
+  local model_name="$3"
+  local marker="$target_dir/.hexe-downloaded"
+  if [[ -f "$marker" ]]; then
+    echo "Already present: $target_dir"
+    return
+  fi
+  mkdir -p "$target_dir"
+  echo "Downloading $model_name..."
+  "$PYTHON_BIN" - "$url" "$target_dir" "$model_name" <<'PY'
+from __future__ import annotations
+
+import shutil
+import sys
+import tempfile
+import urllib.request
+import zipfile
+from pathlib import Path
+
+url, target_dir_raw, model_name = sys.argv[1:4]
+target_dir = Path(target_dir_raw)
+with tempfile.TemporaryDirectory() as tmp_raw:
+    tmp = Path(tmp_raw)
+    archive = tmp / "model.zip"
+    urllib.request.urlretrieve(url, archive)
+    extract_dir = tmp / "extract"
+    extract_root = extract_dir.resolve()
+    with zipfile.ZipFile(archive) as handle:
+        for member in handle.infolist():
+            destination = (extract_dir / member.filename).resolve()
+            if destination != extract_root and extract_root not in destination.parents:
+                raise RuntimeError(f"unsafe zip path: {member.filename}")
+            handle.extract(member, extract_dir)
+    candidates = [path for path in extract_dir.rglob("*") if path.is_dir() and path.name == model_name]
+    source_dir = candidates[0] if candidates else extract_dir
+    for child in source_dir.iterdir():
+        destination = target_dir / child.name
+        if child.is_dir():
+            if destination.exists():
+                shutil.rmtree(destination)
+            shutil.copytree(child, destination)
+        else:
+            shutil.copy2(child, destination)
+    (target_dir / ".hexe-downloaded").write_text(url + "\n", encoding="utf-8")
+PY
+}
+
 download_gpu_controlnet_models() {
   prepare_gpu_runtime_dirs
   download_if_missing "$COMFYUI_GPU_CONTROLNET_OPENPOSE_URL" "$COMFYUI_GPU_CONTROLNET_DIR/$COMFYUI_GPU_CONTROLNET_OPENPOSE_FILE"
   download_if_missing "$COMFYUI_GPU_CONTROLNET_CANNY_URL" "$COMFYUI_GPU_CONTROLNET_DIR/$COMFYUI_GPU_CONTROLNET_CANNY_FILE"
   download_if_missing "$COMFYUI_GPU_CONTROLNET_DEPTH_URL" "$COMFYUI_GPU_CONTROLNET_DIR/$COMFYUI_GPU_CONTROLNET_DEPTH_FILE"
+}
+
+download_gpu_pulid_models() {
+  prepare_gpu_runtime_dirs
+  download_if_missing "$COMFYUI_GPU_PULID_MODEL_URL" "$COMFYUI_GPU_MODEL_DIR/pulid/$COMFYUI_GPU_PULID_MODEL_FILE"
+  download_zip_model_if_missing "$COMFYUI_GPU_INSIGHTFACE_MODEL_URL" "$COMFYUI_GPU_MODEL_DIR/insightface/models/$COMFYUI_GPU_INSIGHTFACE_MODEL_NAME" "$COMFYUI_GPU_INSIGHTFACE_MODEL_NAME"
 }
 
 each_target() {
@@ -403,6 +462,13 @@ case "$command" in
       gpu) download_gpu_controlnet_models ;;
       cpu) echo "CPU ComfyUI uses the SD1.5 DreamShaper preset; SDXL ControlNet downloads are GPU-only." ;;
       all) download_gpu_controlnet_models ;;
+    esac
+    ;;
+  download-pulid|download-pulid-models)
+    case "$target" in
+      gpu) download_gpu_pulid_models ;;
+      cpu) echo "PuLID is used by the GPU Simple Avatar Generation template only." ;;
+      all) download_gpu_pulid_models ;;
     esac
     ;;
   build)
@@ -448,8 +514,8 @@ case "$command" in
     done
     ;;
   *)
-    echo "Usage: $0 [gpu|cpu|all] {prepare|gate|download-controlnets|build|create|start|stop|restart|status|logs|ready}" >&2
-    echo "       $0 {prepare|gate|download-controlnets|build|create|start|stop|restart|status|logs|ready}  # defaults to gpu" >&2
+    echo "Usage: $0 [gpu|cpu|all] {prepare|gate|download-controlnets|download-pulid|build|create|start|stop|restart|status|logs|ready}" >&2
+    echo "       $0 {prepare|gate|download-controlnets|download-pulid|build|create|start|stop|restart|status|logs|ready}  # defaults to gpu" >&2
     exit 2
     ;;
 esac

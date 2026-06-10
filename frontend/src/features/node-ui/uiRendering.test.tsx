@@ -287,9 +287,9 @@ describe("OperationalDashboard", () => {
               manual_paths: { output_dir: "runtime/manual/comfyui-gpu/output" },
               templates: [
                 {
-                  template_id: "template.avatar_reference.realvisxl.v1",
-                  template_name: "Avatar References RealVisXL",
-                  description: "Avatar workflow that applies prompt edits while conditioning on selected face and body reference images.",
+                  template_id: "template.avatar_body_depth_reference_transparent.realvisxl.v1",
+                  template_name: "Simple Avatar Generation",
+                  description: "Transparent avatar workflow that uses PuLID for face identity and body-depth guidance.",
                   metadata: { domain: "avatar", input_mode: "image" },
                   defaults: {
                     negative_prompt: "low quality, blurry",
@@ -312,6 +312,8 @@ describe("OperationalDashboard", () => {
                     { name: "cfg", required: false, type: "number" },
                     { name: "denoise", required: false, type: "number" },
                     { name: "face_strength", required: false, type: "number" },
+                    { name: "pulid_model", required: false, type: "string" },
+                    { name: "pulid_provider", required: false, type: "string" },
                     { name: "body_strength", required: false, type: "number" },
                     { name: "body_depth_strength", required: false, type: "number" },
                   ],
@@ -346,7 +348,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("1 running / 2 pending");
     expect(markup).toContain("25.0%");
     expect(markup).toContain("Template");
-    expect(markup).toContain("Avatar workflow that applies prompt edits");
+    expect(markup).toContain("Transparent avatar workflow that uses PuLID");
     expect(markup).toContain("Default Size");
     expect(markup).toContain("Current Size");
     expect(markup).toContain("Source Image");

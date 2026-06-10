@@ -8,6 +8,7 @@ services:
       args:
         COMFYUI_REF: ${COMFYUI_REF:-master}
         COMFYUI_CONTROLNET_AUX_REF: ${COMFYUI_CONTROLNET_AUX_REF:-main}
+        COMFYUI_PULID_REF: ${COMFYUI_PULID_REF:-main}
     image: ${COMFYUI_IMAGE:-hexe-ai-node-comfyui:local}
     container_name: ${COMFYUI_CONTAINER_NAME:-hexe-ai-node-comfyui}
     restart: unless-stopped

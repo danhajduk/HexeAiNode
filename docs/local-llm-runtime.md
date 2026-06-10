@@ -229,15 +229,20 @@ the resolved API workflow under `inputs.comfyui_workflow`. The effective request
 `output_folder_policy: operational`, keeping governed generation separate from manual Web UI artifact folders.
 
 The default ComfyUI template catalog intentionally contains only
-`template.avatar_body_depth_reference_transparent.realvisxl.v1`. Older prompt-only, img2img, scene, avatar-reference,
-avatar-identity, and non-transparent depth templates were removed from `config/comfyui/templates` while the local
-text-to-pose helper is being developed. The remaining template resizes and pads the body reference to the output aspect
-ratio, extracts a Depth Anything V2 depth map, and applies the SDXL depth ControlNet before sampling from an empty
-latent. It also saves an RGB fallback before using ComfyUI's local background-removal nodes with an inverted alpha mask
-to save transparent output under `hexe/avatar_body_depth_transparent/`. The template requires the native BiRefNet
-background-removal checkpoint in the runtime model folder, for example
+`template.avatar_body_depth_reference_transparent.realvisxl.v1`, displayed as `Simple Avatar Generation`. Older
+prompt-only, img2img, scene, avatar-reference, avatar-identity, and non-transparent depth templates were removed from
+`config/comfyui/templates` while the local text-to-pose helper is being developed. The remaining template applies PuLID
+face identity to the model, resizes and pads the body reference to the output aspect ratio, extracts a Depth Anything V2
+depth map, and applies the SDXL depth ControlNet before sampling from an empty latent. It also saves an RGB fallback
+before using ComfyUI's local background-removal nodes with an inverted alpha mask to save transparent output under
+`hexe/avatar_body_depth_transparent/`. The template requires PuLID and InsightFace assets in the GPU model folder plus
+the native BiRefNet background-removal checkpoint, for example
+`runtime/models/comfyui-gpu/pulid/ip-adapter_pulid_sdxl_fp16.safetensors`,
+`runtime/models/comfyui-gpu/insightface/models/antelopev2/`, and
 `runtime/models/comfyui-gpu/background_removal/birefnet.safetensors`. If local background removal fails after the RGB
 fallback has been saved, the latest manual job is reported as `completed_with_fallback` and points to the `_rgb` output.
+After rebuilding the ComfyUI image for the packaged PuLID custom node, download the GPU PuLID assets with
+`scripts/comfyui-control.sh gpu download-pulid`.
 
 The node UI runtime section also exposes a manual image-generation card backed by `GET/POST /api/manual-image-generation`.
 It starts or reuses the manual ComfyUI session, lets operators choose a GPU ComfyUI template and adjust its exposed

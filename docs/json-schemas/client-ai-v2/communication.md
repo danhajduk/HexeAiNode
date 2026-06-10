@@ -151,15 +151,19 @@ Image template registration payload shape:
 {
   "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
   "service_id": "avatar-node",
-  "template_name": "Avatar Body Depth Reference Transparent RealVisXL",
+  "template_name": "Simple Avatar Generation",
   "version": "v1",
   "template_version": {
     "runtime_id": "comfyui_gpu",
     "api_workflow_path": "config/comfyui/templates/avatar-body-depth-reference-transparent-realvisxl/api_workflow.json",
     "ui_workflow_path": "config/comfyui/templates/avatar-body-depth-reference-transparent-realvisxl/ui_workflow.json",
-    "variables": ["positive_prompt", "face_reference_image", "body_reference_image", "negative_prompt", "width", "height", "seed"],
+    "variables": ["positive_prompt", "face_reference_image", "body_reference_image", "face_strength", "pulid_model", "pulid_provider", "body_depth_strength", "negative_prompt", "width", "height", "seed"],
     "defaults": {
       "negative_prompt": "low quality, blurry, cropped body",
+      "face_strength": 0.8,
+      "pulid_model": "ip-adapter_pulid_sdxl_fp16.safetensors",
+      "pulid_provider": "CUDA",
+      "body_depth_strength": 0.75,
       "width": 768,
       "height": 1152,
       "seed": null
@@ -167,7 +171,11 @@ Image template registration payload shape:
     "model_requirements": {
       "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
       "loras": ["sdxl_lightning_4step_lora.safetensors"],
-      "controlnets": ["controlnet-depth-sdxl-1.0-fp16.safetensors"]
+      "controlnets": ["controlnet-depth-sdxl-1.0-fp16.safetensors"],
+      "other": {
+        "identity_model": "ip-adapter_pulid_sdxl_fp16.safetensors",
+        "insightface_model": "antelopev2"
+      }
     },
     "output_scope": "normal"
   }

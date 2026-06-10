@@ -48,6 +48,11 @@ Backend runtime:
 - `COMFYUI_CPU_HEALTH_SOCKET` default `/run/hexe/ai-node/comfyui-cpu-health.sock`
 - `COMFYUI_GPU_CHECKPOINT` default `RealVisXL_V5.0_fp16.safetensors`
 - `COMFYUI_GPU_LORA` default `sdxl_lightning_4step_lora.safetensors`
+- `COMFYUI_PULID_REF` default `main`; branch/tag used when packaging the PuLID ComfyUI custom node during image build
+- `COMFYUI_GPU_PULID_MODEL_FILE` default `ip-adapter_pulid_sdxl_fp16.safetensors`
+- `COMFYUI_GPU_PULID_MODEL_URL` default `https://huggingface.co/huchenlei/ipadapter_pulid/resolve/main/ip-adapter_pulid_sdxl_fp16.safetensors`
+- `COMFYUI_GPU_INSIGHTFACE_MODEL_NAME` default `antelopev2`
+- `COMFYUI_GPU_INSIGHTFACE_MODEL_URL` default `https://huggingface.co/MonsterMMORPG/tools/resolve/main/antelopev2.zip`
 - `COMFYUI_GPU_CONTROLNET_DEPTH_FILE` default `controlnet-depth-sdxl-1.0-fp16.safetensors`
 - `COMFYUI_GPU_CONTROLNET_DEPTH_URL` default `https://huggingface.co/diffusers/controlnet-depth-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors`
 - `HEXE_COMFYUI_GPU_PRESETS_CONFIG` default `config/comfyui-gpu-presets.json`; discoverable GPU preset catalog for RealVisXL + SDXL-Lightning workflows

@@ -43,36 +43,36 @@
       "image": "{{face_reference_image}}"
     }
   },
-  "7": {
-    "class_type": "ImageScale",
+  "28": {
+    "class_type": "PulidModelLoader",
     "inputs": {
+      "pulid_file": "{{pulid_model}}"
+    }
+  },
+  "29": {
+    "class_type": "PulidEvaClipLoader",
+    "inputs": {}
+  },
+  "30": {
+    "class_type": "PulidInsightFaceLoader",
+    "inputs": {
+      "provider": "{{pulid_provider}}"
+    }
+  },
+  "31": {
+    "class_type": "ApplyPulidAdvanced",
+    "inputs": {
+      "model": ["2", 0],
+      "pulid": ["28", 0],
+      "eva_clip": ["29", 0],
+      "face_analysis": ["30", 0],
       "image": ["6", 0],
-      "upscale_method": "lanczos",
-      "width": "{{width}}",
-      "height": "{{height}}",
-      "crop": "center"
-    }
-  },
-  "8": {
-    "class_type": "VAEEncode",
-    "inputs": {
-      "pixels": ["7", 0],
-      "vae": ["1", 2]
-    }
-  },
-  "9": {
-    "class_type": "ReferenceLatent",
-    "inputs": {
-      "conditioning": ["4", 0],
-      "latent": ["8", 0]
-    }
-  },
-  "21": {
-    "class_type": "ConditioningAverage",
-    "inputs": {
-      "conditioning_to": ["9", 0],
-      "conditioning_from": ["4", 0],
-      "conditioning_to_strength": "{{face_strength}}"
+      "weight": "{{face_strength}}",
+      "projection": "{{pulid_projection}}",
+      "fidelity": "{{pulid_fidelity}}",
+      "noise": "{{pulid_noise}}",
+      "start_at": "{{pulid_start_at}}",
+      "end_at": "{{pulid_end_at}}"
     }
   },
   "10": {
@@ -108,7 +108,7 @@
   "27": {
     "class_type": "ControlNetApplyAdvanced",
     "inputs": {
-      "positive": ["21", 0],
+      "positive": ["4", 0],
       "negative": ["5", 0],
       "control_net": ["26", 0],
       "image": ["25", 0],
@@ -120,7 +120,7 @@
   "14": {
     "class_type": "KSampler",
     "inputs": {
-      "model": ["2", 0],
+      "model": ["31", 0],
       "positive": ["27", 0],
       "negative": ["27", 1],
       "latent_image": ["3", 0],

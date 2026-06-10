@@ -1,5 +1,5 @@
 {
-  "last_node_id": 27,
+  "last_node_id": 31,
   "last_link_id": 18,
   "nodes": [
     {
@@ -28,14 +28,24 @@
       "title": "Face Reference"
     },
     {
-      "id": 9,
-      "type": "ReferenceLatent",
-      "title": "Apply Face Reference"
+      "id": 28,
+      "type": "PulidModelLoader",
+      "title": "Load PuLID Identity Model"
     },
     {
-      "id": 21,
-      "type": "ConditioningAverage",
-      "title": "Face Reference Strength"
+      "id": 29,
+      "type": "PulidEvaClipLoader",
+      "title": "Load PuLID EVA CLIP"
+    },
+    {
+      "id": 30,
+      "type": "PulidInsightFaceLoader",
+      "title": "Load InsightFace"
+    },
+    {
+      "id": 31,
+      "type": "ApplyPulidAdvanced",
+      "title": "Apply PuLID Face Identity"
     },
     {
       "id": 10,
@@ -101,6 +111,6 @@
   "links": [],
   "extra": {
     "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
-    "notes": "Transparent avatar generation using face reference conditioning and body-reference Depth Anything V2 ControlNet. The decoded RGB image is saved before local background removal."
+    "notes": "Simple transparent avatar generation using PuLID face identity and body-reference Depth Anything V2 ControlNet. The decoded RGB image is saved before local background removal."
   }
 }

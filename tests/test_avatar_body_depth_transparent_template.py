@@ -19,9 +19,6 @@ REQUIRED_NODE_IDS = {
     "4",
     "5",
     "6",
-    "7",
-    "8",
-    "9",
     "10",
     "11",
     "14",
@@ -31,11 +28,14 @@ REQUIRED_NODE_IDS = {
     "18",
     "19",
     "20",
-    "21",
     "24",
     "25",
     "26",
     "27",
+    "28",
+    "29",
+    "30",
+    "31",
 }
 EXPECTED_CLASS_TYPES = {
     "1": "CheckpointLoaderSimple",
@@ -44,9 +44,6 @@ EXPECTED_CLASS_TYPES = {
     "4": "CLIPTextEncode",
     "5": "CLIPTextEncode",
     "6": "LoadImage",
-    "7": "ImageScale",
-    "8": "VAEEncode",
-    "9": "ReferenceLatent",
     "10": "LoadImage",
     "11": "ResizeAndPadImage",
     "14": "KSampler",
@@ -56,11 +53,14 @@ EXPECTED_CLASS_TYPES = {
     "18": "RemoveBackground",
     "19": "JoinImageWithAlpha",
     "20": "InvertMask",
-    "21": "ConditioningAverage",
     "24": "SaveImage",
     "25": "DepthAnythingV2Preprocessor",
     "26": "ControlNetLoader",
     "27": "ControlNetApplyAdvanced",
+    "28": "PulidModelLoader",
+    "29": "PulidEvaClipLoader",
+    "30": "PulidInsightFaceLoader",
+    "31": "ApplyPulidAdvanced",
 }
 REQUIRED_PLACEHOLDERS = {
     "{{width}}",
@@ -70,6 +70,13 @@ REQUIRED_PLACEHOLDERS = {
     "{{face_reference_image}}",
     "{{body_reference_image}}",
     "{{face_strength}}",
+    "{{pulid_model}}",
+    "{{pulid_provider}}",
+    "{{pulid_projection}}",
+    "{{pulid_fidelity}}",
+    "{{pulid_noise}}",
+    "{{pulid_start_at}}",
+    "{{pulid_end_at}}",
     "{{body_depth_strength}}",
     "{{body_depth_start}}",
     "{{body_depth_end}}",
@@ -123,16 +130,27 @@ class AvatarBodyDepthTransparentTemplateTests(unittest.TestCase):
         self.assertEqual(workflow["2"]["inputs"]["clip"], ["1", 1])
         self.assertEqual(workflow["4"]["inputs"]["clip"], ["2", 1])
         self.assertEqual(workflow["5"]["inputs"]["clip"], ["2", 1])
-        self.assertEqual(workflow["9"]["inputs"]["conditioning"], ["4", 0])
-        self.assertEqual(workflow["21"]["inputs"]["conditioning_to"], ["9", 0])
-        self.assertEqual(workflow["21"]["inputs"]["conditioning_from"], ["4", 0])
+        self.assertEqual(workflow["28"]["inputs"]["pulid_file"], "{{pulid_model}}")
+        self.assertEqual(workflow["30"]["inputs"]["provider"], "{{pulid_provider}}")
+        self.assertEqual(workflow["31"]["inputs"]["model"], ["2", 0])
+        self.assertEqual(workflow["31"]["inputs"]["pulid"], ["28", 0])
+        self.assertEqual(workflow["31"]["inputs"]["eva_clip"], ["29", 0])
+        self.assertEqual(workflow["31"]["inputs"]["face_analysis"], ["30", 0])
+        self.assertEqual(workflow["31"]["inputs"]["image"], ["6", 0])
+        self.assertEqual(workflow["31"]["inputs"]["weight"], "{{face_strength}}")
+        self.assertEqual(workflow["31"]["inputs"]["projection"], "{{pulid_projection}}")
+        self.assertEqual(workflow["31"]["inputs"]["fidelity"], "{{pulid_fidelity}}")
+        self.assertEqual(workflow["31"]["inputs"]["noise"], "{{pulid_noise}}")
+        self.assertEqual(workflow["31"]["inputs"]["start_at"], "{{pulid_start_at}}")
+        self.assertEqual(workflow["31"]["inputs"]["end_at"], "{{pulid_end_at}}")
         self.assertEqual(workflow["11"]["inputs"]["image"], ["10", 0])
         self.assertEqual(workflow["25"]["inputs"]["image"], ["11", 0])
         self.assertEqual(workflow["26"]["inputs"]["control_net_name"], "{{body_depth_controlnet}}")
-        self.assertEqual(workflow["27"]["inputs"]["positive"], ["21", 0])
+        self.assertEqual(workflow["27"]["inputs"]["positive"], ["4", 0])
         self.assertEqual(workflow["27"]["inputs"]["negative"], ["5", 0])
         self.assertEqual(workflow["27"]["inputs"]["control_net"], ["26", 0])
         self.assertEqual(workflow["27"]["inputs"]["image"], ["25", 0])
+        self.assertEqual(workflow["14"]["inputs"]["model"], ["31", 0])
         self.assertEqual(workflow["14"]["inputs"]["positive"], ["27", 0])
         self.assertEqual(workflow["14"]["inputs"]["negative"], ["27", 1])
         self.assertEqual(workflow["14"]["inputs"]["latent_image"], ["3", 0])
@@ -186,6 +204,13 @@ class AvatarBodyDepthTransparentTemplateTests(unittest.TestCase):
                         "face_reference_image": "references/avatar/jane_face.png",
                         "body_reference_image": "references/avatar/jane_body.png",
                         "face_strength": "0.7",
+                        "pulid_model": "ip-adapter_pulid_sdxl_fp16.safetensors",
+                        "pulid_provider": "CPU",
+                        "pulid_projection": "ortho_v2",
+                        "pulid_fidelity": "6",
+                        "pulid_noise": "0.01",
+                        "pulid_start_at": "0.1",
+                        "pulid_end_at": "0.95",
                         "body_depth_strength": "0.85",
                         "body_depth_start": "0.05",
                         "body_depth_end": "0.9",
@@ -206,7 +231,14 @@ class AvatarBodyDepthTransparentTemplateTests(unittest.TestCase):
         self.assertEqual(workflow["14"]["inputs"]["cfg"], 1.0)
         self.assertEqual(workflow["6"]["inputs"]["image"], "references/avatar/jane_face.png")
         self.assertEqual(workflow["10"]["inputs"]["image"], "references/avatar/jane_body.png")
-        self.assertEqual(workflow["21"]["inputs"]["conditioning_to_strength"], 0.7)
+        self.assertEqual(workflow["28"]["inputs"]["pulid_file"], "ip-adapter_pulid_sdxl_fp16.safetensors")
+        self.assertEqual(workflow["30"]["inputs"]["provider"], "CPU")
+        self.assertEqual(workflow["31"]["inputs"]["weight"], 0.7)
+        self.assertEqual(workflow["31"]["inputs"]["projection"], "ortho_v2")
+        self.assertEqual(workflow["31"]["inputs"]["fidelity"], 6)
+        self.assertEqual(workflow["31"]["inputs"]["noise"], 0.01)
+        self.assertEqual(workflow["31"]["inputs"]["start_at"], 0.1)
+        self.assertEqual(workflow["31"]["inputs"]["end_at"], 0.95)
         self.assertEqual(workflow["25"]["inputs"]["resolution"], 1024)
         self.assertEqual(workflow["27"]["inputs"]["strength"], 0.85)
         self.assertEqual(workflow["27"]["inputs"]["start_percent"], 0.05)

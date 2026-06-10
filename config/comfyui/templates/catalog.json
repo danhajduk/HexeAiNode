@@ -3,8 +3,8 @@
   "templates": [
     {
       "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
-      "template_name": "Avatar Body Depth Reference Transparent RealVisXL",
-      "description": "Transparent avatar workflow that uses a face reference for identity and a padded body reference depth map through SDXL ControlNet, saves an RGB fallback, then removes the background.",
+      "template_name": "Simple Avatar Generation",
+      "description": "Transparent avatar workflow that uses PuLID for face identity and a padded body reference depth map through SDXL ControlNet, saves an RGB fallback, then removes the background.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-body-depth-reference-transparent-realvisxl/api_workflow.json",
       "ui_workflow_path": "avatar-body-depth-reference-transparent-realvisxl/ui_workflow.json",
@@ -19,7 +19,7 @@
           "name": "face_reference_image",
           "type": "image",
           "required": true,
-          "description": "Reference image for face identity."
+          "description": "Reference image for PuLID face identity."
         },
         {
           "name": "body_reference_image",
@@ -31,7 +31,60 @@
           "name": "face_strength",
           "type": "number",
           "required": false,
-          "description": "Face reference strength from 0 to 1."
+          "description": "PuLID face identity weight from 0 to 1."
+        },
+        {
+          "name": "pulid_model",
+          "type": "string",
+          "required": false,
+          "description": "Local PuLID SDXL model filename from the ComfyUI pulid model folder."
+        },
+        {
+          "name": "pulid_provider",
+          "type": "string",
+          "required": false,
+          "description": "InsightFace execution provider for PuLID face analysis.",
+          "allowed_values": [
+            "CPU",
+            "CUDA",
+            "ROCM",
+            "CoreML"
+          ]
+        },
+        {
+          "name": "pulid_projection",
+          "type": "string",
+          "required": false,
+          "description": "PuLID projection mode.",
+          "allowed_values": [
+            "ortho",
+            "ortho_v2",
+            "none"
+          ]
+        },
+        {
+          "name": "pulid_fidelity",
+          "type": "integer",
+          "required": false,
+          "description": "PuLID fidelity value. Lower values bias toward stronger resemblance; higher values allow more prompt freedom."
+        },
+        {
+          "name": "pulid_noise",
+          "type": "number",
+          "required": false,
+          "description": "Optional PuLID noise amount."
+        },
+        {
+          "name": "pulid_start_at",
+          "type": "number",
+          "required": false,
+          "description": "Sampler percentage where PuLID identity guidance begins applying."
+        },
+        {
+          "name": "pulid_end_at",
+          "type": "number",
+          "required": false,
+          "description": "Sampler percentage where PuLID identity guidance stops applying."
         },
         {
           "name": "body_depth_strength",
@@ -135,6 +188,13 @@
         "cfg": 1.2,
         "denoise": 1,
         "face_strength": 0.8,
+        "pulid_model": "ip-adapter_pulid_sdxl_fp16.safetensors",
+        "pulid_provider": "CUDA",
+        "pulid_projection": "ortho_v2",
+        "pulid_fidelity": 8,
+        "pulid_noise": 0,
+        "pulid_start_at": 0,
+        "pulid_end_at": 1,
         "body_depth_strength": 0.75,
         "body_depth_start": 0,
         "body_depth_end": 0.8,
@@ -153,8 +213,10 @@
         ],
         "other": {
           "nodes": [
-            "ReferenceLatent",
-            "ConditioningAverage",
+            "PulidModelLoader",
+            "PulidEvaClipLoader",
+            "PulidInsightFaceLoader",
+            "ApplyPulidAdvanced",
             "ResizeAndPadImage",
             "DepthAnythingV2Preprocessor",
             "ControlNetLoader",
@@ -165,7 +227,12 @@
             "JoinImageWithAlpha",
             "SaveImage"
           ],
-          "identity_strength": "fallback_reference_latent_not_faceid",
+          "custom_nodes": {
+            "PuLID_ComfyUI": "https://github.com/cubiq/PuLID_ComfyUI"
+          },
+          "identity_model": "ip-adapter_pulid_sdxl_fp16.safetensors",
+          "insightface_model": "antelopev2",
+          "identity_strength": "pulid_face_identity",
           "body_preservation": "depth_anything_v2_controlnet",
           "body_reference_fit": "resize_and_pad_to_output_aspect",
           "background_removal": "birefnet.safetensors"
@@ -176,7 +243,7 @@
         "preset_family": "realvisxl_lightning",
         "domain": "avatar",
         "input_mode": "text",
-        "edit_intent": "body_depth_controlnet_composition_with_avatar_references_transparent_background",
+        "edit_intent": "simple_avatar_generation_with_pulid_identity_body_depth_transparent_background",
         "reference_roles": [
           "face",
           "body"
