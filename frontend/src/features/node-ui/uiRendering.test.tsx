@@ -547,6 +547,7 @@ describe("OperationalDashboard", () => {
                   character_type: "human",
                   visual_style: "stylized-realistic",
                   nsfw: true,
+                  general_prompt: "Jane Avatar, stylized realistic, human, female, light skin, black hair",
                 },
               ],
             },
@@ -566,6 +567,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("female");
     expect(markup).toContain("black");
     expect(markup).toContain("stylized-realistic");
+    expect(markup).toContain("General Initial Prompt");
+    expect(markup).toContain("Jane Avatar, stylized realistic");
     expect(markup).not.toContain("Structured JSON");
   });
 

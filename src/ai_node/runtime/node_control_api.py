@@ -2084,6 +2084,7 @@ class NodeControlState:
                 filename=payload.body_image_filename,
                 data_base64=payload.body_image_data_base64,
             )
+        prompt_workspaces = existing.get("prompt_workspaces") if isinstance(existing.get("prompt_workspaces"), dict) else {}
         metadata = {
             "schema_version": "1.0",
             "profile_id": profile_id,
@@ -2099,6 +2100,23 @@ class NodeControlState:
             "created_at": existing.get("created_at") or now,
             "updated_at": now,
         }
+        general_prompt = str(existing.get("general_prompt") or "").strip() or self._avatar_profile_general_initial_prompt(profile=metadata)
+        metadata["general_prompt"] = general_prompt
+        if "head_face" not in prompt_workspaces:
+            prompt_workspaces = {
+                **prompt_workspaces,
+                "head_face": {
+                    "section": "head_face",
+                    "prompt": self._avatar_profile_default_head_prompt(profile={**metadata, "general_prompt": general_prompt}),
+                    "negative_prompt": "",
+                    "conversation": [],
+                    "preview_history": [],
+                    "created_at": now,
+                    "updated_at": now,
+                    "source": "profile_creation_baseline",
+                },
+            }
+        metadata["prompt_workspaces"] = prompt_workspaces
         if face_filename:
             metadata["face_image"] = face_filename
             metadata["face_input_image"] = f"avatar_profiles/{profile_id}/{face_filename}"
@@ -3727,14 +3745,28 @@ class NodeControlState:
         }
 
     @classmethod
-    def _avatar_profile_default_head_prompt(cls, *, profile: dict) -> str:
+    def _avatar_profile_general_initial_prompt(cls, *, profile: dict) -> str:
+        style = str(profile.get("visual_style") or "").replace("-", " ").strip()
+        character_type = str(profile.get("character_type") or "").replace("-", " ").strip()
         parts = [
             str(profile.get("name") or profile.get("profile_id") or "avatar").strip(),
+            style,
+            character_type,
             str(profile.get("gender") or "").strip(),
-            str(profile.get("character_type") or "").strip(),
-            str(profile.get("visual_style") or "").replace("-", " ").strip(),
             f"{profile.get('skin_color')} skin" if str(profile.get("skin_color") or "").strip() else "",
             f"{profile.get('hair_color')} hair" if str(profile.get("hair_color") or "").strip() else "",
+            "adult character avatar" if profile.get("nsfw") else "character avatar",
+            "consistent identity",
+            "clean full character design",
+            "high quality ComfyUI SDXL prompt baseline",
+        ]
+        return ", ".join(item for item in parts if item)
+
+    @classmethod
+    def _avatar_profile_default_head_prompt(cls, *, profile: dict) -> str:
+        general_prompt = str(profile.get("general_prompt") or "").strip()
+        parts = [
+            general_prompt or cls._avatar_profile_general_initial_prompt(profile=profile),
             "head and shoulders portrait",
             "expressive eyes",
             "clear face shape",

@@ -499,13 +499,17 @@ function promptWorkspace(profile, section) {
 }
 
 function defaultHeadFacePrompt(profile) {
+  const generalPrompt = compactPromptText(profile?.general_prompt);
   const parts = [
-    profileName(profile),
-    profile?.gender,
-    String(profile?.character_type || "").replace("-", " "),
-    String(profile?.visual_style || "").replace("-", " "),
-    profile?.skin_color ? `${profile.skin_color} skin` : "",
-    profile?.hair_color ? `${profile.hair_color} hair` : "",
+    generalPrompt ||
+      [
+        profileName(profile),
+        profile?.gender,
+        String(profile?.character_type || "").replace("-", " "),
+        String(profile?.visual_style || "").replace("-", " "),
+        profile?.skin_color ? `${profile.skin_color} skin` : "",
+        profile?.hair_color ? `${profile.hair_color} hair` : "",
+      ].map((part) => compactPromptText(part)).filter(Boolean).join(", "),
     "head and shoulders portrait",
     "expressive eyes",
     "clear face shape",
@@ -1036,6 +1040,10 @@ export function AvatarGenerationCard({
               <span>NSFW</span>
               <StatusBadge value={routeProfile.nsfw ? "enabled" : "disabled"} />
             </div>
+            <label className="avatar-generation-wide-field avatar-generation-compiled-prompt">
+              General Initial Prompt
+              <textarea rows={5} readOnly value={String(routeProfile.general_prompt || "")} />
+            </label>
             <div className="avatar-profile-images avatar-profile-detail-images">
               {routeProfile.face_url ? (
                 <a href={profileImageUrl(apiBase, routeProfile.face_url)} target="_blank" rel="noreferrer">

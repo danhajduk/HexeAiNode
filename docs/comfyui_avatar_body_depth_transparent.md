@@ -116,6 +116,9 @@ Each saved profile writes `profile.json`. Metadata-only profiles intentionally o
 `face_image`, `body_image`, and ComfyUI input paths until later reference assets
 are added through the profile detail tabs. Saved profile cards support selecting,
 opening, and deleting profiles without requiring extracted image data first.
+Profile creation also derives and stores `general_prompt`, a reusable baseline
+ComfyUI prompt built from the saved character facts. The `Head / Face` workspace
+is seeded from this general prompt at creation time.
 
 Opening a profile shows the baseline facts captured during creation and staged
 design tabs: `Head / Face`, `Upper Torso`, `Lower Torso`, and `Full Body`.
