@@ -1071,6 +1071,72 @@ export default function App() {
     }
   }
 
+  async function onSelectAvatarProfile(profileId) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/select`, {});
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onDeleteAvatarProfile(profileId) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiDelete(`/api/avatar-generation/profiles/${encodedProfileId}`);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onExtractAvatarProfile(profileId) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/extract`, {});
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
   async function onDeclareCapabilities() {
     if (declaringCapabilities) {
       return;
@@ -2016,7 +2082,9 @@ export default function App() {
       result: avatarGenerationResult,
       apiBase: getApiBase(),
       onSaveProfile: onSaveAvatarProfile,
-      onDescribeReference: onDescribeManualImageReference,
+      onSelectProfile: onSelectAvatarProfile,
+      onDeleteProfile: onDeleteAvatarProfile,
+      onExtractProfile: onExtractAvatarProfile,
       onRefresh: loadStatus,
     },
     operationalActions,

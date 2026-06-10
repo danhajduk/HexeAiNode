@@ -39,58 +39,26 @@ const AVATAR_GENERATION_TABS = [
 export function AvatarGenerationCard({
   payload = null,
   busy = false,
-  visionBusy = false,
   result = null,
   apiBase = "",
   initialTab = "profile",
   onSaveProfile,
-  onDescribeReference,
+  onSelectProfile,
+  onDeleteProfile,
+  onExtractProfile,
   onRefresh,
 }) {
   const profiles = asArray(payload?.profiles);
+  const selectedProfileId = String(payload?.selected_profile_id || "").trim();
   const [activeTab, setActiveTab] = useState(initialTab === "saved_profiles" ? "saved_profiles" : "profile");
   const [characterName, setCharacterName] = useState("");
   const [faceFile, setFaceFile] = useState(null);
   const [bodyFile, setBodyFile] = useState(null);
   const [description, setDescription] = useState("");
   const [localStatus, setLocalStatus] = useState("");
+  const [activeProfileAction, setActiveProfileAction] = useState("");
   const latestProfile = result?.profile || profiles[0] || null;
   const canSave = Boolean(characterName.trim()) && Boolean(faceFile) && Boolean(bodyFile) && !busy;
-  const canDescribe = Boolean(faceFile) && Boolean(bodyFile) && !visionBusy && !busy;
-
-  async function describeProfile() {
-    if (!canDescribe) {
-      return;
-    }
-    setLocalStatus("");
-    const faceData = await fileToDataUrl(faceFile);
-    const faceResult = await onDescribeReference?.({
-      mode: "face",
-      image_filename: faceFile?.name || "face.png",
-      image_data_base64: faceData,
-      custom_prompt:
-        "Describe this character's face for avatar identity preservation. Include face shape, visible age range, skin tone, eyes, eyebrows, nose, lips, hair, distinctive features, and expression. Be specific and concise.",
-    });
-    const bodyData = await fileToDataUrl(bodyFile);
-    const bodyResult = await onDescribeReference?.({
-      mode: "body",
-      image_filename: bodyFile?.name || "body.png",
-      image_data_base64: bodyData,
-      custom_prompt:
-        "Describe this character's body reference for avatar generation. Include full-body proportions, silhouette, body shape, posture, pose angle, limb placement, clothing, visible style, and details useful for preserving the character. Be specific and concise.",
-    });
-    const nextDescription = [
-      characterName.trim() ? `Character name: ${characterName.trim()}` : "",
-      faceResult?.description ? `Face: ${String(faceResult.description).trim()}` : "",
-      bodyResult?.description ? `Body: ${String(bodyResult.description).trim()}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-    if (nextDescription) {
-      setDescription(nextDescription);
-      setLocalStatus("description_ready");
-    }
-  }
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -111,6 +79,20 @@ export function AvatarGenerationCard({
       setLocalStatus("saved");
       setActiveTab("saved_profiles");
     }
+  }
+
+  async function runProfileAction(action, profileId, callback) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || busy) {
+      return;
+    }
+    setActiveProfileAction(`${action}:${normalized}`);
+    setLocalStatus("");
+    const actionResult = await callback?.(normalized);
+    if (actionResult) {
+      setLocalStatus(action);
+    }
+    setActiveProfileAction("");
   }
 
   return (
@@ -166,13 +148,10 @@ export function AvatarGenerationCard({
           </label>
 
           <div className="row">
-            <button className="btn" type="button" onClick={describeProfile} disabled={!canDescribe}>
-              {visionBusy ? "Describing..." : "Describe With Vision"}
-            </button>
             <button className="btn btn-primary" type="submit" disabled={!canSave}>
               {busy ? "Saving..." : "Save Profile"}
             </button>
-            <button className="btn" type="button" onClick={onRefresh} disabled={busy || visionBusy}>
+            <button className="btn" type="button" onClick={onRefresh} disabled={busy}>
               Refresh
             </button>
             {localStatus ? <StatusBadge value={localStatus} /> : null}
@@ -197,9 +176,12 @@ export function AvatarGenerationCard({
             <div className="avatar-profile-list">
               {profiles.map((profile) => (
                 <article className="avatar-profile-card" key={profile.profile_id}>
-                  <div>
-                    <strong>{profileName(profile)}</strong>
-                    <span>{profile.updated_at || profile.created_at || "not_saved"}</span>
+                  <div className="avatar-profile-card-header">
+                    <div>
+                      <strong>{profileName(profile)}</strong>
+                      <span>{profile.updated_at || profile.created_at || "not_saved"}</span>
+                    </div>
+                    {profile.selected || profile.profile_id === selectedProfileId ? <StatusBadge value="selected" /> : null}
                   </div>
                   <div className="avatar-profile-images">
                     {profile.face_url ? (
@@ -214,6 +196,38 @@ export function AvatarGenerationCard({
                     ) : null}
                   </div>
                   {profile.description ? <p className="muted tiny">{profile.description}</p> : null}
+                  {profile.extraction?.structured ? (
+                    <details className="avatar-profile-json">
+                      <summary>Extracted JSON</summary>
+                      <pre>{JSON.stringify(profile.extraction.structured, null, 2)}</pre>
+                    </details>
+                  ) : null}
+                  <div className="row avatar-profile-actions">
+                    <button
+                      className="btn"
+                      type="button"
+                      disabled={busy || profile.selected || profile.profile_id === selectedProfileId}
+                      onClick={() => runProfileAction("selected", profile.profile_id, onSelectProfile)}
+                    >
+                      {profile.selected || profile.profile_id === selectedProfileId ? "Selected" : "Select"}
+                    </button>
+                    <button
+                      className="btn"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => runProfileAction("extracted", profile.profile_id, onExtractProfile)}
+                    >
+                      {activeProfileAction === `extracted:${profile.profile_id}` ? "Extracting..." : "Extract Data"}
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => runProfileAction("deleted", profile.profile_id, onDeleteProfile)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>

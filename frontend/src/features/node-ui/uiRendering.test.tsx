@@ -456,8 +456,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Face Image");
     expect(markup).toContain("Body Image");
     expect(markup).toContain("Character Description");
-    expect(markup).toContain("Describe With Vision");
     expect(markup).toContain("Save Profile");
+    expect(markup).not.toContain("Describe With Vision");
     expect(markup).not.toContain("Body Depth");
     expect(markup).not.toContain("No avatar profiles saved.");
     expect(markup).not.toContain("Manual Image Generation");
@@ -471,14 +471,22 @@ describe("OperationalDashboard", () => {
           avatarGenerationProps: {
             initialTab: "saved_profiles",
             payload: {
+              selected_profile_id: "Jane_Avatar",
               profiles: [
                 {
                   profile_id: "Jane_Avatar",
                   name: "Jane Avatar",
+                  selected: true,
                   description: "Face: oval face.\n\nBody: full-body reference.",
                   face_url: "/api/avatar-generation/profiles/Jane_Avatar/assets/face.png",
                   body_url: "/api/avatar-generation/profiles/Jane_Avatar/assets/body.png",
                   updated_at: "2026-06-09T12:00:00Z",
+                  extraction: {
+                    structured: {
+                      identity_prompt: "same Jane Avatar identity",
+                      body: { shape: "curvy" },
+                    },
+                  },
                 },
               ],
             },
@@ -492,6 +500,12 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Profiles");
     expect(markup).toContain("Latest");
     expect(markup).toContain("Jane Avatar");
+    expect(markup).toContain("selected");
+    expect(markup).toContain("Selected");
+    expect(markup).toContain("Extract Data");
+    expect(markup).toContain("Delete");
+    expect(markup).toContain("Extracted JSON");
+    expect(markup).toContain("same Jane Avatar identity");
     expect(markup).toContain("http://node.local:9002/api/avatar-generation/profiles/Jane_Avatar/assets/face.png");
     expect(markup).toContain("http://node.local:9002/api/avatar-generation/profiles/Jane_Avatar/assets/body.png");
     expect(markup).toContain("Face: oval face.");

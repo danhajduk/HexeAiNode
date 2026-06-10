@@ -4,6 +4,7 @@ import binascii
 import json
 import os
 import secrets
+import shutil
 import socket
 import struct
 import subprocess
@@ -1820,6 +1821,33 @@ class NodeControlState:
         }
 
     def manual_image_vision_describe(self, *, payload: "ManualImageVisionDescribeRequest") -> dict:
+        image_bytes, mime_type, image_name = self._manual_vision_image_payload(payload=payload)
+        prompt = self._manual_vision_describe_prompt(mode=payload.mode, custom_prompt=payload.custom_prompt)
+        description, model_id = self._vision_describe_image_bytes(
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            image_name=image_name,
+            prompt=prompt,
+            max_tokens=450,
+        )
+        return {
+            "status": "ok",
+            "provider": "vision_llm",
+            "model_id": model_id,
+            "mode": str(payload.mode or "avatar"),
+            "image_name": image_name,
+            "description": description,
+        }
+
+    def _vision_describe_image_bytes(
+        self,
+        *,
+        image_bytes: bytes,
+        mime_type: str,
+        image_name: str,
+        prompt: str,
+        max_tokens: int = 450,
+    ) -> tuple[str, str]:
         services = self.service_status_payload().get("services", {})
         vision_llm = services.get("vision_llm") if isinstance(services, dict) else {}
         socket_path = str(vision_llm.get("socket_path") or "") if isinstance(vision_llm, dict) else ""
@@ -1829,9 +1857,7 @@ class NodeControlState:
             residency = vision_llm.get("residency") if isinstance(vision_llm, dict) else {}
             reason = str(residency.get("reason") or state or "vision_runtime_unavailable") if isinstance(residency, dict) else "vision_runtime_unavailable"
             raise ValueError(f"vision_runtime_unavailable:{reason}")
-        image_bytes, mime_type, image_name = self._manual_vision_image_payload(payload=payload)
         encoded = base64.b64encode(image_bytes).decode("ascii")
-        prompt = self._manual_vision_describe_prompt(mode=payload.mode, custom_prompt=payload.custom_prompt)
         response = self._uds_json_request(
             socket_path=socket_path,
             method="POST",
@@ -1848,7 +1874,7 @@ class NodeControlState:
                     }
                 ],
                 "temperature": 0.2,
-                "max_tokens": 450,
+                "max_tokens": max_tokens,
                 "stream": False,
             },
             host="vision-llm",
@@ -1859,20 +1885,18 @@ class NodeControlState:
         if choices and isinstance(choices[0], dict):
             message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
             content = str(message.get("content") or message.get("reasoning_content") or choices[0].get("text") or "").strip()
-        return {
-            "status": "ok",
-            "provider": "vision_llm",
-            "model_id": model_id,
-            "mode": str(payload.mode or "avatar"),
-            "image_name": image_name,
-            "description": content,
-        }
+        return content, model_id
 
     def avatar_generation_status(self) -> dict:
+        selected_profile_id = self._selected_avatar_profile_id()
+        profiles = self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id)
+        selected_profile = next((profile for profile in profiles if profile.get("profile_id") == selected_profile_id), None)
         return {
             "configured": True,
             "profile_root": self._avatar_profile_root().as_posix(),
-            "profiles": self._avatar_profiles(limit=48),
+            "selected_profile_id": selected_profile_id,
+            "selected_profile": selected_profile,
+            "profiles": profiles,
         }
 
     def save_avatar_profile(self, *, payload: "AvatarProfileSaveRequest") -> dict:
@@ -1922,8 +1946,162 @@ class NodeControlState:
         return {
             "status": "saved",
             "profile": profile,
-            "profiles": self._avatar_profiles(limit=48),
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=self._selected_avatar_profile_id()),
         }
+
+    def select_avatar_profile(self, *, profile_id: str) -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        if not (profile_dir / "profile.json").exists():
+            raise ValueError("avatar_profile_not_found")
+        selected_profile_id = profile_dir.name
+        self._write_selected_avatar_profile_id(profile_id=selected_profile_id)
+        profiles = self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id)
+        selected_profile = next((profile for profile in profiles if profile.get("profile_id") == selected_profile_id), None)
+        return {
+            "status": "selected",
+            "selected_profile_id": selected_profile_id,
+            "selected_profile": selected_profile,
+            "profiles": profiles,
+        }
+
+    def delete_avatar_profile(self, *, profile_id: str) -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        if not profile_dir.exists() or not profile_dir.is_dir():
+            raise ValueError("avatar_profile_not_found")
+        shutil.rmtree(profile_dir)
+        selected_profile_id = self._selected_avatar_profile_id()
+        if selected_profile_id == profile_dir.name:
+            self._write_selected_avatar_profile_id(profile_id="")
+            selected_profile_id = None
+        return {
+            "deleted": True,
+            "profile_id": profile_dir.name,
+            "selected_profile_id": selected_profile_id,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    def extract_avatar_profile_data(self, *, profile_id: str) -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        profile = self._avatar_profile_payload(profile_dir=profile_dir)
+        if not profile:
+            raise ValueError("avatar_profile_not_found")
+        face_path = (profile_dir / str(profile.get("face_image") or "")).resolve()
+        body_path = (profile_dir / str(profile.get("body_image") or "")).resolve()
+        root = self._avatar_profile_root()
+        if root not in face_path.parents or root not in body_path.parents or not face_path.exists() or not body_path.exists():
+            raise ValueError("avatar_profile_assets_missing")
+        face_description, vision_model_id = self._vision_describe_image_bytes(
+            image_bytes=face_path.read_bytes(),
+            mime_type=self._image_mime_type(face_path.suffix),
+            image_name=face_path.name,
+            prompt=(
+                "Analyze this avatar face reference for reusable image-generation identity data. "
+                "Capture face shape, visible age range, skin tone, eye shape/color, eyebrows, nose, lips, cheekbones, jaw/chin, hair color/style, expression, distinctive marks, accessories, and identity-preservation notes."
+            ),
+            max_tokens=700,
+        )
+        body_description, _ = self._vision_describe_image_bytes(
+            image_bytes=body_path.read_bytes(),
+            mime_type=self._image_mime_type(body_path.suffix),
+            image_name=body_path.name,
+            prompt=(
+                "Analyze this avatar full-body/body reference for reusable image-generation data. "
+                "Capture body proportions, silhouette, height impression, build, bust/waist/hip relationship, limbs, posture, pose angle, hand/arm placement, legs/feet, clothing, accessories, and body-preservation notes."
+            ),
+            max_tokens=800,
+        )
+        structured, llm_model_id = self._avatar_profile_json_from_local_llm(
+            profile=profile,
+            face_description=face_description,
+            body_description=body_description,
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        extraction = {
+            "schema_version": "1.0",
+            "status": "extracted",
+            "created_at": now,
+            "vision_model_id": vision_model_id,
+            "local_llm_model_id": llm_model_id,
+            "face_description": face_description,
+            "body_description": body_description,
+            "structured": structured,
+        }
+        updated = {**metadata, "extraction": extraction, "updated_at": now}
+        profile_path = profile_dir / "profile.json"
+        profile_path.write_text(json.dumps(updated, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        return {
+            "status": "extracted",
+            "profile": saved_profile,
+            "extraction": extraction,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    def _avatar_profile_json_from_local_llm(self, *, profile: dict, face_description: str, body_description: str) -> tuple[dict, str]:
+        services = self.service_status_payload().get("services", {})
+        local_llm = services.get("local_llm") if isinstance(services, dict) else {}
+        socket_path = str(local_llm.get("socket_path") or "") if isinstance(local_llm, dict) else ""
+        model_id = str(local_llm.get("model_id") or local_llm.get("default_model_id") or "local").strip() if isinstance(local_llm, dict) else "local"
+        state = str(local_llm.get("state") or "").strip().lower() if isinstance(local_llm, dict) else ""
+        if not socket_path or state not in {"running", "healthy"}:
+            raise ValueError(f"local_llm_unavailable:{state or 'not_running'}")
+        request_body = {
+            "model": model_id,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "/no_think Convert avatar reference observations into reusable JSON for future image prompts. "
+                        "Return only JSON, no markdown. Include keys: profile_name, identity_prompt, negative_identity_prompt, "
+                        "face, hair, body, pose_reference, clothing_reference, accessories, preservation_notes, prompt_sections. "
+                        "Keep values specific, compact, and useful for SDXL/ComfyUI prompt assembly."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "/no_think "
+                        + json.dumps(
+                            {
+                                "profile_name": profile.get("name"),
+                                "manual_description": profile.get("description"),
+                                "face_vision_description": face_description,
+                                "body_vision_description": body_description,
+                            },
+                            sort_keys=True,
+                        )
+                    ),
+                },
+            ],
+            "temperature": 0.2,
+            "max_tokens": 1200,
+            "stream": False,
+        }
+        response = self._uds_json_request(
+            socket_path=socket_path,
+            method="POST",
+            path="/v1/chat/completions",
+            body=request_body,
+            host="local-llm",
+            error_label="local_llm_avatar_profile_extract_failed",
+        )
+        choices = response.get("choices") if isinstance(response.get("choices"), list) else []
+        content = ""
+        if choices and isinstance(choices[0], dict):
+            message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
+            content = str(message.get("content") or message.get("reasoning_content") or choices[0].get("text") or "").strip()
+        parsed = self._parse_manual_image_prompt_helper_content(content)
+        if not parsed:
+            parsed = {
+                "profile_name": profile.get("name"),
+                "identity_prompt": str(profile.get("description") or "").strip(),
+                "face": {"description": face_description},
+                "body": {"description": body_description},
+                "raw_response": content,
+            }
+        return parsed, model_id
 
     def avatar_profile_asset_response(self, *, profile_id: str, asset_name: str) -> FileResponse:
         root = self._avatar_profile_root()
@@ -1939,7 +2117,10 @@ class NodeControlState:
     def _avatar_profile_root(self) -> Path:
         return (self._manual_image_input_dir() / "avatar_profiles").resolve()
 
-    def _avatar_profiles(self, *, limit: int) -> list[dict]:
+    def _avatar_profile_dir(self, *, profile_id: str) -> Path:
+        return (self._avatar_profile_root() / self._safe_filename_component(profile_id)).resolve()
+
+    def _avatar_profiles(self, *, limit: int, selected_profile_id: str | None = None) -> list[dict]:
         root = self._avatar_profile_root()
         if not root.exists():
             return []
@@ -1947,19 +2128,15 @@ class NodeControlState:
         for profile_dir in root.iterdir():
             if not profile_dir.is_dir():
                 continue
-            profile = self._avatar_profile_payload(profile_dir=profile_dir)
+            profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
             if profile:
                 profiles.append(profile)
         profiles.sort(key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""), reverse=True)
         return profiles[: max(int(limit), 1)]
 
-    def _avatar_profile_payload(self, *, profile_dir: Path) -> dict:
-        profile_path = profile_dir / "profile.json"
-        try:
-            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
-        if not isinstance(metadata, dict):
+    def _avatar_profile_payload(self, *, profile_dir: Path, selected_profile_id: str | None = None) -> dict:
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
             return {}
         profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
         face_image = Path(str(metadata.get("face_image") or "face.png")).name
@@ -1967,6 +2144,7 @@ class NodeControlState:
         return {
             **metadata,
             "profile_id": profile_id,
+            "selected": bool(selected_profile_id and selected_profile_id == profile_id),
             "face_image": face_image,
             "body_image": body_image,
             "face_input_image": f"avatar_profiles/{profile_id}/{face_image}",
@@ -1974,6 +2152,42 @@ class NodeControlState:
             "face_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{face_image}",
             "body_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{body_image}",
         }
+
+    def _avatar_profile_metadata(self, *, profile_dir: Path) -> dict:
+        profile_path = profile_dir / "profile.json"
+        try:
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        return metadata if isinstance(metadata, dict) else {}
+
+    def _selected_avatar_profile_path(self) -> Path:
+        return self._avatar_profile_root() / "selected_profile.json"
+
+    def _selected_avatar_profile_id(self) -> str | None:
+        try:
+            payload = json.loads(self._selected_avatar_profile_path().read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        profile_id = str(payload.get("profile_id") or "").strip() if isinstance(payload, dict) else ""
+        if not profile_id:
+            return None
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        return profile_dir.name if (profile_dir / "profile.json").exists() else None
+
+    def _write_selected_avatar_profile_id(self, *, profile_id: str) -> None:
+        path = self._selected_avatar_profile_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not profile_id:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            return
+        path.write_text(
+            json.dumps({"profile_id": self._safe_filename_component(profile_id), "updated_at": datetime.now(timezone.utc).isoformat()}, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     def _write_avatar_profile_image(
         self,
@@ -8098,6 +8312,27 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             return state.save_avatar_profile(payload=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/select")
+    def post_avatar_generation_profile_select(profile_id: str):
+        try:
+            return state.select_avatar_profile(profile_id=profile_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/extract")
+    def post_avatar_generation_profile_extract(profile_id: str):
+        try:
+            return state.extract_avatar_profile_data(profile_id=profile_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.delete("/api/avatar-generation/profiles/{profile_id}")
+    def delete_avatar_generation_profile(profile_id: str):
+        try:
+            return state.delete_avatar_profile(profile_id=profile_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/avatar-generation/profiles/{profile_id}/assets/{asset_name}")
     def get_avatar_generation_profile_asset(profile_id: str, asset_name: str):

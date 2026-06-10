@@ -68,9 +68,13 @@ includes ComfyUI input paths such as `avatar_profiles/<avatar_name>/face.png` an
 `avatar_profiles/<avatar_name>/body.png`, so later body-depth, pose, and final-avatar
 flows can reuse the profile assets without mixing them into normal operation output.
 
-The profile tab can call the existing local vision describe endpoint for the face
-and body images. Vision is used only through the normal vision runtime endpoint when
-it is already available; profile creation does not start vision by itself.
+Saved profile cards support selecting the active profile, deleting the profile, and
+extracting reusable profile data. Extraction reads the saved face and body images,
+sends each one to the local vision runtime for detailed observations, then sends the
+combined observations plus any manual description to the local LLM. The local LLM
+returns structured JSON stored under `profile.json` as `extraction.structured` for
+future prompt assembly. Vision and local LLM calls use the existing runtimes only
+when they are already available; profile management does not start them implicitly.
 
 ## Required Models And Nodes
 

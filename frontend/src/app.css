@@ -784,26 +784,41 @@
 
 .avatar-profile-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
 .avatar-profile-card {
   display: grid;
-  align-content: start;
-  gap: 10px;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  gap: 14px;
   padding: 12px;
   border: 1px solid hsl(var(--sx-border) / 0.75);
   border-radius: var(--sx-radius-sm);
   background: hsl(var(--sx-panel) / 0.65);
 }
 
-.avatar-profile-card > div:first-child {
-  display: grid;
-  gap: 3px;
+.avatar-profile-card-header,
+.avatar-profile-card p,
+.avatar-profile-json,
+.avatar-profile-actions {
+  grid-column: 2;
 }
 
-.avatar-profile-card > div:first-child span {
+.avatar-profile-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.avatar-profile-card-header > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.avatar-profile-card-header span {
   color: hsl(var(--sx-text-muted));
   font-size: 12px;
   overflow-wrap: anywhere;
@@ -811,6 +826,8 @@
 
 .avatar-profile-images {
   display: grid;
+  grid-column: 1;
+  grid-row: 1 / span 4;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
@@ -828,6 +845,42 @@
   max-height: 120px;
   overflow: auto;
   white-space: pre-wrap;
+}
+
+.avatar-profile-json {
+  display: grid;
+  gap: 8px;
+}
+
+.avatar-profile-json pre {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-bg) / 0.8);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.avatar-profile-actions {
+  align-self: end;
+}
+
+@media (max-width: 760px) {
+  .avatar-profile-card {
+    grid-template-columns: 1fr;
+  }
+
+  .avatar-profile-card-header,
+  .avatar-profile-card p,
+  .avatar-profile-json,
+  .avatar-profile-actions,
+  .avatar-profile-images {
+    grid-column: 1;
+    grid-row: auto;
+  }
 }
 
 .manual-reference-role-label {
