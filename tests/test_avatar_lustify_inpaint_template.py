@@ -12,6 +12,8 @@ from ai_node.runtime.node_control_api import ManualImageGenerationRequest, NodeC
 
 TEMPLATE_PATH = Path("config/comfyui/templates/avatar-lustify-sdxl-inpaint/api_workflow.json")
 TEMPLATE_ID = "template.avatar_lustify_sdxl_inpaint.v1"
+BASE_TEMPLATE_PATH = Path("config/comfyui/templates/avatar-base-unclothed-lustify-inpaint/api_workflow.json")
+BASE_TEMPLATE_ID = "template.avatar_base_unclothed_lustify_inpaint.v1"
 PLACEHOLDER_PATTERN = re.compile(r"{{[^{}]+}}")
 REQUIRED_PLACEHOLDERS = {
     "{{positive_prompt}}",
@@ -29,10 +31,15 @@ REQUIRED_PLACEHOLDERS = {
     "{{denoise}}",
     "{{avatar_name}}",
 }
+BASE_REQUIRED_PLACEHOLDERS = (REQUIRED_PLACEHOLDERS - {"{{input_image}}"}) | {"{{source_image}}"}
 
 
 def _template() -> dict:
     return json.loads(TEMPLATE_PATH.read_text(encoding="utf-8"))
+
+
+def _base_template() -> dict:
+    return json.loads(BASE_TEMPLATE_PATH.read_text(encoding="utf-8"))
 
 
 def _collect_placeholders(value) -> set[str]:
@@ -115,6 +122,59 @@ class AvatarLustifyInpaintTemplateTests(unittest.TestCase):
         self.assertEqual(workflow["7"]["inputs"]["sampler_name"], "euler")
         self.assertEqual(workflow["7"]["inputs"]["scheduler"], "normal")
         self.assertEqual(workflow["9"]["inputs"]["filename_prefix"], "hexe/avatar_lustify_inpaint/Jane_Doe_seed123")
+
+    def test_base_unclothed_template_uses_prefilled_source_and_mask_variables(self):
+        workflow = _base_template()
+
+        self.assertEqual(workflow["4"]["class_type"], "LoadImage")
+        self.assertEqual(workflow["4"]["inputs"]["image"], "{{source_image}}")
+        self.assertEqual(workflow["5"]["class_type"], "LoadImageMask")
+        self.assertEqual(workflow["5"]["inputs"]["image"], "{{mask_image}}")
+        self.assertEqual(workflow["6"]["class_type"], "VAEEncodeForInpaint")
+        self.assertEqual(
+            workflow["9"]["inputs"]["filename_prefix"],
+            "hexe/avatar_base_unclothed/{{avatar_name}}_seed{{seed}}",
+        )
+        self.assertEqual(_collect_placeholders(workflow), BASE_REQUIRED_PLACEHOLDERS)
+
+    def test_base_unclothed_template_rendering_uses_default_avatar_source_and_mask(self):
+        payload = load_comfyui_template_catalog(catalog_dir="config/comfyui/templates")
+        template = {item["template_id"]: item for item in payload["templates"]}[BASE_TEMPLATE_ID]
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("avatar-base-unclothed-template-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("avatar-base-unclothed-template-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id=BASE_TEMPLATE_ID,
+                    mode="txt2img",
+                    prompt="adult synthetic avatar base body, bare skin, preserve face and pose",
+                    seed=456,
+                ),
+                input_image="",
+            )
+
+        self.assertEqual(workflow["1"]["inputs"]["ckpt_name"], "lustifySDXLNSFW_v20-inpainting.safetensors")
+        self.assertEqual(
+            workflow["4"]["inputs"]["image"],
+            "references/avatar/avatar_seed2923980995547288489_rgb_00001_source.png",
+        )
+        self.assertEqual(
+            workflow["5"]["inputs"]["image"],
+            "references/avatar/avatar_seed2923980995547288489_unclothed_mask.png",
+        )
+        self.assertEqual(workflow["6"]["inputs"]["grow_mask_by"], 12)
+        self.assertEqual(workflow["7"]["inputs"]["steps"], 28)
+        self.assertEqual(workflow["7"]["inputs"]["cfg"], 6.5)
+        self.assertEqual(workflow["7"]["inputs"]["denoise"], 0.82)
+        self.assertEqual(
+            workflow["9"]["inputs"]["filename_prefix"],
+            "hexe/avatar_base_unclothed/avatar_seed2923980995547288489_base_seed456",
+        )
 
 
 if __name__ == "__main__":

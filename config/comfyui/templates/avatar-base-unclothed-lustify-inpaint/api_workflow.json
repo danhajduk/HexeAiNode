@@ -1,0 +1,73 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "{{checkpoint_name}}"
+    }
+  },
+  "2": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "{{positive_prompt}}"
+    }
+  },
+  "3": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "{{negative_prompt}}"
+    }
+  },
+  "4": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{source_image}}"
+    }
+  },
+  "5": {
+    "class_type": "LoadImageMask",
+    "inputs": {
+      "image": "{{mask_image}}",
+      "channel": "{{mask_channel}}"
+    }
+  },
+  "6": {
+    "class_type": "VAEEncodeForInpaint",
+    "inputs": {
+      "pixels": ["4", 0],
+      "vae": ["1", 2],
+      "mask": ["5", 0],
+      "grow_mask_by": "{{grow_mask_by}}"
+    }
+  },
+  "7": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["1", 0],
+      "positive": ["2", 0],
+      "negative": ["3", 0],
+      "latent_image": ["6", 0],
+      "seed": "{{seed}}",
+      "steps": "{{steps}}",
+      "cfg": "{{cfg}}",
+      "sampler_name": "{{sampler_name}}",
+      "scheduler": "{{scheduler}}",
+      "denoise": "{{denoise}}"
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["7", 0],
+      "vae": ["1", 2]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["8", 0],
+      "filename_prefix": "hexe/avatar_base_unclothed/{{avatar_name}}_seed{{seed}}"
+    }
+  }
+}

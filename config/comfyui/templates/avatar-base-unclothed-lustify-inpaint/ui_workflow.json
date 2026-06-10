@@ -1,0 +1,56 @@
+{
+  "last_node_id": 9,
+  "last_link_id": 8,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "CheckpointLoaderSimple",
+      "title": "Lustify SDXL Inpaint Checkpoint"
+    },
+    {
+      "id": 2,
+      "type": "CLIPTextEncode",
+      "title": "Unclothed Base Prompt"
+    },
+    {
+      "id": 3,
+      "type": "CLIPTextEncode",
+      "title": "Negative Prompt"
+    },
+    {
+      "id": 4,
+      "type": "LoadImage",
+      "title": "Clothed Avatar Source"
+    },
+    {
+      "id": 5,
+      "type": "LoadImageMask",
+      "title": "Clothing And Shoe Mask"
+    },
+    {
+      "id": 6,
+      "type": "VAEEncodeForInpaint",
+      "title": "Encode Base-Body Inpaint Latent"
+    },
+    {
+      "id": 7,
+      "type": "KSampler",
+      "title": "Base-Body Inpaint Sampler"
+    },
+    {
+      "id": 8,
+      "type": "VAEDecode",
+      "title": "Decode Base Avatar"
+    },
+    {
+      "id": 9,
+      "type": "SaveImage",
+      "title": "Save Unclothed Base Avatar"
+    }
+  ],
+  "links": [],
+  "extra": {
+    "template_id": "template.avatar_base_unclothed_lustify_inpaint.v1",
+    "notes": "Simple local synthetic-adult avatar base-body inpaint preset using the Lustify SDXL inpainting checkpoint. The default source and mask target avatar_seed2923980995547288489_rgb_00001_.png."
+  }
+}

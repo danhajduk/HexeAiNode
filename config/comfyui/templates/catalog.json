@@ -672,6 +672,157 @@
         "transparent_background": false,
         "not_for_all_audiences": true
       }
+    },
+    {
+      "template_id": "template.avatar_base_unclothed_lustify_inpaint.v1",
+      "template_name": "Avatar Base Unclothed Inpaint",
+      "description": "Simple local synthetic-adult avatar base-body inpaint preset using the Lustify SDXL inpainting checkpoint. The default source image is avatar_seed2923980995547288489_rgb_00001_.png copied into the manual ComfyUI input folder, and the default mask repaints the bodysuit and heels.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "avatar-base-unclothed-lustify-inpaint/api_workflow.json",
+      "ui_workflow_path": "avatar-base-unclothed-lustify-inpaint/ui_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Prompt for the masked clothing and shoe areas only. Keep this focused on an adult synthetic unclothed base body and preserved identity."
+        },
+        {
+          "name": "source_image",
+          "type": "image",
+          "required": true,
+          "description": "ComfyUI input path for the source avatar image."
+        },
+        {
+          "name": "mask_image",
+          "type": "image",
+          "required": true,
+          "description": "Black/white mask image. White is repainted; black is preserved."
+        },
+        {
+          "name": "mask_channel",
+          "type": "string",
+          "required": false,
+          "description": "Mask image channel to read.",
+          "allowed_values": [
+            "red",
+            "green",
+            "blue",
+            "alpha"
+          ]
+        },
+        {
+          "name": "grow_mask_by",
+          "type": "integer",
+          "required": false,
+          "description": "Pixel growth around the mask before inpainting."
+        },
+        {
+          "name": "checkpoint_name",
+          "type": "string",
+          "required": false,
+          "description": "Local Lustify SDXL inpainting checkpoint filename."
+        },
+        {
+          "name": "sampler_name",
+          "type": "string",
+          "required": false,
+          "description": "ComfyUI sampler name."
+        },
+        {
+          "name": "scheduler",
+          "type": "string",
+          "required": false,
+          "description": "ComfyUI scheduler name."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress inside the masked area."
+        },
+        {
+          "name": "avatar_name",
+          "type": "string",
+          "required": false,
+          "description": "Filesystem-safe avatar name used in output filenames."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed. Use null for runtime randomization."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        },
+        {
+          "name": "denoise",
+          "type": "number",
+          "required": false,
+          "description": "Inpaint denoise strength. Higher values replace the garment more strongly but can alter body details."
+        }
+      ],
+      "defaults": {
+        "source_image": "references/avatar/avatar_seed2923980995547288489_rgb_00001_source.png",
+        "mask_image": "references/avatar/avatar_seed2923980995547288489_unclothed_mask.png",
+        "negative_prompt": "clothing, bodysuit, lingerie, swimsuit, fabric, lace, straps, seams, shoes, heels, socks, stockings, changed face, changed hair, changed pose, changed background, extra limbs, distorted anatomy, blurry, low quality, watermark, text, child, teen, underage",
+        "avatar_name": "avatar_seed2923980995547288489_base",
+        "checkpoint_name": "lustifySDXLNSFW_v20-inpainting.safetensors",
+        "mask_channel": "red",
+        "grow_mask_by": 12,
+        "seed": null,
+        "steps": 28,
+        "cfg": 6.5,
+        "denoise": 0.82,
+        "sampler_name": "dpmpp_2m",
+        "scheduler": "karras"
+      },
+      "model_requirements": {
+        "checkpoint": "lustifySDXLNSFW_v20-inpainting.safetensors",
+        "loras": [],
+        "vae": null,
+        "controlnets": [],
+        "other": {
+          "nodes": [
+            "CheckpointLoaderSimple",
+            "CLIPTextEncode",
+            "LoadImage",
+            "LoadImageMask",
+            "VAEEncodeForInpaint",
+            "KSampler",
+            "VAEDecode",
+            "SaveImage"
+          ],
+          "source_image": "references/avatar/avatar_seed2923980995547288489_rgb_00001_source.png",
+          "mask_image": "references/avatar/avatar_seed2923980995547288489_unclothed_mask.png",
+          "model_repo": "andro-flock/LUSTIFY-SDXL-NSFW-checkpoint-v2-0-INPAINTING",
+          "usage": "local_adult_synthetic_avatar_base_body_inpaint",
+          "mask_semantics": "white_repaints_black_preserves"
+        }
+      },
+      "output_scope": "manual",
+      "metadata": {
+        "preset_family": "lustify_sdxl_inpaint",
+        "domain": "avatar_inpaint",
+        "input_mode": "text",
+        "edit_intent": "synthetic_avatar_unclothed_base_body_inpaint",
+        "reference_roles": [
+          "source",
+          "mask"
+        ],
+        "transparent_background": false,
+        "not_for_all_audiences": true
+      }
     }
   ]
 }
