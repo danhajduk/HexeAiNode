@@ -6,6 +6,7 @@ BOOTSTRAP_SCRIPT="$ROOT_DIR/scripts/bootstrap.sh"
 STACK_CONTROL_SCRIPT="$ROOT_DIR/scripts/stack-control.sh"
 VENV_PY="$ROOT_DIR/.venv/bin/python"
 REQ_FILE="$ROOT_DIR/requirements.txt"
+FRONTEND_DIR="$ROOT_DIR/frontend"
 BACKEND_SERVICE="hexe-ai-node-backend.service"
 FRONTEND_SERVICE="hexe-ai-node-frontend.service"
 
@@ -22,6 +23,11 @@ print_failure_logs() {
 if [[ -x "$VENV_PY" && -f "$REQ_FILE" ]]; then
   echo "Ensuring Python dependencies are installed in .venv..."
   "$VENV_PY" -m pip install -r "$REQ_FILE" >/dev/null
+fi
+
+if [[ -f "$FRONTEND_DIR/package.json" ]]; then
+  echo "Rebuilding frontend..."
+  npm --prefix "$FRONTEND_DIR" run build
 fi
 
 if have_user_units; then
