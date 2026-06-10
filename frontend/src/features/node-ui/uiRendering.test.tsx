@@ -648,7 +648,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Latest Preview");
     expect(markup).toContain("Preview History");
     expect(markup).toContain("head_face_2_seed1211.png");
-    expect(markup.indexOf("prompt-face-preview-latest")).toBeLessThan(markup.indexOf("prompt-face-preview</code>"));
+    expect(markup.match(/prompt-face-preview-latest/g)).toHaveLength(1);
     expect(markup).toContain("prompt-face-preview");
   });
 

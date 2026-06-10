@@ -662,6 +662,7 @@ export function AvatarGenerationCard({
   const detailMode = Boolean(routeProfileId);
   const headPreviewHistory = useMemo(() => headFacePreviewHistory(routeProfile), [routeProfile]);
   const latestHeadPreview = headPreviewHistory[0] || null;
+  const olderHeadPreviewHistory = useMemo(() => headPreviewHistory.slice(1), [headPreviewHistory]);
   const latestHeadPreviewOutput = headFacePreviewOutput(latestHeadPreview, manualOutputs, routeProfile);
   const headPrompt = useMemo(() => composeHeadFacePrompt(headPromptParts), [headPromptParts]);
 
@@ -1254,9 +1255,9 @@ export function AvatarGenerationCard({
 
             <div className="avatar-reference-section">
               <h3>Preview History</h3>
-              {headPreviewHistory.length ? (
+              {olderHeadPreviewHistory.length ? (
                 <div className="avatar-reference-card-grid avatar-head-face-preview-history">
-                  {headPreviewHistory.map((preview) => {
+                  {olderHeadPreviewHistory.map((preview) => {
                     const output = headFacePreviewOutput(preview, manualOutputs, routeProfile);
                     return (
                       <article className="avatar-reference-card" key={preview.preview_id || preview.created_at}>
