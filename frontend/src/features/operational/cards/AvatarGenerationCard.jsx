@@ -965,6 +965,14 @@ export function AvatarGenerationCard({
     }
   }
 
+  function submitHeadPromptShortcut(event) {
+    if (!(event.ctrlKey || event.metaKey) || event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    refineHeadPrompt(event);
+  }
+
   async function submitHeadPreview({ profileId, promptParts, negativePrompt }) {
     const prompt = composeHeadFacePrompt(promptParts);
     return onCreateHeadPreview?.(profileId, {
@@ -1261,6 +1269,7 @@ export function AvatarGenerationCard({
                     rows={5}
                     value={headInstruction}
                     onChange={(event) => updateHeadInstruction(event.target.value)}
+                    onKeyDown={submitHeadPromptShortcut}
                     placeholder="Tell the local LLM what to change about the head, face, hair, expression, or portrait style."
                   />
                 </label>
