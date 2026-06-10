@@ -588,8 +588,9 @@ describe("OperationalDashboard", () => {
               preview_history: [
                 {
                   preview_id: "head_face_1",
-                  status: "requested",
-                  note: "face_preview_template_not_configured",
+                  status: "submitted",
+                  template_id: "template.avatar_head_face_preview.realvisxl.v1",
+                  prompt_id: "prompt-face-preview",
                   created_at: "2026-06-10T10:00:00Z",
                 },
               ],
@@ -618,7 +619,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Refine Prompt");
     expect(markup).toContain("Create Preview");
     expect(markup).toContain("Preview History");
-    expect(markup).toContain("face_preview_template_not_configured");
+    expect(markup).toContain("prompt-face-preview");
   });
 
   it("shows friendly task kind and schedule names and sorts the legend by duration", () => {

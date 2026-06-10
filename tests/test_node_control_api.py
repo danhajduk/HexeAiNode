@@ -3880,22 +3880,45 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             )
             state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
 
-            result = state.create_avatar_profile_head_preview(
-                profile_id="Jane_Avatar",
-                payload=AvatarProfileHeadPreviewRequest(
-                    prompt="head portrait, black hair",
-                    negative_prompt="blurry",
-                ),
+            async def _submit_manual_image_generation(*, payload):
+                self.assertEqual(payload.template_id, "template.avatar_head_face_preview.realvisxl.v1")
+                self.assertEqual(payload.prompt, "head portrait, black hair")
+                self.assertEqual(payload.negative_prompt, "blurry")
+                self.assertEqual(payload.width, 768)
+                self.assertEqual(payload.height, 768)
+                self.assertTrue(payload.randomize_seed)
+                self.assertEqual(payload.template_variables["avatar_name"], "Jane_Avatar")
+                return {
+                    "status": "submitted",
+                    "template_id": payload.template_id,
+                    "prompt_id": "prompt-face-preview",
+                    "prompt_ids": ["prompt-face-preview"],
+                    "submissions": [{"seed": 1234}],
+                }
+
+            state.submit_manual_image_generation = _submit_manual_image_generation
+
+            result = asyncio.run(
+                state.create_avatar_profile_head_preview(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadPreviewRequest(
+                        prompt="head portrait, black hair",
+                        negative_prompt="blurry",
+                    ),
+                )
             )
 
             profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
             metadata = json.loads(profile_path.read_text(encoding="utf-8"))
 
-        self.assertEqual(result["status"], "preview_requested")
+        self.assertEqual(result["status"], "preview_submitted")
         self.assertEqual(result["preview"]["section"], "head_face")
-        self.assertEqual(result["preview"]["status"], "requested")
-        self.assertEqual(result["preview"]["note"], "face_preview_template_not_configured")
+        self.assertEqual(result["preview"]["status"], "submitted")
+        self.assertEqual(result["preview"]["template_id"], "template.avatar_head_face_preview.realvisxl.v1")
+        self.assertEqual(result["preview"]["prompt_id"], "prompt-face-preview")
+        self.assertEqual(result["preview"]["seed"], 1234)
         self.assertEqual(metadata["prompt_workspaces"]["head_face"]["preview_history"][0]["prompt"], "head portrait, black hair")
+        self.assertEqual(metadata["prompt_workspaces"]["head_face"]["preview_history"][0]["prompt_id"], "prompt-face-preview")
 
     def test_avatar_generation_selects_and_deletes_profile(self):
         class _AvatarProfileServiceManager:

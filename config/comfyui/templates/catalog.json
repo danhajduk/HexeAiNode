@@ -2,6 +2,106 @@
   "schema_version": "1.0",
   "templates": [
     {
+      "template_id": "template.avatar_head_face_preview.realvisxl.v1",
+      "template_name": "Avatar Head Face Preview",
+      "description": "Text-only RealVisXL SDXL preview workflow for an avatar profile's head and face prompt workspace.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "avatar-head-face-preview-realvisxl/api_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Head and face portrait prompt for the avatar profile."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress."
+        },
+        {
+          "name": "avatar_name",
+          "type": "string",
+          "required": false,
+          "description": "Filesystem-safe avatar name used in output filenames."
+        },
+        {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width."
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed. Use null for runtime randomization."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        },
+        {
+          "name": "denoise",
+          "type": "number",
+          "required": false,
+          "description": "Sampler denoise strength."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "low quality, blurry, distorted face, asymmetrical eyes, extra limbs, full body, cropped head, text, watermark, child, teen, underage",
+        "avatar_name": "avatar_head_face_preview",
+        "width": 768,
+        "height": 768,
+        "seed": null,
+        "steps": 4,
+        "cfg": 1.2,
+        "denoise": 1.0
+      },
+      "model_requirements": {
+        "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "loras": [
+          "sdxl_lightning_4step_lora.safetensors"
+        ],
+        "vae": null,
+        "controlnets": [],
+        "other": {
+          "nodes": [
+            "CheckpointLoaderSimple",
+            "LoraLoader",
+            "CLIPTextEncode",
+            "EmptyLatentImage",
+            "KSampler",
+            "VAEDecode",
+            "SaveImage"
+          ]
+        }
+      },
+      "output_scope": "manual",
+      "metadata": {
+        "domain": "avatar_profile",
+        "input_mode": "text",
+        "edit_intent": "avatar_head_face_preview",
+        "reference_roles": [],
+        "transparent_background": false
+      }
+    },
+    {
       "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
       "template_name": "Simple Avatar Generation",
       "description": "Transparent avatar workflow that uses PuLID for face identity and a padded body reference depth map through SDXL ControlNet, saves an RGB fallback, then removes the background.",

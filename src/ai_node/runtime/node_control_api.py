@@ -71,6 +71,7 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
 )
 
 MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"
+AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID = "template.avatar_head_face_preview.realvisxl.v1"
 AVATAR_BODY_DEPTH_PROFILE_CLIENT_ID = "hexe-node-avatar-body-depth"
 
 MANUAL_IMAGE_PROGRESS_NODE_LABELS = {
@@ -2182,7 +2183,7 @@ class NodeControlState:
             "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
         }
 
-    def create_avatar_profile_head_preview(self, *, profile_id: str, payload: "AvatarProfileHeadPreviewRequest") -> dict:
+    async def create_avatar_profile_head_preview(self, *, profile_id: str, payload: "AvatarProfileHeadPreviewRequest") -> dict:
         profile_dir = self._avatar_profile_dir(profile_id=profile_id)
         metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
         if not metadata:
@@ -2192,15 +2193,51 @@ class NodeControlState:
         if not prompt:
             prompt = self._avatar_profile_default_head_prompt(profile=metadata)
         negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
+        template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID)["template"]
+        defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+        if not negative_prompt:
+            negative_prompt = str(defaults.get("negative_prompt") or "").strip()
+        width = int(defaults.get("width") or 768)
+        height = int(defaults.get("height") or 768)
+        steps = int(defaults.get("steps") or 4)
+        cfg = float(defaults.get("cfg") or 1.2)
+        denoise = float(defaults.get("denoise") or 1.0)
+        avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
+        generation = await self.submit_manual_image_generation(
+            payload=ManualImageGenerationRequest(
+                template_id=AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID,
+                mode="txt2img",
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                width=width,
+                height=height,
+                steps=steps,
+                cfg=cfg,
+                denoise=denoise,
+                batch_count=1,
+                randomize_seed=True,
+                template_variables={"avatar_name": avatar_name},
+            )
+        )
         now = datetime.now(timezone.utc).isoformat()
+        submissions = generation.get("submissions") if isinstance(generation.get("submissions"), list) else []
+        first_submission = submissions[0] if submissions and isinstance(submissions[0], dict) else {}
         preview = {
             "preview_id": f"head_face_{int(time.time())}",
             "section": "head_face",
-            "status": "requested",
+            "status": str(generation.get("status") or "submitted"),
+            "template_id": AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID,
+            "prompt_id": generation.get("prompt_id"),
+            "prompt_ids": generation.get("prompt_ids") or [],
+            "seed": first_submission.get("seed"),
+            "width": width,
+            "height": height,
+            "steps": steps,
+            "cfg": cfg,
+            "denoise": denoise,
             "prompt": prompt,
             "negative_prompt": negative_prompt,
             "created_at": now,
-            "note": "face_preview_template_not_configured",
         }
         preview_history = list(workspace.get("preview_history") or [])
         preview_history.append(preview)
@@ -2222,8 +2259,9 @@ class NodeControlState:
         selected_profile_id = self._selected_avatar_profile_id()
         saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
         return {
-            "status": "preview_requested",
+            "status": "preview_submitted",
             "preview": preview,
+            "generation": generation,
             "profile": saved_profile,
             "workspace": saved_profile.get("prompt_workspaces", {}).get("head_face", {}),
             "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
@@ -10494,9 +10532,9 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/avatar-generation/profiles/{profile_id}/head-face/previews")
-    def post_avatar_generation_profile_head_preview(profile_id: str, payload: AvatarProfileHeadPreviewRequest):
+    async def post_avatar_generation_profile_head_preview(profile_id: str, payload: AvatarProfileHeadPreviewRequest):
         try:
-            return state.create_avatar_profile_head_preview(profile_id=profile_id, payload=payload)
+            return await state.create_avatar_profile_head_preview(profile_id=profile_id, payload=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

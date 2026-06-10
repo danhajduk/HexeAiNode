@@ -1,8 +1,8 @@
 # ComfyUI Simple Avatar Generation Workflow
 
-Status: Implemented in `config/comfyui/templates/avatar-body-depth-reference-transparent-realvisxl/api_workflow.json`, `config/comfyui/templates/avatar-profile-depth-pulid-realvisxl/api_workflow.json`, and `config/comfyui/templates/avatar-lustify-sdxl-inpaint/api_workflow.json`.
+Status: Implemented in `config/comfyui/templates/avatar-head-face-preview-realvisxl/api_workflow.json`, `config/comfyui/templates/avatar-body-depth-reference-transparent-realvisxl/api_workflow.json`, `config/comfyui/templates/avatar-profile-depth-pulid-realvisxl/api_workflow.json`, and `config/comfyui/templates/avatar-lustify-sdxl-inpaint/api_workflow.json`.
 
-The active ComfyUI template catalog contains `template.avatar_body_depth_reference_transparent.realvisxl.v1`, displayed in the node UI as `Simple Avatar Generation`; `template.avatar_profile_depth_pulid.realvisxl.v1`, displayed as `Avatar Profile Generation`; `template.avatar_lustify_sdxl_inpaint.v1`, displayed as `Avatar Clothing Inpaint`; and `template.avatar_base_unclothed_lustify_inpaint.v1`, displayed as `Avatar Base Unclothed Inpaint`. The older prompt-only, img2img, scene, avatar-reference, avatar-identity, and non-transparent depth template files were removed to keep manual avatar testing focused on PuLID identity plus SDXL depth ControlNet paths and the explicit masked inpaint pass.
+The active ComfyUI template catalog contains `template.avatar_head_face_preview.realvisxl.v1`, displayed as `Avatar Head Face Preview`; `template.avatar_body_depth_reference_transparent.realvisxl.v1`, displayed in the node UI as `Simple Avatar Generation`; `template.avatar_profile_depth_pulid.realvisxl.v1`, displayed as `Avatar Profile Generation`; `template.avatar_lustify_sdxl_inpaint.v1`, displayed as `Avatar Clothing Inpaint`; and `template.avatar_base_unclothed_lustify_inpaint.v1`, displayed as `Avatar Base Unclothed Inpaint`. The older prompt-only, img2img, scene, avatar-reference, avatar-identity, and non-transparent depth template files were removed to keep manual avatar testing focused on profile prompt previews, PuLID identity plus SDXL depth ControlNet paths, and the explicit masked inpaint pass.
 
 ## Purpose
 
@@ -57,7 +57,7 @@ save prefix as normal ComfyUI widgets.
 
 Required variables:
 
-- `positive_prompt`
+- `positive_prompt` for all prompt-driven avatar templates, including `Avatar Head Face Preview`
 - `face_reference_image`
 - `body_reference_image` for `Simple Avatar Generation`
 - `body_depth_image` for `Avatar Profile Generation`
@@ -131,10 +131,9 @@ history.
 current head/face prompt plus the user's adjustment request to the local LLM. The
 LLM returns updated prompt JSON, and the node persists both the prompt and the
 conversation. `POST /api/avatar-generation/profiles/{profile_id}/head-face/previews`
-records a preview request against the current prompt. Until a dedicated face
-preview ComfyUI template exists, preview entries are saved with
-`face_preview_template_not_configured` so the history is preserved without
-pretending an image was generated.
+submits `template.avatar_head_face_preview.realvisxl.v1` through the manual
+ComfyUI runtime and records the prompt id, template id, seed, prompt snapshot, and
+negative prompt in preview history.
 
 The extracted profile schema is versioned as `2.0` and separates stable identity
 from editable generation choices:

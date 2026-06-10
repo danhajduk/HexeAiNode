@@ -815,7 +815,7 @@ export function AvatarGenerationCard({
         negative_prompt: headNegativePrompt,
       });
       if (result) {
-        setLocalStatus("preview_requested");
+        setLocalStatus(result.status || "preview_submitted");
       }
     } finally {
       setActiveReferenceAction("");
@@ -1106,7 +1106,7 @@ export function AvatarGenerationCard({
                       <div>
                         <strong>{preview.status || "requested"}</strong>
                         <span>{preview.created_at || "not_saved"}</span>
-                        <code>{preview.note || "preview"}</code>
+                        <code>{preview.prompt_id || preview.note || preview.template_id || "preview"}</code>
                       </div>
                     </article>
                   ))}

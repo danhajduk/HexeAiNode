@@ -228,7 +228,8 @@ the resolved API workflow under `inputs.comfyui_workflow`. The effective request
 `constraints.image_template_resolved` with template id, version, runtime, model requirements, and
 `output_folder_policy: operational`, keeping governed generation separate from manual Web UI artifact folders.
 
-The default ComfyUI template catalog contains two GPU avatar templates. `Simple Avatar Generation`
+The default ComfyUI template catalog contains GPU avatar templates for profile prompt previews, final profile-aware generation, body-reference testing, and masked inpaint passes. `Avatar Head Face Preview`
+(`template.avatar_head_face_preview.realvisxl.v1`) is a text-only RealVisXL SDXL portrait workflow used by the Avatar Generation profile detail page to submit head/face prompt previews and record the resulting prompt id in preview history. `Simple Avatar Generation`
 (`template.avatar_body_depth_reference_transparent.realvisxl.v1`) applies PuLID face identity to the model, resizes and
 pads the body reference to the output aspect ratio, extracts a Depth Anything V2 depth map, and applies the SDXL depth
 ControlNet before sampling from an empty latent. `Avatar Profile Generation`
