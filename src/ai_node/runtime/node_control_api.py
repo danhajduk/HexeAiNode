@@ -4252,6 +4252,8 @@ class NodeControlState:
         source: str,
         source_output: str | None = None,
         placeholder: bool = False,
+        background_removed: bool = False,
+        rgb_fallback: bool = False,
     ) -> dict:
         seed = preview.get("seed")
         return {
@@ -4265,6 +4267,8 @@ class NodeControlState:
             "source": source,
             "source_output": source_output,
             "placeholder": bool(placeholder),
+            "background_removed": bool(background_removed),
+            "rgb_fallback": bool(rgb_fallback),
             "preview_id": preview.get("preview_id"),
             "prompt_id": preview.get("prompt_id"),
             "seed": seed,
@@ -4374,6 +4378,7 @@ class NodeControlState:
             shutil.copyfile(output_path, target_path)
             relative_name = f"preview/{filename}"
             source_output = output_path.relative_to(output_dir).as_posix() if output_dir in output_path.parents else str(output_path)
+            rgb_fallback = self._avatar_head_face_preview_is_rgb_fallback_path(path=output_path)
             sidecar = self._avatar_head_face_preview_sidecar(
                 profile_id=profile_id,
                 preview=preview,
@@ -4383,6 +4388,8 @@ class NodeControlState:
                 source="avatar_head_face_preview_generation",
                 source_output=source_output,
                 placeholder=False,
+                background_removed=not rgb_fallback,
+                rgb_fallback=rgb_fallback,
             )
             target_path.with_suffix(target_path.suffix + ".json").write_text(
                 json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
@@ -4391,11 +4398,13 @@ class NodeControlState:
             updated_history.append(
                 {
                     **preview,
-                    "status": "completed",
+                    "status": "completed_with_fallback" if rgb_fallback else "completed",
                     "filename": filename,
                     "input_image": sidecar["input_image"],
                     "url": sidecar["url"],
                     "placeholder": False,
+                    "background_removed": not rgb_fallback,
+                    "rgb_fallback": rgb_fallback,
                     "imported_at": now,
                     "source_output": sidecar["source_output"],
                 }
@@ -4433,13 +4442,21 @@ class NodeControlState:
         if output_dir not in prefix_path.parents:
             return None
         candidates = sorted(prefix_path.parent.glob(f"{prefix_path.name}*.png"), key=lambda path: path.stat().st_mtime, reverse=True)
+        rgb_fallback = None
         for candidate in candidates:
             if not candidate.is_file():
                 continue
-            if "_rgb" in candidate.stem:
+            if NodeControlState._avatar_head_face_preview_is_rgb_fallback_path(path=candidate):
+                if rgb_fallback is None:
+                    rgb_fallback = candidate.resolve()
                 continue
             return candidate.resolve()
-        return None
+        return rgb_fallback
+
+    @staticmethod
+    def _avatar_head_face_preview_is_rgb_fallback_path(*, path: Path) -> bool:
+        stem = path.stem
+        return stem.endswith("_rgb") or "_rgb_" in stem
 
     def _refresh_avatar_body_depth_profile_job(self, *, profile_dir: Path, metadata: dict) -> dict:
         job = self._read_avatar_body_depth_profile_job(profile_dir=profile_dir)

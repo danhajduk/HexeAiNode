@@ -4005,6 +4005,76 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(imported_bytes, b"preview-image")
         self.assertEqual(imported_reference["url"], imported_preview["url"])
 
+    def test_avatar_generation_imports_head_preview_rgb_fallback_when_alpha_output_missing(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+
+            async def _submit_manual_image_generation(*, payload):
+                return {
+                    "status": "submitted",
+                    "template_id": payload.template_id,
+                    "prompt_id": "prompt-face-preview",
+                    "prompt_ids": ["prompt-face-preview"],
+                    "submissions": [{"seed": 1211}],
+                }
+
+            state.submit_manual_image_generation = _submit_manual_image_generation
+
+            asyncio.run(
+                state.create_avatar_profile_head_preview(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadPreviewRequest(
+                        prompt="head portrait",
+                        negative_prompt="blurry",
+                    ),
+                )
+            )
+            placeholder_profile = state.avatar_generation_status()["profiles"][0]
+            placeholder_preview = placeholder_profile["prompt_workspaces"]["head_face"]["preview_history"][-1]
+            placeholder_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / placeholder_preview["filename"]
+            rgb_preview_output = output_dir / "hexe" / "avatar_head_face_preview" / "Jane_Avatar_seed1211_rgb_00001_.png"
+            rgb_preview_output.parent.mkdir(parents=True, exist_ok=True)
+            rgb_preview_output.write_bytes(b"rgb-preview-image")
+
+            refreshed = state.avatar_generation_status()["profiles"][0]
+            imported_preview = refreshed["prompt_workspaces"]["head_face"]["preview_history"][-1]
+            imported_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / imported_preview["filename"]
+            imported_bytes = imported_path.read_bytes()
+            imported_sidecar = json.loads(imported_path.with_suffix(imported_path.suffix + ".json").read_text(encoding="utf-8"))
+            placeholder_still_exists = placeholder_path.exists()
+
+        self.assertEqual(imported_preview["status"], "completed_with_fallback")
+        self.assertFalse(imported_preview["placeholder"])
+        self.assertFalse(imported_preview["background_removed"])
+        self.assertTrue(imported_preview["rgb_fallback"])
+        self.assertEqual(imported_preview["source_output"], "hexe/avatar_head_face_preview/Jane_Avatar_seed1211_rgb_00001_.png")
+        self.assertEqual(imported_bytes, b"rgb-preview-image")
+        self.assertFalse(placeholder_still_exists)
+        self.assertFalse(imported_sidecar["background_removed"])
+        self.assertTrue(imported_sidecar["rgb_fallback"])
+
     def test_avatar_generation_selects_and_deletes_profile(self):
         class _AvatarProfileServiceManager:
             def __init__(self, input_dir: str):
