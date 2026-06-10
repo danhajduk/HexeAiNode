@@ -61,6 +61,18 @@ function profileReferences(profile, role) {
   return asArray(objectValue(profile?.references)[role]);
 }
 
+function bodyDepthProfile(profile) {
+  return objectValue(profile?.body_depth_profile);
+}
+
+function rawBodyReferences(profile) {
+  return profileReferences(profile, "body_depth").filter((reference) => !reference?.background_removed);
+}
+
+function noBgBodyReferences(profile) {
+  return profileReferences(profile, "body_depth").filter((reference) => Boolean(reference?.background_removed));
+}
+
 function extractionEditorState(profile) {
   const extraction = objectValue(profile?.extraction);
   const structured = objectValue(extraction.structured);
@@ -153,6 +165,7 @@ export function AvatarGenerationCard({
   onUpdateProfileExtraction,
   onUploadProfileReference,
   onDeleteProfileReference,
+  onGenerateBodyDepthProfile,
   onBackToProfiles,
   onRefresh,
 }) {
@@ -283,8 +296,30 @@ export function AvatarGenerationCard({
     }
   }
 
-  function renderReferenceCards(role) {
-    const references = profileReferences(routeProfile, role);
+  async function generateBodyDepthProfile() {
+    if (!routeProfile?.profile_id || busy) {
+      return;
+    }
+    const sources = rawBodyReferences(routeProfile).map((reference) => String(reference.filename || "").trim()).filter(Boolean);
+    setActiveReferenceAction("generate:body_depth");
+    setLocalStatus("");
+    try {
+      const result = await onGenerateBodyDepthProfile?.(routeProfile.profile_id, {
+        source_filenames: sources.length ? sources : null,
+        width: 768,
+        height: 1152,
+        depth_resolution: 1024,
+        replace_source_images: true,
+      });
+      if (result) {
+        setLocalStatus("submitted");
+      }
+    } finally {
+      setActiveReferenceAction("");
+    }
+  }
+
+  function renderReferenceCards(role, references = profileReferences(routeProfile, role)) {
     if (!references.length) {
       return <p className="muted tiny">No saved references.</p>;
     }
@@ -449,28 +484,52 @@ export function AvatarGenerationCard({
 
         {activeDetailTab === "body_depth" ? (
           <section className="setup-form avatar-reference-upload-panel">
-            <label className="avatar-upload-control">
-              <span className="btn btn-primary">{activeReferenceAction === "upload:body_depth" ? "Uploading..." : "Upload Body Images"}</span>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(event) => {
-                  const files = Array.from(event.target.files || []);
-                  setBodyDepthFiles(files);
-                  uploadReferenceFiles("body_depth", files);
-                }}
-              />
-            </label>
+            <div className="row">
+              <label className="avatar-upload-control">
+                <span className="btn btn-primary">{activeReferenceAction === "upload:body_depth" ? "Uploading..." : "Upload Body Images"}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files || []);
+                    setBodyDepthFiles(files);
+                    uploadReferenceFiles("body_depth", files);
+                  }}
+                />
+              </label>
+              <button className="btn" type="button" disabled={busy} onClick={generateBodyDepthProfile}>
+                {activeReferenceAction === "generate:body_depth" ? "Generating..." : "Generate Depth Profile"}
+              </button>
+            </div>
             <div className="state-grid compact-grid">
               <span>Queued</span>
               <code>{bodyDepthFiles.length}</code>
               <span>Files</span>
               <code>{selectedFileNames(bodyDepthFiles)}</code>
-              <span>Saved</span>
-              <code>{profileReferences(routeProfile, "body_depth").length}</code>
+              <span>Raw Bodies</span>
+              <code>{rawBodyReferences(routeProfile).length}</code>
+              <span>No-BG Bodies</span>
+              <code>{noBgBodyReferences(routeProfile).length}</code>
+              <span>Depth Maps</span>
+              <code>{profileReferences(routeProfile, "body_depth_map").length}</code>
+              <span>Depth Profile</span>
+              <StatusBadge value={bodyDepthProfile(routeProfile).status || "not_started"} />
+              <span>Generated</span>
+              <code>{bodyDepthProfile(routeProfile).generated_count ?? 0}</code>
             </div>
-            {renderReferenceCards("body_depth")}
+            <div className="avatar-reference-section">
+              <h3>Raw Body Images</h3>
+              {renderReferenceCards("body_depth", rawBodyReferences(routeProfile))}
+            </div>
+            <div className="avatar-reference-section">
+              <h3>No-BG Body Images</h3>
+              {renderReferenceCards("body_depth", noBgBodyReferences(routeProfile))}
+            </div>
+            <div className="avatar-reference-section">
+              <h3>Depth Maps</h3>
+              {renderReferenceCards("body_depth_map")}
+            </div>
           </section>
         ) : null}
 

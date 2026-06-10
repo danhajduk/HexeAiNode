@@ -914,6 +914,16 @@
   gap: 12px;
 }
 
+.avatar-reference-section {
+  display: grid;
+  gap: 10px;
+}
+
+.avatar-reference-section h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
 .avatar-reference-card {
   display: grid;
   gap: 8px;

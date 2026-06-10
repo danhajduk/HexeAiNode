@@ -1215,6 +1215,28 @@ export default function App() {
     }
   }
 
+  async function onGenerateAvatarBodyDepthProfile(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/body-depth/generate`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
   async function onDeclareCapabilities() {
     if (declaringCapabilities) {
       return;
@@ -2168,6 +2190,7 @@ export default function App() {
       onUpdateProfileExtraction: onUpdateAvatarProfileExtraction,
       onUploadProfileReference: onUploadAvatarProfileReference,
       onDeleteProfileReference: onDeleteAvatarProfileReference,
+      onGenerateBodyDepthProfile: onGenerateAvatarBodyDepthProfile,
       onBackToProfiles: () => {
         window.location.hash = buildOperationalRoute("avatar_generation");
       },

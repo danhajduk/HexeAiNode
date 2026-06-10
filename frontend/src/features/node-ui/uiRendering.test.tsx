@@ -606,6 +606,21 @@ describe("OperationalDashboard", () => {
                 url: "/api/avatar-generation/profiles/Jane_Avatar/references/body_depth/standing_body.webp",
                 created_at: "2026-06-09T12:10:00Z",
               },
+              {
+                name: "Standing Body No BG",
+                filename: "avatar_body_standing_body.png",
+                url: "/api/avatar-generation/profiles/Jane_Avatar/references/body_depth/avatar_body_standing_body.png",
+                background_removed: true,
+                created_at: "2026-06-09T12:13:00Z",
+              },
+            ],
+            body_depth_map: [
+              {
+                name: "Standing Body Depth Map",
+                filename: "avatar_body_depth_standing_body.png",
+                url: "/api/avatar-generation/profiles/Jane_Avatar/references/body_depth_map/avatar_body_depth_standing_body.png",
+                created_at: "2026-06-09T12:14:00Z",
+              },
             ],
             face: [
               {
@@ -623,6 +638,11 @@ describe("OperationalDashboard", () => {
                 created_at: "2026-06-09T12:12:00Z",
               },
             ],
+          },
+          body_depth_profile: {
+            status: "completed",
+            generated_count: 1,
+            depth_map_count: 1,
           },
         },
       ],
@@ -666,8 +686,14 @@ describe("OperationalDashboard", () => {
     );
 
     expect(bodyMarkup).toContain("Upload Body Images");
+    expect(bodyMarkup).toContain("Generate Depth Profile");
+    expect(bodyMarkup).toContain("Raw Body Images");
     expect(bodyMarkup).toContain("Standing Body");
     expect(bodyMarkup).toContain("standing_body.webp");
+    expect(bodyMarkup).toContain("No-BG Body Images");
+    expect(bodyMarkup).toContain("avatar_body_standing_body.png");
+    expect(bodyMarkup).toContain("Depth Maps");
+    expect(bodyMarkup).toContain("avatar_body_depth_standing_body.png");
     expect(faceMarkup).toContain("Upload Face Images");
     expect(faceMarkup).toContain("Face Closeup");
     expect(poseMarkup).toContain("Upload Pose Images");
