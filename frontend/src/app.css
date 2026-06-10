@@ -1077,6 +1077,22 @@
   background: hsl(var(--sx-bg));
 }
 
+.avatar-head-face-preview-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.avatar-head-face-preview-button:focus-visible {
+  outline: 2px solid hsl(var(--sx-accent));
+  outline-offset: 3px;
+}
+
 .avatar-reference-card div {
   display: grid;
   gap: 3px;
@@ -1121,6 +1137,49 @@
   color: hsl(var(--sx-text-muted));
 }
 
+.avatar-preview-modal-overlay {
+  z-index: 1150;
+}
+
+.avatar-preview-modal-card {
+  width: min(1100px, 96vw);
+}
+
+.avatar-preview-modal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.avatar-preview-modal-body {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.avatar-preview-modal-image-panel {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.avatar-preview-modal-image-panel img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-bg));
+}
+
+.avatar-preview-modal-data {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
 @media (max-width: 760px) {
   .avatar-profile-card {
     grid-template-columns: 1fr;
@@ -1160,6 +1219,15 @@
   .avatar-profile-detail-controls,
   .avatar-generation-tabs {
     justify-content: flex-start;
+  }
+
+  .avatar-preview-modal-body {
+    grid-template-columns: 1fr;
+  }
+
+  .avatar-preview-modal-header {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

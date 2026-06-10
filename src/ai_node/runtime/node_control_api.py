@@ -3954,6 +3954,7 @@ class NodeControlState:
                         "role": "system",
                         "content": (
                             "/no_think You refine SDXL/ComfyUI prompts for an avatar head and face design workspace. "
+                            "This avatar may later be used for LoRA training, so descriptions must be specific, repeatable, and identity-stable. "
                             "Return strict JSON only. Do not wrap it in markdown. "
                             "The JSON object must contain keys prompt_parts, prompt, negative_prompt, and reply. "
                             "prompt_parts must be an object with these string keys: "
@@ -3961,7 +3962,9 @@ class NodeControlState:
                             "Update only the prompt_parts needed to satisfy the user request, then compile prompt from all prompt_parts. "
                             "reply must be one short user-facing sentence. "
                             "Preserve stable profile facts unless the user explicitly changes them. "
-                            "Focus on head, face, hair, expression, skin, eyes, makeup/accessories, portrait framing, lighting, and style. "
+                            "Focus on head, face, hair, expression, skin, eyes, eyebrows, nose, cheeks, mouth, jaw/chin, ears, makeup/accessories, portrait framing, lighting, and style. "
+                            "Avoid vague descriptors like beautiful, nice, good, detailed, or high quality unless paired with concrete visible traits. "
+                            "Describe concrete shapes, colors, proportions, textures, symmetry/asymmetry, camera angle, gaze direction, and lighting cues. "
                             "Do not include any text outside the JSON object."
                         ),
                     },

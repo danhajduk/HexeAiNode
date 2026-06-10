@@ -67,6 +67,21 @@ function headFacePreviewOutput(preview, outputs, profile) {
   return asArray(outputs).find((output) => String(output?.relative_path || "").startsWith(expected)) || null;
 }
 
+function headFacePreviewMetadata(preview, output) {
+  const source = objectValue(preview);
+  const metadata = {};
+  Object.entries(source).forEach(([key, value]) => {
+    if (["prompt", "negative_prompt", "prompt_parts"].includes(key)) {
+      return;
+    }
+    metadata[key] = value;
+  });
+  if (output) {
+    metadata.output = output;
+  }
+  return metadata;
+}
+
 function objectValue(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
@@ -681,6 +696,7 @@ export function AvatarGenerationCard({
   const [headNegativePrompt, setHeadNegativePrompt] = useState(() => promptWorkspace(routeProfile, "head_face").negative_prompt || "");
   const [headInstruction, setHeadInstruction] = useState(() => savedHeadInstructionDraft(routeProfile, routeProfileId));
   const [headAssistantReply, setHeadAssistantReply] = useState(() => latestHeadAssistantReply(routeProfile));
+  const [selectedHeadPreview, setSelectedHeadPreview] = useState(null);
   const generationProfileIdRef = useRef("");
   const headEditorProfileIdRef = useRef(String(routeProfile?.profile_id || ""));
   const generationProfileSignature = avatarGenerationProfileSignature(routeProfile);
@@ -692,6 +708,12 @@ export function AvatarGenerationCard({
   const olderHeadPreviewHistory = useMemo(() => headPreviewHistory.slice(1), [headPreviewHistory]);
   const latestHeadPreviewOutput = headFacePreviewOutput(latestHeadPreview, manualOutputs, routeProfile);
   const headPrompt = useMemo(() => composeHeadFacePrompt(headPromptParts), [headPromptParts]);
+  const selectedHeadPreviewPrompt = selectedHeadPreview
+    ? compactPromptText(selectedHeadPreview.preview?.prompt) || headPrompt
+    : "";
+  const selectedHeadPreviewNegativePrompt = selectedHeadPreview
+    ? compactPromptText(selectedHeadPreview.preview?.negative_prompt) || headNegativePrompt
+    : "";
 
   useEffect(() => {
     if (AVATAR_PROFILE_DETAIL_TABS.some((tab) => tab.id === initialDetailTab)) {
@@ -711,6 +733,7 @@ export function AvatarGenerationCard({
       setHeadAssistantReply(latestHeadAssistantReply(routeProfile));
       if (profileId !== previousProfileId) {
         setHeadInstruction(savedHeadInstructionDraft(routeProfile, routeProfileId));
+        setSelectedHeadPreview(null);
       }
     }
   }, [routeProfile, routeProfileId]);
@@ -777,6 +800,13 @@ export function AvatarGenerationCard({
       HEAD_INSTRUCTION_DRAFTS.set(key, value);
     }
     setHeadInstruction(value);
+  }
+
+  function openHeadPreviewDetails(preview, output) {
+    if (!preview) {
+      return;
+    }
+    setSelectedHeadPreview({ preview, output });
   }
 
   function resetGenerationDefaults() {
@@ -1210,6 +1240,76 @@ export function AvatarGenerationCard({
           </div>
         </div>
 
+        {selectedHeadPreview ? (
+          <section
+            className="modal-overlay avatar-preview-modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Head face preview details"
+            onClick={() => setSelectedHeadPreview(null)}
+          >
+            <article className="card modal-card avatar-preview-modal-card" onClick={(event) => event.stopPropagation()}>
+              <div className="avatar-preview-modal-header">
+                <CardHeader title="Head / Face Preview" subtitle={selectedHeadPreview.preview?.created_at || "preview metadata"} />
+                <button className="btn" type="button" onClick={() => setSelectedHeadPreview(null)}>
+                  Close
+                </button>
+              </div>
+              <div className="avatar-preview-modal-body">
+                <div className="avatar-preview-modal-image-panel">
+                  {selectedHeadPreview.output ? (
+                    <>
+                      <img
+                        src={`${apiBase}${selectedHeadPreview.output.url}`}
+                        alt={selectedHeadPreview.output.filename || selectedHeadPreview.output.relative_path}
+                      />
+                      <a className="btn" href={`${apiBase}${selectedHeadPreview.output.url}`} target="_blank" rel="noreferrer">
+                        Open Image
+                      </a>
+                    </>
+                  ) : (
+                    <div className="avatar-head-face-preview-placeholder">
+                      <StatusBadge value={selectedHeadPreview.preview?.status || "submitted"} />
+                    </div>
+                  )}
+                </div>
+                <div className="avatar-preview-modal-data">
+                  <div className="state-grid compact-grid avatar-head-face-preview-meta">
+                    <span>Status</span>
+                    <code>{selectedHeadPreview.preview?.status || "submitted"}</code>
+                    <span>Prompt</span>
+                    <code>{selectedHeadPreview.preview?.prompt_id || "pending"}</code>
+                    <span>Seed</span>
+                    <code>{selectedHeadPreview.preview?.seed || "pending"}</code>
+                    <span>Created</span>
+                    <code>{selectedHeadPreview.preview?.created_at || "not_saved"}</code>
+                  </div>
+                  <label className="avatar-generation-wide-field avatar-generation-compiled-prompt">
+                    Combined Prompt
+                    <textarea rows={7} readOnly value={selectedHeadPreviewPrompt} />
+                  </label>
+                  <label className="avatar-generation-wide-field">
+                    Negative Prompt
+                    <textarea rows={4} readOnly value={selectedHeadPreviewNegativePrompt} />
+                  </label>
+                  <label className="avatar-generation-wide-field avatar-generation-compiled-prompt">
+                    Metadata
+                    <textarea
+                      rows={10}
+                      readOnly
+                      value={JSON.stringify(
+                        headFacePreviewMetadata(selectedHeadPreview.preview, selectedHeadPreview.output),
+                        null,
+                        2
+                      )}
+                    />
+                  </label>
+                </div>
+              </div>
+            </article>
+          </section>
+        ) : null}
+
         {activeDetailTab === "profile" ? (
           <section className="setup-form avatar-extraction-form">
             <div className="state-grid compact-grid">
@@ -1321,12 +1421,17 @@ export function AvatarGenerationCard({
                 {latestHeadPreview ? (
                   <>
                     {latestHeadPreviewOutput ? (
-                      <a href={`${apiBase}${latestHeadPreviewOutput.url}`} target="_blank" rel="noreferrer">
+                      <button
+                        className="avatar-head-face-preview-button"
+                        type="button"
+                        onClick={() => openHeadPreviewDetails(latestHeadPreview, latestHeadPreviewOutput)}
+                        aria-label="Open latest head face preview details"
+                      >
                         <img
                           src={`${apiBase}${latestHeadPreviewOutput.url}`}
                           alt={latestHeadPreviewOutput.filename || latestHeadPreviewOutput.relative_path}
                         />
-                      </a>
+                      </button>
                     ) : (
                       <div className="avatar-head-face-preview-placeholder">
                         <StatusBadge value={latestHeadPreview.status || "submitted"} />
@@ -1358,9 +1463,14 @@ export function AvatarGenerationCard({
                     return (
                       <article className="avatar-reference-card" key={preview.preview_id || preview.created_at}>
                         {output ? (
-                          <a href={`${apiBase}${output.url}`} target="_blank" rel="noreferrer">
+                          <button
+                            className="avatar-head-face-preview-button"
+                            type="button"
+                            onClick={() => openHeadPreviewDetails(preview, output)}
+                            aria-label="Open head face preview details"
+                          >
                             <img src={`${apiBase}${output.url}`} alt={output.filename || output.relative_path} />
-                          </a>
+                          </button>
                         ) : (
                           <div className="avatar-head-face-preview-placeholder avatar-head-face-preview-placeholder-small">
                             <StatusBadge value={preview.status || "submitted"} />

@@ -608,10 +608,13 @@ describe("OperationalDashboard", () => {
                 },
                 {
                   preview_id: "head_face_1",
-                  status: "submitted",
+                  status: "completed",
                   template_id: "template.avatar_head_face_preview.realvisxl.v1",
                   prompt_id: "prompt-face-preview",
                   seed: 1200,
+                  filename: "head_face_1_seed1200.png",
+                  input_image: "avatar_profiles/Jane_Avatar/refs/head_face/preview/head_face_1_seed1200.png",
+                  url: "/api/avatar-generation/profiles/Jane_Avatar/references/head_face/preview/head_face_1_seed1200.png",
                   created_at: "2026-06-10T10:00:00Z",
                 },
               ],
@@ -653,6 +656,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Latest Preview");
     expect(markup).toContain("Preview History");
     expect(markup).toContain("head_face_2_seed1211.png");
+    expect(markup).toContain("Open latest head face preview details");
+    expect(markup).toContain("Open head face preview details");
     expect(markup.match(/prompt-face-preview-latest/g)).toHaveLength(1);
     expect(markup).toContain("prompt-face-preview");
   });

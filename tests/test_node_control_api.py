@@ -3927,6 +3927,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(workspace["conversation"]), 2)
         request_body = request.call_args.kwargs["body"]
         self.assertEqual(request_body["response_format"], {"type": "json_object"})
+        self.assertIn("LoRA training", request_body["messages"][0]["content"])
+        self.assertIn("specific, repeatable, and identity-stable", request_body["messages"][0]["content"])
         self.assertIn("current_prompt_parts", request_body["messages"][1]["content"])
         self.assertIn("prompt_parts", request_body["messages"][1]["content"])
         self.assertIn("blue headset", request_body["messages"][1]["content"])
