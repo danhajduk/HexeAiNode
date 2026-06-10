@@ -1868,6 +1868,161 @@ class NodeControlState:
             "description": content,
         }
 
+    def avatar_generation_status(self) -> dict:
+        return {
+            "configured": True,
+            "profile_root": self._avatar_profile_root().as_posix(),
+            "profiles": self._avatar_profiles(limit=48),
+        }
+
+    def save_avatar_profile(self, *, payload: "AvatarProfileSaveRequest") -> dict:
+        display_name = str(payload.name or "").strip()
+        if not display_name:
+            raise ValueError("avatar_profile_name_required")
+        profile_id = self._safe_filename_component(display_name)
+        profile_dir = self._avatar_profile_root() / profile_id
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        face_filename = self._write_avatar_profile_image(
+            profile_dir=profile_dir,
+            profile_id=profile_id,
+            role="face",
+            filename=payload.face_image_filename,
+            data_base64=payload.face_image_data_base64,
+        )
+        body_filename = self._write_avatar_profile_image(
+            profile_dir=profile_dir,
+            profile_id=profile_id,
+            role="body",
+            filename=payload.body_image_filename,
+            data_base64=payload.body_image_data_base64,
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        existing = {}
+        profile_path = profile_dir / "profile.json"
+        if profile_path.exists():
+            try:
+                existing = json.loads(profile_path.read_text(encoding="utf-8"))
+            except Exception:
+                existing = {}
+        existing = existing if isinstance(existing, dict) else {}
+        metadata = {
+            "schema_version": "1.0",
+            "profile_id": profile_id,
+            "name": display_name,
+            "description": str(payload.description or "").strip(),
+            "face_image": face_filename,
+            "body_image": body_filename,
+            "face_input_image": f"avatar_profiles/{profile_id}/{face_filename}",
+            "body_input_image": f"avatar_profiles/{profile_id}/{body_filename}",
+            "created_at": existing.get("created_at") or now,
+            "updated_at": now,
+        }
+        profile_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        profile = self._avatar_profile_payload(profile_dir=profile_dir)
+        return {
+            "status": "saved",
+            "profile": profile,
+            "profiles": self._avatar_profiles(limit=48),
+        }
+
+    def avatar_profile_asset_response(self, *, profile_id: str, asset_name: str) -> FileResponse:
+        root = self._avatar_profile_root()
+        safe_profile_id = self._safe_filename_component(profile_id)
+        safe_asset_name = Path(str(asset_name or "")).name
+        if safe_asset_name not in {"face.png", "face.jpg", "face.jpeg", "face.webp", "body.png", "body.jpg", "body.jpeg", "body.webp"}:
+            raise ValueError("avatar_profile_asset_not_found")
+        path = (root / safe_profile_id / safe_asset_name).resolve()
+        if root not in path.parents or not path.exists() or not path.is_file():
+            raise ValueError("avatar_profile_asset_not_found")
+        return FileResponse(path)
+
+    def _avatar_profile_root(self) -> Path:
+        return (self._manual_image_input_dir() / "avatar_profiles").resolve()
+
+    def _avatar_profiles(self, *, limit: int) -> list[dict]:
+        root = self._avatar_profile_root()
+        if not root.exists():
+            return []
+        profiles = []
+        for profile_dir in root.iterdir():
+            if not profile_dir.is_dir():
+                continue
+            profile = self._avatar_profile_payload(profile_dir=profile_dir)
+            if profile:
+                profiles.append(profile)
+        profiles.sort(key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""), reverse=True)
+        return profiles[: max(int(limit), 1)]
+
+    def _avatar_profile_payload(self, *, profile_dir: Path) -> dict:
+        profile_path = profile_dir / "profile.json"
+        try:
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        if not isinstance(metadata, dict):
+            return {}
+        profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
+        face_image = Path(str(metadata.get("face_image") or "face.png")).name
+        body_image = Path(str(metadata.get("body_image") or "body.png")).name
+        return {
+            **metadata,
+            "profile_id": profile_id,
+            "face_image": face_image,
+            "body_image": body_image,
+            "face_input_image": f"avatar_profiles/{profile_id}/{face_image}",
+            "body_input_image": f"avatar_profiles/{profile_id}/{body_image}",
+            "face_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{face_image}",
+            "body_url": f"/api/avatar-generation/profiles/{profile_id}/assets/{body_image}",
+        }
+
+    def _write_avatar_profile_image(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        role: str,
+        filename: str | None,
+        data_base64: str | None,
+    ) -> str:
+        encoded = str(data_base64 or "")
+        if not encoded:
+            raise ValueError(f"avatar_profile_{role}_image_required")
+        raw_name = Path(str(filename or f"{role}.png")).name
+        suffix = Path(raw_name).suffix.lower()
+        if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+            suffix = ".png"
+        target_name = f"{role}{suffix}"
+        target_path = (profile_dir / target_name).resolve()
+        root = self._avatar_profile_root()
+        if root not in target_path.parents:
+            raise ValueError("avatar_profile_path_invalid")
+        if "," in encoded and encoded.split(",", 1)[0].lower().startswith("data:"):
+            encoded = encoded.split(",", 1)[1]
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(f"invalid_avatar_profile_{role}_image_data") from exc
+        if not data:
+            raise ValueError(f"avatar_profile_{role}_image_empty")
+        if len(data) > 20 * 1024 * 1024:
+            raise ValueError(f"avatar_profile_{role}_image_too_large")
+        for stale in profile_dir.glob(f"{role}.*"):
+            if stale.name != target_name and stale.is_file():
+                stale.unlink()
+        target_path.write_bytes(data)
+        sidecar = {
+            "profile_id": profile_id,
+            "role": role,
+            "filename": target_name,
+            "input_image": f"avatar_profiles/{profile_id}/{target_name}",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        target_path.with_suffix(target_path.suffix + ".json").write_text(
+            json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return target_name
+
     def _manual_vision_image_payload(self, *, payload: "ManualImageVisionDescribeRequest") -> tuple[bytes, str, str]:
         if payload.reference_relative_path:
             root = self._manual_image_reference_root()
@@ -7064,6 +7219,15 @@ class ManualImageVisionDescribeRequest(BaseModel):
     image_data_base64: str | None = None
 
 
+class AvatarProfileSaveRequest(BaseModel):
+    name: str
+    description: str | None = None
+    face_image_filename: str | None = None
+    face_image_data_base64: str | None = None
+    body_image_filename: str | None = None
+    body_image_data_base64: str | None = None
+
+
 class ExecutionAuthorizeRequest(BaseModel):
     prompt_id: str
     task_family: str
@@ -7921,6 +8085,24 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def delete_manual_image_generation_output(relative_path: str):
         try:
             return state.delete_manual_image_output(relative_path=relative_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/avatar-generation")
+    def get_avatar_generation():
+        return state.avatar_generation_status()
+
+    @app.post("/api/avatar-generation/profiles")
+    def post_avatar_generation_profile(payload: AvatarProfileSaveRequest):
+        try:
+            return state.save_avatar_profile(payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/avatar-generation/profiles/{profile_id}/assets/{asset_name}")
+    def get_avatar_generation_profile_asset(profile_id: str, asset_name: str):
+        try:
+            return state.avatar_profile_asset_response(profile_id=profile_id, asset_name=asset_name)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

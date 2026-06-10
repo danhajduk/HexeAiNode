@@ -13,6 +13,7 @@ function buildOperationalProps(overrides = {}) {
       { id: "overview", label: "Overview", onClick: () => {} },
       { id: "runtime", label: "Runtime", onClick: () => {} },
       { id: "manual_image", label: "Manual Images", onClick: () => {} },
+      { id: "avatar_generation", label: "Avatar Generation", onClick: () => {} },
       { id: "scheduled", label: "Scheduled Tasks", onClick: () => {} },
       { id: "clients", label: "Clients", onClick: () => {} },
       { id: "diagnostics", label: "Diagnostics", onClick: () => {} },
@@ -422,6 +423,44 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Latest Job");
     expect(markup).toContain("submitted");
     expect(markup).toContain("prompt-submitted");
+  });
+
+  it("shows avatar generation profile creation on its own section", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "avatar_generation",
+          avatarGenerationProps: {
+            payload: {
+              profiles: [
+                {
+                  profile_id: "Jane_Avatar",
+                  name: "Jane Avatar",
+                  description: "Face: oval face.\n\nBody: full-body reference.",
+                  face_url: "/api/avatar-generation/profiles/Jane_Avatar/assets/face.png",
+                  body_url: "/api/avatar-generation/profiles/Jane_Avatar/assets/body.png",
+                  updated_at: "2026-06-09T12:00:00Z",
+                },
+              ],
+            },
+            apiBase: "http://node.local:9002",
+          },
+        })}
+      />
+    );
+
+    expect(markup).toContain("Avatar Generation");
+    expect(markup).toContain("Profile");
+    expect(markup).toContain("Body Depth");
+    expect(markup).toContain("Character Name");
+    expect(markup).toContain("Face Image");
+    expect(markup).toContain("Body Image");
+    expect(markup).toContain("Character Description");
+    expect(markup).toContain("Describe With Vision");
+    expect(markup).toContain("Save Profile");
+    expect(markup).toContain("Jane Avatar");
+    expect(markup).toContain("http://node.local:9002/api/avatar-generation/profiles/Jane_Avatar/assets/face.png");
+    expect(markup).not.toContain("Manual Image Generation");
   });
 
   it("shows friendly task kind and schedule names and sorts the legend by duration", () => {

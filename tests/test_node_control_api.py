@@ -15,6 +15,7 @@ from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
 from ai_node.persistence.image_generation_template_store import ImageGenerationTemplateStateStore
 from ai_node.runtime.node_control_api import (
+    AvatarProfileSaveRequest,
     DirectExecutionAdmissionConfig,
     DirectExecutionAdmissionGuard,
     DirectExecutionBusyError,
@@ -3656,6 +3657,59 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(delete_result["references"], [])
             with self.assertRaises(ValueError):
                 state.delete_manual_image_reference(relative_path="../outside.png")
+
+    def test_avatar_generation_saves_profile_with_face_and_body_images(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir)),
+            )
+            face_data = base64.b64encode(b"face-image").decode("ascii")
+            body_data = base64.b64encode(b"body-image").decode("ascii")
+
+            result = state.save_avatar_profile(
+                payload=AvatarProfileSaveRequest(
+                    name="Jane Avatar",
+                    description="editable avatar description",
+                    face_image_filename="face.webp",
+                    face_image_data_base64=face_data,
+                    body_image_filename="body.png",
+                    body_image_data_base64=body_data,
+                )
+            )
+
+            profile = result["profile"]
+            profile_dir = input_dir / "avatar_profiles" / "Jane_Avatar"
+            self.assertEqual(result["status"], "saved")
+            self.assertEqual(profile["profile_id"], "Jane_Avatar")
+            self.assertEqual(profile["name"], "Jane Avatar")
+            self.assertEqual(profile["description"], "editable avatar description")
+            self.assertEqual(profile["face_input_image"], "avatar_profiles/Jane_Avatar/face.webp")
+            self.assertEqual(profile["body_input_image"], "avatar_profiles/Jane_Avatar/body.png")
+            self.assertEqual(profile["face_url"], "/api/avatar-generation/profiles/Jane_Avatar/assets/face.webp")
+            self.assertEqual((profile_dir / "face.webp").read_bytes(), b"face-image")
+            self.assertEqual((profile_dir / "body.png").read_bytes(), b"body-image")
+
+            status = state.avatar_generation_status()
+
+        self.assertEqual(status["profiles"][0]["profile_id"], "Jane_Avatar")
+        self.assertEqual(status["profiles"][0]["description"], "editable avatar description")
 
     def test_manual_image_vision_describe_uses_local_vision_socket(self):
         class _VisionServiceManager:

@@ -52,6 +52,26 @@ Common tuning variables:
 
 Default output is `768x1152`, 4 steps, CFG `1.2`, denoise `1.0`, PuLID face strength `0.8`, PuLID fidelity `8`, and body depth strength `0.75`.
 
+## Avatar Profiles
+
+The node UI includes an `Avatar Generation` menu with tabs for the avatar pipeline.
+The first implemented tab is `Profile`. It stores one face image, one body image,
+an editable character description, and the character name under the manual ComfyUI
+input folder:
+
+```text
+runtime/manual/comfyui-gpu/input/avatar_profiles/<avatar_name>/
+```
+
+Each saved profile writes `profile.json`, a face image, and a body image. The JSON
+includes ComfyUI input paths such as `avatar_profiles/<avatar_name>/face.png` and
+`avatar_profiles/<avatar_name>/body.png`, so later body-depth, pose, and final-avatar
+tabs can reuse the profile assets without mixing them into normal operation output.
+
+The profile tab can call the existing local vision describe endpoint for the face
+and body images. Vision is used only through the normal vision runtime endpoint when
+it is already available; profile creation does not start vision by itself.
+
 ## Required Models And Nodes
 
 - Checkpoint: `RealVisXL_V5.0_fp16.safetensors`

@@ -88,12 +88,14 @@ describe("uiRoutes", () => {
     expect(buildSetupRoute("local")).toBe("#/setup/provider/local");
     expect(buildOperationalRoute()).toBe("#/dashboard");
     expect(buildOperationalRoute("manual_image")).toBe("#/dashboard/manual_image");
+    expect(buildOperationalRoute("avatar_generation")).toBe("#/dashboard/avatar_generation");
     expect(buildOperationalRoute("diagnostics")).toBe("#/dashboard/diagnostics");
   });
 
   it("resolves operational sections and setup helpers", () => {
     expect(resolveOperationalSection("#/dashboard/runtime")).toBe("runtime");
     expect(resolveOperationalSection("#/dashboard/manual_image")).toBe("manual_image");
+    expect(resolveOperationalSection("#/dashboard/avatar_generation")).toBe("avatar_generation");
     expect(resolveOperationalSection("#/dashboard/clients")).toBe("clients");
     expect(resolveOperationalSection("#/dashboard/scheduled")).toBe("scheduled");
     expect(resolveOperationalSection("#/dashboard")).toBe("overview");

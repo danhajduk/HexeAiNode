@@ -9,6 +9,7 @@ import { ResolvedTasksCard } from "./cards/ResolvedTasksCard";
 import { RuntimeServicesCard } from "./cards/RuntimeServicesCard";
 import { ImageTemplatesCard } from "./cards/ImageTemplatesCard";
 import { ManualImageGenerationCard } from "./cards/ManualImageGenerationCard";
+import { AvatarGenerationCard } from "./cards/AvatarGenerationCard";
 import { RecentActivityCard } from "./cards/RecentActivityCard";
 import { ClientCostCard } from "./cards/ClientCostCard";
 import { OperationalActionsCard } from "./cards/OperationalActionsCard";
@@ -87,6 +88,7 @@ export function OperationalDashboard({
   runtimeServicesProps,
   imageTemplatesProps,
   manualImageGenerationProps,
+  avatarGenerationProps,
   operationalActions,
   activityItems = [],
   clientCostItems = [],
@@ -173,6 +175,8 @@ export function OperationalDashboard({
         ) : null}
 
         {currentSection === "manual_image" ? <ManualImageGenerationCard {...manualImageGenerationProps} /> : null}
+
+        {currentSection === "avatar_generation" ? <AvatarGenerationCard {...avatarGenerationProps} /> : null}
 
         {currentSection === "activity" ? (
           <>

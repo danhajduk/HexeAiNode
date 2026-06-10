@@ -3,6 +3,7 @@ export type OperationalSection =
   | "capabilities"
   | "runtime"
   | "manual_image"
+  | "avatar_generation"
   | "activity"
   | "clients"
   | "scheduled"
@@ -16,6 +17,7 @@ const OPERATIONAL_SECTIONS: OperationalSection[] = [
   "capabilities",
   "runtime",
   "manual_image",
+  "avatar_generation",
   "activity",
   "clients",
   "scheduled",

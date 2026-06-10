@@ -188,6 +188,9 @@ export default function App() {
   const [manualImagePromptHelperBusy, setManualImagePromptHelperBusy] = useState(false);
   const [manualImagePoseHelperBusy, setManualImagePoseHelperBusy] = useState(false);
   const [manualImageVisionBusy, setManualImageVisionBusy] = useState(false);
+  const [avatarGenerationPayload, setAvatarGenerationPayload] = useState(null);
+  const [avatarGenerationBusy, setAvatarGenerationBusy] = useState(false);
+  const [avatarGenerationResult, setAvatarGenerationResult] = useState(null);
   const [runningAdminAction, setRunningAdminAction] = useState("");
   const [adminActionState, setAdminActionState] = useState("");
   const [uiState, setUiState] = useState(() =>
@@ -222,6 +225,7 @@ export default function App() {
       imageTemplatesResult,
       comfyuiTemplatesResult,
       manualImageGenerationStatusResult,
+      avatarGenerationStatusResult,
       capabilityDiagnosticsResult,
     ] = await Promise.allSettled([
       apiGet("/api/node/status"),
@@ -243,6 +247,7 @@ export default function App() {
       apiGet("/api/image-templates"),
       apiGet("/api/comfyui/templates"),
       apiGet("/api/manual-image-generation"),
+      apiGet("/api/avatar-generation"),
       apiAdminGet("/api/capabilities/diagnostics"),
     ]);
 
@@ -286,6 +291,8 @@ export default function App() {
     const comfyuiTemplatesPayload = comfyuiTemplatesResult.status === "fulfilled" ? comfyuiTemplatesResult.value : null;
     const manualImageGenerationPayload =
       manualImageGenerationStatusResult.status === "fulfilled" ? manualImageGenerationStatusResult.value : null;
+    const avatarGenerationPayload =
+      avatarGenerationStatusResult.status === "fulfilled" ? avatarGenerationStatusResult.value : null;
     const capabilityDiagnosticsPayload = capabilityDiagnosticsResult.status === "fulfilled" ? capabilityDiagnosticsResult.value : null;
     const partialFailures = [];
     if (governanceResult.status !== "fulfilled") {
@@ -342,6 +349,9 @@ export default function App() {
     if (manualImageGenerationStatusResult.status !== "fulfilled") {
       partialFailures.push("manual_image_generation_unavailable");
     }
+    if (avatarGenerationStatusResult.status !== "fulfilled") {
+      partialFailures.push("avatar_generation_unavailable");
+    }
     setBackendStatus(payload.status || "unknown");
     setPendingApprovalUrl(payload.pending_approval_url || "");
     setNodeId(payload.node_id || "");
@@ -369,6 +379,7 @@ export default function App() {
     setImageTemplatePayload(imageTemplatesPayload);
     setComfyuiTemplateCatalogPayload(comfyuiTemplatesPayload);
     setManualImageGenerationPayload(manualImageGenerationPayload);
+    setAvatarGenerationPayload(avatarGenerationPayload);
     setGovernanceStatusPayload(governancePayload);
     setBudgetStatePayload(budgetPayload);
     setProviderBudgetSummaries(summarizeProviderBudgets({ providerConfig: providerPayload, budgetState: budgetPayload }));
@@ -1036,6 +1047,27 @@ export default function App() {
       return null;
     } finally {
       setManualImageVisionBusy(false);
+    }
+  }
+
+  async function onSaveAvatarProfile(payload) {
+    if (avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setAvatarGenerationResult(null);
+    setError("");
+    try {
+      const result = await apiPost("/api/avatar-generation/profiles", payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
     }
   }
 
@@ -1784,6 +1816,7 @@ export default function App() {
     ["capabilities", "Capabilities"],
     ["runtime", "Runtime"],
     ["manual_image", "Manual Images"],
+    ["avatar_generation", "Avatar Generation"],
     ["activity", "Activity"],
     ["clients", "Clients"],
     ["scheduled", "Scheduled Tasks"],
@@ -1974,6 +2007,16 @@ export default function App() {
       onDeleteReference: onDeleteManualImageReference,
       onDescribeReference: onDescribeManualImageReference,
       onDeleteOutput: onDeleteManualImageOutput,
+      onRefresh: loadStatus,
+    },
+    avatarGenerationProps: {
+      payload: avatarGenerationPayload,
+      busy: avatarGenerationBusy,
+      visionBusy: manualImageVisionBusy,
+      result: avatarGenerationResult,
+      apiBase: getApiBase(),
+      onSaveProfile: onSaveAvatarProfile,
+      onDescribeReference: onDescribeManualImageReference,
       onRefresh: loadStatus,
     },
     operationalActions,
