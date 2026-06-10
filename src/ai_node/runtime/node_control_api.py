@@ -4299,12 +4299,15 @@ class NodeControlState:
         preview_history = list(workspace.get("preview_history") or [])
         if not preview_history:
             return metadata
+        original_preview_history_count = len(preview_history)
+        if len(preview_history) > AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:
+            preview_history = preview_history[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:]
         profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
         avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
         output_dir = self._manual_image_output_dir()
         preview_dir = profile_dir / "refs" / "head_face" / "preview"
         updated_history = []
-        changed = False
+        changed = original_preview_history_count > AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT
         now = datetime.now(timezone.utc).isoformat()
         for preview in preview_history:
             if not isinstance(preview, dict):
@@ -4314,7 +4317,7 @@ class NodeControlState:
             existing_filename = Path(str(preview.get("filename") or "")).name
             existing_is_placeholder = bool(preview.get("placeholder"))
             if existing_input and existing_filename and (preview_dir / existing_filename).is_file() and not existing_is_placeholder:
-                if str(preview.get("status") or "").strip() != "completed":
+                if str(preview.get("status") or "").strip() not in {"completed", "completed_with_fallback"}:
                     updated_history.append({**preview, "status": "completed"})
                     changed = True
                 else:

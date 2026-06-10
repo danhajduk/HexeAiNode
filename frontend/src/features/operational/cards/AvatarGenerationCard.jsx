@@ -48,7 +48,8 @@ function previewTimestamp(preview) {
 function headFacePreviewHistory(profile) {
   return asArray(promptWorkspace(profile, "head_face").preview_history)
     .slice()
-    .sort((left, right) => previewTimestamp(right) - previewTimestamp(left));
+    .sort((left, right) => previewTimestamp(right) - previewTimestamp(left))
+    .slice(0, 9);
 }
 
 function headFacePreviewOutput(preview, outputs, profile) {
