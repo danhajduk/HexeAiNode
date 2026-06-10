@@ -671,6 +671,7 @@ export function AvatarGenerationCard({
   const [headInstruction, setHeadInstruction] = useState("");
   const [headAssistantReply, setHeadAssistantReply] = useState(() => latestHeadAssistantReply(routeProfile));
   const generationProfileIdRef = useRef("");
+  const headEditorProfileIdRef = useRef(String(routeProfile?.profile_id || ""));
   const generationProfileSignature = avatarGenerationProfileSignature(routeProfile);
   const latestProfile = result?.profile || profiles[0] || null;
   const canSave = Boolean(characterName.trim()) && !busy;
@@ -691,10 +692,15 @@ export function AvatarGenerationCard({
     if (routeProfile) {
       setEditorState(extractionEditorState(routeProfile));
       const workspace = promptWorkspace(routeProfile, "head_face");
+      const profileId = String(routeProfile.profile_id || "").trim();
+      const previousProfileId = headEditorProfileIdRef.current;
+      headEditorProfileIdRef.current = profileId;
       setHeadPromptParts(headFacePromptParts(routeProfile));
       setHeadNegativePrompt(String(workspace.negative_prompt || ""));
       setHeadAssistantReply(latestHeadAssistantReply(routeProfile));
-      setHeadInstruction("");
+      if (profileId !== previousProfileId) {
+        setHeadInstruction("");
+      }
     }
   }, [routeProfile]);
 
