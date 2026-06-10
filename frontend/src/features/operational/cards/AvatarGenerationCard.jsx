@@ -31,6 +31,36 @@ function profileName(profile) {
   return profile?.name || profile?.profile_id || "avatar";
 }
 
+function safeFilenameComponent(value) {
+  const safe = String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return safe.slice(0, 80) || "avatar";
+}
+
+function previewTimestamp(preview) {
+  const parsed = Date.parse(String(preview?.created_at || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function headFacePreviewHistory(profile) {
+  return asArray(promptWorkspace(profile, "head_face").preview_history)
+    .slice()
+    .sort((left, right) => previewTimestamp(right) - previewTimestamp(left));
+}
+
+function headFacePreviewOutput(preview, outputs, profile) {
+  const seed = preview?.seed === null || preview?.seed === undefined ? "" : String(preview.seed).trim();
+  if (!seed) {
+    return null;
+  }
+  const safeName = safeFilenameComponent(profileName(profile));
+  const expected = `hexe/avatar_head_face_preview/${safeName}_seed${seed}`;
+  return asArray(outputs).find((output) => String(output?.relative_path || "").startsWith(expected)) || null;
+}
+
 function objectValue(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
@@ -521,6 +551,7 @@ function defaultHeadFacePrompt(profile) {
 
 export function AvatarGenerationCard({
   payload = null,
+  manualImageGenerationPayload = null,
   busy = false,
   result = null,
   apiBase = "",
@@ -545,6 +576,7 @@ export function AvatarGenerationCard({
   onRefresh,
 }) {
   const profiles = asArray(payload?.profiles);
+  const manualOutputs = asArray(manualImageGenerationPayload?.outputs);
   const selectedProfileId = String(payload?.selected_profile_id || "").trim();
   const routeProfile = useMemo(
     () => profiles.find((profile) => String(profile?.profile_id || "") === String(routeProfileId || "")),
@@ -579,6 +611,9 @@ export function AvatarGenerationCard({
   const latestProfile = result?.profile || profiles[0] || null;
   const canSave = Boolean(characterName.trim()) && !busy;
   const detailMode = Boolean(routeProfileId);
+  const headPreviewHistory = useMemo(() => headFacePreviewHistory(routeProfile), [routeProfile]);
+  const latestHeadPreview = headPreviewHistory[0] || null;
+  const latestHeadPreviewOutput = headFacePreviewOutput(latestHeadPreview, manualOutputs, routeProfile);
 
   useEffect(() => {
     if (AVATAR_PROFILE_DETAIL_TABS.some((tab) => tab.id === initialDetailTab)) {
@@ -1076,55 +1111,102 @@ export function AvatarGenerationCard({
 
         {activeDetailTab === "head_face" ? (
           <section className="setup-form avatar-reference-upload-panel avatar-generation-panel">
-            <form className="setup-form avatar-extraction-form" onSubmit={refineHeadPrompt}>
-              <div className="state-grid compact-grid">
-                <span>Workspace</span>
-                <StatusBadge value="head_face" />
-                <span>Conversation</span>
-                <code>{asArray(promptWorkspace(routeProfile, "head_face").conversation).length}</code>
-                <span>Previews</span>
-                <code>{asArray(promptWorkspace(routeProfile, "head_face").preview_history).length}</code>
-              </div>
-              <label className="avatar-generation-wide-field avatar-generation-compiled-prompt">
-                Current Head / Face Prompt
-                <textarea rows={8} value={headPrompt} onChange={(event) => setHeadPrompt(event.target.value)} />
-              </label>
-              <label className="avatar-generation-wide-field">
-                Negative Prompt
-                <textarea rows={4} value={headNegativePrompt} onChange={(event) => setHeadNegativePrompt(event.target.value)} />
-              </label>
-              <label className="avatar-generation-wide-field">
-                Adjustment Request
-                <textarea
-                  rows={5}
-                  value={headInstruction}
-                  onChange={(event) => setHeadInstruction(event.target.value)}
-                  placeholder="Tell the local LLM what to change about the head, face, hair, expression, or portrait style."
-                />
-              </label>
-              <div className="row">
-                <button className="btn btn-primary" type="submit" disabled={busy || !headInstruction.trim()}>
-                  {activeReferenceAction === "refine:head_face" ? "Refining..." : "Refine Prompt"}
-                </button>
-                <button className="btn" type="button" disabled={busy || !headPrompt.trim()} onClick={createHeadPreview}>
-                  {activeReferenceAction === "preview:head_face" ? "Requesting..." : "Create Preview"}
-                </button>
-              </div>
-            </form>
+            <div className="avatar-head-face-workspace">
+              <form className="setup-form avatar-extraction-form avatar-head-face-editor" onSubmit={refineHeadPrompt}>
+                <div className="state-grid compact-grid">
+                  <span>Workspace</span>
+                  <StatusBadge value="head_face" />
+                  <span>Conversation</span>
+                  <code>{asArray(promptWorkspace(routeProfile, "head_face").conversation).length}</code>
+                  <span>Previews</span>
+                  <code>{headPreviewHistory.length}</code>
+                </div>
+                <label className="avatar-generation-wide-field avatar-generation-compiled-prompt">
+                  Current Head / Face Prompt
+                  <textarea rows={8} value={headPrompt} onChange={(event) => setHeadPrompt(event.target.value)} />
+                </label>
+                <label className="avatar-generation-wide-field">
+                  Negative Prompt
+                  <textarea rows={4} value={headNegativePrompt} onChange={(event) => setHeadNegativePrompt(event.target.value)} />
+                </label>
+                <label className="avatar-generation-wide-field">
+                  Adjustment Request
+                  <textarea
+                    rows={5}
+                    value={headInstruction}
+                    onChange={(event) => setHeadInstruction(event.target.value)}
+                    placeholder="Tell the local LLM what to change about the head, face, hair, expression, or portrait style."
+                  />
+                </label>
+                <div className="row">
+                  <button className="btn btn-primary" type="submit" disabled={busy || !headInstruction.trim()}>
+                    {activeReferenceAction === "refine:head_face" ? "Refining..." : "Refine Prompt"}
+                  </button>
+                  <button className="btn" type="button" disabled={busy || !headPrompt.trim()} onClick={createHeadPreview}>
+                    {activeReferenceAction === "preview:head_face" ? "Requesting..." : "Create Preview"}
+                  </button>
+                </div>
+              </form>
+
+              <aside className="avatar-head-face-latest-preview">
+                <h3>Latest Preview</h3>
+                {latestHeadPreview ? (
+                  <>
+                    {latestHeadPreviewOutput ? (
+                      <a href={`${apiBase}${latestHeadPreviewOutput.url}`} target="_blank" rel="noreferrer">
+                        <img
+                          src={`${apiBase}${latestHeadPreviewOutput.url}`}
+                          alt={latestHeadPreviewOutput.filename || latestHeadPreviewOutput.relative_path}
+                        />
+                      </a>
+                    ) : (
+                      <div className="avatar-head-face-preview-placeholder">
+                        <StatusBadge value={latestHeadPreview.status || "submitted"} />
+                      </div>
+                    )}
+                    <div className="state-grid compact-grid avatar-head-face-preview-meta">
+                      <span>Status</span>
+                      <code>{latestHeadPreview.status || "submitted"}</code>
+                      <span>Prompt</span>
+                      <code>{latestHeadPreview.prompt_id || "pending"}</code>
+                      <span>Seed</span>
+                      <code>{latestHeadPreview.seed || "pending"}</code>
+                      <span>Created</span>
+                      <code>{latestHeadPreview.created_at || "not_saved"}</code>
+                    </div>
+                  </>
+                ) : (
+                  <p className="muted tiny">No preview yet.</p>
+                )}
+              </aside>
+            </div>
 
             <div className="avatar-reference-section">
               <h3>Preview History</h3>
-              {asArray(promptWorkspace(routeProfile, "head_face").preview_history).length ? (
-                <div className="avatar-reference-card-grid">
-                  {asArray(promptWorkspace(routeProfile, "head_face").preview_history).map((preview) => (
-                    <article className="avatar-reference-card" key={preview.preview_id || preview.created_at}>
-                      <div>
-                        <strong>{preview.status || "requested"}</strong>
-                        <span>{preview.created_at || "not_saved"}</span>
-                        <code>{preview.prompt_id || preview.note || preview.template_id || "preview"}</code>
-                      </div>
-                    </article>
-                  ))}
+              {headPreviewHistory.length ? (
+                <div className="avatar-reference-card-grid avatar-head-face-preview-history">
+                  {headPreviewHistory.map((preview) => {
+                    const output = headFacePreviewOutput(preview, manualOutputs, routeProfile);
+                    return (
+                      <article className="avatar-reference-card" key={preview.preview_id || preview.created_at}>
+                        {output ? (
+                          <a href={`${apiBase}${output.url}`} target="_blank" rel="noreferrer">
+                            <img src={`${apiBase}${output.url}`} alt={output.filename || output.relative_path} />
+                          </a>
+                        ) : (
+                          <div className="avatar-head-face-preview-placeholder avatar-head-face-preview-placeholder-small">
+                            <StatusBadge value={preview.status || "submitted"} />
+                          </div>
+                        )}
+                        <div>
+                          <strong>{preview.status || "requested"}</strong>
+                          <span>{preview.created_at || "not_saved"}</span>
+                          <code>{preview.prompt_id || preview.note || preview.template_id || "preview"}</code>
+                          <code>{preview.seed ? `seed ${preview.seed}` : "seed pending"}</code>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="muted tiny">No previews requested yet.</p>

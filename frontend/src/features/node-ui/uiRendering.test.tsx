@@ -587,10 +587,19 @@ describe("OperationalDashboard", () => {
               conversation: [{ role: "user", content: "make the smile softer" }],
               preview_history: [
                 {
+                  preview_id: "head_face_2",
+                  status: "submitted",
+                  template_id: "template.avatar_head_face_preview.realvisxl.v1",
+                  prompt_id: "prompt-face-preview-latest",
+                  seed: 1211,
+                  created_at: "2026-06-10T10:05:00Z",
+                },
+                {
                   preview_id: "head_face_1",
                   status: "submitted",
                   template_id: "template.avatar_head_face_preview.realvisxl.v1",
                   prompt_id: "prompt-face-preview",
+                  seed: 1200,
                   created_at: "2026-06-10T10:00:00Z",
                 },
               ],
@@ -608,6 +617,15 @@ describe("OperationalDashboard", () => {
             routeProfileId: "Jane_Avatar",
             initialDetailTab: "head_face",
             payload: profilePayload,
+            manualImageGenerationPayload: {
+              outputs: [
+                {
+                  relative_path: "hexe/avatar_head_face_preview/Jane_Avatar_seed1211_00001_.png",
+                  filename: "Jane_Avatar_seed1211_00001_.png",
+                  url: "/api/manual-image-generation/outputs/hexe/avatar_head_face_preview/Jane_Avatar_seed1211_00001_.png",
+                },
+              ],
+            },
           },
         })}
       />
@@ -618,7 +636,10 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Adjustment Request");
     expect(markup).toContain("Refine Prompt");
     expect(markup).toContain("Create Preview");
+    expect(markup).toContain("Latest Preview");
     expect(markup).toContain("Preview History");
+    expect(markup).toContain("Jane_Avatar_seed1211_00001_.png");
+    expect(markup.indexOf("prompt-face-preview-latest")).toBeLessThan(markup.indexOf("prompt-face-preview</code>"));
     expect(markup).toContain("prompt-face-preview");
   });
 

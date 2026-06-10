@@ -2271,6 +2271,7 @@ export default function App() {
     },
     avatarGenerationProps: {
       payload: avatarGenerationPayload,
+      manualImageGenerationPayload,
       busy: avatarGenerationBusy,
       visionBusy: manualImageVisionBusy,
       result: avatarGenerationResult,
