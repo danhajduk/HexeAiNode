@@ -15,6 +15,7 @@ from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.providers.models import UnifiedExecutionResponse, UnifiedExecutionUsage
 from ai_node.persistence.image_generation_template_store import ImageGenerationTemplateStateStore
 from ai_node.runtime.node_control_api import (
+    AvatarProfileExtractionUpdateRequest,
     AvatarProfileSaveRequest,
     DirectExecutionAdmissionConfig,
     DirectExecutionAdmissionGuard,
@@ -3753,6 +3754,64 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(deleted["selected_profile_id"])
         self.assertEqual(status["profiles"], [])
         self.assertIsNone(status["selected_profile_id"])
+
+    def test_avatar_generation_updates_extracted_profile_data(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(
+                payload=AvatarProfileSaveRequest(
+                    name="Jane Avatar",
+                    description="manual note",
+                    face_image_filename="face.png",
+                    face_image_data_base64=base64.b64encode(b"face-image").decode("ascii"),
+                    body_image_filename="body.png",
+                    body_image_data_base64=base64.b64encode(b"body-image").decode("ascii"),
+                )
+            )
+
+            result = state.update_avatar_profile_extraction(
+                profile_id="Jane_Avatar",
+                payload=AvatarProfileExtractionUpdateRequest(
+                    face_description="edited face detail",
+                    body_description="edited body detail",
+                    structured={
+                        "profile_name": "Jane Avatar",
+                        "permanent_identity": {"identity_prompt": "edited same Jane identity"},
+                        "body_profile": {"body_prompt": "- **Legs**: edited leg detail."},
+                        "negative_prompt_terms": ["different person", "no eyes"],
+                    },
+                ),
+            )
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(result["status"], "updated")
+        self.assertEqual(result["extraction"]["status"], "edited")
+        self.assertEqual(result["extraction"]["face_description"], "edited face detail")
+        self.assertEqual(result["extraction"]["body_description"], "edited body detail")
+        self.assertEqual(result["extraction"]["structured"]["identity_prompt"], "edited same Jane identity")
+        self.assertEqual(result["extraction"]["structured"]["body_profile"]["legs_feet"], "edited leg detail.")
+        self.assertEqual(result["extraction"]["structured"]["negative_prompt_terms"], ["different person"])
+        self.assertEqual(metadata["extraction"]["structured"]["schema_version"], "2.0")
 
     def test_avatar_generation_extracts_structured_profile_data(self):
         class _AvatarProfileServiceManager:

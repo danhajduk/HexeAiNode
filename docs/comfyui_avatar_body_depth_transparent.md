@@ -100,6 +100,10 @@ or identity, such as `no eyes`, `no face`, or `no hair`, are filtered out. Visio
 and local LLM calls use the existing runtimes only when they are already available;
 profile management does not start them implicitly.
 
+Edited extraction data can be saved back through
+`PUT /api/avatar-generation/profiles/{profile_id}/extraction`. The node runs the
+edited JSON through the same schema normalizer before writing it to the profile.
+
 ## Required Models And Nodes
 
 - Checkpoint: `RealVisXL_V5.0_fp16.safetensors`

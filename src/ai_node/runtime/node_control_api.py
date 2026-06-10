@@ -2058,6 +2058,51 @@ class NodeControlState:
             "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
         }
 
+    def update_avatar_profile_extraction(self, *, profile_id: str, payload: "AvatarProfileExtractionUpdateRequest") -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        existing_extraction = metadata.get("extraction") if isinstance(metadata.get("extraction"), dict) else {}
+        face_description = (
+            str(payload.face_description).strip()
+            if payload.face_description is not None
+            else str(existing_extraction.get("face_description") or "").strip()
+        )
+        body_description = (
+            str(payload.body_description).strip()
+            if payload.body_description is not None
+            else str(existing_extraction.get("body_description") or "").strip()
+        )
+        structured = self._normalize_avatar_profile_structured_data(
+            parsed=payload.structured if isinstance(payload.structured, dict) else {},
+            profile=metadata,
+            face_description=face_description,
+            body_description=body_description,
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        extraction = {
+            **existing_extraction,
+            "schema_version": existing_extraction.get("schema_version") or "1.0",
+            "status": "edited",
+            "created_at": existing_extraction.get("created_at") or now,
+            "updated_at": now,
+            "face_description": face_description,
+            "body_description": body_description,
+            "structured": structured,
+        }
+        updated = {**metadata, "extraction": extraction, "updated_at": now}
+        profile_path = profile_dir / "profile.json"
+        profile_path.write_text(json.dumps(updated, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        return {
+            "status": "updated",
+            "profile": saved_profile,
+            "extraction": extraction,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
     def _avatar_profile_json_from_local_llm(self, *, profile: dict, face_description: str, body_description: str) -> tuple[dict, str]:
         services = self.service_status_payload().get("services", {})
         local_llm = services.get("local_llm") if isinstance(services, dict) else {}
@@ -7790,6 +7835,12 @@ class AvatarProfileSaveRequest(BaseModel):
     body_image_data_base64: str | None = None
 
 
+class AvatarProfileExtractionUpdateRequest(BaseModel):
+    face_description: str | None = None
+    body_description: str | None = None
+    structured: dict | None = None
+
+
 class ExecutionAuthorizeRequest(BaseModel):
     prompt_id: str
     task_family: str
@@ -8672,6 +8723,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def post_avatar_generation_profile_extract(profile_id: str):
         try:
             return state.extract_avatar_profile_data(profile_id=profile_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.put("/api/avatar-generation/profiles/{profile_id}/extraction")
+    def put_avatar_generation_profile_extraction(profile_id: str, payload: AvatarProfileExtractionUpdateRequest):
+        try:
+            return state.update_avatar_profile_extraction(profile_id=profile_id, payload=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
