@@ -74,7 +74,12 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
             base_template["defaults"]["mask_image"],
             "references/avatar/avatar_seed2923980995547288489_unclothed_mask.png",
         )
-        self.assertEqual(base_template["defaults"]["denoise"], 0.82)
+        self.assertIn("continuous bare skin", base_template["defaults"]["positive_prompt"])
+        self.assertIn("garment outline", base_template["defaults"]["negative_prompt"])
+        self.assertEqual(base_template["defaults"]["grow_mask_by"], 20)
+        self.assertEqual(base_template["defaults"]["steps"], 32)
+        self.assertEqual(base_template["defaults"]["cfg"], 7.5)
+        self.assertEqual(base_template["defaults"]["denoise"], 0.9)
 
     def test_validate_rejects_default_without_variable(self):
         with tempfile.TemporaryDirectory() as tmp:

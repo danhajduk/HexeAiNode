@@ -15,6 +15,13 @@ TEMPLATE_ID = "template.avatar_lustify_sdxl_inpaint.v1"
 BASE_TEMPLATE_PATH = Path("config/comfyui/templates/avatar-base-unclothed-lustify-inpaint/api_workflow.json")
 BASE_UI_WORKFLOW_PATH = Path("config/comfyui/templates/avatar-base-unclothed-lustify-inpaint/ui_workflow.json")
 BASE_TEMPLATE_ID = "template.avatar_base_unclothed_lustify_inpaint.v1"
+BASE_DEFAULT_POSITIVE_PROMPT = (
+    "masked area only, replace all clothing with continuous bare skin, natural adult synthetic female torso anatomy, "
+    "bare shoulders to hips, visible natural skin across chest, abdomen, waist, pelvis, and upper thighs, "
+    "no fabric texture, no lace texture, no bodysuit shape, no garment edges, no straps, no seams, no underwear, "
+    "no swimsuit, skin tone matches surrounding arms and legs, smooth realistic skin transition, preserve same body "
+    "silhouette and pose, preserve face and background outside mask"
+)
 PLACEHOLDER_PATTERN = re.compile(r"{{[^{}]+}}")
 REQUIRED_PLACEHOLDERS = {
     "{{positive_prompt}}",
@@ -172,14 +179,38 @@ class AvatarLustifyInpaintTemplateTests(unittest.TestCase):
             workflow["5"]["inputs"]["image"],
             "references/avatar/avatar_seed2923980995547288489_unclothed_mask.png",
         )
-        self.assertEqual(workflow["6"]["inputs"]["grow_mask_by"], 12)
-        self.assertEqual(workflow["7"]["inputs"]["steps"], 28)
-        self.assertEqual(workflow["7"]["inputs"]["cfg"], 6.5)
-        self.assertEqual(workflow["7"]["inputs"]["denoise"], 0.82)
+        self.assertEqual(workflow["2"]["inputs"]["text"], "adult synthetic avatar base body, bare skin, preserve face and pose")
+        self.assertEqual(workflow["6"]["inputs"]["grow_mask_by"], 20)
+        self.assertEqual(workflow["7"]["inputs"]["steps"], 32)
+        self.assertEqual(workflow["7"]["inputs"]["cfg"], 7.5)
+        self.assertEqual(workflow["7"]["inputs"]["denoise"], 0.9)
         self.assertEqual(
             workflow["9"]["inputs"]["filename_prefix"],
             "hexe/avatar_base_unclothed/avatar_seed2923980995547288489_base_seed456",
         )
+
+    def test_base_unclothed_template_uses_webui_prompt_when_request_prompt_is_blank(self):
+        payload = load_comfyui_template_catalog(catalog_dir="config/comfyui/templates")
+        template = {item["template_id"]: item for item in payload["templates"]}[BASE_TEMPLATE_ID]
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("avatar-base-unclothed-template-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("avatar-base-unclothed-template-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id=BASE_TEMPLATE_ID,
+                    mode="txt2img",
+                    prompt="",
+                    seed=456,
+                ),
+                input_image="",
+            )
+
+        self.assertEqual(workflow["2"]["inputs"]["text"], BASE_DEFAULT_POSITIVE_PROMPT)
 
     def test_base_unclothed_ui_workflow_is_tweakable_comfyui_canvas(self):
         workflow = _base_ui_workflow()
@@ -190,6 +221,7 @@ class AvatarLustifyInpaintTemplateTests(unittest.TestCase):
         self.assertEqual(len(workflow["links"]), 12)
         self.assertEqual(nodes[1]["type"], "CheckpointLoaderSimple")
         self.assertEqual(nodes[1]["widgets_values"], ["lustifySDXLNSFW_v20-inpainting.safetensors"])
+        self.assertEqual(nodes[2]["widgets_values"], [BASE_DEFAULT_POSITIVE_PROMPT])
         self.assertEqual(nodes[4]["type"], "LoadImage")
         self.assertEqual(
             nodes[4]["widgets_values"][0],

@@ -773,17 +773,18 @@
         }
       ],
       "defaults": {
+        "positive_prompt": "masked area only, replace all clothing with continuous bare skin, natural adult synthetic female torso anatomy, bare shoulders to hips, visible natural skin across chest, abdomen, waist, pelvis, and upper thighs, no fabric texture, no lace texture, no bodysuit shape, no garment edges, no straps, no seams, no underwear, no swimsuit, skin tone matches surrounding arms and legs, smooth realistic skin transition, preserve same body silhouette and pose, preserve face and background outside mask",
         "source_image": "references/avatar/avatar_seed2923980995547288489_rgb_00001_source.png",
         "mask_image": "references/avatar/avatar_seed2923980995547288489_unclothed_mask.png",
-        "negative_prompt": "clothing, bodysuit, lingerie, swimsuit, fabric, lace, straps, seams, shoes, heels, socks, stockings, changed face, changed hair, changed pose, changed background, extra limbs, distorted anatomy, blurry, low quality, watermark, text, child, teen, underage",
+        "negative_prompt": "clothing, bodysuit, leotard, corset, lingerie, swimsuit, bikini, underwear, bra, panties, fabric, lace, mesh, pattern, white garment, garment outline, seams, straps, cups, waistband, leg holes, shoes, heels, socks, stockings, changed face, changed pose, changed background, distorted anatomy, blurry, low quality, watermark, text, child, teen, underage",
         "avatar_name": "avatar_seed2923980995547288489_base",
         "checkpoint_name": "lustifySDXLNSFW_v20-inpainting.safetensors",
         "mask_channel": "red",
-        "grow_mask_by": 12,
+        "grow_mask_by": 20,
         "seed": null,
-        "steps": 28,
-        "cfg": 6.5,
-        "denoise": 0.82,
+        "steps": 32,
+        "cfg": 7.5,
+        "denoise": 0.9,
         "sampler_name": "dpmpp_2m",
         "scheduler": "karras"
       },

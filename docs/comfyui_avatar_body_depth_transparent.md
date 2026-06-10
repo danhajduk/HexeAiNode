@@ -95,7 +95,7 @@ Default output is `768x1152`, 4 steps, CFG `1.2`, denoise `1.0`, PuLID face stre
 
 `Avatar Clothing Inpaint` defaults to 24 steps, CFG `6`, denoise `0.72`, `dpmpp_2m` with `karras`, `mask_channel: red`, and `grow_mask_by: 8`. Start lower on denoise when preserving the original body is more important; raise denoise when the clothing prompt is being ignored.
 
-`Avatar Base Unclothed Inpaint` defaults to 28 steps, CFG `6.5`, denoise `0.82`, `dpmpp_2m` with `karras`, `mask_channel: red`, and `grow_mask_by: 12`. Reduce denoise if the inpaint changes too much of the silhouette; raise it only if the garment remains visible.
+`Avatar Base Unclothed Inpaint` defaults to the same baseline as the ComfyUI Web UI workflow: 32 steps, CFG `7.5`, denoise `0.9`, `dpmpp_2m` with `karras`, `mask_channel: red`, and `grow_mask_by: 20`. Reduce denoise if the inpaint changes too much of the silhouette; raise it only if the garment remains visible.
 
 The Avatar Generation profile detail page includes a `Generation` tab that assembles prompt sections from the saved extraction and face profile. Operators can choose the template, PuLID face reference, body depth map, body reference, pose control image, prompt sections for identity/face/hair/body/pose/clothing/accessories/scene/style, negative prompt, sampler settings, batch count, seed randomization, face/body/pose strengths, strength jitter, and LoRA metadata sidecar output. Submissions are sent through `POST /api/manual-image-generation`.
 

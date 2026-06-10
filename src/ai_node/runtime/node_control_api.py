@@ -5065,7 +5065,7 @@ class NodeControlState:
             seed = secrets.randbelow(2**63)
         values.update(
             {
-                "positive_prompt": str(payload.prompt or "").strip(),
+                "positive_prompt": str(payload.prompt or values.get("positive_prompt") or "").strip(),
                 "negative_prompt": str(payload.negative_prompt or values.get("negative_prompt") or "").strip(),
                 "width": int(payload.width or values.get("width") or 1024),
                 "height": int(payload.height or values.get("height") or 1024),
