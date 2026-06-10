@@ -13,6 +13,7 @@ from ai_node.runtime.node_control_api import ManualImageGenerationRequest, NodeC
 TEMPLATE_PATH = Path("config/comfyui/templates/avatar-lustify-sdxl-inpaint/api_workflow.json")
 TEMPLATE_ID = "template.avatar_lustify_sdxl_inpaint.v1"
 BASE_TEMPLATE_PATH = Path("config/comfyui/templates/avatar-base-unclothed-lustify-inpaint/api_workflow.json")
+BASE_UI_WORKFLOW_PATH = Path("config/comfyui/templates/avatar-base-unclothed-lustify-inpaint/ui_workflow.json")
 BASE_TEMPLATE_ID = "template.avatar_base_unclothed_lustify_inpaint.v1"
 PLACEHOLDER_PATTERN = re.compile(r"{{[^{}]+}}")
 REQUIRED_PLACEHOLDERS = {
@@ -40,6 +41,10 @@ def _template() -> dict:
 
 def _base_template() -> dict:
     return json.loads(BASE_TEMPLATE_PATH.read_text(encoding="utf-8"))
+
+
+def _base_ui_workflow() -> dict:
+    return json.loads(BASE_UI_WORKFLOW_PATH.read_text(encoding="utf-8"))
 
 
 def _collect_placeholders(value) -> set[str]:
@@ -174,6 +179,34 @@ class AvatarLustifyInpaintTemplateTests(unittest.TestCase):
         self.assertEqual(
             workflow["9"]["inputs"]["filename_prefix"],
             "hexe/avatar_base_unclothed/avatar_seed2923980995547288489_base_seed456",
+        )
+
+    def test_base_unclothed_ui_workflow_is_tweakable_comfyui_canvas(self):
+        workflow = _base_ui_workflow()
+        nodes = {node["id"]: node for node in workflow["nodes"]}
+
+        self.assertEqual(workflow["last_node_id"], 9)
+        self.assertEqual(workflow["last_link_id"], 12)
+        self.assertEqual(len(workflow["links"]), 12)
+        self.assertEqual(nodes[1]["type"], "CheckpointLoaderSimple")
+        self.assertEqual(nodes[1]["widgets_values"], ["lustifySDXLNSFW_v20-inpainting.safetensors"])
+        self.assertEqual(nodes[4]["type"], "LoadImage")
+        self.assertEqual(
+            nodes[4]["widgets_values"][0],
+            "references/avatar/avatar_seed2923980995547288489_rgb_00001_source.png",
+        )
+        self.assertEqual(nodes[5]["type"], "LoadImageMask")
+        self.assertEqual(
+            nodes[5]["widgets_values"],
+            ["references/avatar/avatar_seed2923980995547288489_unclothed_mask.png", "red"],
+        )
+        self.assertEqual(nodes[6]["type"], "VAEEncodeForInpaint")
+        self.assertEqual(nodes[6]["widgets_values"], [20])
+        self.assertEqual(nodes[7]["type"], "KSampler")
+        self.assertEqual(nodes[7]["widgets_values"][1:], ["randomize", 32, 7.5, "dpmpp_2m", "karras", 0.9])
+        self.assertEqual(
+            nodes[9]["widgets_values"],
+            ["hexe/avatar_base_unclothed/avatar_seed2923980995547288489_base_webui"],
         )
 
 

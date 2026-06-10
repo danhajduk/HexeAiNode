@@ -28,6 +28,18 @@ references/avatar/avatar_seed2923980995547288489_unclothed_mask.png
 
 The mask repaints the bodysuit, straps, ankle straps, and heels, while preserving the face, hair, arms, legs, pose, and background outside the mask. Outputs are saved under `hexe/avatar_base_unclothed/`.
 
+The same preset is also stored as a full ComfyUI Web UI canvas workflow in
+`config/comfyui/templates/avatar-base-unclothed-lustify-inpaint/ui_workflow.json`.
+For live tweaking in the ComfyUI Web UI, copy that file into:
+
+```text
+runtime/manual/comfyui-gpu/user/default/workflows/Avatar Base Unclothed Inpaint.json
+```
+
+The Web UI workflow exposes the source image, mask image, positive and negative
+prompts, mask growth, seed behavior, steps, CFG, sampler, scheduler, denoise, and
+save prefix as normal ComfyUI widgets.
+
 ## Pipeline
 
 1. Load `RealVisXL_V5.0_fp16.safetensors`.
