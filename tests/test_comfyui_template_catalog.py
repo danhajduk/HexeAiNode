@@ -15,7 +15,7 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
 
         self.assertTrue(payload["configured"])
         self.assertEqual(payload["schema_version"], "1.0")
-        self.assertEqual(len(payload["templates"]), 2)
+        self.assertEqual(len(payload["templates"]), 3)
         templates_by_id = {template["template_id"]: template for template in payload["templates"]}
         template = templates_by_id["template.avatar_body_depth_reference_transparent.realvisxl.v1"]
         self.assertEqual(template["template_name"], "Simple Avatar Generation")
@@ -50,6 +50,17 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
             "precomputed_depth_map_controlnet",
         )
         self.assertEqual(profile_template["model_requirements"]["other"]["pose_preservation"], "openpose_controlnet")
+        inpaint_template = templates_by_id["template.avatar_lustify_sdxl_inpaint.v1"]
+        self.assertEqual(inpaint_template["template_name"], "Avatar Clothing Inpaint")
+        self.assertEqual(
+            inpaint_template["model_requirements"]["checkpoint"],
+            "lustifySDXLNSFW_v20-inpainting.safetensors",
+        )
+        self.assertEqual(inpaint_template["metadata"]["input_mode"], "image")
+        self.assertEqual(inpaint_template["metadata"]["edit_intent"], "avatar_clothing_or_body_masked_inpaint")
+        self.assertIn("input_image", [item["name"] for item in inpaint_template["variables"]])
+        self.assertIn("mask_image", [item["name"] for item in inpaint_template["variables"]])
+        self.assertEqual(inpaint_template["defaults"]["steps"], 24)
 
     def test_validate_rejects_default_without_variable(self):
         with tempfile.TemporaryDirectory() as tmp:

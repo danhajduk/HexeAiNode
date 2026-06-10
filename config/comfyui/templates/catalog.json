@@ -522,6 +522,156 @@
         ],
         "transparent_background": true
       }
+    },
+    {
+      "template_id": "template.avatar_lustify_sdxl_inpaint.v1",
+      "template_name": "Avatar Clothing Inpaint",
+      "description": "Mask-based SDXL inpaint workflow using the Lustify SDXL NSFW inpainting checkpoint. Use this as a second pass on a base avatar image to repaint clothing or body areas inside a white mask while preserving the rest of the image.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "avatar-lustify-sdxl-inpaint/api_workflow.json",
+      "ui_workflow_path": "avatar-lustify-sdxl-inpaint/ui_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Prompt for the masked area only, such as the outfit, skin repair, fabric, and local lighting."
+        },
+        {
+          "name": "input_image",
+          "type": "image",
+          "required": true,
+          "description": "Base avatar image to inpaint. Pixels outside the mask are preserved."
+        },
+        {
+          "name": "mask_image",
+          "type": "image",
+          "required": true,
+          "description": "Black/white mask image. White is repainted; black is preserved. The mask should match the source image size."
+        },
+        {
+          "name": "mask_channel",
+          "type": "string",
+          "required": false,
+          "description": "Mask image channel to read. Use red for black/white masks or alpha for transparent-mask PNGs.",
+          "allowed_values": [
+            "red",
+            "green",
+            "blue",
+            "alpha"
+          ]
+        },
+        {
+          "name": "grow_mask_by",
+          "type": "integer",
+          "required": false,
+          "description": "Pixel growth around the mask before inpainting."
+        },
+        {
+          "name": "checkpoint_name",
+          "type": "string",
+          "required": false,
+          "description": "Local Lustify SDXL inpainting checkpoint filename."
+        },
+        {
+          "name": "sampler_name",
+          "type": "string",
+          "required": false,
+          "description": "ComfyUI sampler name."
+        },
+        {
+          "name": "scheduler",
+          "type": "string",
+          "required": false,
+          "description": "ComfyUI scheduler name."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress inside the masked area."
+        },
+        {
+          "name": "avatar_name",
+          "type": "string",
+          "required": false,
+          "description": "Filesystem-safe avatar name used in output filenames."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed. Use null for runtime randomization."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        },
+        {
+          "name": "denoise",
+          "type": "number",
+          "required": false,
+          "description": "Inpaint denoise strength. Lower values preserve the original image; higher values obey the outfit/body prompt more strongly."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "out of mask changes, changed face, changed hands, changed background, extra fabric, broken straps, distorted body, distorted anatomy, blurry, low quality, watermark, text, child, teen, underage",
+        "avatar_name": "avatar",
+        "checkpoint_name": "lustifySDXLNSFW_v20-inpainting.safetensors",
+        "mask_channel": "red",
+        "grow_mask_by": 8,
+        "seed": null,
+        "steps": 24,
+        "cfg": 6,
+        "denoise": 0.72,
+        "sampler_name": "dpmpp_2m",
+        "scheduler": "karras"
+      },
+      "model_requirements": {
+        "checkpoint": "lustifySDXLNSFW_v20-inpainting.safetensors",
+        "loras": [],
+        "vae": null,
+        "controlnets": [],
+        "other": {
+          "nodes": [
+            "CheckpointLoaderSimple",
+            "CLIPTextEncode",
+            "LoadImage",
+            "LoadImageMask",
+            "VAEEncodeForInpaint",
+            "KSampler",
+            "VAEDecode",
+            "SaveImage"
+          ],
+          "model_repo": "andro-flock/LUSTIFY-SDXL-NSFW-checkpoint-v2-0-INPAINTING",
+          "model_file": "lustifySDXLNSFW_v20-inpainting.safetensors",
+          "license": "creativeml-openrail-m",
+          "usage": "local_adult_synthetic_avatar_inpaint",
+          "mask_semantics": "white_repaints_black_preserves",
+          "source": "https://huggingface.co/andro-flock/LUSTIFY-SDXL-NSFW-checkpoint-v2-0-INPAINTING"
+        }
+      },
+      "output_scope": "manual",
+      "metadata": {
+        "preset_family": "lustify_sdxl_inpaint",
+        "domain": "avatar",
+        "input_mode": "image",
+        "edit_intent": "avatar_clothing_or_body_masked_inpaint",
+        "reference_roles": [
+          "source",
+          "mask"
+        ],
+        "transparent_background": false,
+        "not_for_all_audiences": true
+      }
     }
   ]
 }

@@ -1,8 +1,8 @@
 # ComfyUI Simple Avatar Generation Workflow
 
-Status: Implemented in `config/comfyui/templates/avatar-body-depth-reference-transparent-realvisxl/api_workflow.json` and `config/comfyui/templates/avatar-profile-depth-pulid-realvisxl/api_workflow.json`.
+Status: Implemented in `config/comfyui/templates/avatar-body-depth-reference-transparent-realvisxl/api_workflow.json`, `config/comfyui/templates/avatar-profile-depth-pulid-realvisxl/api_workflow.json`, and `config/comfyui/templates/avatar-lustify-sdxl-inpaint/api_workflow.json`.
 
-The active ComfyUI template catalog contains `template.avatar_body_depth_reference_transparent.realvisxl.v1`, displayed in the node UI as `Simple Avatar Generation`, and `template.avatar_profile_depth_pulid.realvisxl.v1`, displayed as `Avatar Profile Generation`. The older prompt-only, img2img, scene, avatar-reference, avatar-identity, and non-transparent depth template files were removed to keep manual avatar testing focused on PuLID identity plus SDXL depth ControlNet paths.
+The active ComfyUI template catalog contains `template.avatar_body_depth_reference_transparent.realvisxl.v1`, displayed in the node UI as `Simple Avatar Generation`; `template.avatar_profile_depth_pulid.realvisxl.v1`, displayed as `Avatar Profile Generation`; and `template.avatar_lustify_sdxl_inpaint.v1`, displayed as `Avatar Clothing Inpaint`. The older prompt-only, img2img, scene, avatar-reference, avatar-identity, and non-transparent depth template files were removed to keep manual avatar testing focused on PuLID identity plus SDXL depth ControlNet paths and the explicit masked inpaint pass.
 
 ## Purpose
 
@@ -11,6 +11,8 @@ This workflow generates a new transparent avatar image from a prompt, a face ref
 PuLID owns face/ID preservation, while the body reference controls pose, silhouette, and proportions. This is stronger than the older latent-only face reference path, but it is still not a trained identity LoRA or a true pose-from-text model.
 
 `Avatar Profile Generation` is the preferred final-generation path after an avatar profile has a body depth profile. It uses the profile's selected PuLID face image, a saved `refs/body_depth_map/*` depth map, and a saved `refs/pose/*` OpenPose or pose-control image directly, which avoids rerunning Depth Anything during each final image generation and lets the selected pose image guide the composition.
+
+`Avatar Clothing Inpaint` is a manual second-pass workflow for changing the masked area of an existing avatar image. It loads `lustifySDXLNSFW_v20-inpainting.safetensors`, reads the selected source image from `input_image`, reads a separate `mask_image` with `LoadImageMask`, encodes the image with `VAEEncodeForInpaint`, samples the masked area, and saves the result under `hexe/avatar_lustify_inpaint/`. The mask should match the source image dimensions; white pixels are repainted and black pixels are preserved. This template intentionally does not run background removal.
 
 ## Pipeline
 
@@ -34,6 +36,7 @@ Required variables:
 - `body_reference_image` for `Simple Avatar Generation`
 - `body_depth_image` for `Avatar Profile Generation`
 - `pose_reference_image` for `Avatar Profile Generation`
+- `input_image` and `mask_image` for `Avatar Clothing Inpaint`
 
 Common tuning variables:
 
@@ -56,8 +59,14 @@ Common tuning variables:
 - `steps`
 - `cfg`
 - `denoise`
+- `mask_channel`
+- `grow_mask_by`
+- `sampler_name`
+- `scheduler`
 
 Default output is `768x1152`, 4 steps, CFG `1.2`, denoise `1.0`, PuLID face strength `0.8`, PuLID fidelity `8`, and body depth strength `0.75`.
+
+`Avatar Clothing Inpaint` defaults to 24 steps, CFG `6`, denoise `0.72`, `dpmpp_2m` with `karras`, `mask_channel: red`, and `grow_mask_by: 8`. Start lower on denoise when preserving the original body is more important; raise denoise when the clothing prompt is being ignored.
 
 The Avatar Generation profile detail page includes a `Generation` tab that assembles prompt sections from the saved extraction and face profile. Operators can choose the template, PuLID face reference, body depth map, body reference, pose control image, prompt sections for identity/face/hair/body/pose/clothing/accessories/scene/style, negative prompt, sampler settings, batch count, seed randomization, face/body/pose strengths, strength jitter, and LoRA metadata sidecar output. Submissions are sent through `POST /api/manual-image-generation`.
 
@@ -177,7 +186,10 @@ count, and depth-map count.
 - OpenPose ControlNet: `controlnet-openpose-sdxl-1.0.safetensors`
 - Depth preprocessor model: `depth_anything_v2_vits.pth`
 - Background-removal model: `birefnet.safetensors`
+- Inpaint checkpoint: `runtime/models/comfyui-gpu/checkpoints/lustifySDXLNSFW_v20-inpainting.safetensors`
 - Custom nodes: `PuLID_ComfyUI` nodes (`PulidModelLoader`, `PulidEvaClipLoader`, `PulidInsightFaceLoader`, `ApplyPulidAdvanced`), `ResizeAndPadImage`, `DepthAnythingV2Preprocessor`, `ControlNetLoader`, `ControlNetApplyAdvanced`, `LoadBackgroundRemovalModel`, `RemoveBackground`, `InvertMask`, `JoinImageWithAlpha`, and `SaveImage`.
+
+The Lustify inpaint checkpoint is hosted at `andro-flock/LUSTIFY-SDXL-NSFW-checkpoint-v2-0-INPAINTING` and the required file is `lustifySDXLNSFW_v20-inpainting.safetensors`.
 
 Build/rebuild the ComfyUI image after this template change so the packaged PuLID custom nodes are linked into the persistent runtime custom-node folder. Download the GPU PuLID assets with:
 
@@ -194,6 +206,7 @@ hexe/avatar_body_depth_transparent/{{avatar_name}}_seed{{seed}}_rgb
 hexe/avatar_body_depth_transparent/{{avatar_name}}_seed{{seed}}
 hexe/avatar_profile_generation/{{avatar_name}}_seed{{seed}}_rgb
 hexe/avatar_profile_generation/{{avatar_name}}_seed{{seed}}
+hexe/avatar_lustify_inpaint/{{avatar_name}}_seed{{seed}}
 ```
 
 The `_rgb` file is a fallback for background-removal OOM or node failure. If the transparent output is written successfully, the node cleans up the `_rgb` file and its LoRA sidecars from manual output listings.

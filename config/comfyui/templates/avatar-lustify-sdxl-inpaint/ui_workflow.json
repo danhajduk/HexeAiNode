@@ -1,0 +1,56 @@
+{
+  "last_node_id": 9,
+  "last_link_id": 8,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "CheckpointLoaderSimple",
+      "title": "Lustify SDXL Inpaint Checkpoint"
+    },
+    {
+      "id": 2,
+      "type": "CLIPTextEncode",
+      "title": "Inpaint Prompt"
+    },
+    {
+      "id": 3,
+      "type": "CLIPTextEncode",
+      "title": "Negative Prompt"
+    },
+    {
+      "id": 4,
+      "type": "LoadImage",
+      "title": "Base Avatar Image"
+    },
+    {
+      "id": 5,
+      "type": "LoadImageMask",
+      "title": "White Mask Area to Repaint"
+    },
+    {
+      "id": 6,
+      "type": "VAEEncodeForInpaint",
+      "title": "Encode Inpaint Latent"
+    },
+    {
+      "id": 7,
+      "type": "KSampler",
+      "title": "Inpaint Sampler"
+    },
+    {
+      "id": 8,
+      "type": "VAEDecode",
+      "title": "Decode Inpaint Result"
+    },
+    {
+      "id": 9,
+      "type": "SaveImage",
+      "title": "Save Lustify Inpaint Result"
+    }
+  ],
+  "links": [],
+  "extra": {
+    "template_id": "template.avatar_lustify_sdxl_inpaint.v1",
+    "notes": "Avatar inpaint workflow using the Lustify SDXL inpainting checkpoint. The source image is preserved outside the white mask; the mask image should be black where the original should remain and white where the outfit/body area should be repainted."
+  }
+}
