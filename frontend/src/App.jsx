@@ -1215,6 +1215,53 @@ export default function App() {
     }
   }
 
+  async function onSetAvatarPrimaryFace(profileId, filename) {
+    const normalized = String(profileId || "").trim();
+    const normalizedFilename = String(filename || "").trim();
+    if (!normalized || !normalizedFilename || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/face/primary`, {
+        filename: normalizedFilename,
+      });
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onExtractAvatarFaceProfile(profileId, payload = {}) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/face/extract`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
   async function onGenerateAvatarBodyDepthProfile(profileId, payload) {
     const normalized = String(profileId || "").trim();
     if (!normalized || avatarGenerationBusy) {
@@ -2190,6 +2237,8 @@ export default function App() {
       onUpdateProfileExtraction: onUpdateAvatarProfileExtraction,
       onUploadProfileReference: onUploadAvatarProfileReference,
       onDeleteProfileReference: onDeleteAvatarProfileReference,
+      onSetPrimaryFace: onSetAvatarPrimaryFace,
+      onExtractFaceProfile: onExtractAvatarFaceProfile,
       onGenerateBodyDepthProfile: onGenerateAvatarBodyDepthProfile,
       onBackToProfiles: () => {
         window.location.hash = buildOperationalRoute("avatar_generation");

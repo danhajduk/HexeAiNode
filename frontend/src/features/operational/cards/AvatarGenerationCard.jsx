@@ -65,6 +65,10 @@ function bodyDepthProfile(profile) {
   return objectValue(profile?.body_depth_profile);
 }
 
+function faceProfile(profile) {
+  return objectValue(profile?.face_profile);
+}
+
 function rawBodyReferences(profile) {
   return profileReferences(profile, "body_depth").filter((reference) => !reference?.background_removed);
 }
@@ -165,9 +169,12 @@ export function AvatarGenerationCard({
   onUpdateProfileExtraction,
   onUploadProfileReference,
   onDeleteProfileReference,
+  onSetPrimaryFace,
+  onExtractFaceProfile,
   onGenerateBodyDepthProfile,
   onBackToProfiles,
   onRefresh,
+  visionBusy = false,
 }) {
   const profiles = asArray(payload?.profiles);
   const selectedProfileId = String(payload?.selected_profile_id || "").trim();
@@ -319,6 +326,41 @@ export function AvatarGenerationCard({
     }
   }
 
+  async function setPrimaryFace(filename) {
+    if (!routeProfile?.profile_id || !filename || busy) {
+      return;
+    }
+    setActiveReferenceAction(`primary:face:${filename}`);
+    setLocalStatus("");
+    try {
+      const result = await onSetPrimaryFace?.(routeProfile.profile_id, filename);
+      if (result) {
+        setLocalStatus("primary_face_selected");
+      }
+    } finally {
+      setActiveReferenceAction("");
+    }
+  }
+
+  async function extractFaceProfile() {
+    if (!routeProfile?.profile_id || busy || visionBusy) {
+      return;
+    }
+    const sources = profileReferences(routeProfile, "face").map((reference) => String(reference.filename || "").trim()).filter(Boolean);
+    setActiveReferenceAction("extract:face");
+    setLocalStatus("");
+    try {
+      const result = await onExtractFaceProfile?.(routeProfile.profile_id, {
+        source_filenames: sources.length ? sources : null,
+      });
+      if (result) {
+        setLocalStatus("face_profile_extracted");
+      }
+    } finally {
+      setActiveReferenceAction("");
+    }
+  }
+
   function renderReferenceCards(role, references = profileReferences(routeProfile, role)) {
     if (!references.length) {
       return <p className="muted tiny">No saved references.</p>;
@@ -337,7 +379,18 @@ export function AvatarGenerationCard({
               <div>
                 <strong>{reference.name || filename}</strong>
                 <span>{reference.created_at || filename}</span>
+                {role === "face" && reference.primary ? <StatusBadge value="primary" /> : null}
               </div>
+              {role === "face" && !reference.primary ? (
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setPrimaryFace(filename)}
+                >
+                  {activeReferenceAction === `primary:face:${filename}` ? "Selecting..." : "Set Primary"}
+                </button>
+              ) : null}
               <button
                 className="btn btn-danger"
                 type="button"
@@ -535,19 +588,24 @@ export function AvatarGenerationCard({
 
         {activeDetailTab === "face" ? (
           <section className="setup-form avatar-reference-upload-panel">
-            <label className="avatar-upload-control">
-              <span className="btn btn-primary">{activeReferenceAction === "upload:face" ? "Uploading..." : "Upload Face Images"}</span>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(event) => {
-                  const files = Array.from(event.target.files || []);
-                  setFaceAnalysisFiles(files);
-                  uploadReferenceFiles("face", files);
-                }}
-              />
-            </label>
+            <div className="row">
+              <label className="avatar-upload-control">
+                <span className="btn btn-primary">{activeReferenceAction === "upload:face" ? "Uploading..." : "Upload Face Images"}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files || []);
+                    setFaceAnalysisFiles(files);
+                    uploadReferenceFiles("face", files);
+                  }}
+                />
+              </label>
+              <button className="btn" type="button" disabled={busy || visionBusy} onClick={extractFaceProfile}>
+                {activeReferenceAction === "extract:face" ? "Extracting..." : "Extract Face Profile"}
+              </button>
+            </div>
             <div className="state-grid compact-grid">
               <span>Queued</span>
               <code>{faceAnalysisFiles.length}</code>
@@ -555,7 +613,35 @@ export function AvatarGenerationCard({
               <code>{selectedFileNames(faceAnalysisFiles)}</code>
               <span>Saved</span>
               <code>{profileReferences(routeProfile, "face").length}</code>
+              <span>Primary</span>
+              <code>{routeProfile.primary_face_reference_filename || routeProfile.face_image || "base face"}</code>
+              <span>PuLID Face</span>
+              <code>{routeProfile.pulid_face_reference_image || routeProfile.face_input_image || "none"}</code>
+              <span>Face Profile</span>
+              <StatusBadge value={faceProfile(routeProfile).status || "not_started"} />
+              <span>References</span>
+              <code>{faceProfile(routeProfile).reference_count ?? 0}</code>
             </div>
+            {faceProfile(routeProfile).structured ? (
+              <div className="form-grid two-column-form-grid">
+                <label>
+                  Identity Prompt
+                  <textarea rows={5} readOnly value={String(faceProfile(routeProfile).structured.identity_prompt || "")} />
+                </label>
+                <label>
+                  Face Prompt
+                  <textarea rows={5} readOnly value={String(faceProfile(routeProfile).structured.face_prompt || "")} />
+                </label>
+                <label>
+                  Hair Prompt
+                  <textarea rows={4} readOnly value={String(faceProfile(routeProfile).structured.hair_prompt || "")} />
+                </label>
+                <label>
+                  Negative Identity
+                  <textarea rows={4} readOnly value={String(faceProfile(routeProfile).structured.negative_identity_prompt || "")} />
+                </label>
+              </div>
+            ) : null}
             {renderReferenceCards("face")}
           </section>
         ) : null}

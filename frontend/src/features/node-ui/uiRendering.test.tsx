@@ -593,9 +593,24 @@ describe("OperationalDashboard", () => {
           profile_id: "Jane_Avatar",
           name: "Jane Avatar",
           selected: true,
+          face_image: "face.png",
+          face_input_image: "avatar_profiles/Jane_Avatar/face.png",
+          primary_face_reference_filename: "face_closeup.webp",
+          primary_face_input_image: "avatar_profiles/Jane_Avatar/refs/face/face_closeup.webp",
+          pulid_face_reference_image: "avatar_profiles/Jane_Avatar/refs/face/face_closeup.webp",
           extraction: {
             structured: {
               identity_prompt: "same Jane Avatar identity",
+            },
+          },
+          face_profile: {
+            status: "extracted",
+            reference_count: 2,
+            structured: {
+              identity_prompt: "same Jane Avatar face identity",
+              face_prompt: "oval face, green eyes, defined cheekbones",
+              hair_prompt: "dark wavy hair with a side part",
+              negative_identity_prompt: "different person, changed face",
             },
           },
           references: {
@@ -627,7 +642,16 @@ describe("OperationalDashboard", () => {
                 name: "Face Closeup",
                 filename: "face_closeup.webp",
                 url: "/api/avatar-generation/profiles/Jane_Avatar/references/face/face_closeup.webp",
+                input_image: "avatar_profiles/Jane_Avatar/refs/face/face_closeup.webp",
+                primary: true,
                 created_at: "2026-06-09T12:11:00Z",
+              },
+              {
+                name: "Face Three Quarter",
+                filename: "face_three_quarter.webp",
+                url: "/api/avatar-generation/profiles/Jane_Avatar/references/face/face_three_quarter.webp",
+                input_image: "avatar_profiles/Jane_Avatar/refs/face/face_three_quarter.webp",
+                created_at: "2026-06-09T12:16:00Z",
               },
             ],
             pose: [
@@ -695,7 +719,15 @@ describe("OperationalDashboard", () => {
     expect(bodyMarkup).toContain("Depth Maps");
     expect(bodyMarkup).toContain("avatar_body_depth_standing_body.png");
     expect(faceMarkup).toContain("Upload Face Images");
+    expect(faceMarkup).toContain("Extract Face Profile");
+    expect(faceMarkup).toContain("PuLID Face");
     expect(faceMarkup).toContain("Face Closeup");
+    expect(faceMarkup).toContain("primary");
+    expect(faceMarkup).toContain("Face Three Quarter");
+    expect(faceMarkup).toContain("Set Primary");
+    expect(faceMarkup).toContain("Face Profile");
+    expect(faceMarkup).toContain("Face Prompt");
+    expect(faceMarkup).toContain("oval face, green eyes");
     expect(poseMarkup).toContain("Upload Pose Images");
     expect(poseMarkup).toContain("Open Pose");
     expect(poseMarkup).toContain("Pose Notes");
