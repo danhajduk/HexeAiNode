@@ -935,6 +935,21 @@
   min-width: 0;
 }
 
+.avatar-head-face-prompt-parts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.avatar-head-face-part-field {
+  min-width: 0;
+}
+
+.avatar-head-face-part-general,
+.avatar-head-face-part-style_lighting {
+  grid-column: 1 / -1;
+}
+
 .avatar-head-face-latest-preview {
   display: grid;
   gap: 10px;
@@ -1052,6 +1067,10 @@
   }
 
   .avatar-head-face-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .avatar-head-face-prompt-parts {
     grid-template-columns: 1fr;
   }
 }

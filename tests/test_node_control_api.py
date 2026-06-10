@@ -3813,7 +3813,12 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("black hair", profile["general_prompt"])
         self.assertIn("adult character avatar", profile["general_prompt"])
         self.assertIn("head_face", profile["prompt_workspaces"])
-        self.assertIn("head and shoulders portrait", profile["prompt_workspaces"]["head_face"]["prompt"])
+        head_workspace = profile["prompt_workspaces"]["head_face"]
+        self.assertIn("head and shoulders portrait", head_workspace["prompt"])
+        self.assertEqual(head_workspace["prompt_parts"]["general"], profile["general_prompt"])
+        self.assertIn("black hair", head_workspace["prompt_parts"]["hair"])
+        self.assertIn("defined nose", head_workspace["prompt_parts"]["nose"])
+        self.assertIn("natural cheeks", head_workspace["prompt_parts"]["cheeks"])
         self.assertEqual(profile["face_url"], "")
         self.assertEqual(profile["body_url"], "")
         self.assertNotIn("face_image", metadata)
@@ -3876,6 +3881,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     profile_id="Jane_Avatar",
                     payload=AvatarProfileHeadPromptRefineRequest(
                         current_prompt="head portrait",
+                        prompt_parts={"general": "head portrait", "hair": "black hair", "nose": "defined nose", "cheeks": "soft cheeks"},
                         negative_prompt="blurry",
                         user_message="Add the blue headset and a softer smile.",
                     ),
@@ -3889,6 +3895,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["negative_prompt"], "blurry, distorted face")
         workspace = metadata["prompt_workspaces"]["head_face"]
         self.assertEqual(workspace["prompt"], result["prompt"])
+        self.assertEqual(workspace["prompt_parts"]["hair"], "black hair")
+        self.assertEqual(workspace["prompt_parts"]["nose"], "defined nose")
+        self.assertEqual(workspace["prompt_parts"]["cheeks"], "soft cheeks")
         self.assertEqual(workspace["negative_prompt"], result["negative_prompt"])
         self.assertEqual(workspace["local_llm_model_id"], "local-model")
         self.assertEqual(len(workspace["conversation"]), 2)

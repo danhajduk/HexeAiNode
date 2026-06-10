@@ -583,6 +583,14 @@ describe("OperationalDashboard", () => {
           prompt_workspaces: {
             head_face: {
               prompt: "head portrait, blue headset, soft smile",
+              prompt_parts: {
+                general: "Jane Avatar, stylized realistic head portrait",
+                hair: "black bob haircut",
+                nose: "small defined nose",
+                cheeks: "soft rounded cheeks",
+                expression: "soft smile",
+                style_lighting: "head and shoulders portrait, clean studio lighting",
+              },
               negative_prompt: "blurry",
               conversation: [{ role: "user", content: "make the smile softer" }],
               preview_history: [
@@ -625,8 +633,15 @@ describe("OperationalDashboard", () => {
       />
     );
 
-    expect(markup).toContain("Current Head / Face Prompt");
-    expect(markup).toContain("head portrait, blue headset, soft smile");
+    expect(markup).toContain("General");
+    expect(markup).toContain("Hair");
+    expect(markup).toContain("Nose");
+    expect(markup).toContain("Cheeks");
+    expect(markup).toContain("Compiled Head / Face Prompt");
+    expect(markup).toContain("Jane Avatar, stylized realistic head portrait");
+    expect(markup).toContain("black bob haircut");
+    expect(markup).toContain("small defined nose");
+    expect(markup).toContain("soft rounded cheeks");
     expect(markup).toContain("Adjustment Request");
     expect(markup).toContain("Refine Prompt");
     expect(markup).toContain("Create Preview");

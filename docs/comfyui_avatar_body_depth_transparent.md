@@ -126,8 +126,9 @@ Opening a profile shows the baseline facts captured during creation and staged
 design tabs: `Head / Face`, `Upper Torso`, `Lower Torso`, and `Full Body`.
 `Head / Face` is the first active workspace. It stores
 `prompt_workspaces.head_face` in `profile.json`, including the current ComfyUI
-prompt, negative prompt, local-LLM conversation history, and preview request
-history.
+prompt, editable `prompt_parts` such as `general`, `hair`, `nose`, `cheeks`,
+`expression`, and `style_lighting`, negative prompt, local-LLM conversation
+history, and preview request history.
 
 `POST /api/avatar-generation/profiles/{profile_id}/head-face/refine` sends the
 current head/face prompt plus the user's adjustment request to the local LLM. The

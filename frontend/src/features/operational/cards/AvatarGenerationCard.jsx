@@ -529,14 +529,30 @@ const AVATAR_PROFILE_DETAIL_TABS = [
   { id: "full_body", label: "Full Body" },
 ];
 
+const HEAD_FACE_PROMPT_PARTS = [
+  { id: "general", label: "General", rows: 4 },
+  { id: "hair", label: "Hair", rows: 2 },
+  { id: "eyes", label: "Eyes", rows: 2 },
+  { id: "eyebrows", label: "Eyebrows", rows: 2 },
+  { id: "nose", label: "Nose", rows: 2 },
+  { id: "cheeks", label: "Cheeks", rows: 2 },
+  { id: "mouth", label: "Mouth", rows: 2 },
+  { id: "jaw_chin", label: "Jaw / Chin", rows: 2 },
+  { id: "ears", label: "Ears", rows: 2 },
+  { id: "skin", label: "Skin", rows: 2 },
+  { id: "expression", label: "Expression", rows: 2 },
+  { id: "style_lighting", label: "Style / Lighting", rows: 3 },
+];
+
 function promptWorkspace(profile, section) {
   return objectValue(objectValue(profile?.prompt_workspaces)[section]);
 }
 
-function defaultHeadFacePrompt(profile) {
+function defaultHeadFacePromptParts(profile) {
   const generalPrompt = compactPromptText(profile?.general_prompt);
-  const parts = [
-    generalPrompt ||
+  return {
+    general:
+      generalPrompt ||
       [
         profileName(profile),
         profile?.gender,
@@ -545,13 +561,41 @@ function defaultHeadFacePrompt(profile) {
         profile?.skin_color ? `${profile.skin_color} skin` : "",
         profile?.hair_color ? `${profile.hair_color} hair` : "",
       ].map((part) => compactPromptText(part)).filter(Boolean).join(", "),
-    "head and shoulders portrait",
-    "expressive eyes",
-    "clear face shape",
-    "detailed hair",
-    "clean studio lighting",
-  ];
-  return parts.map((part) => compactPromptText(part)).filter(Boolean).join(", ");
+    hair: profile?.hair_color ? `detailed ${profile.hair_color} hair` : "detailed hair",
+    eyes: "expressive detailed eyes",
+    eyebrows: "natural eyebrows",
+    nose: "defined nose",
+    cheeks: "natural cheeks",
+    mouth: "natural lips",
+    jaw_chin: "clear jaw and chin shape",
+    ears: "natural ears",
+    skin: profile?.skin_color ? `${profile.skin_color} skin, natural skin texture` : "natural skin texture",
+    expression: "natural expression",
+    style_lighting: "head and shoulders portrait, clear face, centered composition, clean studio lighting",
+  };
+}
+
+function composeHeadFacePrompt(parts) {
+  const source = objectValue(parts);
+  return HEAD_FACE_PROMPT_PARTS.map((part) => compactPromptText(source[part.id])).filter(Boolean).join(", ");
+}
+
+function headFacePromptParts(profile) {
+  const workspace = promptWorkspace(profile, "head_face");
+  const defaults = defaultHeadFacePromptParts(profile);
+  const savedParts = objectValue(workspace.prompt_parts);
+  const hasSavedParts = HEAD_FACE_PROMPT_PARTS.some((part) => compactPromptText(savedParts[part.id]));
+  if (hasSavedParts) {
+    return HEAD_FACE_PROMPT_PARTS.reduce(
+      (parts, part) => ({ ...parts, [part.id]: compactPromptText(savedParts[part.id] ?? defaults[part.id]) }),
+      {}
+    );
+  }
+  const savedPrompt = compactPromptText(workspace.prompt);
+  if (savedPrompt) {
+    return { ...defaults, general: savedPrompt };
+  }
+  return defaults;
 }
 
 export function AvatarGenerationCard({
@@ -608,7 +652,7 @@ export function AvatarGenerationCard({
   const [activeReferenceAction, setActiveReferenceAction] = useState("");
   const [editorState, setEditorState] = useState(() => extractionEditorState(routeProfile));
   const [generationState, setGenerationState] = useState(() => generationEditorState(routeProfile));
-  const [headPrompt, setHeadPrompt] = useState(() => promptWorkspace(routeProfile, "head_face").prompt || defaultHeadFacePrompt(routeProfile));
+  const [headPromptParts, setHeadPromptParts] = useState(() => headFacePromptParts(routeProfile));
   const [headNegativePrompt, setHeadNegativePrompt] = useState(() => promptWorkspace(routeProfile, "head_face").negative_prompt || "");
   const [headInstruction, setHeadInstruction] = useState("");
   const generationProfileIdRef = useRef("");
@@ -619,6 +663,7 @@ export function AvatarGenerationCard({
   const headPreviewHistory = useMemo(() => headFacePreviewHistory(routeProfile), [routeProfile]);
   const latestHeadPreview = headPreviewHistory[0] || null;
   const latestHeadPreviewOutput = headFacePreviewOutput(latestHeadPreview, manualOutputs, routeProfile);
+  const headPrompt = useMemo(() => composeHeadFacePrompt(headPromptParts), [headPromptParts]);
 
   useEffect(() => {
     if (AVATAR_PROFILE_DETAIL_TABS.some((tab) => tab.id === initialDetailTab)) {
@@ -630,7 +675,7 @@ export function AvatarGenerationCard({
     if (routeProfile) {
       setEditorState(extractionEditorState(routeProfile));
       const workspace = promptWorkspace(routeProfile, "head_face");
-      setHeadPrompt(String(workspace.prompt || defaultHeadFacePrompt(routeProfile)));
+      setHeadPromptParts(headFacePromptParts(routeProfile));
       setHeadNegativePrompt(String(workspace.negative_prompt || ""));
       setHeadInstruction("");
     }
@@ -686,6 +731,10 @@ export function AvatarGenerationCard({
       }
       return next;
     });
+  }
+
+  function updateHeadPromptPart(name, value) {
+    setHeadPromptParts((current) => ({ ...current, [name]: value }));
   }
 
   function resetGenerationDefaults() {
@@ -839,11 +888,12 @@ export function AvatarGenerationCard({
     try {
       const result = await onRefineHeadPrompt?.(profileId, {
         current_prompt: headPrompt,
+        prompt_parts: headPromptParts,
         negative_prompt: headNegativePrompt,
         user_message: userMessage,
       });
       if (result?.prompt) {
-        setHeadPrompt(String(result.prompt));
+        setHeadPromptParts((current) => ({ ...current, general: String(result.prompt) }));
       }
       if (result?.negative_prompt !== undefined) {
         setHeadNegativePrompt(String(result.negative_prompt || ""));
@@ -867,6 +917,7 @@ export function AvatarGenerationCard({
     try {
       const result = await onCreateHeadPreview?.(profileId, {
         prompt: headPrompt,
+        prompt_parts: headPromptParts,
         negative_prompt: headNegativePrompt,
       });
       if (result) {
@@ -1126,9 +1177,24 @@ export function AvatarGenerationCard({
                   <span>Previews</span>
                   <code>{headPreviewHistory.length}</code>
                 </div>
+                <div className="avatar-head-face-prompt-parts">
+                  {HEAD_FACE_PROMPT_PARTS.map((part) => (
+                    <label
+                      className={`avatar-generation-wide-field avatar-head-face-part-field avatar-head-face-part-${part.id}`}
+                      key={part.id}
+                    >
+                      {part.label}
+                      <textarea
+                        rows={part.rows}
+                        value={String(headPromptParts[part.id] || "")}
+                        onChange={(event) => updateHeadPromptPart(part.id, event.target.value)}
+                      />
+                    </label>
+                  ))}
+                </div>
                 <label className="avatar-generation-wide-field avatar-generation-compiled-prompt">
-                  Current Head / Face Prompt
-                  <textarea rows={8} value={headPrompt} onChange={(event) => setHeadPrompt(event.target.value)} />
+                  Compiled Head / Face Prompt
+                  <textarea rows={5} readOnly value={headPrompt} />
                 </label>
                 <label className="avatar-generation-wide-field">
                   Negative Prompt

@@ -74,6 +74,20 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
 MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID = "template.avatar_head_face_preview.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT = 10
+AVATAR_HEAD_FACE_PROMPT_PART_ORDER = (
+    "general",
+    "hair",
+    "eyes",
+    "eyebrows",
+    "nose",
+    "cheeks",
+    "mouth",
+    "jaw_chin",
+    "ears",
+    "skin",
+    "expression",
+    "style_lighting",
+)
 AVATAR_BODY_DEPTH_PROFILE_CLIENT_ID = "hexe-node-avatar-body-depth"
 
 MANUAL_IMAGE_PROGRESS_NODE_LABELS = {
@@ -2106,11 +2120,13 @@ class NodeControlState:
         general_prompt = str(existing.get("general_prompt") or "").strip() or self._avatar_profile_general_initial_prompt(profile=metadata)
         metadata["general_prompt"] = general_prompt
         if "head_face" not in prompt_workspaces:
+            head_prompt_parts = self._avatar_profile_default_head_prompt_parts(profile={**metadata, "general_prompt": general_prompt})
             prompt_workspaces = {
                 **prompt_workspaces,
                 "head_face": {
                     "section": "head_face",
-                    "prompt": self._avatar_profile_default_head_prompt(profile={**metadata, "general_prompt": general_prompt}),
+                    "prompt_parts": head_prompt_parts,
+                    "prompt": self._avatar_profile_head_prompt_from_parts(prompt_parts=head_prompt_parts, profile=metadata),
                     "negative_prompt": "",
                     "conversation": [],
                     "preview_history": [],
@@ -2143,7 +2159,15 @@ class NodeControlState:
         if not user_message:
             raise ValueError("avatar_head_prompt_user_message_required")
         workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
-        current_prompt = str(payload.current_prompt or workspace.get("prompt") or "").strip()
+        prompt_parts = self._avatar_profile_normalized_head_prompt_parts(
+            profile=metadata,
+            prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
+            fallback_prompt=str(payload.current_prompt or workspace.get("prompt") or "").strip(),
+        )
+        current_prompt = str(payload.current_prompt or "").strip() or self._avatar_profile_head_prompt_from_parts(
+            prompt_parts=prompt_parts,
+            profile=metadata,
+        )
         if not current_prompt:
             current_prompt = self._avatar_profile_default_head_prompt(profile=metadata)
         current_negative = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
@@ -2161,6 +2185,7 @@ class NodeControlState:
             **workspace,
             "section": "head_face",
             "prompt": prompt,
+            "prompt_parts": prompt_parts,
             "negative_prompt": negative_prompt,
             "updated_at": now,
             "local_llm_model_id": model_id,
@@ -2191,7 +2216,15 @@ class NodeControlState:
         if not metadata:
             raise ValueError("avatar_profile_not_found")
         workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
-        prompt = str(payload.prompt or workspace.get("prompt") or "").strip()
+        prompt_parts = self._avatar_profile_normalized_head_prompt_parts(
+            profile=metadata,
+            prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
+            fallback_prompt=str(payload.prompt or workspace.get("prompt") or "").strip(),
+        )
+        prompt = str(payload.prompt or "").strip() or self._avatar_profile_head_prompt_from_parts(
+            prompt_parts=prompt_parts,
+            profile=metadata,
+        )
         if not prompt:
             prompt = self._avatar_profile_default_head_prompt(profile=metadata)
         negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
@@ -2247,6 +2280,7 @@ class NodeControlState:
             **workspace,
             "section": "head_face",
             "prompt": prompt,
+            "prompt_parts": prompt_parts,
             "negative_prompt": negative_prompt,
             "updated_at": now,
             "preview_history": preview_history[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:],
@@ -3807,17 +3841,53 @@ class NodeControlState:
         return ", ".join(item for item in parts if item)
 
     @classmethod
-    def _avatar_profile_default_head_prompt(cls, *, profile: dict) -> str:
+    def _avatar_profile_default_head_prompt_parts(cls, *, profile: dict) -> dict:
         general_prompt = str(profile.get("general_prompt") or "").strip()
-        parts = [
-            general_prompt or cls._avatar_profile_general_initial_prompt(profile=profile),
-            "head and shoulders portrait",
-            "expressive eyes",
-            "clear face shape",
-            "detailed hair",
-            "clean studio lighting",
-        ]
-        return ", ".join(item for item in parts if item)
+        hair_color = str(profile.get("hair_color") or "").strip()
+        skin_color = str(profile.get("skin_color") or "").strip()
+        return {
+            "general": general_prompt or cls._avatar_profile_general_initial_prompt(profile=profile),
+            "hair": f"detailed {hair_color} hair" if hair_color else "detailed hair",
+            "eyes": "expressive detailed eyes",
+            "eyebrows": "natural eyebrows",
+            "nose": "defined nose",
+            "cheeks": "natural cheeks",
+            "mouth": "natural lips",
+            "jaw_chin": "clear jaw and chin shape",
+            "ears": "natural ears",
+            "skin": f"{skin_color} skin, natural skin texture" if skin_color else "natural skin texture",
+            "expression": "natural expression",
+            "style_lighting": "head and shoulders portrait, clear face, centered composition, clean studio lighting",
+        }
+
+    @classmethod
+    def _avatar_profile_normalized_head_prompt_parts(cls, *, profile: dict, prompt_parts: object, fallback_prompt: str = "") -> dict:
+        defaults = cls._avatar_profile_default_head_prompt_parts(profile=profile)
+        source = prompt_parts if isinstance(prompt_parts, dict) else {}
+        has_source_parts = any(str(source.get(key) or "").strip() for key in AVATAR_HEAD_FACE_PROMPT_PART_ORDER)
+        normalized = {
+            key: str(source.get(key) if has_source_parts and source.get(key) is not None else defaults.get(key) or "").strip()
+            for key in AVATAR_HEAD_FACE_PROMPT_PART_ORDER
+        }
+        fallback = str(fallback_prompt or "").strip()
+        if fallback and not has_source_parts:
+            normalized["general"] = fallback
+        return normalized
+
+    @classmethod
+    def _avatar_profile_head_prompt_from_parts(cls, *, prompt_parts: object, profile: dict) -> str:
+        normalized = cls._avatar_profile_normalized_head_prompt_parts(
+            profile=profile,
+            prompt_parts=prompt_parts,
+        )
+        return ", ".join(normalized[key] for key in AVATAR_HEAD_FACE_PROMPT_PART_ORDER if normalized.get(key))
+
+    @classmethod
+    def _avatar_profile_default_head_prompt(cls, *, profile: dict) -> str:
+        return cls._avatar_profile_head_prompt_from_parts(
+            prompt_parts=cls._avatar_profile_default_head_prompt_parts(profile=profile),
+            profile=profile,
+        )
 
     def _avatar_profile_head_prompt_from_local_llm(
         self,
@@ -9786,12 +9856,14 @@ class AvatarProfileExtractionUpdateRequest(BaseModel):
 
 class AvatarProfileHeadPromptRefineRequest(BaseModel):
     current_prompt: str | None = None
+    prompt_parts: dict | None = None
     negative_prompt: str | None = None
     user_message: str
 
 
 class AvatarProfileHeadPreviewRequest(BaseModel):
     prompt: str | None = None
+    prompt_parts: dict | None = None
     negative_prompt: str | None = None
 
 
