@@ -250,6 +250,241 @@
         ],
         "transparent_background": true
       }
+    },
+    {
+      "template_id": "template.avatar_profile_depth_pulid.realvisxl.v1",
+      "template_name": "Avatar Profile Generation",
+      "description": "Transparent profile-aware avatar workflow that uses a saved PuLID face reference and a precomputed avatar body depth map from the profile. Use this for final avatar generation after the body depth profile has been created.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "avatar-profile-depth-pulid-realvisxl/api_workflow.json",
+      "ui_workflow_path": "avatar-profile-depth-pulid-realvisxl/ui_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Rendered avatar prompt assembled from face, body, pose, clothing, and scene sections."
+        },
+        {
+          "name": "face_reference_image",
+          "type": "image",
+          "required": true,
+          "description": "Profile face image for PuLID face identity."
+        },
+        {
+          "name": "body_depth_image",
+          "type": "image",
+          "required": true,
+          "description": "Precomputed profile body depth map used by SDXL depth ControlNet."
+        },
+        {
+          "name": "face_strength",
+          "type": "number",
+          "required": false,
+          "description": "PuLID face identity weight from 0 to 1."
+        },
+        {
+          "name": "pulid_model",
+          "type": "string",
+          "required": false,
+          "description": "Local PuLID SDXL model filename from the ComfyUI pulid model folder."
+        },
+        {
+          "name": "pulid_provider",
+          "type": "string",
+          "required": false,
+          "description": "InsightFace execution provider for PuLID face analysis.",
+          "allowed_values": [
+            "CPU",
+            "CUDA",
+            "ROCM",
+            "CoreML"
+          ]
+        },
+        {
+          "name": "pulid_projection",
+          "type": "string",
+          "required": false,
+          "description": "PuLID projection mode.",
+          "allowed_values": [
+            "ortho",
+            "ortho_v2",
+            "none"
+          ]
+        },
+        {
+          "name": "pulid_fidelity",
+          "type": "integer",
+          "required": false,
+          "description": "PuLID fidelity value. Lower values bias toward stronger resemblance; higher values allow more prompt freedom."
+        },
+        {
+          "name": "pulid_noise",
+          "type": "number",
+          "required": false,
+          "description": "Optional PuLID noise amount."
+        },
+        {
+          "name": "pulid_start_at",
+          "type": "number",
+          "required": false,
+          "description": "Sampler percentage where PuLID identity guidance begins applying."
+        },
+        {
+          "name": "pulid_end_at",
+          "type": "number",
+          "required": false,
+          "description": "Sampler percentage where PuLID identity guidance stops applying."
+        },
+        {
+          "name": "body_depth_strength",
+          "type": "number",
+          "required": false,
+          "description": "Saved depth-map ControlNet strength from 0 to 1."
+        },
+        {
+          "name": "body_depth_start",
+          "type": "number",
+          "required": false,
+          "description": "Sampler percentage where saved body depth ControlNet begins applying."
+        },
+        {
+          "name": "body_depth_end",
+          "type": "number",
+          "required": false,
+          "description": "Sampler percentage where saved body depth ControlNet stops applying."
+        },
+        {
+          "name": "body_depth_controlnet",
+          "type": "string",
+          "required": false,
+          "description": "Local SDXL depth ControlNet model filename."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress."
+        },
+        {
+          "name": "avatar_name",
+          "type": "string",
+          "required": false,
+          "description": "Filesystem-safe avatar name used in output filenames."
+        },
+        {
+          "name": "bg_removal_model",
+          "type": "string",
+          "required": false,
+          "description": "Local ComfyUI background-removal model filename."
+        },
+        {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width."
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed. Use null for runtime randomization."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        },
+        {
+          "name": "denoise",
+          "type": "number",
+          "required": false,
+          "description": "Sampler denoise. This template starts from empty latent, so 1.0 gives the cleanest new composition."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "busy background, detailed background, cropped head, cropped face, cropped body, out of frame, close-up crop, torso crop, missing legs, missing feet, different body shape, changed identity, altered face, low quality, blurry, distorted face, distorted hands, extra limbs, malformed body, watermark, text",
+        "avatar_name": "avatar",
+        "bg_removal_model": "birefnet.safetensors",
+        "width": 768,
+        "height": 1152,
+        "seed": null,
+        "steps": 4,
+        "cfg": 1.2,
+        "denoise": 1,
+        "face_strength": 0.8,
+        "pulid_model": "ip-adapter_pulid_sdxl_fp16.safetensors",
+        "pulid_provider": "CUDA",
+        "pulid_projection": "ortho_v2",
+        "pulid_fidelity": 8,
+        "pulid_noise": 0,
+        "pulid_start_at": 0,
+        "pulid_end_at": 1,
+        "body_depth_strength": 0.8,
+        "body_depth_start": 0,
+        "body_depth_end": 0.9,
+        "body_depth_controlnet": "controlnet-depth-sdxl-1.0-fp16.safetensors"
+      },
+      "model_requirements": {
+        "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "loras": [
+          "sdxl_lightning_4step_lora.safetensors"
+        ],
+        "vae": null,
+        "controlnets": [
+          "controlnet-depth-sdxl-1.0-fp16.safetensors"
+        ],
+        "other": {
+          "nodes": [
+            "PulidModelLoader",
+            "PulidEvaClipLoader",
+            "PulidInsightFaceLoader",
+            "ApplyPulidAdvanced",
+            "ResizeAndPadImage",
+            "ControlNetLoader",
+            "ControlNetApplyAdvanced",
+            "LoadBackgroundRemovalModel",
+            "RemoveBackground",
+            "InvertMask",
+            "JoinImageWithAlpha",
+            "SaveImage"
+          ],
+          "custom_nodes": {
+            "PuLID_ComfyUI": "https://github.com/cubiq/PuLID_ComfyUI"
+          },
+          "identity_model": "ip-adapter_pulid_sdxl_fp16.safetensors",
+          "insightface_model": "antelopev2",
+          "identity_strength": "pulid_face_identity",
+          "body_preservation": "precomputed_depth_map_controlnet",
+          "body_reference_fit": "resize_and_pad_saved_depth_map_to_output_aspect",
+          "background_removal": "birefnet.safetensors"
+        }
+      },
+      "output_scope": "normal",
+      "metadata": {
+        "preset_family": "realvisxl_lightning",
+        "domain": "avatar",
+        "input_mode": "text",
+        "edit_intent": "avatar_profile_generation_with_pulid_identity_saved_body_depth_transparent_background",
+        "reference_roles": [
+          "face",
+          "body_depth_map"
+        ],
+        "transparent_background": true
+      }
     }
   ]
 }

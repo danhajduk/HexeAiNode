@@ -1,0 +1,174 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "RealVisXL_V5.0_fp16.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": ["1", 0],
+      "clip": ["1", 1],
+      "lora_name": "sdxl_lightning_4step_lora.safetensors",
+      "strength_model": 1.0,
+      "strength_clip": 1.0
+    }
+  },
+  "3": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": "{{width}}",
+      "height": "{{height}}",
+      "batch_size": 1
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["2", 1],
+      "text": "{{positive_prompt}}"
+    }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["2", 1],
+      "text": "{{negative_prompt}}"
+    }
+  },
+  "6": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{face_reference_image}}"
+    }
+  },
+  "28": {
+    "class_type": "PulidModelLoader",
+    "inputs": {
+      "pulid_file": "{{pulid_model}}"
+    }
+  },
+  "29": {
+    "class_type": "PulidEvaClipLoader",
+    "inputs": {}
+  },
+  "30": {
+    "class_type": "PulidInsightFaceLoader",
+    "inputs": {
+      "provider": "{{pulid_provider}}"
+    }
+  },
+  "31": {
+    "class_type": "ApplyPulidAdvanced",
+    "inputs": {
+      "model": ["2", 0],
+      "pulid": ["28", 0],
+      "eva_clip": ["29", 0],
+      "face_analysis": ["30", 0],
+      "image": ["6", 0],
+      "weight": "{{face_strength}}",
+      "projection": "{{pulid_projection}}",
+      "fidelity": "{{pulid_fidelity}}",
+      "noise": "{{pulid_noise}}",
+      "start_at": "{{pulid_start_at}}",
+      "end_at": "{{pulid_end_at}}"
+    }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{body_depth_image}}"
+    }
+  },
+  "11": {
+    "class_type": "ResizeAndPadImage",
+    "inputs": {
+      "image": ["10", 0],
+      "target_width": "{{width}}",
+      "target_height": "{{height}}",
+      "padding_color": "black",
+      "interpolation": "lanczos"
+    }
+  },
+  "26": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "{{body_depth_controlnet}}"
+    }
+  },
+  "27": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "positive": ["4", 0],
+      "negative": ["5", 0],
+      "control_net": ["26", 0],
+      "image": ["11", 0],
+      "strength": "{{body_depth_strength}}",
+      "start_percent": "{{body_depth_start}}",
+      "end_percent": "{{body_depth_end}}"
+    }
+  },
+  "14": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["31", 0],
+      "positive": ["27", 0],
+      "negative": ["27", 1],
+      "latent_image": ["3", 0],
+      "seed": "{{seed}}",
+      "steps": "{{steps}}",
+      "cfg": "{{cfg}}",
+      "sampler_name": "euler",
+      "scheduler": "sgm_uniform",
+      "denoise": "{{denoise}}"
+    }
+  },
+  "15": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["14", 0],
+      "vae": ["1", 2]
+    }
+  },
+  "17": {
+    "class_type": "LoadBackgroundRemovalModel",
+    "inputs": {
+      "bg_removal_name": "{{bg_removal_model}}"
+    }
+  },
+  "18": {
+    "class_type": "RemoveBackground",
+    "inputs": {
+      "image": ["15", 0],
+      "bg_removal_model": ["17", 0]
+    }
+  },
+  "20": {
+    "class_type": "InvertMask",
+    "inputs": {
+      "mask": ["18", 0]
+    }
+  },
+  "19": {
+    "class_type": "JoinImageWithAlpha",
+    "inputs": {
+      "image": ["15", 0],
+      "alpha": ["20", 0]
+    }
+  },
+  "16": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["15", 0],
+      "filename_prefix": "hexe/avatar_profile_generation/{{avatar_name}}_seed{{seed}}_rgb"
+    }
+  },
+  "24": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["19", 0],
+      "filename_prefix": "hexe/avatar_profile_generation/{{avatar_name}}_seed{{seed}}"
+    }
+  }
+}

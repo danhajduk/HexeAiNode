@@ -1,14 +1,16 @@
 # ComfyUI Simple Avatar Generation Workflow
 
-Status: Implemented in `config/comfyui/templates/avatar-body-depth-reference-transparent-realvisxl/api_workflow.json`.
+Status: Implemented in `config/comfyui/templates/avatar-body-depth-reference-transparent-realvisxl/api_workflow.json` and `config/comfyui/templates/avatar-profile-depth-pulid-realvisxl/api_workflow.json`.
 
-The active ComfyUI template catalog contains only `template.avatar_body_depth_reference_transparent.realvisxl.v1`, displayed in the node UI as `Simple Avatar Generation`. The older prompt-only, img2img, scene, avatar-reference, avatar-identity, and non-transparent depth template files were removed to keep manual avatar testing focused on the PuLID identity plus Depth Anything ControlNet path.
+The active ComfyUI template catalog contains `template.avatar_body_depth_reference_transparent.realvisxl.v1`, displayed in the node UI as `Simple Avatar Generation`, and `template.avatar_profile_depth_pulid.realvisxl.v1`, displayed as `Avatar Profile Generation`. The older prompt-only, img2img, scene, avatar-reference, avatar-identity, and non-transparent depth template files were removed to keep manual avatar testing focused on PuLID identity plus SDXL depth ControlNet paths.
 
 ## Purpose
 
 This workflow generates a new transparent avatar image from a prompt, a face reference, and a body reference. It applies the face image through PuLID identity conditioning, then resizes and pads the body image to the requested output aspect ratio, extracts a Depth Anything V2 map, and applies SDXL depth ControlNet during sampling.
 
 PuLID owns face/ID preservation, while the body reference controls pose, silhouette, and proportions. This is stronger than the older latent-only face reference path, but it is still not a trained identity LoRA or a true pose-from-text model.
+
+`Avatar Profile Generation` is the preferred final-generation path after an avatar profile has a body depth profile. It uses the profile's selected PuLID face image and a saved `refs/body_depth_map/*` depth map directly, which avoids rerunning Depth Anything during each final image generation.
 
 ## Pipeline
 
@@ -29,7 +31,8 @@ Required variables:
 
 - `positive_prompt`
 - `face_reference_image`
-- `body_reference_image`
+- `body_reference_image` for `Simple Avatar Generation`
+- `body_depth_image` for `Avatar Profile Generation`
 
 Common tuning variables:
 
@@ -51,6 +54,8 @@ Common tuning variables:
 - `denoise`
 
 Default output is `768x1152`, 4 steps, CFG `1.2`, denoise `1.0`, PuLID face strength `0.8`, PuLID fidelity `8`, and body depth strength `0.75`.
+
+The Avatar Generation profile detail page includes a `Generation` tab that assembles prompt sections from the saved extraction and face profile. Operators can choose the template, PuLID face reference, body depth map, body reference, optional pose reference, prompt sections for identity/face/hair/body/pose/clothing/accessories/scene/style, negative prompt, sampler settings, batch count, seed randomization, strength jitter, and LoRA metadata sidecar output. Submissions are sent through `POST /api/manual-image-generation`.
 
 ## Avatar Profiles
 
@@ -182,6 +187,8 @@ The template saves both outputs under the selected ComfyUI runtime output folder
 ```text
 hexe/avatar_body_depth_transparent/{{avatar_name}}_seed{{seed}}_rgb
 hexe/avatar_body_depth_transparent/{{avatar_name}}_seed{{seed}}
+hexe/avatar_profile_generation/{{avatar_name}}_seed{{seed}}_rgb
+hexe/avatar_profile_generation/{{avatar_name}}_seed{{seed}}
 ```
 
 The `_rgb` file is a fallback for background-removal OOM or node failure. If the transparent output is written successfully, the node cleans up the `_rgb` file and its LoRA sidecars from manual output listings.

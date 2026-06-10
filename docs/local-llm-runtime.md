@@ -228,15 +228,16 @@ the resolved API workflow under `inputs.comfyui_workflow`. The effective request
 `constraints.image_template_resolved` with template id, version, runtime, model requirements, and
 `output_folder_policy: operational`, keeping governed generation separate from manual Web UI artifact folders.
 
-The default ComfyUI template catalog intentionally contains only
-`template.avatar_body_depth_reference_transparent.realvisxl.v1`, displayed as `Simple Avatar Generation`. Older
-prompt-only, img2img, scene, avatar-reference, avatar-identity, and non-transparent depth templates were removed from
-`config/comfyui/templates` while the local text-to-pose helper is being developed. The remaining template applies PuLID
-face identity to the model, resizes and pads the body reference to the output aspect ratio, extracts a Depth Anything V2
-depth map, and applies the SDXL depth ControlNet before sampling from an empty latent. It also saves an RGB fallback
-before using ComfyUI's local background-removal nodes with an inverted alpha mask to save transparent output under
-`hexe/avatar_body_depth_transparent/`. The template requires PuLID and InsightFace assets in the GPU model folder plus
-the native BiRefNet background-removal checkpoint, for example
+The default ComfyUI template catalog contains two GPU avatar templates. `Simple Avatar Generation`
+(`template.avatar_body_depth_reference_transparent.realvisxl.v1`) applies PuLID face identity to the model, resizes and
+pads the body reference to the output aspect ratio, extracts a Depth Anything V2 depth map, and applies the SDXL depth
+ControlNet before sampling from an empty latent. `Avatar Profile Generation`
+(`template.avatar_profile_depth_pulid.realvisxl.v1`) is the profile-aware final generation path: it uses the selected
+PuLID face reference plus a saved `body_depth_map` reference from the avatar profile, so final generations do not rerun
+Depth Anything. Both templates save an RGB fallback before using ComfyUI's local background-removal nodes with an
+inverted alpha mask to save transparent output under `hexe/avatar_body_depth_transparent/` or
+`hexe/avatar_profile_generation/`. The templates require PuLID and InsightFace assets in the GPU model folder plus the
+native BiRefNet background-removal checkpoint, for example
 `runtime/models/comfyui-gpu/pulid/ip-adapter_pulid_sdxl_fp16.safetensors`,
 `runtime/models/comfyui-gpu/insightface/models/antelopev2/`, and
 `runtime/models/comfyui-gpu/background_removal/birefnet.safetensors`. If local background removal fails after the RGB

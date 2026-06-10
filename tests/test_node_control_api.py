@@ -2536,7 +2536,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             [item["template_id"] for item in payload["templates"]],
-            ["template.avatar_body_depth_reference_transparent.realvisxl.v1"],
+            [
+                "template.avatar_body_depth_reference_transparent.realvisxl.v1",
+                "template.avatar_profile_depth_pulid.realvisxl.v1",
+            ],
         )
 
     def test_manual_image_generation_status_reports_latest_job_completion(self):

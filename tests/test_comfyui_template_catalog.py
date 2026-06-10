@@ -15,7 +15,7 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
 
         self.assertTrue(payload["configured"])
         self.assertEqual(payload["schema_version"], "1.0")
-        self.assertEqual(len(payload["templates"]), 1)
+        self.assertEqual(len(payload["templates"]), 2)
         templates_by_id = {template["template_id"]: template for template in payload["templates"]}
         template = templates_by_id["template.avatar_body_depth_reference_transparent.realvisxl.v1"]
         self.assertEqual(template["template_name"], "Simple Avatar Generation")
@@ -37,6 +37,13 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
         self.assertEqual(template["model_requirements"]["other"]["identity_model"], "ip-adapter_pulid_sdxl_fp16.safetensors")
         self.assertEqual(template["model_requirements"]["other"]["insightface_model"], "antelopev2")
         self.assertEqual(template["model_requirements"]["other"]["body_preservation"], "depth_anything_v2_controlnet")
+        profile_template = templates_by_id["template.avatar_profile_depth_pulid.realvisxl.v1"]
+        self.assertEqual(profile_template["template_name"], "Avatar Profile Generation")
+        self.assertIn("body_depth_image", [item["name"] for item in profile_template["variables"]])
+        self.assertEqual(
+            profile_template["model_requirements"]["other"]["body_preservation"],
+            "precomputed_depth_map_controlnet",
+        )
 
     def test_validate_rejects_default_without_variable(self):
         with tempfile.TemporaryDirectory() as tmp:
