@@ -72,6 +72,7 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
 
 MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID = "template.avatar_head_face_preview.realvisxl.v1"
+AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT = 10
 AVATAR_BODY_DEPTH_PROFILE_CLIENT_ID = "hexe-node-avatar-body-depth"
 
 MANUAL_IMAGE_PROGRESS_NODE_LABELS = {
@@ -2163,7 +2164,7 @@ class NodeControlState:
             "updated_at": now,
             "local_llm_model_id": model_id,
             "conversation": conversation[-50:],
-            "preview_history": list(workspace.get("preview_history") or [])[-24:],
+            "preview_history": list(workspace.get("preview_history") or [])[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:],
         }
         updated_metadata = self._avatar_profile_metadata_with_workspace(
             metadata=metadata,
@@ -2247,7 +2248,7 @@ class NodeControlState:
             "prompt": prompt,
             "negative_prompt": negative_prompt,
             "updated_at": now,
-            "preview_history": preview_history[-24:],
+            "preview_history": preview_history[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:],
         }
         updated_metadata = self._avatar_profile_metadata_with_workspace(
             metadata=metadata,
