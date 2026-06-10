@@ -4570,6 +4570,8 @@ class NodeControlState:
         socket_path = str(webui.get("socket_path") or "") if isinstance(webui, dict) else ""
         if not socket_path:
             return None
+        if not Path(socket_path).exists():
+            return None
         input_dir = self._manual_image_input_dir()
         source_dir = profile_dir / "refs" / "head_face" / "preview"
         source_dir.mkdir(parents=True, exist_ok=True)
@@ -4586,18 +4588,24 @@ class NodeControlState:
             bg_removal_model = str(defaults.get("bg_removal_model") or bg_removal_model).strip() or bg_removal_model
         except Exception:
             pass
-        self._free_manual_image_runtime_models(socket_path=socket_path)
+        cleanup = self._free_manual_image_runtime_models(socket_path=socket_path)
+        if cleanup.get("status") == "failed":
+            return None
         workflow = self._avatar_head_face_background_removal_workflow(
             input_image=input_image,
             bg_removal_model=bg_removal_model,
             output_prefix=f"hexe/avatar_head_face_preview/{avatar_name}_seed{seed}",
         )
-        response = self._uds_json_request(
-            socket_path=socket_path,
-            method="POST",
-            path="/prompt",
-            body={"client_id": "hexe-node-avatar-head-face-bg", "prompt": workflow},
-        )
+        try:
+            response = self._uds_json_request(
+                socket_path=socket_path,
+                method="POST",
+                path="/prompt",
+                body={"client_id": "hexe-node-avatar-head-face-bg", "prompt": workflow},
+            )
+        except Exception as exc:
+            self._logger.debug("avatar head face background removal submit unavailable: %s", exc)
+            return None
         now = datetime.now(timezone.utc).isoformat()
         return {
             **preview,
