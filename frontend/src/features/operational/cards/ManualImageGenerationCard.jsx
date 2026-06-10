@@ -74,6 +74,10 @@ function formatSliderValue(value) {
   return Number.isFinite(number) ? number.toFixed(2) : "0.00";
 }
 
+function isPoseReferenceRole(value) {
+  return ["openpose", "pose"].includes(String(value || "").trim().toLowerCase());
+}
+
 function variableLabel(name) {
   return String(name || "")
     .split("_")
@@ -391,7 +395,7 @@ export function ManualImageGenerationCard({
     if (result?.reference) {
       if (libraryRole === "face") {
         setFaceReference(result.reference);
-      } else if (libraryRole === "body") {
+      } else if (libraryRole === "body" || isPoseReferenceRole(libraryRole)) {
         setBodyReference(result.reference);
       } else if (libraryCategory === "scene" || libraryRole === "place") {
         setSceneReference(result.reference);
@@ -683,6 +687,7 @@ export function ManualImageGenerationCard({
               <select value={libraryRole} onChange={(event) => setLibraryRole(event.target.value)}>
                 <option value="face">Face</option>
                 <option value="body">Body</option>
+                <option value="openpose">OpenPose</option>
                 <option value="reference">Reference</option>
               </select>
             </label>
@@ -707,7 +712,9 @@ export function ManualImageGenerationCard({
               Upload Reference
             </button>
             {faceReference ? <code>{`Face: ${faceReference.name || faceReference.filename}`}</code> : null}
-            {bodyReference ? <code>{`Body: ${bodyReference.name || bodyReference.filename}`}</code> : null}
+            {bodyReference ? (
+              <code>{`${isPoseReferenceRole(bodyReference.role) ? "OpenPose" : "Body"}: ${bodyReference.name || bodyReference.filename}`}</code>
+            ) : null}
           </div>
           <div className="manual-pose-helper-panel">
             <label>
@@ -796,7 +803,7 @@ export function ManualImageGenerationCard({
                     ) : null}
                     {needsBodyReference ? (
                       <button className="btn" type="button" onClick={() => useReference(reference, "body")} disabled={busy}>
-                        Body
+                        {isPoseReferenceRole(reference.role) ? "OpenPose" : "Body"}
                       </button>
                     ) : null}
                   </div>

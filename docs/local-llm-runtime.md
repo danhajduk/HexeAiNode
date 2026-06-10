@@ -244,6 +244,9 @@ It starts or reuses the manual ComfyUI session, lets operators choose a GPU Comf
 settings, submits txt2img or img2img workflows, stores reference images in the manual input folder, and lists recent
 files from the manual output folder through node API output URLs. Avatar templates can also write LoRA training sidecars
 next to completed images: a same-name `.txt` caption file and a `.json` metadata file.
+Avatar reference uploads support face, body, and OpenPose roles. OpenPose uploads are stored as avatar references and
+can be selected as the active body/pose reference for the current body-depth workflow; the active catalog does not yet
+include a dedicated OpenPose ControlNet template.
 Manual image submissions can queue up to 25 separate ComfyUI prompts, optionally randomize each seed, and optionally
 jitter avatar face/body reference strengths around the configured slider values by a bounded variation amount.
 

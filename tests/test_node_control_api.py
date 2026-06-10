@@ -3391,6 +3391,45 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(reference["input_image"].startswith("references/avatar/Jane_Doe_face_"))
         self.assertEqual(status["references"][0]["input_image"], reference["input_image"])
 
+    def test_manual_image_reference_upload_preserves_openpose_role(self):
+        class _ReferenceServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ReferenceServiceManager(str(input_dir)),
+            )
+
+            result = state.upload_manual_image_reference(
+                payload=ManualImageReferenceUploadRequest(
+                    category="avatar",
+                    role="openpose",
+                    name="Jane OpenPose",
+                    filename="pose.png",
+                    data_base64=base64.b64encode(b"png-data").decode("ascii"),
+                )
+            )
+
+        reference = result["reference"]
+        self.assertEqual(reference["category"], "avatar")
+        self.assertEqual(reference["role"], "openpose")
+        self.assertEqual(reference["name"], "Jane OpenPose")
+        self.assertTrue(reference["input_image"].startswith("references/avatar/Jane_OpenPose_openpose_"))
+
     def test_delete_manual_image_reference_removes_image_and_sidecar(self):
         class _ReferenceServiceManager:
             def __init__(self, input_dir: str):
