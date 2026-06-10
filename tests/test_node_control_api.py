@@ -3751,6 +3751,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     character_type="humanlike",
                     visual_style="semi-real",
                     initial_data="reserved, observant, late twenties",
+                    nsfw=True,
                 )
             )
 
@@ -3766,6 +3767,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(profile["character_type"], "humanlike")
         self.assertEqual(profile["visual_style"], "semi-real")
         self.assertEqual(profile["initial_data"], "reserved, observant, late twenties")
+        self.assertTrue(profile["nsfw"])
         self.assertEqual(profile["face_url"], "")
         self.assertEqual(profile["body_url"], "")
         self.assertNotIn("face_image", metadata)

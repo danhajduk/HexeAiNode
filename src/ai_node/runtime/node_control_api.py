@@ -2095,6 +2095,7 @@ class NodeControlState:
             "character_type": str(payload.character_type or "").strip(),
             "visual_style": str(payload.visual_style or "").strip(),
             "initial_data": str(payload.initial_data or "").strip(),
+            "nsfw": bool(payload.nsfw) if payload.nsfw is not None else bool(existing.get("nsfw", False)),
             "created_at": existing.get("created_at") or now,
             "updated_at": now,
         }
@@ -9284,6 +9285,7 @@ class AvatarProfileSaveRequest(BaseModel):
     character_type: str | None = None
     visual_style: str | None = None
     initial_data: str | None = None
+    nsfw: bool | None = None
     face_image_filename: str | None = None
     face_image_data_base64: str | None = None
     body_image_filename: str | None = None

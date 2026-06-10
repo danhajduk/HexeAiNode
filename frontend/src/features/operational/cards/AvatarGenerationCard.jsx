@@ -532,6 +532,7 @@ export function AvatarGenerationCard({
   const [hairColor, setHairColor] = useState("");
   const [characterType, setCharacterType] = useState("human");
   const [visualStyle, setVisualStyle] = useState("semi-real");
+  const [nsfw, setNsfw] = useState(false);
   const [bodyDepthFiles, setBodyDepthFiles] = useState([]);
   const [faceAnalysisFiles, setFaceAnalysisFiles] = useState([]);
   const [poseFiles, setPoseFiles] = useState([]);
@@ -621,6 +622,7 @@ export function AvatarGenerationCard({
       character_type: characterType.trim(),
       visual_style: visualStyle.trim(),
       initial_data: description.trim(),
+      nsfw: Boolean(nsfw),
     });
     if (saveResult?.profile) {
       setLocalStatus("saved");
@@ -952,6 +954,8 @@ export function AvatarGenerationCard({
               <code>{routeProfile.character_type || "unset"}</code>
               <span>Style</span>
               <code>{routeProfile.visual_style || "unset"}</code>
+              <span>NSFW</span>
+              <StatusBadge value={routeProfile.nsfw ? "enabled" : "disabled"} />
               <span>Initial Data</span>
               <code>{routeProfile.initial_data || routeProfile.description || "unset"}</code>
             </div>
@@ -1501,6 +1505,14 @@ export function AvatarGenerationCard({
                 <option value="real">Real</option>
               </select>
             </label>
+            <label className="manual-lora-metadata-toggle">
+              <input
+                type="checkbox"
+                checked={nsfw}
+                onChange={(event) => setNsfw(event.target.checked)}
+              />
+              NSFW
+            </label>
             <label className="avatar-generation-wide-field">
               Initial Data
               <textarea rows={8} value={description} onChange={(event) => setDescription(event.target.value)} />
@@ -1567,6 +1579,8 @@ export function AvatarGenerationCard({
                     <code>{profile.character_type || "unset"}</code>
                     <span>Style</span>
                     <code>{profile.visual_style || "unset"}</code>
+                    <span>NSFW</span>
+                    <StatusBadge value={profile.nsfw ? "enabled" : "disabled"} />
                   </div>
                   {profile.extraction?.structured ? (
                     <details className="avatar-profile-json">
