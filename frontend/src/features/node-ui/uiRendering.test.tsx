@@ -598,6 +598,32 @@ describe("OperationalDashboard", () => {
               identity_prompt: "same Jane Avatar identity",
             },
           },
+          references: {
+            body_depth: [
+              {
+                name: "Standing Body",
+                filename: "standing_body.webp",
+                url: "/api/avatar-generation/profiles/Jane_Avatar/references/body_depth/standing_body.webp",
+                created_at: "2026-06-09T12:10:00Z",
+              },
+            ],
+            face: [
+              {
+                name: "Face Closeup",
+                filename: "face_closeup.webp",
+                url: "/api/avatar-generation/profiles/Jane_Avatar/references/face/face_closeup.webp",
+                created_at: "2026-06-09T12:11:00Z",
+              },
+            ],
+            pose: [
+              {
+                name: "Open Pose",
+                filename: "open_pose.webp",
+                url: "/api/avatar-generation/profiles/Jane_Avatar/references/pose/open_pose.webp",
+                created_at: "2026-06-09T12:12:00Z",
+              },
+            ],
+          },
         },
       ],
     };
@@ -640,8 +666,12 @@ describe("OperationalDashboard", () => {
     );
 
     expect(bodyMarkup).toContain("Upload Body Images");
+    expect(bodyMarkup).toContain("Standing Body");
+    expect(bodyMarkup).toContain("standing_body.webp");
     expect(faceMarkup).toContain("Upload Face Images");
+    expect(faceMarkup).toContain("Face Closeup");
     expect(poseMarkup).toContain("Upload Pose Images");
+    expect(poseMarkup).toContain("Open Pose");
     expect(poseMarkup).toContain("Pose Notes");
   });
 

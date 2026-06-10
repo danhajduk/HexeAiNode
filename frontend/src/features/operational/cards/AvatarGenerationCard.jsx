@@ -57,6 +57,10 @@ function selectedFileNames(files) {
   return asArray(files).map((file) => file?.name).filter(Boolean).join(", ") || "none";
 }
 
+function profileReferences(profile, role) {
+  return asArray(objectValue(profile?.references)[role]);
+}
+
 function extractionEditorState(profile) {
   const extraction = objectValue(profile?.extraction);
   const structured = objectValue(extraction.structured);
@@ -147,6 +151,8 @@ export function AvatarGenerationCard({
   onDeleteProfile,
   onExtractProfile,
   onUpdateProfileExtraction,
+  onUploadProfileReference,
+  onDeleteProfileReference,
   onBackToProfiles,
   onRefresh,
 }) {
@@ -170,6 +176,7 @@ export function AvatarGenerationCard({
   const [description, setDescription] = useState("");
   const [localStatus, setLocalStatus] = useState("");
   const [activeProfileAction, setActiveProfileAction] = useState("");
+  const [activeReferenceAction, setActiveReferenceAction] = useState("");
   const [editorState, setEditorState] = useState(() => extractionEditorState(routeProfile));
   const latestProfile = result?.profile || profiles[0] || null;
   const canSave = Boolean(characterName.trim()) && Boolean(faceFile) && Boolean(bodyFile) && !busy;
@@ -235,6 +242,80 @@ export function AvatarGenerationCard({
     } catch (err) {
       setLocalStatus("invalid_json");
     }
+  }
+
+  async function uploadReferenceFiles(role, files) {
+    const selectedFiles = Array.from(files || []);
+    if (!routeProfile?.profile_id || !selectedFiles.length || busy) {
+      return;
+    }
+    setActiveReferenceAction(`upload:${role}`);
+    setLocalStatus("");
+    try {
+      for (const file of selectedFiles) {
+        const dataBase64 = await fileToDataUrl(file);
+        await onUploadProfileReference?.(routeProfile.profile_id, {
+          role,
+          name: file.name ? file.name.replace(/\.[^.]+$/, "") : role,
+          filename: file.name || `${role}.png`,
+          data_base64: dataBase64,
+        });
+      }
+      setLocalStatus("uploaded");
+    } finally {
+      setActiveReferenceAction("");
+    }
+  }
+
+  async function deleteReference(role, filename) {
+    if (!routeProfile?.profile_id || !filename || busy) {
+      return;
+    }
+    setActiveReferenceAction(`delete:${role}:${filename}`);
+    setLocalStatus("");
+    try {
+      const result = await onDeleteProfileReference?.(routeProfile.profile_id, role, filename);
+      if (result) {
+        setLocalStatus("deleted");
+      }
+    } finally {
+      setActiveReferenceAction("");
+    }
+  }
+
+  function renderReferenceCards(role) {
+    const references = profileReferences(routeProfile, role);
+    if (!references.length) {
+      return <p className="muted tiny">No saved references.</p>;
+    }
+    return (
+      <div className="avatar-reference-card-grid">
+        {references.map((reference) => {
+          const filename = String(reference.filename || "").trim();
+          return (
+            <article className="avatar-reference-card" key={`${role}:${filename}`}>
+              {reference.url ? (
+                <a href={profileImageUrl(apiBase, reference.url)} target="_blank" rel="noreferrer">
+                  <img src={profileImageUrl(apiBase, reference.url)} alt={reference.name || filename} />
+                </a>
+              ) : null}
+              <div>
+                <strong>{reference.name || filename}</strong>
+                <span>{reference.created_at || filename}</span>
+              </div>
+              <button
+                className="btn btn-danger"
+                type="button"
+                disabled={busy}
+                onClick={() => deleteReference(role, filename)}
+              >
+                {activeReferenceAction === `delete:${role}:${filename}` ? "Deleting..." : "Delete"}
+              </button>
+            </article>
+          );
+        })}
+      </div>
+    );
   }
 
   if (detailMode) {
@@ -369,12 +450,16 @@ export function AvatarGenerationCard({
         {activeDetailTab === "body_depth" ? (
           <section className="setup-form avatar-reference-upload-panel">
             <label className="avatar-upload-control">
-              <span className="btn btn-primary">Upload Body Images</span>
+              <span className="btn btn-primary">{activeReferenceAction === "upload:body_depth" ? "Uploading..." : "Upload Body Images"}</span>
               <input
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={(event) => setBodyDepthFiles(Array.from(event.target.files || []))}
+                onChange={(event) => {
+                  const files = Array.from(event.target.files || []);
+                  setBodyDepthFiles(files);
+                  uploadReferenceFiles("body_depth", files);
+                }}
               />
             </label>
             <div className="state-grid compact-grid">
@@ -382,19 +467,26 @@ export function AvatarGenerationCard({
               <code>{bodyDepthFiles.length}</code>
               <span>Files</span>
               <code>{selectedFileNames(bodyDepthFiles)}</code>
+              <span>Saved</span>
+              <code>{profileReferences(routeProfile, "body_depth").length}</code>
             </div>
+            {renderReferenceCards("body_depth")}
           </section>
         ) : null}
 
         {activeDetailTab === "face" ? (
           <section className="setup-form avatar-reference-upload-panel">
             <label className="avatar-upload-control">
-              <span className="btn btn-primary">Upload Face Images</span>
+              <span className="btn btn-primary">{activeReferenceAction === "upload:face" ? "Uploading..." : "Upload Face Images"}</span>
               <input
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={(event) => setFaceAnalysisFiles(Array.from(event.target.files || []))}
+                onChange={(event) => {
+                  const files = Array.from(event.target.files || []);
+                  setFaceAnalysisFiles(files);
+                  uploadReferenceFiles("face", files);
+                }}
               />
             </label>
             <div className="state-grid compact-grid">
@@ -402,15 +494,27 @@ export function AvatarGenerationCard({
               <code>{faceAnalysisFiles.length}</code>
               <span>Files</span>
               <code>{selectedFileNames(faceAnalysisFiles)}</code>
+              <span>Saved</span>
+              <code>{profileReferences(routeProfile, "face").length}</code>
             </div>
+            {renderReferenceCards("face")}
           </section>
         ) : null}
 
         {activeDetailTab === "poses" ? (
           <section className="setup-form avatar-reference-upload-panel">
             <label className="avatar-upload-control">
-              <span className="btn btn-primary">Upload Pose Images</span>
-              <input type="file" accept="image/*" multiple onChange={(event) => setPoseFiles(Array.from(event.target.files || []))} />
+              <span className="btn btn-primary">{activeReferenceAction === "upload:pose" ? "Uploading..." : "Upload Pose Images"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(event) => {
+                  const files = Array.from(event.target.files || []);
+                  setPoseFiles(files);
+                  uploadReferenceFiles("pose", files);
+                }}
+              />
             </label>
             <label>
               Pose Notes
@@ -420,8 +524,11 @@ export function AvatarGenerationCard({
               <span>Queued</span>
               <code>{poseFiles.length}</code>
               <span>Files</span>
-              <code>{poseFiles.map((file) => file.name).join(", ") || "none"}</code>
+              <code>{selectedFileNames(poseFiles)}</code>
+              <span>Saved</span>
+              <code>{profileReferences(routeProfile, "pose").length}</code>
             </div>
+            {renderReferenceCards("pose")}
           </section>
         ) : null}
 

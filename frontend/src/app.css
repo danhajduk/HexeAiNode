@@ -908,6 +908,42 @@
   pointer-events: none;
 }
 
+.avatar-reference-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.avatar-reference-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid hsl(var(--sx-border) / 0.75);
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-panel) / 0.65);
+}
+
+.avatar-reference-card img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-bg));
+}
+
+.avatar-reference-card div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.avatar-reference-card span {
+  color: hsl(var(--sx-text-muted));
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 760px) {
   .avatar-profile-card {
     grid-template-columns: 1fr;
