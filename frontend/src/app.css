@@ -1007,6 +1007,7 @@
   border: 1px solid hsl(var(--sx-border) / 0.75);
   border-radius: var(--sx-radius-sm);
   background: hsl(var(--sx-panel) / 0.65);
+  overflow: hidden;
 }
 
 .avatar-reference-card img {

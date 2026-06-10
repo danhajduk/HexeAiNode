@@ -73,7 +73,7 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
 
 MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID = "template.avatar_head_face_preview.realvisxl.v1"
-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT = 10
+AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT = 9
 AVATAR_HEAD_FACE_PROMPT_PART_ORDER = (
     "general",
     "hair",

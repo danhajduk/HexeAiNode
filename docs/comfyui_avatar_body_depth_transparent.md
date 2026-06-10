@@ -137,7 +137,7 @@ conversation. `POST /api/avatar-generation/profiles/{profile_id}/head-face/previ
 submits `template.avatar_head_face_preview.realvisxl.v1` through the manual
 ComfyUI runtime as a quick `512x512`, 4-step preview and records the prompt id,
 template id, seed, prompt snapshot, and negative prompt in preview history. The
-profile keeps only the latest 10 head/face preview history entries. When the
+profile keeps only the latest 9 head/face preview history entries. When the
 ComfyUI output file appears, the node copies it into
 `avatar_profiles/<profile_id>/refs/head_face/preview/` and updates the preview
 history entry with the profile-local `input_image` and API `url`. If the output
