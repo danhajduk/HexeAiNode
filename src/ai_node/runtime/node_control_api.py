@@ -2113,6 +2113,104 @@ class NodeControlState:
             "profiles": self._avatar_profiles(limit=48, selected_profile_id=self._selected_avatar_profile_id()),
         }
 
+    def refine_avatar_profile_head_prompt(self, *, profile_id: str, payload: "AvatarProfileHeadPromptRefineRequest") -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        user_message = str(payload.user_message or "").strip()
+        if not user_message:
+            raise ValueError("avatar_head_prompt_user_message_required")
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
+        current_prompt = str(payload.current_prompt or workspace.get("prompt") or "").strip()
+        if not current_prompt:
+            current_prompt = self._avatar_profile_default_head_prompt(profile=metadata)
+        current_negative = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
+        prompt, negative_prompt, model_id = self._avatar_profile_head_prompt_from_local_llm(
+            profile=metadata,
+            current_prompt=current_prompt,
+            current_negative_prompt=current_negative,
+            user_message=user_message,
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        conversation = list(workspace.get("conversation") or [])
+        conversation.append({"role": "user", "content": user_message, "created_at": now})
+        conversation.append({"role": "assistant", "content": prompt, "negative_prompt": negative_prompt, "model_id": model_id, "created_at": now})
+        updated_workspace = {
+            **workspace,
+            "section": "head_face",
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "updated_at": now,
+            "local_llm_model_id": model_id,
+            "conversation": conversation[-50:],
+            "preview_history": list(workspace.get("preview_history") or [])[-24:],
+        }
+        updated_metadata = self._avatar_profile_metadata_with_workspace(
+            metadata=metadata,
+            section="head_face",
+            workspace=updated_workspace,
+        )
+        updated_metadata["updated_at"] = now
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        return {
+            "status": "head_prompt_refined",
+            "profile": saved_profile,
+            "workspace": saved_profile.get("prompt_workspaces", {}).get("head_face", {}),
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    def create_avatar_profile_head_preview(self, *, profile_id: str, payload: "AvatarProfileHeadPreviewRequest") -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
+        prompt = str(payload.prompt or workspace.get("prompt") or "").strip()
+        if not prompt:
+            prompt = self._avatar_profile_default_head_prompt(profile=metadata)
+        negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
+        now = datetime.now(timezone.utc).isoformat()
+        preview = {
+            "preview_id": f"head_face_{int(time.time())}",
+            "section": "head_face",
+            "status": "requested",
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "created_at": now,
+            "note": "face_preview_template_not_configured",
+        }
+        preview_history = list(workspace.get("preview_history") or [])
+        preview_history.append(preview)
+        updated_workspace = {
+            **workspace,
+            "section": "head_face",
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "updated_at": now,
+            "preview_history": preview_history[-24:],
+        }
+        updated_metadata = self._avatar_profile_metadata_with_workspace(
+            metadata=metadata,
+            section="head_face",
+            workspace=updated_workspace,
+        )
+        updated_metadata["updated_at"] = now
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        return {
+            "status": "preview_requested",
+            "preview": preview,
+            "profile": saved_profile,
+            "workspace": saved_profile.get("prompt_workspaces", {}).get("head_face", {}),
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
     def select_avatar_profile(self, *, profile_id: str) -> dict:
         profile_dir = self._avatar_profile_dir(profile_id=profile_id)
         if not (profile_dir / "profile.json").exists():
@@ -3610,6 +3708,108 @@ class NodeControlState:
         except Exception:
             return {}
         return metadata if isinstance(metadata, dict) else {}
+
+    @classmethod
+    def _avatar_profile_prompt_workspace(cls, *, metadata: dict, section: str) -> dict:
+        workspaces = metadata.get("prompt_workspaces") if isinstance(metadata.get("prompt_workspaces"), dict) else {}
+        workspace = workspaces.get(section) if isinstance(workspaces.get(section), dict) else {}
+        return dict(workspace)
+
+    @classmethod
+    def _avatar_profile_metadata_with_workspace(cls, *, metadata: dict, section: str, workspace: dict) -> dict:
+        workspaces = metadata.get("prompt_workspaces") if isinstance(metadata.get("prompt_workspaces"), dict) else {}
+        return {
+            **metadata,
+            "prompt_workspaces": {
+                **workspaces,
+                section: workspace,
+            },
+        }
+
+    @classmethod
+    def _avatar_profile_default_head_prompt(cls, *, profile: dict) -> str:
+        parts = [
+            str(profile.get("name") or profile.get("profile_id") or "avatar").strip(),
+            str(profile.get("gender") or "").strip(),
+            str(profile.get("character_type") or "").strip(),
+            str(profile.get("visual_style") or "").replace("-", " ").strip(),
+            f"{profile.get('skin_color')} skin" if str(profile.get("skin_color") or "").strip() else "",
+            f"{profile.get('hair_color')} hair" if str(profile.get("hair_color") or "").strip() else "",
+            "head and shoulders portrait",
+            "expressive eyes",
+            "clear face shape",
+            "detailed hair",
+            "clean studio lighting",
+        ]
+        return ", ".join(item for item in parts if item)
+
+    def _avatar_profile_head_prompt_from_local_llm(
+        self,
+        *,
+        profile: dict,
+        current_prompt: str,
+        current_negative_prompt: str,
+        user_message: str,
+    ) -> tuple[str, str, str]:
+        services = self.service_status_payload().get("services", {})
+        local_llm = services.get("local_llm") if isinstance(services, dict) else {}
+        socket_path = str(local_llm.get("socket_path") or "") if isinstance(local_llm, dict) else ""
+        model_id = str(local_llm.get("model_id") or local_llm.get("default_model_id") or "local").strip() if isinstance(local_llm, dict) else "local"
+        if not socket_path:
+            raise ValueError("local_llm_socket_unavailable")
+        if isinstance(local_llm, dict) and str(local_llm.get("state") or "").strip().lower() not in {"running", "healthy"}:
+            raise ValueError("local_llm_unavailable")
+        request_payload = {
+            "profile": {
+                "name": profile.get("name") or profile.get("profile_id"),
+                "gender": profile.get("gender"),
+                "skin_color": profile.get("skin_color"),
+                "hair_color": profile.get("hair_color"),
+                "character_type": profile.get("character_type"),
+                "visual_style": profile.get("visual_style"),
+                "nsfw": bool(profile.get("nsfw")),
+            },
+            "section": "head_face",
+            "current_prompt": current_prompt,
+            "current_negative_prompt": current_negative_prompt,
+            "user_request": user_message,
+        }
+        response = self._uds_json_request(
+            socket_path=socket_path,
+            method="POST",
+            path="/v1/chat/completions",
+            body={
+                "model": model_id,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "/no_think You refine SDXL/ComfyUI prompts for an avatar head and face design workspace. "
+                            "Return only JSON with keys prompt and negative_prompt. "
+                            "Preserve stable profile facts unless the user explicitly changes them. "
+                            "Focus on head, face, hair, expression, skin, eyes, makeup/accessories, portrait framing, lighting, and style. "
+                            "Do not write explanations or markdown."
+                        ),
+                    },
+                    {"role": "user", "content": "/no_think " + json.dumps(request_payload, sort_keys=True)},
+                ],
+                "temperature": 0.4,
+                "max_tokens": 550,
+                "stream": False,
+            },
+            host="local-llm",
+            error_label="local_llm_avatar_head_prompt_failed",
+            timeout_s=60,
+        )
+        choices = response.get("choices") if isinstance(response.get("choices"), list) else []
+        content = ""
+        if choices and isinstance(choices[0], dict):
+            message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
+            content = str(message.get("content") or message.get("reasoning_content") or choices[0].get("text") or "").strip()
+        parsed = self._parse_manual_image_prompt_helper_content(content)
+        prompt = str(parsed.get("prompt") or content or current_prompt).strip()
+        negative_prompt = str(parsed.get("negative_prompt") or current_negative_prompt).strip()
+        return prompt, negative_prompt, model_id
 
     def _selected_avatar_profile_path(self) -> Path:
         return self._avatar_profile_root() / "selected_profile.json"
@@ -9298,6 +9498,17 @@ class AvatarProfileExtractionUpdateRequest(BaseModel):
     structured: dict | None = None
 
 
+class AvatarProfileHeadPromptRefineRequest(BaseModel):
+    current_prompt: str | None = None
+    negative_prompt: str | None = None
+    user_message: str
+
+
+class AvatarProfileHeadPreviewRequest(BaseModel):
+    prompt: str | None = None
+    negative_prompt: str | None = None
+
+
 class AvatarProfileReferenceUploadRequest(BaseModel):
     role: str
     name: str | None = None
@@ -10240,6 +10451,20 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def put_avatar_generation_profile_extraction(profile_id: str, payload: AvatarProfileExtractionUpdateRequest):
         try:
             return state.update_avatar_profile_extraction(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/head-face/refine")
+    def post_avatar_generation_profile_head_refine(profile_id: str, payload: AvatarProfileHeadPromptRefineRequest):
+        try:
+            return state.refine_avatar_profile_head_prompt(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/head-face/previews")
+    def post_avatar_generation_profile_head_preview(profile_id: str, payload: AvatarProfileHeadPreviewRequest):
+        try:
+            return state.create_avatar_profile_head_preview(profile_id=profile_id, payload=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

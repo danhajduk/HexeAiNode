@@ -488,11 +488,32 @@ const AVATAR_GENERATION_TABS = [
 
 const AVATAR_PROFILE_DETAIL_TABS = [
   { id: "profile", label: "Profile" },
-  { id: "body_depth", label: "Body Depth" },
-  { id: "face", label: "Face" },
-  { id: "poses", label: "Poses" },
-  { id: "generation", label: "Generation" },
+  { id: "head_face", label: "Head / Face" },
+  { id: "upper_torso", label: "Upper Torso" },
+  { id: "lower_torso", label: "Lower Torso" },
+  { id: "full_body", label: "Full Body" },
 ];
+
+function promptWorkspace(profile, section) {
+  return objectValue(objectValue(profile?.prompt_workspaces)[section]);
+}
+
+function defaultHeadFacePrompt(profile) {
+  const parts = [
+    profileName(profile),
+    profile?.gender,
+    String(profile?.character_type || "").replace("-", " "),
+    String(profile?.visual_style || "").replace("-", " "),
+    profile?.skin_color ? `${profile.skin_color} skin` : "",
+    profile?.hair_color ? `${profile.hair_color} hair` : "",
+    "head and shoulders portrait",
+    "expressive eyes",
+    "clear face shape",
+    "detailed hair",
+    "clean studio lighting",
+  ];
+  return parts.map((part) => compactPromptText(part)).filter(Boolean).join(", ");
+}
 
 export function AvatarGenerationCard({
   payload = null,
@@ -510,6 +531,8 @@ export function AvatarGenerationCard({
   onDeleteProfileReference,
   onSetPrimaryFace,
   onGenerateBodyDepthProfile,
+  onRefineHeadPrompt,
+  onCreateHeadPreview,
   onSubmitGeneration,
   generationBusy = false,
   generationResult = null,
@@ -543,6 +566,9 @@ export function AvatarGenerationCard({
   const [activeReferenceAction, setActiveReferenceAction] = useState("");
   const [editorState, setEditorState] = useState(() => extractionEditorState(routeProfile));
   const [generationState, setGenerationState] = useState(() => generationEditorState(routeProfile));
+  const [headPrompt, setHeadPrompt] = useState(() => promptWorkspace(routeProfile, "head_face").prompt || defaultHeadFacePrompt(routeProfile));
+  const [headNegativePrompt, setHeadNegativePrompt] = useState(() => promptWorkspace(routeProfile, "head_face").negative_prompt || "");
+  const [headInstruction, setHeadInstruction] = useState("");
   const generationProfileIdRef = useRef("");
   const generationProfileSignature = avatarGenerationProfileSignature(routeProfile);
   const latestProfile = result?.profile || profiles[0] || null;
@@ -552,6 +578,10 @@ export function AvatarGenerationCard({
   useEffect(() => {
     if (routeProfile) {
       setEditorState(extractionEditorState(routeProfile));
+      const workspace = promptWorkspace(routeProfile, "head_face");
+      setHeadPrompt(String(workspace.prompt || defaultHeadFacePrompt(routeProfile)));
+      setHeadNegativePrompt(String(workspace.negative_prompt || ""));
+      setHeadInstruction("");
     }
   }, [routeProfile]);
 
@@ -615,13 +645,12 @@ export function AvatarGenerationCard({
     setLocalStatus("");
     const saveResult = await onSaveProfile?.({
       name: characterName.trim(),
-      description: description.trim(),
+      description: "",
       gender: gender.trim(),
       skin_color: skinColor.trim(),
       hair_color: hairColor.trim(),
       character_type: characterType.trim(),
       visual_style: visualStyle.trim(),
-      initial_data: description.trim(),
       nsfw: Boolean(nsfw),
     });
     if (saveResult?.profile) {
@@ -733,6 +762,56 @@ export function AvatarGenerationCard({
       const result = await onSetPrimaryFace?.(routeProfile.profile_id, filename);
       if (result) {
         setLocalStatus("primary_face_selected");
+      }
+    } finally {
+      setActiveReferenceAction("");
+    }
+  }
+
+  async function refineHeadPrompt(event) {
+    event.preventDefault();
+    const profileId = String(routeProfile?.profile_id || "").trim();
+    const userMessage = headInstruction.trim();
+    if (!profileId || !userMessage || busy) {
+      return;
+    }
+    setActiveReferenceAction("refine:head_face");
+    setLocalStatus("");
+    try {
+      const result = await onRefineHeadPrompt?.(profileId, {
+        current_prompt: headPrompt,
+        negative_prompt: headNegativePrompt,
+        user_message: userMessage,
+      });
+      if (result?.prompt) {
+        setHeadPrompt(String(result.prompt));
+      }
+      if (result?.negative_prompt !== undefined) {
+        setHeadNegativePrompt(String(result.negative_prompt || ""));
+      }
+      if (result) {
+        setHeadInstruction("");
+        setLocalStatus("head_prompt_refined");
+      }
+    } finally {
+      setActiveReferenceAction("");
+    }
+  }
+
+  async function createHeadPreview() {
+    const profileId = String(routeProfile?.profile_id || "").trim();
+    if (!profileId || !headPrompt.trim() || busy) {
+      return;
+    }
+    setActiveReferenceAction("preview:head_face");
+    setLocalStatus("");
+    try {
+      const result = await onCreateHeadPreview?.(profileId, {
+        prompt: headPrompt,
+        negative_prompt: headNegativePrompt,
+      });
+      if (result) {
+        setLocalStatus("preview_requested");
       }
     } finally {
       setActiveReferenceAction("");
@@ -942,7 +1021,7 @@ export function AvatarGenerationCard({
         </div>
 
         {activeDetailTab === "profile" ? (
-          <form className="setup-form avatar-extraction-form" onSubmit={saveExtractionEdits}>
+          <section className="setup-form avatar-extraction-form">
             <div className="state-grid compact-grid">
               <span>Gender</span>
               <code>{routeProfile.gender || "unset"}</code>
@@ -956,8 +1035,6 @@ export function AvatarGenerationCard({
               <code>{routeProfile.visual_style || "unset"}</code>
               <span>NSFW</span>
               <StatusBadge value={routeProfile.nsfw ? "enabled" : "disabled"} />
-              <span>Initial Data</span>
-              <code>{routeProfile.initial_data || routeProfile.description || "unset"}</code>
             </div>
             <div className="avatar-profile-images avatar-profile-detail-images">
               {routeProfile.face_url ? (
@@ -971,74 +1048,77 @@ export function AvatarGenerationCard({
                 </a>
               ) : null}
             </div>
-            <div className="form-grid two-column-form-grid">
-              <label>
-                Face Description
-                <textarea rows={9} value={editorState.face_description} onChange={(event) => updateEditorField("face_description", event.target.value)} />
+          </section>
+        ) : null}
+
+        {activeDetailTab === "head_face" ? (
+          <section className="setup-form avatar-reference-upload-panel avatar-generation-panel">
+            <form className="setup-form avatar-extraction-form" onSubmit={refineHeadPrompt}>
+              <div className="state-grid compact-grid">
+                <span>Workspace</span>
+                <StatusBadge value="head_face" />
+                <span>Conversation</span>
+                <code>{asArray(promptWorkspace(routeProfile, "head_face").conversation).length}</code>
+                <span>Previews</span>
+                <code>{asArray(promptWorkspace(routeProfile, "head_face").preview_history).length}</code>
+              </div>
+              <label className="avatar-generation-wide-field avatar-generation-compiled-prompt">
+                Current Head / Face Prompt
+                <textarea rows={8} value={headPrompt} onChange={(event) => setHeadPrompt(event.target.value)} />
               </label>
-              <label>
-                Body Description
-                <textarea rows={9} value={editorState.body_description} onChange={(event) => updateEditorField("body_description", event.target.value)} />
+              <label className="avatar-generation-wide-field">
+                Negative Prompt
+                <textarea rows={4} value={headNegativePrompt} onChange={(event) => setHeadNegativePrompt(event.target.value)} />
               </label>
-              <label>
-                Identity
-                <textarea rows={5} value={editorState.identity} onChange={(event) => updateEditorField("identity", event.target.value)} />
+              <label className="avatar-generation-wide-field">
+                Adjustment Request
+                <textarea
+                  rows={5}
+                  value={headInstruction}
+                  onChange={(event) => setHeadInstruction(event.target.value)}
+                  placeholder="Tell the local LLM what to change about the head, face, hair, expression, or portrait style."
+                />
               </label>
-              <label>
-                Face
-                <textarea rows={5} value={editorState.face} onChange={(event) => updateEditorField("face", event.target.value)} />
-              </label>
-              <label>
-                Hair
-                <textarea rows={4} value={editorState.hair} onChange={(event) => updateEditorField("hair", event.target.value)} />
-              </label>
-              <label>
-                Body Shape
-                <textarea rows={6} value={editorState.body_shape} onChange={(event) => updateEditorField("body_shape", event.target.value)} />
-              </label>
-              <label>
-                Bust / Breasts
-                <textarea rows={4} value={editorState.bust_breasts} onChange={(event) => updateEditorField("bust_breasts", event.target.value)} />
-              </label>
-              <label>
-                Buttocks / Glutes
-                <textarea rows={4} value={editorState.buttocks_glutes} onChange={(event) => updateEditorField("buttocks_glutes", event.target.value)} />
-              </label>
-              <label>
-                Arms / Hands / Fingers
-                <textarea rows={4} value={editorState.arms_hands_fingers} onChange={(event) => updateEditorField("arms_hands_fingers", event.target.value)} />
-              </label>
-              <label>
-                Legs / Feet
-                <textarea rows={4} value={editorState.legs_feet} onChange={(event) => updateEditorField("legs_feet", event.target.value)} />
-              </label>
-              <label>
-                Pose
-                <textarea rows={4} value={editorState.pose} onChange={(event) => updateEditorField("pose", event.target.value)} />
-              </label>
-              <label>
-                Clothing
-                <textarea rows={4} value={editorState.clothing} onChange={(event) => updateEditorField("clothing", event.target.value)} />
-              </label>
-              <label>
-                Accessories
-                <textarea rows={4} value={editorState.accessories} onChange={(event) => updateEditorField("accessories", event.target.value)} />
-              </label>
-              <label>
-                Negative Terms
-                <textarea rows={4} value={editorState.negative} onChange={(event) => updateEditorField("negative", event.target.value)} />
-              </label>
+              <div className="row">
+                <button className="btn btn-primary" type="submit" disabled={busy || !headInstruction.trim()}>
+                  {activeReferenceAction === "refine:head_face" ? "Refining..." : "Refine Prompt"}
+                </button>
+                <button className="btn" type="button" disabled={busy || !headPrompt.trim()} onClick={createHeadPreview}>
+                  {activeReferenceAction === "preview:head_face" ? "Requesting..." : "Create Preview"}
+                </button>
+              </div>
+            </form>
+
+            <div className="avatar-reference-section">
+              <h3>Preview History</h3>
+              {asArray(promptWorkspace(routeProfile, "head_face").preview_history).length ? (
+                <div className="avatar-reference-card-grid">
+                  {asArray(promptWorkspace(routeProfile, "head_face").preview_history).map((preview) => (
+                    <article className="avatar-reference-card" key={preview.preview_id || preview.created_at}>
+                      <div>
+                        <strong>{preview.status || "requested"}</strong>
+                        <span>{preview.created_at || "not_saved"}</span>
+                        <code>{preview.note || "preview"}</code>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted tiny">No previews requested yet.</p>
+              )}
             </div>
-            <label>
-              Structured JSON
-              <textarea rows={16} value={editorState.structured_json} onChange={(event) => updateEditorField("structured_json", event.target.value)} />
-            </label>
-            <div className="row">
-              <button className="btn btn-primary" type="submit" disabled={busy || !hasExtraction(routeProfile)}>
-                {busy ? "Saving..." : "Save Profile Data"}
-              </button>
+          </section>
+        ) : null}
+
+        {["upper_torso", "lower_torso", "full_body"].includes(activeDetailTab) ? (
+          <section className="setup-form avatar-reference-upload-panel">
+            <div className="state-grid compact-grid">
+              <span>Workspace</span>
+              <StatusBadge value={activeDetailTab} />
+              <span>Status</span>
+              <code>not_started</code>
             </div>
-          </form>
+          </section>
         ) : null}
 
         {activeDetailTab === "body_depth" ? (
@@ -1526,10 +1606,6 @@ export function AvatarGenerationCard({
                 onChange={(event) => setNsfw(event.target.checked)}
               />
               NSFW
-            </label>
-            <label className="avatar-generation-wide-field">
-              Initial Data
-              <textarea rows={8} value={description} onChange={(event) => setDescription(event.target.value)} />
             </label>
           </div>
 

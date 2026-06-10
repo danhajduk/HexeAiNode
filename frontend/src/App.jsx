@@ -1284,6 +1284,50 @@ export default function App() {
     }
   }
 
+  async function onRefineAvatarHeadPrompt(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/head-face/refine`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onCreateAvatarHeadPreview(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/head-face/previews`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
   async function onDeclareCapabilities() {
     if (declaringCapabilities) {
       return;
@@ -2240,6 +2284,8 @@ export default function App() {
       onSetPrimaryFace: onSetAvatarPrimaryFace,
       onExtractFaceProfile: onExtractAvatarFaceProfile,
       onGenerateBodyDepthProfile: onGenerateAvatarBodyDepthProfile,
+      onRefineHeadPrompt: onRefineAvatarHeadPrompt,
+      onCreateHeadPreview: onCreateAvatarHeadPreview,
       onSubmitGeneration: onSubmitManualImageGeneration,
       generationBusy: manualImageGenerationBusy,
       generationResult: manualImageGenerationResult,

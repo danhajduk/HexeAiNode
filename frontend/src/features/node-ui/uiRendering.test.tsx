@@ -460,7 +460,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Visual Style");
     expect(markup).toContain("Stylized Realistic");
     expect(markup).toContain("NSFW");
-    expect(markup).toContain("Initial Data");
+    expect(markup).not.toContain("Initial Data");
     expect(markup).toContain("Save Profile");
     expect(markup).not.toContain("Describe With Vision");
     expect(markup).not.toContain("Body Depth");
@@ -527,7 +527,7 @@ describe("OperationalDashboard", () => {
     expect(markup).not.toContain("Manual Image Generation");
   });
 
-  it("shows an avatar profile detail route with editable extracted data tabs", () => {
+  it("shows an avatar profile detail route with baseline and staged prompt tabs", () => {
     const markup = renderToStaticMarkup(
       <OperationalDashboard
         {...buildOperationalProps({
@@ -541,28 +541,12 @@ describe("OperationalDashboard", () => {
                   profile_id: "Jane_Avatar",
                   name: "Jane Avatar",
                   selected: true,
-                  face_url: "/api/avatar-generation/profiles/Jane_Avatar/assets/face.png",
-                  body_url: "/api/avatar-generation/profiles/Jane_Avatar/assets/body.png",
-                  extraction: {
-                    face_description: "edited oval face detail",
-                    body_description: "edited full body detail",
-                    structured: {
-                      identity_prompt: "same Jane Avatar identity",
-                      prompt_sections: {
-                        identity: "same Jane Avatar identity",
-                        face: "oval face, green eyes",
-                        body_shape: "hourglass body",
-                        negative: "different person",
-                      },
-                      body_profile: {
-                        bust_breasts: "rounded bust silhouette",
-                        buttocks_glutes: "rounded glute silhouette",
-                        arms_hands_fingers: "long fingers",
-                        legs_feet: "long legs",
-                      },
-                      negative_prompt_terms: ["different person"],
-                    },
-                  },
+                  gender: "female",
+                  skin_color: "light",
+                  hair_color: "black",
+                  character_type: "human",
+                  visual_style: "stylized-realistic",
+                  nsfw: true,
                 },
               ],
             },
@@ -575,23 +559,17 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Jane Avatar");
     expect(markup).toContain("Back");
     expect(markup).toContain("Profile");
-    expect(markup).toContain("Body Depth");
-    expect(markup).toContain("Face");
-    expect(markup).toContain("Poses");
-    expect(markup).toContain("Generation");
-    expect(markup).toContain("Face Description");
-    expect(markup).toContain("Body Description");
-    expect(markup).toContain("Bust / Breasts");
-    expect(markup).toContain("Buttocks / Glutes");
-    expect(markup).toContain("Arms / Hands / Fingers");
-    expect(markup).toContain("Legs / Feet");
-    expect(markup).toContain("Structured JSON");
-    expect(markup).toContain("Save Profile Data");
-    expect(markup).toContain("same Jane Avatar identity");
-    expect(markup).toContain("rounded bust silhouette");
+    expect(markup).toContain("Head / Face");
+    expect(markup).toContain("Upper Torso");
+    expect(markup).toContain("Lower Torso");
+    expect(markup).toContain("Full Body");
+    expect(markup).toContain("female");
+    expect(markup).toContain("black");
+    expect(markup).toContain("stylized-realistic");
+    expect(markup).not.toContain("Structured JSON");
   });
 
-  it("shows explicit upload buttons on avatar body, face, and pose tabs", () => {
+  it("shows the head face prompt workspace and preview history", () => {
     const profilePayload = {
       selected_profile_id: "Jane_Avatar",
       profiles: [
@@ -599,170 +577,45 @@ describe("OperationalDashboard", () => {
           profile_id: "Jane_Avatar",
           name: "Jane Avatar",
           selected: true,
-          face_image: "face.png",
-          face_input_image: "avatar_profiles/Jane_Avatar/face.png",
-          primary_face_reference_filename: "face_closeup.webp",
-          primary_face_input_image: "avatar_profiles/Jane_Avatar/refs/face/face_closeup.webp",
-          pulid_face_reference_image: "avatar_profiles/Jane_Avatar/refs/face/face_closeup.webp",
-          extraction: {
-            structured: {
-              identity_prompt: "same Jane Avatar identity",
+          prompt_workspaces: {
+            head_face: {
+              prompt: "head portrait, blue headset, soft smile",
+              negative_prompt: "blurry",
+              conversation: [{ role: "user", content: "make the smile softer" }],
+              preview_history: [
+                {
+                  preview_id: "head_face_1",
+                  status: "requested",
+                  note: "face_preview_template_not_configured",
+                  created_at: "2026-06-10T10:00:00Z",
+                },
+              ],
             },
-          },
-          face_profile: {
-            status: "extracted",
-            reference_count: 2,
-            structured: {
-              identity_prompt: "same Jane Avatar face identity",
-              face_prompt: "oval face, green eyes, defined cheekbones",
-              hair_prompt: "dark wavy hair with a side part",
-              negative_identity_prompt: "different person, changed face",
-            },
-          },
-          references: {
-            body_depth: [
-              {
-                name: "Standing Body",
-                filename: "standing_body.webp",
-                url: "/api/avatar-generation/profiles/Jane_Avatar/references/body_depth/standing_body.webp",
-                created_at: "2026-06-09T12:10:00Z",
-              },
-              {
-                name: "Standing Body No BG",
-                filename: "avatar_body_standing_body.png",
-                url: "/api/avatar-generation/profiles/Jane_Avatar/references/body_depth/avatar_body_standing_body.png",
-                background_removed: true,
-                created_at: "2026-06-09T12:13:00Z",
-              },
-            ],
-            body_depth_map: [
-              {
-                name: "Standing Body Depth Map",
-                filename: "avatar_body_depth_standing_body.png",
-                url: "/api/avatar-generation/profiles/Jane_Avatar/references/body_depth_map/avatar_body_depth_standing_body.png",
-                created_at: "2026-06-09T12:14:00Z",
-              },
-            ],
-            face: [
-              {
-                name: "Face Closeup",
-                filename: "face_closeup.webp",
-                url: "/api/avatar-generation/profiles/Jane_Avatar/references/face/face_closeup.webp",
-                input_image: "avatar_profiles/Jane_Avatar/refs/face/face_closeup.webp",
-                primary: true,
-                created_at: "2026-06-09T12:11:00Z",
-              },
-              {
-                name: "Face Three Quarter",
-                filename: "face_three_quarter.webp",
-                url: "/api/avatar-generation/profiles/Jane_Avatar/references/face/face_three_quarter.webp",
-                input_image: "avatar_profiles/Jane_Avatar/refs/face/face_three_quarter.webp",
-                created_at: "2026-06-09T12:16:00Z",
-              },
-            ],
-            pose: [
-              {
-                name: "Open Pose",
-                filename: "open_pose.webp",
-                url: "/api/avatar-generation/profiles/Jane_Avatar/references/pose/open_pose.webp",
-                created_at: "2026-06-09T12:12:00Z",
-              },
-            ],
-          },
-          body_depth_profile: {
-            status: "completed",
-            generated_count: 1,
-            depth_map_count: 1,
           },
         },
       ],
     };
 
-    const bodyMarkup = renderToStaticMarkup(
+    const markup = renderToStaticMarkup(
       <OperationalDashboard
         {...buildOperationalProps({
           currentSection: "avatar_generation",
           avatarGenerationProps: {
             routeProfileId: "Jane_Avatar",
-            initialDetailTab: "body_depth",
-            payload: profilePayload,
-          },
-        })}
-      />
-    );
-    const faceMarkup = renderToStaticMarkup(
-      <OperationalDashboard
-        {...buildOperationalProps({
-          currentSection: "avatar_generation",
-          avatarGenerationProps: {
-            routeProfileId: "Jane_Avatar",
-            initialDetailTab: "face",
-            payload: profilePayload,
-          },
-        })}
-      />
-    );
-    const poseMarkup = renderToStaticMarkup(
-      <OperationalDashboard
-        {...buildOperationalProps({
-          currentSection: "avatar_generation",
-          avatarGenerationProps: {
-            routeProfileId: "Jane_Avatar",
-            initialDetailTab: "poses",
-            payload: profilePayload,
-          },
-        })}
-      />
-    );
-    const generationMarkup = renderToStaticMarkup(
-      <OperationalDashboard
-        {...buildOperationalProps({
-          currentSection: "avatar_generation",
-          avatarGenerationProps: {
-            routeProfileId: "Jane_Avatar",
-            initialDetailTab: "generation",
+            initialDetailTab: "head_face",
             payload: profilePayload,
           },
         })}
       />
     );
 
-    expect(bodyMarkup).toContain("Upload Body Images");
-    expect(bodyMarkup).toContain("Generate Depth Profile");
-    expect(bodyMarkup).toContain("Raw Body Images");
-    expect(bodyMarkup).toContain("Standing Body");
-    expect(bodyMarkup).toContain("standing_body.webp");
-    expect(bodyMarkup).toContain("No-BG Body Images");
-    expect(bodyMarkup).toContain("avatar_body_standing_body.png");
-    expect(bodyMarkup).toContain("Depth Maps");
-    expect(bodyMarkup).toContain("avatar_body_depth_standing_body.png");
-    expect(faceMarkup).toContain("Upload Face Images");
-    expect(faceMarkup).not.toContain("Extract Face Profile");
-    expect(faceMarkup).toContain("PuLID Face");
-    expect(faceMarkup).toContain("Face Closeup");
-    expect(faceMarkup).toContain("primary");
-    expect(faceMarkup).toContain("Face Three Quarter");
-    expect(faceMarkup).toContain("Set Primary");
-    expect(faceMarkup).toContain("Face Profile");
-    expect(faceMarkup).toContain("Face Prompt");
-    expect(faceMarkup).toContain("oval face, green eyes");
-    expect(poseMarkup).toContain("Upload Pose Images");
-    expect(poseMarkup).toContain("Open Pose");
-    expect(poseMarkup).toContain("Pose Notes");
-    expect(generationMarkup).toContain("Avatar Profile Generation");
-    expect(generationMarkup).toContain("Simple Avatar Generation");
-    expect(generationMarkup).toContain("Body Depth Map");
-    expect(generationMarkup).toContain("avatar_body_depth_standing_body.png");
-    expect(generationMarkup).toContain("Body Reference");
-    expect(generationMarkup).toContain("Pose Control Image");
-    expect(generationMarkup).toContain("Pose Strength");
-    expect(generationMarkup).toContain("Clothing");
-    expect(generationMarkup).toContain("Scene");
-    expect(generationMarkup).toContain("Compiled Prompt");
-    expect(generationMarkup).toContain("Generate Avatar");
-    expect(generationMarkup).toContain("Reload Profile Defaults");
-    expect(generationMarkup).toContain("same Jane Avatar face identity");
-    expect(generationMarkup).toContain("transparent background");
+    expect(markup).toContain("Current Head / Face Prompt");
+    expect(markup).toContain("head portrait, blue headset, soft smile");
+    expect(markup).toContain("Adjustment Request");
+    expect(markup).toContain("Refine Prompt");
+    expect(markup).toContain("Create Preview");
+    expect(markup).toContain("Preview History");
+    expect(markup).toContain("face_preview_template_not_configured");
   });
 
   it("shows friendly task kind and schedule names and sorts the legend by duration", () => {

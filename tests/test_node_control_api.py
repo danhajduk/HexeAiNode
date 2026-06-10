@@ -17,6 +17,8 @@ from ai_node.persistence.image_generation_template_store import ImageGenerationT
 from ai_node.runtime.node_control_api import (
     AvatarBodyDepthProfileGenerateRequest,
     AvatarFaceProfileExtractRequest,
+    AvatarProfileHeadPreviewRequest,
+    AvatarProfileHeadPromptRefineRequest,
     AvatarPrimaryFaceRequest,
     AvatarProfileExtractionUpdateRequest,
     AvatarProfileReferenceUploadRequest,
@@ -3772,6 +3774,122 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(profile["body_url"], "")
         self.assertNotIn("face_image", metadata)
         self.assertNotIn("body_image", metadata)
+
+    def test_avatar_generation_refines_head_prompt_with_local_llm_and_saves_history(self):
+        class _AvatarPromptServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "local_llm": {
+                        "state": "running",
+                        "socket_path": "/tmp/local.sock",
+                        "model_id": "local-model",
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarPromptServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(
+                payload=AvatarProfileSaveRequest(
+                    name="Jane Avatar",
+                    gender="female",
+                    skin_color="light",
+                    hair_color="black",
+                    character_type="human",
+                    visual_style="stylized-realistic",
+                )
+            )
+            llm_response = {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "prompt": "stylized realistic head portrait, black wavy hair, soft smile, blue headset",
+                                    "negative_prompt": "blurry, distorted face",
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+
+            with patch.object(state, "_uds_json_request", return_value=llm_response) as request:
+                result = state.refine_avatar_profile_head_prompt(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadPromptRefineRequest(
+                        current_prompt="head portrait",
+                        negative_prompt="blurry",
+                        user_message="Add the blue headset and a softer smile.",
+                    ),
+                )
+
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(result["status"], "head_prompt_refined")
+        self.assertEqual(result["prompt"], "stylized realistic head portrait, black wavy hair, soft smile, blue headset")
+        self.assertEqual(result["negative_prompt"], "blurry, distorted face")
+        workspace = metadata["prompt_workspaces"]["head_face"]
+        self.assertEqual(workspace["prompt"], result["prompt"])
+        self.assertEqual(workspace["negative_prompt"], result["negative_prompt"])
+        self.assertEqual(workspace["local_llm_model_id"], "local-model")
+        self.assertEqual(len(workspace["conversation"]), 2)
+        self.assertIn("blue headset", request.call_args.kwargs["body"]["messages"][1]["content"])
+
+    def test_avatar_generation_records_head_preview_history(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+
+            result = state.create_avatar_profile_head_preview(
+                profile_id="Jane_Avatar",
+                payload=AvatarProfileHeadPreviewRequest(
+                    prompt="head portrait, black hair",
+                    negative_prompt="blurry",
+                ),
+            )
+
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(result["status"], "preview_requested")
+        self.assertEqual(result["preview"]["section"], "head_face")
+        self.assertEqual(result["preview"]["status"], "requested")
+        self.assertEqual(result["preview"]["note"], "face_preview_template_not_configured")
+        self.assertEqual(metadata["prompt_workspaces"]["head_face"]["preview_history"][0]["prompt"], "head portrait, black hair")
 
     def test_avatar_generation_selects_and_deletes_profile(self):
         class _AvatarProfileServiceManager:

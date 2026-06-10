@@ -105,7 +105,7 @@ The node UI includes an `Avatar Generation` menu with two tabs: `Create Profile`
 and `Saved Profiles`. Profile creation starts with typed character basics:
 character name, gender, skin color, hair color, character type (`human`,
 `humanlike`, or `non-human`), visual style (`cartoon`, `manga`,
-`stylized-realistic`, or `real`), an NSFW boolean, and freeform initial data. This first step does not
+`stylized-realistic`, or `real`), and an NSFW boolean. This first step does not
 upload source images, generate assets, or run vision extraction.
 
 ```text
@@ -116,6 +116,22 @@ Each saved profile writes `profile.json`. Metadata-only profiles intentionally o
 `face_image`, `body_image`, and ComfyUI input paths until later reference assets
 are added through the profile detail tabs. Saved profile cards support selecting,
 opening, and deleting profiles without requiring extracted image data first.
+
+Opening a profile shows the baseline facts captured during creation and staged
+design tabs: `Head / Face`, `Upper Torso`, `Lower Torso`, and `Full Body`.
+`Head / Face` is the first active workspace. It stores
+`prompt_workspaces.head_face` in `profile.json`, including the current ComfyUI
+prompt, negative prompt, local-LLM conversation history, and preview request
+history.
+
+`POST /api/avatar-generation/profiles/{profile_id}/head-face/refine` sends the
+current head/face prompt plus the user's adjustment request to the local LLM. The
+LLM returns updated prompt JSON, and the node persists both the prompt and the
+conversation. `POST /api/avatar-generation/profiles/{profile_id}/head-face/previews`
+records a preview request against the current prompt. Until a dedicated face
+preview ComfyUI template exists, preview entries are saved with
+`face_preview_template_not_configured` so the history is preserved without
+pretending an image was generated.
 
 The extracted profile schema is versioned as `2.0` and separates stable identity
 from editable generation choices:
@@ -182,7 +198,7 @@ shoulder-to-waist-to-hip ratio, torso-to-leg proportion, bust-waist-hip silhouet
 limb thickness, and occluded/uncertain markers instead of defaulting unclear
 traits to `average`.
 
-The Body Depth profile tab can submit a lightweight ComfyUI preprocessing job with
+The legacy body-depth preprocessing API can submit a lightweight ComfyUI job with
 `POST /api/avatar-generation/profiles/{profile_id}/body-depth/generate`. For each
 raw `body_depth` reference, the node runs:
 
