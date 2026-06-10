@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getTheme, setTheme } from "./theme/theme";
-import { apiAdminGet, apiAdminPost, apiDelete, apiGet, apiPost, getApiBase } from "./api";
+import { apiAdminGet, apiAdminPost, apiDelete, apiGet, apiPost, apiPut, getApiBase } from "./api";
 import { buildDashboardUiState } from "./uiStateModel";
 import { CardHeader, SeverityIndicator, StatusBadge } from "./components/uiPrimitives";
 import { IdentityScreen } from "./features/node-ui/IdentityScreen";
@@ -8,8 +8,10 @@ import { BackendUnavailableScreen } from "./features/node-ui/BackendUnavailableS
 import { resolveUiMode } from "./features/node-ui/uiModeResolver";
 import {
   buildOperationalRoute,
+  buildAvatarGenerationProfileRoute,
   buildSetupRoute,
   resolveDefaultRouteHashForMode,
+  resolveAvatarGenerationProfileId,
   resolveOperationalSection,
   shouldArmSetupCompletionRedirect,
   shouldAutoRedirectCompletedSetup,
@@ -1083,6 +1085,9 @@ export default function App() {
       const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/select`, {});
       setAvatarGenerationResult(result);
       await loadStatus();
+      if (result?.selected_profile_id) {
+        window.location.hash = buildAvatarGenerationProfileRoute(result.selected_profile_id);
+      }
       return result;
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
@@ -1105,6 +1110,9 @@ export default function App() {
       const result = await apiDelete(`/api/avatar-generation/profiles/${encodedProfileId}`);
       setAvatarGenerationResult(result);
       await loadStatus();
+      if (resolveAvatarGenerationProfileId(window.location.hash) === normalized) {
+        window.location.hash = buildOperationalRoute("avatar_generation");
+      }
       return result;
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
@@ -1125,6 +1133,28 @@ export default function App() {
     try {
       const encodedProfileId = encodeURIComponent(normalized);
       const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/extract`, {});
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onUpdateAvatarProfileExtraction(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPut(`/api/avatar-generation/profiles/${encodedProfileId}/extraction`, payload);
       setAvatarGenerationResult(result);
       await loadStatus();
       return result;
@@ -1877,6 +1907,7 @@ export default function App() {
   const setupActions = buildSetupActions();
   const enabledProviderSummary = uiState.capabilitySummary.enabledProviders.join(", ");
   const currentOperationalSection = resolveOperationalSection(routeHash);
+  const avatarGenerationProfileId = resolveAvatarGenerationProfileId(routeHash);
   const operationalSections = [
     ["overview", "Overview"],
     ["capabilities", "Capabilities"],
@@ -2081,10 +2112,15 @@ export default function App() {
       visionBusy: manualImageVisionBusy,
       result: avatarGenerationResult,
       apiBase: getApiBase(),
+      routeProfileId: avatarGenerationProfileId,
       onSaveProfile: onSaveAvatarProfile,
       onSelectProfile: onSelectAvatarProfile,
       onDeleteProfile: onDeleteAvatarProfile,
       onExtractProfile: onExtractAvatarProfile,
+      onUpdateProfileExtraction: onUpdateAvatarProfileExtraction,
+      onBackToProfiles: () => {
+        window.location.hash = buildOperationalRoute("avatar_generation");
+      },
       onRefresh: loadStatus,
     },
     operationalActions,

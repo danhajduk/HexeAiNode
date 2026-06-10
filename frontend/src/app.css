@@ -868,6 +868,32 @@
   align-self: end;
 }
 
+.avatar-profile-detail {
+  gap: 14px;
+}
+
+.avatar-profile-detail-actions {
+  margin-bottom: 0;
+}
+
+.avatar-profile-detail-images {
+  grid-column: auto;
+  grid-row: auto;
+  max-width: 420px;
+}
+
+.avatar-extraction-form {
+  min-width: 0;
+}
+
+.avatar-extraction-form textarea {
+  min-height: 108px;
+}
+
+.avatar-reference-upload-panel {
+  max-width: 760px;
+}
+
 @media (max-width: 760px) {
   .avatar-profile-card {
     grid-template-columns: 1fr;

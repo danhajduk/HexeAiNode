@@ -78,6 +78,19 @@ export async function apiPost(path, body, extraHeaders = {}) {
   return payload;
 }
 
+export async function apiPut(path, body, extraHeaders = {}) {
+  const response = await fetch(`${getApiBase()}${path}`, {
+    method: "PUT",
+    headers: requestHeaders({ "Content-Type": "application/json", ...extraHeaders }),
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw buildApiError(response, payload);
+  }
+  return payload;
+}
+
 export async function apiDelete(path, extraHeaders = {}) {
   const response = await fetch(`${getApiBase()}${path}`, {
     method: "DELETE",

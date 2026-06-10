@@ -42,6 +42,27 @@ export function buildOperationalRoute(section?: OperationalSection | null): stri
   return `#/dashboard/${section}`;
 }
 
+export function buildAvatarGenerationProfileRoute(profileId: string): string {
+  const normalized = String(profileId || "").trim();
+  return normalized
+    ? `${buildOperationalRoute("avatar_generation")}/${encodeURIComponent(normalized)}`
+    : buildOperationalRoute("avatar_generation");
+}
+
+export function resolveAvatarGenerationProfileId(routeHash?: string | null): string {
+  const normalized = String(routeHash || "").trim();
+  const prefix = `${buildOperationalRoute("avatar_generation")}/`;
+  if (!normalized.toLowerCase().startsWith(prefix.toLowerCase())) {
+    return "";
+  }
+  const rawProfileId = normalized.slice(prefix.length).split(/[/?#]/)[0] || "";
+  try {
+    return decodeURIComponent(rawProfileId);
+  } catch {
+    return rawProfileId;
+  }
+}
+
 export function resolveOperationalSection(routeHash?: string | null): OperationalSection {
   const normalized = String(routeHash || "#/dashboard").trim().toLowerCase();
   const matched = OPERATIONAL_SECTIONS.filter((section) => section !== "overview")

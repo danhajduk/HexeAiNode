@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { CardHeader, StatusBadge } from "../../../components/uiPrimitives";
 
@@ -31,9 +31,103 @@ function profileName(profile) {
   return profile?.name || profile?.profile_id || "avatar";
 }
 
+function objectValue(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function hasExtraction(profile) {
+  return Boolean(profile?.extraction?.structured && typeof profile.extraction.structured === "object");
+}
+
+function splitTerms(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formattedJson(value) {
+  return JSON.stringify(objectValue(value), null, 2);
+}
+
+function extractionEditorState(profile) {
+  const extraction = objectValue(profile?.extraction);
+  const structured = objectValue(extraction.structured);
+  const promptSections = objectValue(structured.prompt_sections);
+  const bodyProfile = objectValue(structured.body_profile);
+  const permanentIdentity = objectValue(structured.permanent_identity);
+  return {
+    face_description: String(extraction.face_description || ""),
+    body_description: String(extraction.body_description || ""),
+    identity: String(promptSections.identity || structured.identity_prompt || permanentIdentity.identity_prompt || ""),
+    face: String(promptSections.face || ""),
+    hair: String(promptSections.hair || ""),
+    body_shape: String(promptSections.body_shape || bodyProfile.body_prompt || ""),
+    pose: String(promptSections.pose || ""),
+    clothing: String(promptSections.clothing || ""),
+    accessories: String(promptSections.accessories || ""),
+    preservation: String(promptSections.preservation || ""),
+    negative: splitTerms(structured.negative_prompt_terms || promptSections.negative).join(", "),
+    bust_breasts: String(bodyProfile.bust_breasts || ""),
+    buttocks_glutes: String(bodyProfile.buttocks_glutes || ""),
+    arms_hands_fingers: String(bodyProfile.arms_hands_fingers || ""),
+    legs_feet: String(bodyProfile.legs_feet || ""),
+    structured_json: formattedJson(structured),
+  };
+}
+
+function buildExtractionUpdatePayload(editorState) {
+  const structured = JSON.parse(editorState.structured_json || "{}");
+  const promptSections = objectValue(structured.prompt_sections);
+  const bodyProfile = objectValue(structured.body_profile);
+  const permanentIdentity = objectValue(structured.permanent_identity);
+  structured.prompt_sections = {
+    ...promptSections,
+    identity: editorState.identity,
+    face: editorState.face,
+    hair: editorState.hair,
+    body_shape: editorState.body_shape,
+    pose: editorState.pose,
+    clothing: editorState.clothing,
+    accessories: editorState.accessories,
+    preservation: editorState.preservation,
+    negative: editorState.negative,
+  };
+  structured.body_profile = {
+    ...bodyProfile,
+    body_prompt: editorState.body_shape || bodyProfile.body_prompt || "",
+    bust_breasts: editorState.bust_breasts,
+    buttocks_glutes: editorState.buttocks_glutes,
+    arms_hands_fingers: editorState.arms_hands_fingers,
+    legs_feet: editorState.legs_feet,
+  };
+  structured.permanent_identity = {
+    ...permanentIdentity,
+    identity_prompt: editorState.identity || permanentIdentity.identity_prompt || "",
+  };
+  structured.identity_prompt = editorState.identity || structured.identity_prompt || "";
+  structured.negative_prompt_terms = splitTerms(editorState.negative);
+  return {
+    face_description: editorState.face_description,
+    body_description: editorState.body_description,
+    structured,
+  };
+}
+
 const AVATAR_GENERATION_TABS = [
   { id: "profile", label: "Create Profile" },
   { id: "saved_profiles", label: "Saved Profiles" },
+];
+
+const AVATAR_PROFILE_DETAIL_TABS = [
+  { id: "profile", label: "Profile" },
+  { id: "body_depth", label: "Body Depth" },
+  { id: "face", label: "Face" },
+  { id: "poses", label: "Poses" },
+  { id: "generation", label: "Generation" },
 ];
 
 export function AvatarGenerationCard({
@@ -42,23 +136,47 @@ export function AvatarGenerationCard({
   result = null,
   apiBase = "",
   initialTab = "profile",
+  routeProfileId = "",
   onSaveProfile,
   onSelectProfile,
   onDeleteProfile,
   onExtractProfile,
+  onUpdateProfileExtraction,
+  onBackToProfiles,
   onRefresh,
 }) {
   const profiles = asArray(payload?.profiles);
   const selectedProfileId = String(payload?.selected_profile_id || "").trim();
+  const routeProfile = useMemo(
+    () => profiles.find((profile) => String(profile?.profile_id || "") === String(routeProfileId || "")),
+    [profiles, routeProfileId]
+  );
   const [activeTab, setActiveTab] = useState(initialTab === "saved_profiles" ? "saved_profiles" : "profile");
+  const [activeDetailTab, setActiveDetailTab] = useState("profile");
   const [characterName, setCharacterName] = useState("");
   const [faceFile, setFaceFile] = useState(null);
   const [bodyFile, setBodyFile] = useState(null);
+  const [bodyDepthFiles, setBodyDepthFiles] = useState([]);
+  const [faceAnalysisFiles, setFaceAnalysisFiles] = useState([]);
+  const [poseFiles, setPoseFiles] = useState([]);
+  const [poseText, setPoseText] = useState("");
   const [description, setDescription] = useState("");
   const [localStatus, setLocalStatus] = useState("");
   const [activeProfileAction, setActiveProfileAction] = useState("");
+  const [editorState, setEditorState] = useState(() => extractionEditorState(routeProfile));
   const latestProfile = result?.profile || profiles[0] || null;
   const canSave = Boolean(characterName.trim()) && Boolean(faceFile) && Boolean(bodyFile) && !busy;
+  const detailMode = Boolean(routeProfileId);
+
+  useEffect(() => {
+    if (routeProfile) {
+      setEditorState(extractionEditorState(routeProfile));
+    }
+  }, [routeProfile]);
+
+  function updateEditorField(name, value) {
+    setEditorState((current) => ({ ...current, [name]: value }));
+  }
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -93,6 +211,217 @@ export function AvatarGenerationCard({
       setLocalStatus(action);
     }
     setActiveProfileAction("");
+  }
+
+  async function saveExtractionEdits(event) {
+    event.preventDefault();
+    if (!routeProfile?.profile_id || busy) {
+      return;
+    }
+    setLocalStatus("");
+    try {
+      const payload = buildExtractionUpdatePayload(editorState);
+      const updateResult = await onUpdateProfileExtraction?.(routeProfile.profile_id, payload);
+      if (updateResult) {
+        setLocalStatus("saved");
+      }
+    } catch (err) {
+      setLocalStatus("invalid_json");
+    }
+  }
+
+  if (detailMode) {
+    if (!routeProfile) {
+      return (
+        <article className="card operational-card-full-span">
+          <CardHeader title="Avatar Generation" subtitle="Profile not found." />
+          <div className="row">
+            <button className="btn" type="button" onClick={onBackToProfiles}>
+              Back
+            </button>
+            <button className="btn" type="button" onClick={onRefresh} disabled={busy}>
+              Refresh
+            </button>
+          </div>
+        </article>
+      );
+    }
+
+    return (
+      <article className="card operational-card-full-span avatar-profile-detail">
+        <CardHeader title={profileName(routeProfile)} subtitle="Avatar Generation" />
+        <div className="row avatar-profile-detail-actions">
+          <button className="btn" type="button" onClick={onBackToProfiles}>
+            Back
+          </button>
+          <button className="btn" type="button" onClick={onRefresh} disabled={busy}>
+            Refresh
+          </button>
+          {localStatus ? <StatusBadge value={localStatus} /> : null}
+        </div>
+
+        <div className="avatar-generation-tabs" role="tablist" aria-label="Avatar profile tabs">
+          {AVATAR_PROFILE_DETAIL_TABS.map((tab) => (
+            <button
+              className={activeDetailTab === tab.id ? "btn btn-primary" : "btn"}
+              key={tab.id}
+              onClick={() => setActiveDetailTab(tab.id)}
+              role="tab"
+              type="button"
+              aria-selected={activeDetailTab === tab.id}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {activeDetailTab === "profile" ? (
+          <form className="setup-form avatar-extraction-form" onSubmit={saveExtractionEdits}>
+            <div className="avatar-profile-images avatar-profile-detail-images">
+              {routeProfile.face_url ? (
+                <a href={profileImageUrl(apiBase, routeProfile.face_url)} target="_blank" rel="noreferrer">
+                  <img src={profileImageUrl(apiBase, routeProfile.face_url)} alt={`${profileName(routeProfile)} face`} />
+                </a>
+              ) : null}
+              {routeProfile.body_url ? (
+                <a href={profileImageUrl(apiBase, routeProfile.body_url)} target="_blank" rel="noreferrer">
+                  <img src={profileImageUrl(apiBase, routeProfile.body_url)} alt={`${profileName(routeProfile)} body`} />
+                </a>
+              ) : null}
+            </div>
+            <div className="form-grid two-column-form-grid">
+              <label>
+                Face Description
+                <textarea rows={9} value={editorState.face_description} onChange={(event) => updateEditorField("face_description", event.target.value)} />
+              </label>
+              <label>
+                Body Description
+                <textarea rows={9} value={editorState.body_description} onChange={(event) => updateEditorField("body_description", event.target.value)} />
+              </label>
+              <label>
+                Identity
+                <textarea rows={5} value={editorState.identity} onChange={(event) => updateEditorField("identity", event.target.value)} />
+              </label>
+              <label>
+                Face
+                <textarea rows={5} value={editorState.face} onChange={(event) => updateEditorField("face", event.target.value)} />
+              </label>
+              <label>
+                Hair
+                <textarea rows={4} value={editorState.hair} onChange={(event) => updateEditorField("hair", event.target.value)} />
+              </label>
+              <label>
+                Body Shape
+                <textarea rows={6} value={editorState.body_shape} onChange={(event) => updateEditorField("body_shape", event.target.value)} />
+              </label>
+              <label>
+                Bust / Breasts
+                <textarea rows={4} value={editorState.bust_breasts} onChange={(event) => updateEditorField("bust_breasts", event.target.value)} />
+              </label>
+              <label>
+                Buttocks / Glutes
+                <textarea rows={4} value={editorState.buttocks_glutes} onChange={(event) => updateEditorField("buttocks_glutes", event.target.value)} />
+              </label>
+              <label>
+                Arms / Hands / Fingers
+                <textarea rows={4} value={editorState.arms_hands_fingers} onChange={(event) => updateEditorField("arms_hands_fingers", event.target.value)} />
+              </label>
+              <label>
+                Legs / Feet
+                <textarea rows={4} value={editorState.legs_feet} onChange={(event) => updateEditorField("legs_feet", event.target.value)} />
+              </label>
+              <label>
+                Pose
+                <textarea rows={4} value={editorState.pose} onChange={(event) => updateEditorField("pose", event.target.value)} />
+              </label>
+              <label>
+                Clothing
+                <textarea rows={4} value={editorState.clothing} onChange={(event) => updateEditorField("clothing", event.target.value)} />
+              </label>
+              <label>
+                Accessories
+                <textarea rows={4} value={editorState.accessories} onChange={(event) => updateEditorField("accessories", event.target.value)} />
+              </label>
+              <label>
+                Negative Terms
+                <textarea rows={4} value={editorState.negative} onChange={(event) => updateEditorField("negative", event.target.value)} />
+              </label>
+            </div>
+            <label>
+              Structured JSON
+              <textarea rows={16} value={editorState.structured_json} onChange={(event) => updateEditorField("structured_json", event.target.value)} />
+            </label>
+            <div className="row">
+              <button className="btn btn-primary" type="submit" disabled={busy || !hasExtraction(routeProfile)}>
+                {busy ? "Saving..." : "Save Profile Data"}
+              </button>
+            </div>
+          </form>
+        ) : null}
+
+        {activeDetailTab === "body_depth" ? (
+          <section className="setup-form avatar-reference-upload-panel">
+            <label>
+              Body Depth Images
+              <input type="file" accept="image/*" multiple onChange={(event) => setBodyDepthFiles(Array.from(event.target.files || []))} />
+            </label>
+            <div className="state-grid compact-grid">
+              <span>Queued</span>
+              <code>{bodyDepthFiles.length}</code>
+              <span>Files</span>
+              <code>{bodyDepthFiles.map((file) => file.name).join(", ") || "none"}</code>
+            </div>
+          </section>
+        ) : null}
+
+        {activeDetailTab === "face" ? (
+          <section className="setup-form avatar-reference-upload-panel">
+            <label>
+              Face Analysis Images
+              <input type="file" accept="image/*" multiple onChange={(event) => setFaceAnalysisFiles(Array.from(event.target.files || []))} />
+            </label>
+            <div className="state-grid compact-grid">
+              <span>Queued</span>
+              <code>{faceAnalysisFiles.length}</code>
+              <span>Files</span>
+              <code>{faceAnalysisFiles.map((file) => file.name).join(", ") || "none"}</code>
+            </div>
+          </section>
+        ) : null}
+
+        {activeDetailTab === "poses" ? (
+          <section className="setup-form avatar-reference-upload-panel">
+            <label>
+              Pose Images
+              <input type="file" accept="image/*" multiple onChange={(event) => setPoseFiles(Array.from(event.target.files || []))} />
+            </label>
+            <label>
+              Pose Notes
+              <textarea rows={8} value={poseText} onChange={(event) => setPoseText(event.target.value)} />
+            </label>
+            <div className="state-grid compact-grid">
+              <span>Queued</span>
+              <code>{poseFiles.length}</code>
+              <span>Files</span>
+              <code>{poseFiles.map((file) => file.name).join(", ") || "none"}</code>
+            </div>
+          </section>
+        ) : null}
+
+        {activeDetailTab === "generation" ? (
+          <section className="setup-form avatar-reference-upload-panel">
+            <div className="state-grid compact-grid">
+              <span>Profile</span>
+              <code>{routeProfile.profile_id}</code>
+              <span>Selected</span>
+              <StatusBadge value={routeProfile.selected || routeProfile.profile_id === selectedProfileId ? "selected" : "ready"} />
+              <span>Extraction</span>
+              <StatusBadge value={hasExtraction(routeProfile) ? "ready" : "missing"} />
+            </div>
+          </section>
+        ) : null}
+      </article>
+    );
   }
 
   return (
@@ -206,10 +535,16 @@ export function AvatarGenerationCard({
                     <button
                       className="btn"
                       type="button"
-                      disabled={busy || profile.selected || profile.profile_id === selectedProfileId}
+                      disabled={busy || !hasExtraction(profile)}
                       onClick={() => runProfileAction("selected", profile.profile_id, onSelectProfile)}
                     >
-                      {profile.selected || profile.profile_id === selectedProfileId ? "Selected" : "Select"}
+                      {!hasExtraction(profile)
+                        ? "Extract First"
+                        : activeProfileAction === `selected:${profile.profile_id}`
+                          ? "Selecting..."
+                          : profile.selected || profile.profile_id === selectedProfileId
+                            ? "Open"
+                            : "Select"}
                     </button>
                     <button
                       className="btn"

@@ -488,6 +488,13 @@ describe("OperationalDashboard", () => {
                     },
                   },
                 },
+                {
+                  profile_id: "No_Extract",
+                  name: "No Extract",
+                  face_url: "/api/avatar-generation/profiles/No_Extract/assets/face.png",
+                  body_url: "/api/avatar-generation/profiles/No_Extract/assets/body.png",
+                  updated_at: "2026-06-09T12:05:00Z",
+                },
               ],
             },
             apiBase: "http://node.local:9002",
@@ -501,7 +508,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Latest");
     expect(markup).toContain("Jane Avatar");
     expect(markup).toContain("selected");
-    expect(markup).toContain("Selected");
+    expect(markup).toContain("Open");
+    expect(markup).toContain("Extract First");
     expect(markup).toContain("Extract Data");
     expect(markup).toContain("Delete");
     expect(markup).toContain("Extracted JSON");
@@ -511,6 +519,70 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Face: oval face.");
     expect(markup).not.toContain("Character Name");
     expect(markup).not.toContain("Manual Image Generation");
+  });
+
+  it("shows an avatar profile detail route with editable extracted data tabs", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "avatar_generation",
+          avatarGenerationProps: {
+            routeProfileId: "Jane_Avatar",
+            payload: {
+              selected_profile_id: "Jane_Avatar",
+              profiles: [
+                {
+                  profile_id: "Jane_Avatar",
+                  name: "Jane Avatar",
+                  selected: true,
+                  face_url: "/api/avatar-generation/profiles/Jane_Avatar/assets/face.png",
+                  body_url: "/api/avatar-generation/profiles/Jane_Avatar/assets/body.png",
+                  extraction: {
+                    face_description: "edited oval face detail",
+                    body_description: "edited full body detail",
+                    structured: {
+                      identity_prompt: "same Jane Avatar identity",
+                      prompt_sections: {
+                        identity: "same Jane Avatar identity",
+                        face: "oval face, green eyes",
+                        body_shape: "hourglass body",
+                        negative: "different person",
+                      },
+                      body_profile: {
+                        bust_breasts: "rounded bust silhouette",
+                        buttocks_glutes: "rounded glute silhouette",
+                        arms_hands_fingers: "long fingers",
+                        legs_feet: "long legs",
+                      },
+                      negative_prompt_terms: ["different person"],
+                    },
+                  },
+                },
+              ],
+            },
+            apiBase: "http://node.local:9002",
+          },
+        })}
+      />
+    );
+
+    expect(markup).toContain("Jane Avatar");
+    expect(markup).toContain("Back");
+    expect(markup).toContain("Profile");
+    expect(markup).toContain("Body Depth");
+    expect(markup).toContain("Face");
+    expect(markup).toContain("Poses");
+    expect(markup).toContain("Generation");
+    expect(markup).toContain("Face Description");
+    expect(markup).toContain("Body Description");
+    expect(markup).toContain("Bust / Breasts");
+    expect(markup).toContain("Buttocks / Glutes");
+    expect(markup).toContain("Arms / Hands / Fingers");
+    expect(markup).toContain("Legs / Feet");
+    expect(markup).toContain("Structured JSON");
+    expect(markup).toContain("Save Profile Data");
+    expect(markup).toContain("same Jane Avatar identity");
+    expect(markup).toContain("rounded bust silhouette");
   });
 
   it("shows friendly task kind and schedule names and sorts the legend by duration", () => {
