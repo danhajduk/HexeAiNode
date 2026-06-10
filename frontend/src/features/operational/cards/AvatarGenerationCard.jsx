@@ -1108,7 +1108,10 @@ export function AvatarGenerationCard({
     return (
       <article className="card operational-card-full-span avatar-profile-detail">
         <div className="avatar-profile-detail-header">
-          <CardHeader title={profileName(routeProfile)} subtitle="Avatar Generation" />
+          <div className="avatar-profile-detail-title">
+            <CardHeader title={profileName(routeProfile)} subtitle="Avatar Generation" />
+            {localStatus ? <StatusBadge value={localStatus} /> : null}
+          </div>
           <div className="avatar-profile-detail-controls">
             <button className="btn" type="button" onClick={onBackToProfiles}>
               Back
@@ -1116,7 +1119,6 @@ export function AvatarGenerationCard({
             <button className="btn" type="button" onClick={onRefresh} disabled={busy}>
               Refresh
             </button>
-            {localStatus ? <StatusBadge value={localStatus} /> : null}
             <div className="avatar-generation-tabs" role="tablist" aria-label="Avatar profile tabs">
               {AVATAR_PROFILE_DETAIL_TABS.map((tab) => (
                 <button
@@ -1173,13 +1175,19 @@ export function AvatarGenerationCard({
           <section className="setup-form avatar-reference-upload-panel avatar-generation-panel">
             <div className="avatar-head-face-workspace">
               <form className="setup-form avatar-extraction-form avatar-head-face-editor" onSubmit={refineHeadPrompt}>
-                <div className="state-grid compact-grid">
-                  <span>Workspace</span>
-                  <StatusBadge value="head_face" />
-                  <span>Conversation</span>
-                  <code>{asArray(promptWorkspace(routeProfile, "head_face").conversation).length}</code>
-                  <span>Previews</span>
-                  <code>{headPreviewHistory.length}</code>
+                <div className="avatar-head-face-stats">
+                  <div>
+                    <span>Workspace</span>
+                    <StatusBadge value="head_face" />
+                  </div>
+                  <div>
+                    <span>Conversation</span>
+                    <code>{asArray(promptWorkspace(routeProfile, "head_face").conversation).length}</code>
+                  </div>
+                  <div>
+                    <span>Previews</span>
+                    <code>{headPreviewHistory.length}</code>
+                  </div>
                 </div>
                 <label className="avatar-generation-wide-field">
                   Adjustment Request
