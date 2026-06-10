@@ -1201,7 +1201,7 @@ export function AvatarGenerationCard({
                 <div className="avatar-head-face-prompt-parts">
                   {HEAD_FACE_PROMPT_PARTS.map((part) => (
                     <label
-                      className={`avatar-generation-wide-field avatar-head-face-part-field avatar-head-face-part-${part.id}`}
+                      className={`avatar-head-face-part-field avatar-head-face-part-${part.id}`}
                       key={part.id}
                     >
                       {part.label}
