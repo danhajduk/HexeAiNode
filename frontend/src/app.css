@@ -762,6 +762,12 @@
   color: hsl(var(--sx-muted-foreground));
 }
 
+.manual-reference-role-label {
+  color: hsl(var(--sx-text-muted));
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
 .manual-generation-status-grid {
   display: grid;
   gap: 10px;
@@ -810,6 +816,43 @@
   width: 16px;
   height: 16px;
   margin: 0;
+}
+
+.manual-reference-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.manual-reference-summary-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid hsl(var(--sx-border) / 0.75);
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-panel) / 0.62);
+}
+
+.manual-reference-summary-item.is-ready {
+  border-color: hsl(var(--sx-success) / 0.58);
+}
+
+.manual-reference-summary-item span {
+  color: hsl(var(--sx-text-muted));
+  font-size: 12px;
+}
+
+.manual-reference-summary-item code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-reference-panel {
+  display: grid;
+  gap: 10px;
 }
 
 .manual-pose-helper-panel {
@@ -1595,6 +1638,10 @@ h2 {
   }
 
   .manual-generation-card-stack {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-reference-summary-grid {
     grid-template-columns: 1fr;
   }
 

@@ -78,6 +78,44 @@ function isPoseReferenceRole(value) {
   return ["openpose", "pose"].includes(String(value || "").trim().toLowerCase());
 }
 
+function referenceCategory(reference) {
+  return String(reference?.category || reference?.relative_path?.split("/")?.[0] || "").trim().toLowerCase();
+}
+
+function referenceRoleLabel(value) {
+  const role = String(value || "").trim().toLowerCase();
+  if (role === "openpose") {
+    return "OpenPose";
+  }
+  if (role === "face") {
+    return "Face";
+  }
+  if (role === "body") {
+    return "Body";
+  }
+  if (role === "pose") {
+    return "Pose";
+  }
+  if (role === "place") {
+    return "Place";
+  }
+  return role ? variableLabel(role) : "Reference";
+}
+
+function referenceName(reference) {
+  return reference?.name || reference?.filename || reference?.relative_path || "None";
+}
+
+function isAvatarReference(reference) {
+  const category = referenceCategory(reference);
+  return !category || category === "avatar";
+}
+
+function isSceneReference(reference) {
+  const category = referenceCategory(reference);
+  return category === "scene";
+}
+
 function variableLabel(name) {
   return String(name || "")
     .split("_")
@@ -213,6 +251,8 @@ export function ManualImageGenerationCard({
   const [poseHelperResult, setPoseHelperResult] = useState(null);
   const outputs = asArray(payload?.outputs);
   const references = asArray(payload?.references);
+  const avatarReferences = references.filter(isAvatarReference);
+  const sceneReferences = references.filter(isSceneReference);
   const service = payload?.service || {};
   const runtimeService = objectValue(payload?.runtime_service);
   const generationStatus = objectValue(payload?.generation_status);
@@ -293,6 +333,10 @@ export function ManualImageGenerationCard({
   const referenceStrengthVariables = asArray(selectedTemplate?.variables).filter((variable) =>
     isReferenceStrengthVariable(String(variable?.name || "").trim())
   );
+  const sourceReferences = references.slice(0, 8);
+  const visibleAvatarReferences = avatarReferences.slice(0, 12);
+  const visibleSceneReferences = sceneReferences.slice(0, 12);
+  const visionReferences = (showSceneReferences ? sceneReferences : showAvatarReferences ? avatarReferences : references).slice(0, 12);
   const batchCountNumber = Math.min(Math.max(Number.parseInt(batchCount, 10) || 1, 1), 25);
   const canSubmit =
     Boolean(composedPrompt.trim()) &&
@@ -655,9 +699,9 @@ export function ManualImageGenerationCard({
               <input type="text" value={referenceFile?.name || selectedReference?.name || selectedReference?.filename || ""} readOnly />
             </label>
           </div>
-          {references.length ? (
+          {sourceReferences.length ? (
             <div className="image-output-grid">
-              {references.slice(0, 8).map((reference) => (
+              {sourceReferences.map((reference) => (
                 <div className="image-output-tile" key={`source:${reference.relative_path}`}>
                   <div className="row">
                     <button className="btn" type="button" onClick={() => useReference(reference, "source")} disabled={busy}>
@@ -666,7 +710,8 @@ export function ManualImageGenerationCard({
                   </div>
                   <a href={`${apiBase}${reference.url}`} target="_blank" rel="noreferrer">
                     <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
-                    <span>{reference.name || reference.filename}</span>
+                    <span>{referenceName(reference)}</span>
+                    <span className="manual-reference-role-label">{referenceRoleLabel(reference.role)}</span>
                   </a>
                   <button className="btn btn-danger" type="button" onClick={() => deleteReference(reference)} disabled={busy}>
                     Delete
@@ -680,41 +725,50 @@ export function ManualImageGenerationCard({
 
       {showAvatarReferences ? (
         <article className="card">
-          <CardHeader title="Avatar References" subtitle="Manage face and body references for avatar templates." />
-          <div className="form-grid">
-            <label>
-              Reference Role
-              <select value={libraryRole} onChange={(event) => setLibraryRole(event.target.value)}>
-                <option value="face">Face</option>
-                <option value="body">Body</option>
-                <option value="openpose">OpenPose</option>
-                <option value="reference">Reference</option>
-              </select>
-            </label>
-            <label>
-              Reference Name
-              <input type="text" value={libraryName} onChange={(event) => setLibraryName(event.target.value)} />
-            </label>
-            <label>
-              Upload Avatar Reference
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={(event) => {
-                  setLibraryCategory("avatar");
-                  setLibraryFile(event.target.files?.[0] || null);
-                }}
-              />
-            </label>
+          <CardHeader title="Avatar References" subtitle="Face, body, and pose references for the active avatar template." />
+          <div className="manual-reference-summary-grid">
+            <div className={`manual-reference-summary-item ${faceReference ? "is-ready" : ""}`}>
+              <span>Face</span>
+              <code>{faceReference ? referenceName(faceReference) : "not_selected"}</code>
+            </div>
+            <div className={`manual-reference-summary-item ${bodyReference ? "is-ready" : ""}`}>
+              <span>{bodyReference && isPoseReferenceRole(bodyReference.role) ? "OpenPose" : "Body"}</span>
+              <code>{bodyReference ? referenceName(bodyReference) : "not_selected"}</code>
+            </div>
           </div>
-          <div className="row">
-            <button className="btn" type="button" onClick={handleUploadReference} disabled={busy || !libraryFile}>
-              Upload Reference
-            </button>
-            {faceReference ? <code>{`Face: ${faceReference.name || faceReference.filename}`}</code> : null}
-            {bodyReference ? (
-              <code>{`${isPoseReferenceRole(bodyReference.role) ? "OpenPose" : "Body"}: ${bodyReference.name || bodyReference.filename}`}</code>
-            ) : null}
+          <div className="manual-reference-panel">
+            <div className="form-grid">
+              <label>
+                Reference Role
+                <select value={libraryRole} onChange={(event) => setLibraryRole(event.target.value)}>
+                  <option value="face">Face</option>
+                  <option value="body">Body</option>
+                  <option value="openpose">OpenPose</option>
+                  <option value="reference">Reference</option>
+                </select>
+              </label>
+              <label>
+                Reference Name
+                <input type="text" value={libraryName} onChange={(event) => setLibraryName(event.target.value)} />
+              </label>
+              <label>
+                Upload Avatar Reference
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(event) => {
+                    setLibraryCategory("avatar");
+                    setLibraryFile(event.target.files?.[0] || null);
+                  }}
+                />
+              </label>
+            </div>
+            <div className="row">
+              <button className="btn" type="button" onClick={handleUploadReference} disabled={busy || !libraryFile}>
+                Upload Reference
+              </button>
+              {libraryFile ? <code>{libraryFile.name}</code> : null}
+            </div>
           </div>
           <div className="manual-pose-helper-panel">
             <label>
@@ -791,9 +845,9 @@ export function ManualImageGenerationCard({
               </label>
             </div>
           ) : null}
-          {references.length ? (
+          {visibleAvatarReferences.length ? (
             <div className="image-output-grid">
-              {references.slice(0, 8).map((reference) => (
+              {visibleAvatarReferences.map((reference) => (
                 <div className="image-output-tile" key={`avatar:${reference.relative_path}`}>
                   <div className="row">
                     {needsFaceReference ? (
@@ -809,7 +863,8 @@ export function ManualImageGenerationCard({
                   </div>
                   <a href={`${apiBase}${reference.url}`} target="_blank" rel="noreferrer">
                     <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
-                    <span>{reference.name || reference.filename}</span>
+                    <span>{referenceName(reference)}</span>
+                    <span className="manual-reference-role-label">{referenceRoleLabel(reference.role)}</span>
                   </a>
                   <button className="btn btn-danger" type="button" onClick={() => deleteReference(reference)} disabled={busy}>
                     Delete
@@ -817,7 +872,9 @@ export function ManualImageGenerationCard({
                 </div>
               ))}
             </div>
-          ) : null}
+          ) : (
+            <p className="muted tiny">No avatar references.</p>
+          )}
         </article>
       ) : null}
 
@@ -848,9 +905,9 @@ export function ManualImageGenerationCard({
             </button>
             {sceneReference ? <code>{`Scene: ${sceneReference.name || sceneReference.filename}`}</code> : null}
           </div>
-          {references.length ? (
+          {visibleSceneReferences.length ? (
             <div className="image-output-grid">
-              {references.slice(0, 8).map((reference) => (
+              {visibleSceneReferences.map((reference) => (
                 <div className="image-output-tile" key={`scene:${reference.relative_path}`}>
                   <div className="row">
                     <button className="btn" type="button" onClick={() => useReference(reference, "scene")} disabled={busy}>
@@ -859,7 +916,8 @@ export function ManualImageGenerationCard({
                   </div>
                   <a href={`${apiBase}${reference.url}`} target="_blank" rel="noreferrer">
                     <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
-                    <span>{reference.name || reference.filename}</span>
+                    <span>{referenceName(reference)}</span>
+                    <span className="manual-reference-role-label">{referenceRoleLabel(reference.role)}</span>
                   </a>
                   <button className="btn btn-danger" type="button" onClick={() => deleteReference(reference)} disabled={busy}>
                     Delete
@@ -887,9 +945,9 @@ export function ManualImageGenerationCard({
             <input type="text" value={visionPrompt} onChange={(event) => setVisionPrompt(event.target.value)} />
           </label>
         </div>
-        {references.length ? (
+        {visionReferences.length ? (
           <div className="image-output-grid">
-            {references.slice(0, 8).map((reference) => (
+            {visionReferences.map((reference) => (
               <div className="image-output-tile" key={`vision:${reference.relative_path}`}>
                 <div className="row">
                   <button className="btn" type="button" onClick={() => describeReference(reference)} disabled={visionBusy}>
@@ -898,7 +956,8 @@ export function ManualImageGenerationCard({
                 </div>
                 <a href={`${apiBase}${reference.url}`} target="_blank" rel="noreferrer">
                   <img src={`${apiBase}${reference.url}`} alt={reference.name || reference.filename} />
-                  <span>{reference.name || reference.filename}</span>
+                  <span>{referenceName(reference)}</span>
+                  <span className="manual-reference-role-label">{referenceRoleLabel(reference.role)}</span>
                 </a>
                 <button className="btn btn-danger" type="button" onClick={() => deleteReference(reference)} disabled={busy}>
                   Delete
