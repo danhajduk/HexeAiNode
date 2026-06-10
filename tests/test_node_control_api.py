@@ -3914,6 +3914,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
             profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
             metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+            placeholder_profile = state.avatar_generation_status()["profiles"][0]
+            placeholder_history = placeholder_profile["prompt_workspaces"]["head_face"]["preview_history"]
+            placeholder_preview = placeholder_history[-1]
+            placeholder_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / placeholder_preview["filename"]
+            placeholder_bytes = placeholder_path.read_text(encoding="utf-8")
             preview_output = output_dir / "hexe" / "avatar_head_face_preview" / "Jane_Avatar_seed1211_00001_.png"
             preview_output.parent.mkdir(parents=True, exist_ok=True)
             preview_output.write_bytes(b"preview-image")
@@ -3923,6 +3928,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             imported_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / imported_preview["filename"]
             imported_bytes = imported_path.read_bytes()
             imported_reference = refreshed["references"]["head_face"][0]
+            placeholder_still_exists = placeholder_path.exists()
 
         preview_history = metadata["prompt_workspaces"]["head_face"]["preview_history"]
         self.assertEqual(result["status"], "preview_submitted")
@@ -3937,8 +3943,14 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(preview_history[-1]["prompt"], "head portrait 11")
         self.assertEqual(preview_history[-1]["prompt_id"], "prompt-face-preview-11")
         self.assertEqual(preview_history[-1]["seed"], 1211)
+        self.assertTrue(placeholder_preview["placeholder"])
+        self.assertEqual(Path(placeholder_preview["filename"]).suffix, ".svg")
+        self.assertIn("Preview pending", placeholder_bytes)
+        self.assertFalse(placeholder_still_exists)
         self.assertEqual(imported_preview["url"], f"/api/avatar-generation/profiles/Jane_Avatar/references/head_face/preview/{imported_preview['filename']}")
         self.assertEqual(imported_preview["input_image"], f"avatar_profiles/Jane_Avatar/refs/head_face/preview/{imported_preview['filename']}")
+        self.assertFalse(imported_preview["placeholder"])
+        self.assertEqual(Path(imported_preview["filename"]).suffix, ".png")
         self.assertEqual(imported_bytes, b"preview-image")
         self.assertEqual(imported_reference["url"], imported_preview["url"])
 

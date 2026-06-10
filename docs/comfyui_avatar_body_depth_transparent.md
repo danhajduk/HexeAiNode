@@ -137,7 +137,10 @@ template id, seed, prompt snapshot, and negative prompt in preview history. The
 profile keeps only the latest 10 head/face preview history entries. When the
 ComfyUI output file appears, the node copies it into
 `avatar_profiles/<profile_id>/refs/head_face/preview/` and updates the preview
-history entry with the profile-local `input_image` and API `url`.
+history entry with the profile-local `input_image` and API `url`. If the output
+is still missing, the node writes a profile-local SVG placeholder in the same
+folder and replaces it with the real PNG when the ComfyUI output becomes
+available.
 
 The extracted profile schema is versioned as `2.0` and separates stable identity
 from editable generation choices:

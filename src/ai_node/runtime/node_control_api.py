@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import binascii
+import html
 import json
 import os
 import re
@@ -3693,7 +3694,7 @@ class NodeControlState:
         else:
             safe_asset_path = Path(Path(str(asset_name or "")).name)
         path = (root / safe_profile_id / "refs" / safe_role / safe_asset_path).resolve()
-        if root not in path.parents or not path.exists() or not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+        if root not in path.parents or not path.exists() or not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".svg"}:
             raise ValueError("avatar_profile_reference_not_found")
         return FileResponse(path)
 
@@ -4019,7 +4020,7 @@ class NodeControlState:
             items = []
             paths = role_dir.rglob("*") if role == "head_face" else role_dir.iterdir()
             for path in paths:
-                if not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+                if not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".svg"}:
                     continue
                 items.append(self._avatar_profile_reference_payload(path=path))
             items.sort(key=lambda item: str(item.get("created_at") or item.get("filename") or ""), reverse=True)
@@ -4034,7 +4035,8 @@ class NodeControlState:
             metadata = {}
         inferred_role = path.parent.parent.name if path.parent.name == "preview" else path.parent.name
         role = self._avatar_profile_reference_role(metadata.get("role") or inferred_role)
-        profile_id = self._safe_filename_component(metadata.get("profile_id") or path.parent.parent.parent.name)
+        fallback_profile_id = path.parent.parent.parent.parent.name if path.parent.name == "preview" else path.parent.parent.parent.name
+        profile_id = self._safe_filename_component(metadata.get("profile_id") or fallback_profile_id)
         filename = Path(str(metadata.get("filename") or path.name)).name
         relative_name = str(metadata.get("relative_name") or filename)
         return {
@@ -4169,6 +4171,55 @@ class NodeControlState:
     def _write_avatar_body_depth_profile_job(self, *, profile_dir: Path, payload: dict) -> None:
         (profile_dir / "body_depth_job.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+    def _avatar_head_face_preview_sidecar(
+        self,
+        *,
+        profile_id: str,
+        preview: dict,
+        filename: str,
+        relative_name: str,
+        now: str,
+        source: str,
+        source_output: str | None = None,
+        placeholder: bool = False,
+    ) -> dict:
+        seed = preview.get("seed")
+        return {
+            "profile_id": profile_id,
+            "role": "head_face",
+            "name": f"Head Face Preview {seed or 'pending'}",
+            "filename": filename,
+            "relative_name": relative_name,
+            "input_image": f"avatar_profiles/{profile_id}/refs/head_face/{relative_name}",
+            "url": f"/api/avatar-generation/profiles/{profile_id}/references/head_face/{relative_name}",
+            "source": source,
+            "source_output": source_output,
+            "placeholder": bool(placeholder),
+            "preview_id": preview.get("preview_id"),
+            "prompt_id": preview.get("prompt_id"),
+            "seed": seed,
+            "prompt": preview.get("prompt"),
+            "negative_prompt": preview.get("negative_prompt"),
+            "created_at": preview.get("created_at") or now,
+            "imported_at": now,
+        }
+
+    def _write_avatar_head_face_preview_placeholder(self, *, path: Path, preview: dict, profile_name: str) -> None:
+        prompt_id = html.escape(str(preview.get("prompt_id") or "pending"))
+        seed = html.escape(str(preview.get("seed") or "pending"))
+        profile = html.escape(str(profile_name or "Avatar"))
+        svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#111827"/>
+  <rect x="28" y="28" width="456" height="456" rx="18" fill="#1f2937" stroke="#64748b" stroke-width="2"/>
+  <circle cx="256" cy="202" r="74" fill="#334155" stroke="#94a3b8" stroke-width="4"/>
+  <path d="M126 408c22-72 75-112 130-112s108 40 130 112" fill="#334155" stroke="#94a3b8" stroke-width="4"/>
+  <text x="256" y="82" fill="#e5e7eb" font-family="Arial, sans-serif" font-size="28" text-anchor="middle">Preview pending</text>
+  <text x="256" y="448" fill="#cbd5e1" font-family="Arial, sans-serif" font-size="18" text-anchor="middle">{profile}</text>
+  <text x="256" y="474" fill="#94a3b8" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">seed {seed} | {prompt_id}</text>
+</svg>
+"""
+        path.write_text(svg, encoding="utf-8")
+
     def _refresh_avatar_head_face_preview_outputs(self, *, profile_dir: Path, metadata: dict) -> dict:
         workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
         preview_history = list(workspace.get("preview_history") or [])
@@ -4187,44 +4238,77 @@ class NodeControlState:
                 continue
             existing_input = str(preview.get("input_image") or "").strip()
             existing_filename = Path(str(preview.get("filename") or "")).name
-            if existing_input and existing_filename and (preview_dir / existing_filename).is_file():
+            existing_is_placeholder = bool(preview.get("placeholder"))
+            if existing_input and existing_filename and (preview_dir / existing_filename).is_file() and not existing_is_placeholder:
                 updated_history.append(preview)
                 continue
             seed = str(preview.get("seed") or "").strip()
-            if not seed:
-                updated_history.append(preview)
-                continue
-            prefix = f"hexe/avatar_head_face_preview/{avatar_name}_seed{seed}"
-            output_path = self._avatar_body_depth_profile_output_for_prefix(output_dir=output_dir, prefix=prefix)
-            if not output_path:
-                updated_history.append(preview)
-                continue
             preview_id = self._safe_filename_component(preview.get("preview_id") or f"head_face_{seed}")
-            filename = f"{preview_id}_seed{seed}.png"
             preview_dir.mkdir(parents=True, exist_ok=True)
+            output_path = None
+            if seed:
+                prefix = f"hexe/avatar_head_face_preview/{avatar_name}_seed{seed}"
+                output_path = self._avatar_body_depth_profile_output_for_prefix(output_dir=output_dir, prefix=prefix)
+            if not output_path:
+                if existing_is_placeholder and existing_filename and (preview_dir / existing_filename).is_file():
+                    updated_history.append(preview)
+                    continue
+                filename = existing_filename if existing_is_placeholder and existing_filename else f"{preview_id}_seed{seed or 'pending'}_placeholder.svg"
+                target_path = (preview_dir / filename).resolve()
+                if profile_dir not in target_path.parents:
+                    raise ValueError("avatar_head_face_preview_path_invalid")
+                if not target_path.exists():
+                    self._write_avatar_head_face_preview_placeholder(path=target_path, preview=preview, profile_name=metadata.get("name") or profile_dir.name)
+                relative_name = f"preview/{filename}"
+                sidecar = self._avatar_head_face_preview_sidecar(
+                    profile_id=profile_id,
+                    preview=preview,
+                    filename=filename,
+                    relative_name=relative_name,
+                    now=now,
+                    source="avatar_head_face_preview_placeholder",
+                    placeholder=True,
+                )
+                target_path.with_suffix(target_path.suffix + ".json").write_text(
+                    json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                updated_history.append(
+                    {
+                        **preview,
+                        "filename": filename,
+                        "input_image": sidecar["input_image"],
+                        "url": sidecar["url"],
+                        "placeholder": True,
+                        "imported_at": now,
+                    }
+                )
+                changed = True
+                continue
+            if existing_is_placeholder and existing_filename:
+                existing_path = (preview_dir / existing_filename).resolve()
+                if profile_dir in existing_path.parents and existing_path.exists() and existing_path.is_file():
+                    existing_path.unlink()
+                existing_sidecar = existing_path.with_suffix(existing_path.suffix + ".json")
+                if existing_sidecar.exists() and existing_sidecar.is_file():
+                    existing_sidecar.unlink()
+            filename = f"{preview_id}_seed{seed}.png"
             target_path = (preview_dir / filename).resolve()
             if profile_dir not in target_path.parents:
                 raise ValueError("avatar_head_face_preview_path_invalid")
             shutil.copyfile(output_path, target_path)
             relative_name = f"preview/{filename}"
-            sidecar = {
-                "profile_id": profile_id,
-                "role": "head_face",
-                "name": f"Head Face Preview {seed}",
-                "filename": filename,
-                "relative_name": relative_name,
-                "input_image": f"avatar_profiles/{profile_id}/refs/head_face/{relative_name}",
-                "url": f"/api/avatar-generation/profiles/{profile_id}/references/head_face/{relative_name}",
-                "source": "avatar_head_face_preview_generation",
-                "source_output": output_path.relative_to(output_dir).as_posix() if output_dir in output_path.parents else str(output_path),
-                "preview_id": preview.get("preview_id"),
-                "prompt_id": preview.get("prompt_id"),
-                "seed": preview.get("seed"),
-                "prompt": preview.get("prompt"),
-                "negative_prompt": preview.get("negative_prompt"),
-                "created_at": preview.get("created_at") or now,
-                "imported_at": now,
-            }
+            source_output = output_path.relative_to(output_dir).as_posix() if output_dir in output_path.parents else str(output_path)
+            sidecar = self._avatar_head_face_preview_sidecar(
+                profile_id=profile_id,
+                preview=preview,
+                filename=filename,
+                relative_name=relative_name,
+                now=now,
+                source="avatar_head_face_preview_generation",
+                source_output=source_output,
+                placeholder=False,
+            )
             target_path.with_suffix(target_path.suffix + ".json").write_text(
                 json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
@@ -4235,6 +4319,7 @@ class NodeControlState:
                     "filename": filename,
                     "input_image": sidecar["input_image"],
                     "url": sidecar["url"],
+                    "placeholder": False,
                     "imported_at": now,
                     "source_output": sidecar["source_output"],
                 }
