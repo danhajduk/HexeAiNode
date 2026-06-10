@@ -131,10 +131,11 @@ prompt fields are compacted before they are stored. If the local LLM merge fails
 the fallback now builds bounded `identity_prompt`, `face_prompt`, `hair_prompt`,
 and `expression_prompt` fields from visible face traits instead of copying all raw
 vision notes into the prompt. Body extraction also deduplicates repeated
-preservation clauses, removes low-value health/damage/deformity loops, normalizes
-malformed markdown body headings, strips mixed-language fragments from prompt
-phrases, collapses awkward repeated wording, and reduces generic leading `average`
-filler when a line already contains more useful visible shape detail. The body
+preservation clauses, removes low-value health/damage/deformity loops, strips
+markdown asterisks from body headings, normalizes malformed body-heading labels,
+strips mixed-language fragments from prompt phrases, collapses awkward repeated
+wording, and reduces generic leading `average` filler when a line already
+contains more useful visible shape detail. The body
 vision and local-LLM prompts ask for comparative silhouette language such as
 shoulder-to-waist-to-hip ratio, torso-to-leg proportion, bust-waist-hip silhouette,
 limb thickness, and occluded/uncertain markers instead of defaulting unclear

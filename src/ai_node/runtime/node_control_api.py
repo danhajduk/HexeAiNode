@@ -3293,12 +3293,8 @@ class NodeControlState:
                 body = cls._avatar_profile_clean_body_clause_text(body, heading=heading)
                 if not body:
                     continue
-                is_markdown_label = line.lstrip().startswith(("-", "*")) or line.lstrip().startswith("**")
                 prefix = "- " if line.lstrip().startswith(("-", "*")) else ""
-                if is_markdown_label:
-                    cleaned_lines.append(f"{prefix}**{heading}**: {body}")
-                else:
-                    cleaned_lines.append(f"{heading}: {body}")
+                cleaned_lines.append(f"{prefix}{heading}: {body}")
                 continue
             cleaned_lines.append(cls._avatar_profile_clean_body_clause_text(line, heading=""))
         while cleaned_lines and not cleaned_lines[-1]:

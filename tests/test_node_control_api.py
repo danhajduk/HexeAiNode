@@ -4125,11 +4125,12 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         cleaned = NodeControlState._clean_avatar_profile_body_description(raw_body)
 
-        self.assertIn("- **Height Impression**: height, standing posture", cleaned)
-        self.assertIn("- **Shoulder-to-waist-to-hip ratio**: The shoulders are slightly wider, with a straight torso", cleaned)
-        self.assertIn("- **Hip Width**: hip width, slightly wider than the waist", cleaned)
-        self.assertIn("- **Bust/Breasts**: The bust is slightly fuller, with a round shape", cleaned)
-        self.assertIn("- **Body-Preservation Notes**: Preserve visible silhouette", cleaned)
+        self.assertIn("- Height Impression: height, standing posture", cleaned)
+        self.assertIn("- Shoulder-to-waist-to-hip ratio: The shoulders are slightly wider, with a straight torso", cleaned)
+        self.assertIn("- Hip Width: hip width, slightly wider than the waist", cleaned)
+        self.assertIn("- Bust/Breasts: The bust is slightly fuller, with a round shape", cleaned)
+        self.assertIn("- Body-Preservation Notes: Preserve visible silhouette", cleaned)
+        self.assertNotIn("*", cleaned)
         self.assertNotIn("****:", cleaned)
         self.assertNotIn("health damage", cleaned)
         self.assertNotIn("straightened", cleaned)
