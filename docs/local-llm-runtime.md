@@ -233,14 +233,15 @@ The default ComfyUI template catalog contains two GPU avatar templates. `Simple 
 pads the body reference to the output aspect ratio, extracts a Depth Anything V2 depth map, and applies the SDXL depth
 ControlNet before sampling from an empty latent. `Avatar Profile Generation`
 (`template.avatar_profile_depth_pulid.realvisxl.v1`) is the profile-aware final generation path: it uses the selected
-PuLID face reference plus a saved `body_depth_map` reference from the avatar profile, so final generations do not rerun
-Depth Anything. Both templates save an RGB fallback before using ComfyUI's local background-removal nodes with an
+PuLID face reference plus saved `body_depth_map` and `pose` references from the avatar profile, so final generations do
+not rerun Depth Anything and can follow the selected OpenPose/pose-control image. Both templates save an RGB fallback before using ComfyUI's local background-removal nodes with an
 inverted alpha mask to save transparent output under `hexe/avatar_body_depth_transparent/` or
 `hexe/avatar_profile_generation/`. The templates require PuLID and InsightFace assets in the GPU model folder plus the
 native BiRefNet background-removal checkpoint, for example
 `runtime/models/comfyui-gpu/pulid/ip-adapter_pulid_sdxl_fp16.safetensors`,
 `runtime/models/comfyui-gpu/insightface/models/antelopev2/`, and
-`runtime/models/comfyui-gpu/background_removal/birefnet.safetensors`. If local background removal fails after the RGB
+`runtime/models/comfyui-gpu/background_removal/birefnet.safetensors`. The profile generation template also expects the
+SDXL OpenPose ControlNet model `controlnet-openpose-sdxl-1.0.safetensors`. If local background removal fails after the RGB
 fallback has been saved, the latest manual job is reported as `completed_with_fallback` and points to the `_rgb` output.
 After rebuilding the ComfyUI image for the packaged PuLID custom node, download the GPU PuLID assets with
 `scripts/comfyui-control.sh gpu download-pulid`.

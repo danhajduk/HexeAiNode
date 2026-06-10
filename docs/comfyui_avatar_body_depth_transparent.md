@@ -10,7 +10,7 @@ This workflow generates a new transparent avatar image from a prompt, a face ref
 
 PuLID owns face/ID preservation, while the body reference controls pose, silhouette, and proportions. This is stronger than the older latent-only face reference path, but it is still not a trained identity LoRA or a true pose-from-text model.
 
-`Avatar Profile Generation` is the preferred final-generation path after an avatar profile has a body depth profile. It uses the profile's selected PuLID face image and a saved `refs/body_depth_map/*` depth map directly, which avoids rerunning Depth Anything during each final image generation.
+`Avatar Profile Generation` is the preferred final-generation path after an avatar profile has a body depth profile. It uses the profile's selected PuLID face image, a saved `refs/body_depth_map/*` depth map, and a saved `refs/pose/*` OpenPose or pose-control image directly, which avoids rerunning Depth Anything during each final image generation and lets the selected pose image guide the composition.
 
 ## Pipeline
 
@@ -33,6 +33,7 @@ Required variables:
 - `face_reference_image`
 - `body_reference_image` for `Simple Avatar Generation`
 - `body_depth_image` for `Avatar Profile Generation`
+- `pose_reference_image` for `Avatar Profile Generation`
 
 Common tuning variables:
 
@@ -43,6 +44,9 @@ Common tuning variables:
 - `body_depth_strength`
 - `body_depth_start`
 - `body_depth_end`
+- `pose_strength`
+- `pose_start`
+- `pose_end`
 - `depth_resolution`
 - `negative_prompt`
 - `avatar_name`
@@ -55,7 +59,7 @@ Common tuning variables:
 
 Default output is `768x1152`, 4 steps, CFG `1.2`, denoise `1.0`, PuLID face strength `0.8`, PuLID fidelity `8`, and body depth strength `0.75`.
 
-The Avatar Generation profile detail page includes a `Generation` tab that assembles prompt sections from the saved extraction and face profile. Operators can choose the template, PuLID face reference, body depth map, body reference, optional pose reference, prompt sections for identity/face/hair/body/pose/clothing/accessories/scene/style, negative prompt, sampler settings, batch count, seed randomization, strength jitter, and LoRA metadata sidecar output. Submissions are sent through `POST /api/manual-image-generation`.
+The Avatar Generation profile detail page includes a `Generation` tab that assembles prompt sections from the saved extraction and face profile. Operators can choose the template, PuLID face reference, body depth map, body reference, pose control image, prompt sections for identity/face/hair/body/pose/clothing/accessories/scene/style, negative prompt, sampler settings, batch count, seed randomization, face/body/pose strengths, strength jitter, and LoRA metadata sidecar output. Submissions are sent through `POST /api/manual-image-generation`.
 
 ## Avatar Profiles
 
@@ -170,6 +174,7 @@ count, and depth-map count.
 - PuLID model: `runtime/models/comfyui-gpu/pulid/ip-adapter_pulid_sdxl_fp16.safetensors`
 - InsightFace model: `runtime/models/comfyui-gpu/insightface/models/antelopev2`
 - ControlNet: `controlnet-depth-sdxl-1.0-fp16.safetensors`
+- OpenPose ControlNet: `controlnet-openpose-sdxl-1.0.safetensors`
 - Depth preprocessor model: `depth_anything_v2_vits.pth`
 - Background-removal model: `birefnet.safetensors`
 - Custom nodes: `PuLID_ComfyUI` nodes (`PulidModelLoader`, `PulidEvaClipLoader`, `PulidInsightFaceLoader`, `ApplyPulidAdvanced`), `ResizeAndPadImage`, `DepthAnythingV2Preprocessor`, `ControlNetLoader`, `ControlNetApplyAdvanced`, `LoadBackgroundRemovalModel`, `RemoveBackground`, `InvertMask`, `JoinImageWithAlpha`, and `SaveImage`.

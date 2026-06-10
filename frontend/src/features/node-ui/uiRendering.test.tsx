@@ -748,7 +748,8 @@ describe("OperationalDashboard", () => {
     expect(generationMarkup).toContain("Body Depth Map");
     expect(generationMarkup).toContain("avatar_body_depth_standing_body.png");
     expect(generationMarkup).toContain("Body Reference");
-    expect(generationMarkup).toContain("Pose Reference");
+    expect(generationMarkup).toContain("Pose Control Image");
+    expect(generationMarkup).toContain("Pose Strength");
     expect(generationMarkup).toContain("Clothing");
     expect(generationMarkup).toContain("Scene");
     expect(generationMarkup).toContain("Compiled Prompt");

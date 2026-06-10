@@ -109,12 +109,46 @@
       "end_percent": "{{body_depth_end}}"
     }
   },
+  "32": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{pose_reference_image}}"
+    }
+  },
+  "33": {
+    "class_type": "ResizeAndPadImage",
+    "inputs": {
+      "image": ["32", 0],
+      "target_width": "{{width}}",
+      "target_height": "{{height}}",
+      "padding_color": "black",
+      "interpolation": "lanczos"
+    }
+  },
+  "34": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "{{pose_controlnet}}"
+    }
+  },
+  "35": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "positive": ["27", 0],
+      "negative": ["27", 1],
+      "control_net": ["34", 0],
+      "image": ["33", 0],
+      "strength": "{{pose_strength}}",
+      "start_percent": "{{pose_start}}",
+      "end_percent": "{{pose_end}}"
+    }
+  },
   "14": {
     "class_type": "KSampler",
     "inputs": {
       "model": ["31", 0],
-      "positive": ["27", 0],
-      "negative": ["27", 1],
+      "positive": ["35", 0],
+      "negative": ["35", 1],
       "latent_image": ["3", 0],
       "seed": "{{seed}}",
       "steps": "{{steps}}",

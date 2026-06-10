@@ -278,6 +278,12 @@
           "description": "Precomputed profile body depth map used by SDXL depth ControlNet."
         },
         {
+          "name": "pose_reference_image",
+          "type": "image",
+          "required": true,
+          "description": "OpenPose or pose-control image used by SDXL OpenPose ControlNet."
+        },
+        {
           "name": "face_strength",
           "type": "number",
           "required": false,
@@ -361,6 +367,30 @@
           "description": "Local SDXL depth ControlNet model filename."
         },
         {
+          "name": "pose_strength",
+          "type": "number",
+          "required": false,
+          "description": "Pose ControlNet strength from 0 to 1. Higher values follow the selected pose image more strongly."
+        },
+        {
+          "name": "pose_start",
+          "type": "number",
+          "required": false,
+          "description": "Sampler percentage where pose ControlNet begins applying."
+        },
+        {
+          "name": "pose_end",
+          "type": "number",
+          "required": false,
+          "description": "Sampler percentage where pose ControlNet stops applying."
+        },
+        {
+          "name": "pose_controlnet",
+          "type": "string",
+          "required": false,
+          "description": "Local SDXL OpenPose ControlNet model filename."
+        },
+        {
           "name": "negative_prompt",
           "type": "string",
           "required": false,
@@ -436,7 +466,11 @@
         "body_depth_strength": 0.8,
         "body_depth_start": 0,
         "body_depth_end": 0.9,
-        "body_depth_controlnet": "controlnet-depth-sdxl-1.0-fp16.safetensors"
+        "body_depth_controlnet": "controlnet-depth-sdxl-1.0-fp16.safetensors",
+        "pose_strength": 0.65,
+        "pose_start": 0,
+        "pose_end": 0.8,
+        "pose_controlnet": "controlnet-openpose-sdxl-1.0.safetensors"
       },
       "model_requirements": {
         "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
@@ -445,7 +479,8 @@
         ],
         "vae": null,
         "controlnets": [
-          "controlnet-depth-sdxl-1.0-fp16.safetensors"
+          "controlnet-depth-sdxl-1.0-fp16.safetensors",
+          "controlnet-openpose-sdxl-1.0.safetensors"
         ],
         "other": {
           "nodes": [
@@ -469,6 +504,7 @@
           "insightface_model": "antelopev2",
           "identity_strength": "pulid_face_identity",
           "body_preservation": "precomputed_depth_map_controlnet",
+          "pose_preservation": "openpose_controlnet",
           "body_reference_fit": "resize_and_pad_saved_depth_map_to_output_aspect",
           "background_removal": "birefnet.safetensors"
         }
@@ -481,7 +517,8 @@
         "edit_intent": "avatar_profile_generation_with_pulid_identity_saved_body_depth_transparent_background",
         "reference_roles": [
           "face",
-          "body_depth_map"
+          "body_depth_map",
+          "pose"
         ],
         "transparent_background": true
       }

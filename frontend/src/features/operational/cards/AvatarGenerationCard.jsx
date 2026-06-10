@@ -407,6 +407,9 @@ function generationEditorState(profile) {
     body_depth_strength: depthOptions.length ? "0.8" : "0.75",
     body_depth_start: "0",
     body_depth_end: depthOptions.length ? "0.9" : "0.8",
+    pose_strength: "0.65",
+    pose_start: "0",
+    pose_end: "0.8",
     randomize_seed: false,
     randomize_reference_strengths: false,
     reference_strength_jitter: "0.05",
@@ -762,10 +765,11 @@ export function AvatarGenerationCard({
     const faceReferenceImage = String(generationState.face_reference_image || "").trim();
     const bodyReferenceImage = String(generationState.body_reference_image || "").trim();
     const bodyDepthImage = String(generationState.body_depth_image || "").trim();
+    const poseReferenceImage = String(generationState.pose_reference_image || "").trim();
     if (!prompt || !faceReferenceImage) {
       return;
     }
-    if (templateId === AVATAR_PROFILE_TEMPLATE_ID && !bodyDepthImage) {
+    if (templateId === AVATAR_PROFILE_TEMPLATE_ID && (!bodyDepthImage || !poseReferenceImage)) {
       return;
     }
     if (templateId === AVATAR_BODY_REFERENCE_TEMPLATE_ID && !bodyReferenceImage) {
@@ -797,6 +801,10 @@ export function AvatarGenerationCard({
     };
     if (templateId === AVATAR_PROFILE_TEMPLATE_ID) {
       templateVariables.body_depth_image = bodyDepthImage;
+      templateVariables.pose_reference_image = poseReferenceImage;
+      templateVariables.pose_strength = numberValue(generationState.pose_strength, 0.65);
+      templateVariables.pose_start = numberValue(generationState.pose_start, 0);
+      templateVariables.pose_end = numberValue(generationState.pose_end, 0.8);
     } else {
       templateVariables.body_reference_image = bodyReferenceImage;
     }
@@ -904,7 +912,9 @@ export function AvatarGenerationCard({
     const canSubmitGeneration =
       Boolean(generationPrompt) &&
       Boolean(generationState.face_reference_image) &&
-      (usesProfileDepthTemplate ? Boolean(generationState.body_depth_image) : Boolean(generationState.body_reference_image)) &&
+      (usesProfileDepthTemplate
+        ? Boolean(generationState.body_depth_image) && Boolean(generationState.pose_reference_image)
+        : Boolean(generationState.body_reference_image)) &&
       !busy &&
       !generationBusy;
     const renderGenerationPreview = (option, label) => (
@@ -1190,6 +1200,8 @@ export function AvatarGenerationCard({
               <code>{generationDepthOptions.length}</code>
               <span>Pose Refs</span>
               <code>{generationPoseOptions.length}</code>
+              <span>Pose Control</span>
+              <StatusBadge value={!usesProfileDepthTemplate ? "not_used" : generationState.pose_reference_image ? "ready" : "missing"} />
             </div>
 
             <div className="form-grid avatar-generation-reference-grid">
@@ -1246,9 +1258,9 @@ export function AvatarGenerationCard({
                 </select>
               </label>
               <label>
-                Pose Reference
+                Pose Control Image
                 <select value={generationState.pose_reference_image} onChange={(event) => updateGenerationField("pose_reference_image", event.target.value)}>
-                  <option value="">Prompt only</option>
+                  <option value="">No pose control image</option>
                   {generationPoseOptions.map((option) => (
                     <option value={option.inputImage} key={option.inputImage}>
                       {option.label}
@@ -1360,6 +1372,18 @@ export function AvatarGenerationCard({
               <label>
                 Body End
                 <input type="number" min="0" max="1" step="0.01" value={generationState.body_depth_end} onChange={(event) => updateGenerationField("body_depth_end", event.target.value)} />
+              </label>
+              <label>
+                Pose Strength
+                <input type="number" min="0" max="1.5" step="0.01" value={generationState.pose_strength} onChange={(event) => updateGenerationField("pose_strength", event.target.value)} />
+              </label>
+              <label>
+                Pose Start
+                <input type="number" min="0" max="1" step="0.01" value={generationState.pose_start} onChange={(event) => updateGenerationField("pose_start", event.target.value)} />
+              </label>
+              <label>
+                Pose End
+                <input type="number" min="0" max="1" step="0.01" value={generationState.pose_end} onChange={(event) => updateGenerationField("pose_end", event.target.value)} />
               </label>
               <label>
                 Strength Jitter

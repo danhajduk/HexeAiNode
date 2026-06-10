@@ -67,6 +67,7 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
     "body_conditioning_strength",
     "body_latent_strength",
     "body_depth_strength",
+    "pose_strength",
 )
 
 MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"

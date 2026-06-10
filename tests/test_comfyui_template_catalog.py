@@ -40,10 +40,16 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
         profile_template = templates_by_id["template.avatar_profile_depth_pulid.realvisxl.v1"]
         self.assertEqual(profile_template["template_name"], "Avatar Profile Generation")
         self.assertIn("body_depth_image", [item["name"] for item in profile_template["variables"]])
+        self.assertIn("pose_reference_image", [item["name"] for item in profile_template["variables"]])
+        self.assertEqual(
+            profile_template["model_requirements"]["controlnets"],
+            ["controlnet-depth-sdxl-1.0-fp16.safetensors", "controlnet-openpose-sdxl-1.0.safetensors"],
+        )
         self.assertEqual(
             profile_template["model_requirements"]["other"]["body_preservation"],
             "precomputed_depth_map_controlnet",
         )
+        self.assertEqual(profile_template["model_requirements"]["other"]["pose_preservation"], "openpose_controlnet")
 
     def test_validate_rejects_default_without_variable(self):
         with tempfile.TemporaryDirectory() as tmp:

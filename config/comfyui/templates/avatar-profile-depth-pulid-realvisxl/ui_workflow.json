@@ -1,5 +1,5 @@
 {
-  "last_node_id": 31,
+  "last_node_id": 35,
   "last_link_id": 17,
   "nodes": [
     {
@@ -66,6 +66,26 @@
       "id": 27,
       "type": "ControlNetApplyAdvanced",
       "title": "Apply Saved Body Depth Control"
+    },
+    {
+      "id": 32,
+      "type": "LoadImage",
+      "title": "Pose Control Reference"
+    },
+    {
+      "id": 33,
+      "type": "ResizeAndPadImage",
+      "title": "Fit Pose Control to Output"
+    },
+    {
+      "id": 34,
+      "type": "ControlNetLoader",
+      "title": "Load OpenPose ControlNet"
+    },
+    {
+      "id": 35,
+      "type": "ControlNetApplyAdvanced",
+      "title": "Apply Pose Control"
     },
     {
       "id": 14,

@@ -20,6 +20,7 @@ REQUIRED_PLACEHOLDERS = {
     "{{negative_prompt}}",
     "{{face_reference_image}}",
     "{{body_depth_image}}",
+    "{{pose_reference_image}}",
     "{{face_strength}}",
     "{{pulid_model}}",
     "{{pulid_provider}}",
@@ -32,6 +33,10 @@ REQUIRED_PLACEHOLDERS = {
     "{{body_depth_start}}",
     "{{body_depth_end}}",
     "{{body_depth_controlnet}}",
+    "{{pose_strength}}",
+    "{{pose_start}}",
+    "{{pose_end}}",
+    "{{pose_controlnet}}",
     "{{seed}}",
     "{{steps}}",
     "{{cfg}}",
@@ -68,6 +73,18 @@ class AvatarProfileDepthPulidTemplateTests(unittest.TestCase):
         self.assertEqual(workflow["11"]["class_type"], "ResizeAndPadImage")
         self.assertEqual(workflow["11"]["inputs"]["image"], ["10", 0])
         self.assertEqual(workflow["27"]["inputs"]["image"], ["11", 0])
+        self.assertEqual(workflow["32"]["class_type"], "LoadImage")
+        self.assertEqual(workflow["32"]["inputs"]["image"], "{{pose_reference_image}}")
+        self.assertEqual(workflow["33"]["class_type"], "ResizeAndPadImage")
+        self.assertEqual(workflow["33"]["inputs"]["image"], ["32", 0])
+        self.assertEqual(workflow["34"]["inputs"]["control_net_name"], "{{pose_controlnet}}")
+        self.assertEqual(workflow["35"]["class_type"], "ControlNetApplyAdvanced")
+        self.assertEqual(workflow["35"]["inputs"]["positive"], ["27", 0])
+        self.assertEqual(workflow["35"]["inputs"]["negative"], ["27", 1])
+        self.assertEqual(workflow["35"]["inputs"]["image"], ["33", 0])
+        self.assertEqual(workflow["35"]["inputs"]["strength"], "{{pose_strength}}")
+        self.assertEqual(workflow["14"]["inputs"]["positive"], ["35", 0])
+        self.assertEqual(workflow["14"]["inputs"]["negative"], ["35", 1])
         self.assertEqual(workflow["31"]["inputs"]["image"], ["6", 0])
         self.assertEqual(
             workflow["24"]["inputs"]["filename_prefix"],
@@ -99,10 +116,14 @@ class AvatarProfileDepthPulidTemplateTests(unittest.TestCase):
                         "avatar_name": "Jane Doe",
                         "face_reference_image": "avatar_profiles/Jane/refs/face/front.png",
                         "body_depth_image": "avatar_profiles/Jane/refs/body_depth_map/depth.png",
+                        "pose_reference_image": "avatar_profiles/Jane/refs/pose/openpose.png",
                         "face_strength": "0.72",
                         "body_depth_strength": "0.82",
                         "body_depth_start": "0.02",
                         "body_depth_end": "0.88",
+                        "pose_strength": "0.66",
+                        "pose_start": "0.03",
+                        "pose_end": "0.75",
                     },
                 ),
                 input_image="",
@@ -112,10 +133,14 @@ class AvatarProfileDepthPulidTemplateTests(unittest.TestCase):
         self.assertEqual(workflow["3"]["inputs"]["height"], 768)
         self.assertEqual(workflow["6"]["inputs"]["image"], "avatar_profiles/Jane/refs/face/front.png")
         self.assertEqual(workflow["10"]["inputs"]["image"], "avatar_profiles/Jane/refs/body_depth_map/depth.png")
+        self.assertEqual(workflow["32"]["inputs"]["image"], "avatar_profiles/Jane/refs/pose/openpose.png")
         self.assertEqual(workflow["31"]["inputs"]["weight"], 0.72)
         self.assertEqual(workflow["27"]["inputs"]["strength"], 0.82)
         self.assertEqual(workflow["27"]["inputs"]["start_percent"], 0.02)
         self.assertEqual(workflow["27"]["inputs"]["end_percent"], 0.88)
+        self.assertEqual(workflow["35"]["inputs"]["strength"], 0.66)
+        self.assertEqual(workflow["35"]["inputs"]["start_percent"], 0.03)
+        self.assertEqual(workflow["35"]["inputs"]["end_percent"], 0.75)
         self.assertEqual(workflow["24"]["inputs"]["filename_prefix"], "hexe/avatar_profile_generation/Jane_Doe_seed123")
 
 
