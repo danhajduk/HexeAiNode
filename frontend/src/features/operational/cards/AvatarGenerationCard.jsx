@@ -545,8 +545,19 @@ const HEAD_FACE_PROMPT_PARTS = [
   { id: "style_lighting", label: "Style / Lighting", rows: 3 },
 ];
 
+const HEAD_INSTRUCTION_DRAFTS = new Map();
+
 function promptWorkspace(profile, section) {
   return objectValue(objectValue(profile?.prompt_workspaces)[section]);
+}
+
+function headInstructionDraftKey(profile, routeProfileId = "") {
+  return String(profile?.profile_id || routeProfileId || "").trim();
+}
+
+function savedHeadInstructionDraft(profile, routeProfileId = "") {
+  const key = headInstructionDraftKey(profile, routeProfileId);
+  return key ? String(HEAD_INSTRUCTION_DRAFTS.get(key) || "") : "";
 }
 
 function defaultHeadFacePromptParts(profile) {
@@ -668,7 +679,7 @@ export function AvatarGenerationCard({
   const [generationState, setGenerationState] = useState(() => generationEditorState(routeProfile));
   const [headPromptParts, setHeadPromptParts] = useState(() => headFacePromptParts(routeProfile));
   const [headNegativePrompt, setHeadNegativePrompt] = useState(() => promptWorkspace(routeProfile, "head_face").negative_prompt || "");
-  const [headInstruction, setHeadInstruction] = useState("");
+  const [headInstruction, setHeadInstruction] = useState(() => savedHeadInstructionDraft(routeProfile, routeProfileId));
   const [headAssistantReply, setHeadAssistantReply] = useState(() => latestHeadAssistantReply(routeProfile));
   const generationProfileIdRef = useRef("");
   const headEditorProfileIdRef = useRef(String(routeProfile?.profile_id || ""));
@@ -699,10 +710,10 @@ export function AvatarGenerationCard({
       setHeadNegativePrompt(String(workspace.negative_prompt || ""));
       setHeadAssistantReply(latestHeadAssistantReply(routeProfile));
       if (profileId !== previousProfileId) {
-        setHeadInstruction("");
+        setHeadInstruction(savedHeadInstructionDraft(routeProfile, routeProfileId));
       }
     }
-  }, [routeProfile]);
+  }, [routeProfile, routeProfileId]);
 
   useEffect(() => {
     if (!routeProfile) {
@@ -758,6 +769,14 @@ export function AvatarGenerationCard({
 
   function updateHeadPromptPart(name, value) {
     setHeadPromptParts((current) => ({ ...current, [name]: value }));
+  }
+
+  function updateHeadInstruction(value) {
+    const key = headInstructionDraftKey(routeProfile, routeProfileId);
+    if (key) {
+      HEAD_INSTRUCTION_DRAFTS.set(key, value);
+    }
+    setHeadInstruction(value);
   }
 
   function resetGenerationDefaults() {
@@ -932,7 +951,7 @@ export function AvatarGenerationCard({
         setHeadAssistantReply(String(result.assistant_reply || ""));
       }
       if (result) {
-        setHeadInstruction("");
+        updateHeadInstruction("");
         setActiveReferenceAction("preview:head_face");
         const previewResult = await submitHeadPreview({
           profileId,
@@ -1241,7 +1260,7 @@ export function AvatarGenerationCard({
                   <textarea
                     rows={5}
                     value={headInstruction}
-                    onChange={(event) => setHeadInstruction(event.target.value)}
+                    onChange={(event) => updateHeadInstruction(event.target.value)}
                     placeholder="Tell the local LLM what to change about the head, face, hair, expression, or portrait style."
                   />
                 </label>
