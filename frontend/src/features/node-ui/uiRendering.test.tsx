@@ -588,7 +588,7 @@ describe("OperationalDashboard", () => {
               preview_history: [
                 {
                   preview_id: "head_face_2",
-                  status: "submitted",
+                  status: "completed",
                   template_id: "template.avatar_head_face_preview.realvisxl.v1",
                   prompt_id: "prompt-face-preview-latest",
                   seed: 1211,

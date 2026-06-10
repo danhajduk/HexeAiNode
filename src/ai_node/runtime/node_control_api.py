@@ -4240,7 +4240,11 @@ class NodeControlState:
             existing_filename = Path(str(preview.get("filename") or "")).name
             existing_is_placeholder = bool(preview.get("placeholder"))
             if existing_input and existing_filename and (preview_dir / existing_filename).is_file() and not existing_is_placeholder:
-                updated_history.append(preview)
+                if str(preview.get("status") or "").strip() != "completed":
+                    updated_history.append({**preview, "status": "completed"})
+                    changed = True
+                else:
+                    updated_history.append(preview)
                 continue
             seed = str(preview.get("seed") or "").strip()
             preview_id = self._safe_filename_component(preview.get("preview_id") or f"head_face_{seed}")
@@ -4276,6 +4280,7 @@ class NodeControlState:
                 updated_history.append(
                     {
                         **preview,
+                        "status": "pending",
                         "filename": filename,
                         "input_image": sidecar["input_image"],
                         "url": sidecar["url"],
@@ -4316,6 +4321,7 @@ class NodeControlState:
             updated_history.append(
                 {
                     **preview,
+                    "status": "completed",
                     "filename": filename,
                     "input_image": sidecar["input_image"],
                     "url": sidecar["url"],
