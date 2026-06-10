@@ -1060,14 +1060,16 @@ export function AvatarGenerationCard({
     if (!routeProfile) {
       return (
         <article className="card operational-card-full-span">
-          <CardHeader title="Avatar Generation" subtitle="Profile not found." />
-          <div className="row">
-            <button className="btn" type="button" onClick={onBackToProfiles}>
-              Back
-            </button>
-            <button className="btn" type="button" onClick={onRefresh} disabled={busy}>
-              Refresh
-            </button>
+          <div className="avatar-profile-detail-header">
+            <CardHeader title="Avatar Generation" subtitle="Profile not found." />
+            <div className="avatar-profile-detail-controls">
+              <button className="btn" type="button" onClick={onBackToProfiles}>
+                Back
+              </button>
+              <button className="btn" type="button" onClick={onRefresh} disabled={busy}>
+                Refresh
+              </button>
+            </div>
           </div>
         </article>
       );
@@ -1105,30 +1107,31 @@ export function AvatarGenerationCard({
 
     return (
       <article className="card operational-card-full-span avatar-profile-detail">
-        <CardHeader title={profileName(routeProfile)} subtitle="Avatar Generation" />
-        <div className="row avatar-profile-detail-actions">
-          <button className="btn" type="button" onClick={onBackToProfiles}>
-            Back
-          </button>
-          <button className="btn" type="button" onClick={onRefresh} disabled={busy}>
-            Refresh
-          </button>
-          {localStatus ? <StatusBadge value={localStatus} /> : null}
-        </div>
-
-        <div className="avatar-generation-tabs" role="tablist" aria-label="Avatar profile tabs">
-          {AVATAR_PROFILE_DETAIL_TABS.map((tab) => (
-            <button
-              className={activeDetailTab === tab.id ? "btn btn-primary" : "btn"}
-              key={tab.id}
-              onClick={() => selectDetailTab(tab.id)}
-              role="tab"
-              type="button"
-              aria-selected={activeDetailTab === tab.id}
-            >
-              {tab.label}
+        <div className="avatar-profile-detail-header">
+          <CardHeader title={profileName(routeProfile)} subtitle="Avatar Generation" />
+          <div className="avatar-profile-detail-controls">
+            <button className="btn" type="button" onClick={onBackToProfiles}>
+              Back
             </button>
-          ))}
+            <button className="btn" type="button" onClick={onRefresh} disabled={busy}>
+              Refresh
+            </button>
+            {localStatus ? <StatusBadge value={localStatus} /> : null}
+            <div className="avatar-generation-tabs" role="tablist" aria-label="Avatar profile tabs">
+              {AVATAR_PROFILE_DETAIL_TABS.map((tab) => (
+                <button
+                  className={activeDetailTab === tab.id ? "btn btn-primary" : "btn"}
+                  key={tab.id}
+                  onClick={() => selectDetailTab(tab.id)}
+                  role="tab"
+                  type="button"
+                  aria-selected={activeDetailTab === tab.id}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {activeDetailTab === "profile" ? (
