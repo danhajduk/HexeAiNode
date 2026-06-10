@@ -161,9 +161,47 @@ function formatProgress(progress) {
   return progress.active ? "working" : "idle";
 }
 
+function formatDuration(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value < 0) {
+    return "n/a";
+  }
+  if (value < 60) {
+    return `${Math.round(value)}s`;
+  }
+  const minutes = Math.floor(value / 60);
+  const remainingSeconds = Math.round(value % 60);
+  if (minutes < 60) {
+    return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
 function formatLatestJob(job) {
   const status = String(job?.status || "").trim();
   return status || "none";
+}
+
+function progressDetailItems(detail, session) {
+  const queue = {
+    running_count: detail.running_count ?? session.running_count,
+    pending_count: detail.pending_count ?? session.pending_count,
+    queue_available: session.queue_available,
+  };
+  const nodeLabel = detail.node_class
+    ? `${detail.label || detail.node_class} (#${detail.node_id || "?"}, ${detail.node_class})`
+    : detail.label || "idle";
+  return [
+    ["Stage", detail.phase || detail.status || "idle"],
+    ["Node", nodeLabel],
+    ["Prompt", detail.prompt_id || "none"],
+    ["Queue", formatQueue(queue)],
+    ["Elapsed", formatDuration(detail.elapsed_seconds)],
+    ["Updated", detail.updated_ago_seconds === null || detail.updated_ago_seconds === undefined ? "n/a" : `${formatDuration(detail.updated_ago_seconds)} ago`],
+    detail.failure_reason ? ["Reason", detail.failure_reason] : null,
+  ].filter(Boolean);
 }
 
 function formatTemplateIntent(value) {
@@ -261,9 +299,24 @@ export function ManualImageGenerationCard({
   const latestJob = objectValue(payload?.latest_job);
   const displayedLatestJob = latestJob.prompt_id || latestJob.status ? latestJob : objectValue(result);
   const latestJobProgress = objectValue(displayedLatestJob.progress);
+  const progressDetail = objectValue(displayedLatestJob.progress_detail || generationStatus.progress_detail);
+  const progressDetailRows = progressDetailItems(progressDetail, generationSession);
   const latestJobStatus = formatLatestJob(displayedLatestJob);
+  const displayedPromptIds = [
+    displayedLatestJob.prompt_id,
+    ...asArray(displayedLatestJob.prompt_ids),
+  ]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  const generationProgressPrompt = String(generationProgress.prompt_id || "").trim();
+  const generationProgressMatches =
+    !generationProgressPrompt || !displayedPromptIds.length || displayedPromptIds.includes(generationProgressPrompt);
   const statusProgress =
-    generationProgress.available === false && latestJobProgress.available !== false ? latestJobProgress : generationProgress;
+    generationProgress.available === false || !generationProgressMatches
+      ? latestJobProgress.available !== false
+        ? latestJobProgress
+        : generationProgress
+      : generationProgress;
   const progressActive =
     busy ||
     Boolean(generationSession.queue_active) ||
@@ -631,10 +684,25 @@ export function ManualImageGenerationCard({
               width:
                 displayedProgressPercent !== null
                   ? `${Math.max(Math.min(displayedProgressPercent, 100), 0)}%`
-                  : undefined,
+              : undefined,
             }}
           />
         </div>
+        {progressDetailRows.length ? (
+          <div className="manual-generation-progress-details">
+            {progressDetailRows.map(([label, value]) => (
+              <div className="manual-generation-progress-detail" key={label}>
+                <span>{label}</span>
+                <code>{value}</code>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {progressDetail.message ? (
+          <p className={`manual-generation-progress-message ${progressDetail.phase === "failed" ? "is-error" : ""}`}>
+            {progressDetail.message}
+          </p>
+        ) : null}
       </div>
     </article>
 

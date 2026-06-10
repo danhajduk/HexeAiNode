@@ -79,3 +79,20 @@ hexe/avatar_body_depth_transparent/{{avatar_name}}_seed{{seed}}
 ```
 
 The `_rgb` file is a fallback for background-removal OOM or node failure. If the transparent output is written successfully, the node cleans up the `_rgb` file and its LoRA sidecars from manual output listings.
+
+## Manual Progress Status
+
+The manual image status API exposes `latest_job.progress_detail` and mirrors it into
+`generation_status.progress_detail` for the node UI. The detail payload includes the
+current phase, readable node label, ComfyUI node id and class, queue counts, elapsed
+time, update age, message, and failure reason when available.
+
+Known node labels include PuLID identity loading/application, body depth map
+generation, depth ControlNet application, sampling, VAE decode, background removal,
+alpha joining, and output saving. If ComfyUI restarts or is OOM-killed after a manual
+job is submitted and before an output is created, the job is marked `failed` with
+`failure_reason: comfyui_runtime_oom` or `comfyui_runtime_restarted`.
+
+Before submitting a new manual job, the node asks an idle ComfyUI queue to unload
+models and free memory. This preflight cleanup is skipped when the queue is already
+running or pending prompts.

@@ -2641,6 +2641,68 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["latest_job"]["status"], "completed")
         self.assertEqual(payload["latest_job"]["progress"]["percent"], 100.0)
 
+    def test_manual_image_generation_completion_ignores_idle_same_prompt_progress(self):
+        class _ManualImageServiceManager:
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "running"},
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"output_dir": "runtime/manual/comfyui-gpu/output"},
+                    },
+                }
+
+            def comfyui_webui_generation_status(self):
+                return {
+                    "runtime": "gpu",
+                    "session": {"queue_active": False, "running_count": 0, "pending_count": 0},
+                    "progress": {
+                        "available": True,
+                        "active": True,
+                        "value": 8,
+                        "max": 8,
+                        "percent": 100.0,
+                        "prompt_id": "prompt-done",
+                        "node": "14",
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ManualImageServiceManager(),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            state._write_manual_image_latest_job(
+                {
+                    "status": "running",
+                    "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
+                    "prompt_id": "prompt-done",
+                    "prompt_ids": ["prompt-done"],
+                    "submitted_at": "2026-06-09T12:00:00+00:00",
+                    "output_count_before": 0,
+                }
+            )
+            with patch.object(
+                state,
+                "_manual_image_outputs",
+                return_value=[
+                    {
+                        "relative_path": "hexe/avatar_body_depth_transparent/Jane_seed123_00001_.png",
+                        "filename": "Jane_seed123_00001_.png",
+                        "modified_at": "2026-06-09T12:00:05+00:00",
+                    }
+                ],
+            ):
+                payload = state.manual_image_generation_status()
+
+        self.assertEqual(payload["latest_job"]["status"], "completed")
+        self.assertEqual(payload["latest_job"]["progress_detail"]["phase"], "completed")
+        self.assertEqual(payload["latest_job"]["progress_detail"]["percent"], 100.0)
+
     def test_manual_image_generation_status_tracks_batch_prompt_ids(self):
         class _ManualImageServiceManager:
             def __init__(self, output_dir: str):
@@ -2695,6 +2757,127 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["latest_job"]["status"], "running")
         self.assertEqual(payload["latest_job"]["running_count"], 1)
         self.assertEqual(payload["latest_job"]["pending_count"], 1)
+
+    def test_manual_image_generation_status_includes_detailed_progress_node(self):
+        class _ManualImageServiceManager:
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {
+                        "state": "running",
+                        "pid": 123,
+                        "restart_count": 0,
+                        "started_at": "2026-06-09T11:50:00+00:00",
+                    },
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"output_dir": "runtime/manual/comfyui-gpu/output"},
+                    },
+                }
+
+            def comfyui_webui_generation_status(self):
+                return {
+                    "runtime": "gpu",
+                    "session": {
+                        "queue_active": True,
+                        "running_count": 1,
+                        "pending_count": 0,
+                        "running_prompt_id": "prompt-detail",
+                    },
+                    "progress": {
+                        "available": True,
+                        "active": True,
+                        "value": 1,
+                        "max": 1,
+                        "percent": 100.0,
+                        "prompt_id": "prompt-detail",
+                        "node": "25",
+                        "updated_at_epoch": 1781049600.0,
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ManualImageServiceManager(),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            state._write_manual_image_latest_job(
+                {
+                    "status": "running",
+                    "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
+                    "prompt_id": "prompt-detail",
+                    "prompt_ids": ["prompt-detail"],
+                    "submitted_at": "2026-06-09T12:00:00+00:00",
+                    "runtime_pid": 123,
+                    "runtime_restart_count": 0,
+                }
+            )
+
+            payload = state.manual_image_generation_status()
+
+        detail = payload["latest_job"]["progress_detail"]
+        self.assertEqual(detail["phase"], "body")
+        self.assertEqual(detail["label"], "Build body depth map")
+        self.assertEqual(detail["node_id"], "25")
+        self.assertEqual(detail["node_class"], "DepthAnythingV2Preprocessor")
+        self.assertEqual(payload["generation_status"]["progress_detail"]["label"], "Build body depth map")
+
+    def test_manual_image_generation_marks_runtime_oom_restart_as_failed(self):
+        class _ManualImageServiceManager:
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {
+                        "state": "running",
+                        "pid": 222,
+                        "restart_count": 2,
+                        "last_oom_killed": True,
+                        "started_at": "2026-06-09T12:00:30+00:00",
+                    },
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"output_dir": "runtime/manual/comfyui-gpu/output"},
+                    },
+                }
+
+            def comfyui_webui_generation_status(self):
+                return {
+                    "runtime": "gpu",
+                    "session": {"queue_active": False, "running_count": 0, "pending_count": 0},
+                    "progress": {"available": False},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ManualImageServiceManager(),
+            )
+            state._write_manual_image_latest_job(
+                {
+                    "status": "running",
+                    "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
+                    "prompt_id": "prompt-oom",
+                    "prompt_ids": ["prompt-oom"],
+                    "submitted_at": "2026-06-09T12:00:00+00:00",
+                    "runtime_pid": 111,
+                    "runtime_restart_count": 1,
+                }
+            )
+
+            with patch.object(state, "_manual_image_outputs", return_value=[]):
+                payload = state.manual_image_generation_status()
+
+        latest_job = payload["latest_job"]
+        self.assertEqual(latest_job["status"], "failed")
+        self.assertEqual(latest_job["failure"]["reason"], "comfyui_runtime_oom")
+        self.assertEqual(latest_job["progress_detail"]["phase"], "failed")
+        self.assertEqual(latest_job["progress_detail"]["failure_reason"], "comfyui_runtime_oom")
+        self.assertIn("out-of-memory", latest_job["progress_detail"]["message"])
 
     def test_manual_image_generation_marks_background_removal_rgb_fallback(self):
         class _ManualImageServiceManager:
@@ -3028,7 +3211,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 item_payload = state._manual_image_batch_item_payload(template=template, payload=payload, batch_index=0)
             workflow = state._manual_image_workflow_from_template(template=template, payload=item_payload, input_image="")
 
-        self.assertEqual(workflow["21"]["inputs"]["conditioning_to_strength"], 0.8)
+        self.assertEqual(workflow["31"]["inputs"]["weight"], 0.8)
         self.assertEqual(workflow["27"]["inputs"]["strength"], 0.7)
 
     def test_manual_image_workflow_generates_seed_when_blank(self):

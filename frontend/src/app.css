@@ -946,6 +946,40 @@
   animation: manual-progress-slide 1.15s ease-in-out infinite;
 }
 
+.manual-generation-progress-details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.manual-generation-progress-detail {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.manual-generation-progress-detail span {
+  color: hsl(var(--sx-text-muted));
+  font-size: 11px;
+}
+
+.manual-generation-progress-detail code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-generation-progress-message {
+  margin: 0;
+  color: hsl(var(--sx-text-muted));
+  font-size: 12px;
+}
+
+.manual-generation-progress-message.is-error {
+  color: hsl(var(--sx-danger));
+}
+
 @keyframes manual-progress-slide {
   0% {
     transform: translateX(-110%);
@@ -1634,6 +1668,10 @@ h2 {
   .manual-generation-status-row,
   .manual-generation-status-row-primary,
   .manual-generation-status-row-secondary {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-generation-progress-details {
     grid-template-columns: 1fr;
   }
 

@@ -279,6 +279,22 @@ describe("OperationalDashboard", () => {
                   percent: 25,
                   prompt_id: "prompt-running",
                 },
+                progress_detail: {
+                  status: "running",
+                  phase: "sampling",
+                  label: "Sampling",
+                  message: "Sampling step 1 of 4.",
+                  prompt_id: "prompt-running",
+                  node_id: "14",
+                  node_class: "KSampler",
+                  value: 1,
+                  max: 4,
+                  percent: 25,
+                  elapsed_seconds: 42,
+                  updated_ago_seconds: 2,
+                  running_count: 1,
+                  pending_count: 2,
+                },
               },
               latest_job: {
                 status: "running",
@@ -347,6 +363,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("prompt-running");
     expect(markup).toContain("1 running / 2 pending");
     expect(markup).toContain("25.0%");
+    expect(markup).toContain("Sampling (#14, KSampler)");
+    expect(markup).toContain("Sampling step 1 of 4.");
     expect(markup).toContain("Template");
     expect(markup).toContain("Transparent avatar workflow that uses PuLID");
     expect(markup).toContain("Default Size");

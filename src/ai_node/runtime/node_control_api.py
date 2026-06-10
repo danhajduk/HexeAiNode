@@ -69,6 +69,29 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
 
 MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"
 
+MANUAL_IMAGE_PROGRESS_NODE_LABELS = {
+    "CheckpointLoaderSimple": ("loading", "Load checkpoint"),
+    "LoraLoader": ("loading", "Apply LoRA"),
+    "EmptyLatentImage": ("prepare", "Prepare latent"),
+    "CLIPTextEncode": ("prompt", "Encode prompt"),
+    "LoadImage": ("reference", "Load reference image"),
+    "PulidModelLoader": ("identity", "Load PuLID model"),
+    "PulidEvaClipLoader": ("identity", "Load EVA-CLIP"),
+    "PulidInsightFaceLoader": ("identity", "Analyze face identity"),
+    "ApplyPulidAdvanced": ("identity", "Apply face identity"),
+    "ResizeAndPadImage": ("body", "Fit body reference"),
+    "DepthAnythingV2Preprocessor": ("body", "Build body depth map"),
+    "ControlNetLoader": ("body", "Load depth ControlNet"),
+    "ControlNetApplyAdvanced": ("body", "Apply body depth guidance"),
+    "KSampler": ("sampling", "Sampling"),
+    "VAEDecode": ("decode", "Decode image"),
+    "LoadBackgroundRemovalModel": ("background", "Load background remover"),
+    "RemoveBackground": ("background", "Remove background"),
+    "InvertMask": ("background", "Prepare alpha mask"),
+    "JoinImageWithAlpha": ("background", "Attach alpha channel"),
+    "SaveImage": ("saving", "Save output"),
+}
+
 
 class CapabilityDeclarationPrerequisiteError(ValueError):
     def __init__(self, *, payload: dict) -> None:
@@ -1452,7 +1475,13 @@ class NodeControlState:
         if not isinstance(generation_status, dict):
             generation_status = {}
         outputs = self._manual_image_outputs(limit=24)
-        latest_job = self._manual_image_latest_job(generation_status=generation_status, outputs=outputs)
+        latest_job = self._manual_image_latest_job(
+            generation_status=generation_status,
+            outputs=outputs,
+            runtime_service=runtime_service if isinstance(runtime_service, dict) else {},
+        )
+        if isinstance(latest_job.get("progress_detail"), dict):
+            generation_status = {**generation_status, "progress_detail": latest_job["progress_detail"]}
         cleanup = latest_job.get("rgb_fallback_cleanup") if isinstance(latest_job.get("rgb_fallback_cleanup"), dict) else {}
         if cleanup.get("deleted"):
             outputs = self._manual_image_outputs(limit=24)
@@ -1481,6 +1510,8 @@ class NodeControlState:
         service = await self.start_service(target="comfyui_webui")
         services = service.get("services") if isinstance(service.get("services"), dict) else self.service_status_payload().get("services", {})
         webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        runtime_service = services.get("comfyui_gpu") if isinstance(services, dict) else {}
+        runtime_service = runtime_service if isinstance(runtime_service, dict) else {}
         manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
         socket_path = str(webui.get("socket_path") or "") if isinstance(webui, dict) else ""
         if not socket_path:
@@ -1505,6 +1536,7 @@ class NodeControlState:
         batch_count = self._manual_image_batch_count(payload.batch_count)
         outputs_before = self._manual_image_outputs(limit=24)
         submitted_at = datetime.now(timezone.utc).isoformat()
+        preflight_memory_cleanup = self._free_manual_image_runtime_models(socket_path=socket_path)
         if self._service_manager is not None and hasattr(self._service_manager, "ensure_comfyui_progress_listener"):
             try:
                 self._service_manager.ensure_comfyui_progress_listener(client_id="hexe-node-manual-image-ui")
@@ -1555,6 +1587,10 @@ class NodeControlState:
                 "submitted_at": submitted_at,
                 "output_count_before": len(outputs_before),
                 "completed_output_count": 0,
+                "runtime_pid": runtime_service.get("pid"),
+                "runtime_started_at": runtime_service.get("started_at"),
+                "runtime_restart_count": runtime_service.get("restart_count"),
+                "preflight_memory_cleanup": preflight_memory_cleanup,
                 "lora_metadata": {
                     "enabled": bool(payload.create_lora_metadata),
                     "caption": str(payload.prompt or "").strip(),
@@ -2288,7 +2324,8 @@ class NodeControlState:
                 parsed = {}
         return parsed if isinstance(parsed, dict) else {}
 
-    def _manual_image_latest_job(self, *, generation_status: dict, outputs: list[dict]) -> dict:
+    def _manual_image_latest_job(self, *, generation_status: dict, outputs: list[dict], runtime_service: dict | None = None) -> dict:
+        runtime_service = runtime_service if isinstance(runtime_service, dict) else {}
         job = self._read_manual_image_latest_job()
         prompt_id = str(job.get("prompt_id") or "").strip()
         prompt_ids = [
@@ -2305,7 +2342,9 @@ class NodeControlState:
         pending_prompt_ids = [str(item) for item in list(session.get("pending_prompt_ids") or [])]
         running_prompt_id = str(session.get("running_prompt_id") or "").strip()
         progress_prompt_id = str(progress.get("prompt_id") or "").strip()
-        running_prompt_ids = {running_prompt_id, progress_prompt_id} - {""}
+        running_prompt_ids = {running_prompt_id} - {""}
+        if bool(session.get("queue_active")) and progress_prompt_id:
+            running_prompt_ids.add(progress_prompt_id)
         status = "submitted"
         if any(item in running_prompt_ids for item in prompt_ids):
             status = "running"
@@ -2320,6 +2359,11 @@ class NodeControlState:
         transparent_outputs = [
             item for item in completed_outputs if not self._manual_image_is_rgb_background_removal_fallback_output(output=item)
         ]
+        runtime_failure = None
+        if not completed_outputs and status in {"submitted", "queued", "running"}:
+            runtime_failure = self._manual_image_runtime_failure(job=job, runtime_service=runtime_service)
+            if runtime_failure:
+                status = "failed"
         job_inactive = status not in {"running", "queued"}
         bg_removal_fallback_active = bool(transparent_background and rgb_fallback_outputs and not transparent_outputs and job_inactive)
         rgb_fallback_cleanup = None
@@ -2346,16 +2390,36 @@ class NodeControlState:
             }
         elif completed_outputs and job_inactive:
             status = "completed"
+        progress_for_job = self._manual_image_progress_for_job(
+            progress=progress,
+            prompt_id=prompt_id,
+            prompt_ids=prompt_ids,
+            status=status,
+            running_prompt_id=running_prompt_id,
+        )
         lora_metadata = self._materialize_manual_lora_metadata(job=job, completed_outputs=completed_outputs)
+        progress_detail = self._manual_image_progress_detail(
+            job=job,
+            status=status,
+            prompt_id=prompt_id,
+            prompt_ids=prompt_ids,
+            session=session,
+            progress=progress_for_job,
+            runtime_service=runtime_service,
+            runtime_failure=runtime_failure,
+            completed_output_count=len(completed_outputs),
+        )
         updated = {
             **job,
             "status": status,
             "queue_active": bool(session.get("queue_active")),
             "running_count": int(session.get("running_count") or 0),
             "pending_count": int(session.get("pending_count") or 0),
-            "progress": progress,
+            "progress": progress_for_job,
+            "progress_detail": progress_detail,
             "completed_output_count": len(completed_outputs),
             "latest_output": latest_output,
+            "failure": runtime_failure,
             "background_removal_fallback": fallback,
             "rgb_fallback_cleanup": rgb_fallback_cleanup,
             "lora_metadata": lora_metadata,
@@ -2363,6 +2427,250 @@ class NodeControlState:
         if updated != job:
             self._write_manual_image_latest_job(updated)
         return updated
+
+    def _free_manual_image_runtime_models(self, *, socket_path: str) -> dict:
+        if not socket_path:
+            return {"attempted": False, "reason": "socket_unavailable"}
+        try:
+            queue = self._uds_json_request(socket_path=socket_path, method="GET", path="/queue")
+            running = queue.get("queue_running") if isinstance(queue, dict) else []
+            pending = queue.get("queue_pending") if isinstance(queue, dict) else []
+            if (isinstance(running, list) and running) or (isinstance(pending, list) and pending):
+                return {"attempted": False, "reason": "queue_active"}
+            self._uds_json_request(
+                socket_path=socket_path,
+                method="POST",
+                path="/free",
+                body={"unload_models": True, "free_memory": True},
+            )
+            return {"attempted": True, "status": "ok"}
+        except Exception as exc:
+            self._logger.debug("manual image preflight memory cleanup unavailable: %s", exc)
+            return {"attempted": True, "status": "failed", "error": str(exc)}
+
+    def _manual_image_progress_for_job(
+        self,
+        *,
+        progress: dict,
+        prompt_id: str,
+        prompt_ids: list[str],
+        status: str,
+        running_prompt_id: str,
+    ) -> dict:
+        if not isinstance(progress, dict):
+            progress = {}
+        progress_prompt_id = str(progress.get("prompt_id") or "").strip()
+        active_status = status in {"submitted", "queued", "running"}
+        if active_status and progress_prompt_id and progress_prompt_id not in set(prompt_ids):
+            return {
+                "available": bool(progress.get("available", False)),
+                "active": True,
+                "value": None,
+                "max": None,
+                "percent": None,
+                "prompt_id": running_prompt_id if running_prompt_id in set(prompt_ids) else prompt_id,
+                "node": None,
+                "fallback_status": status,
+                "stale_prompt_id": progress_prompt_id,
+                "updated_at_epoch": progress.get("updated_at_epoch"),
+            }
+        return dict(progress)
+
+    def _manual_image_progress_detail(
+        self,
+        *,
+        job: dict,
+        status: str,
+        prompt_id: str,
+        prompt_ids: list[str],
+        session: dict,
+        progress: dict,
+        runtime_service: dict,
+        runtime_failure: dict | None,
+        completed_output_count: int,
+    ) -> dict:
+        now_epoch = time.time()
+        submitted_epoch = self._manual_image_parse_epoch(job.get("submitted_at"))
+        updated_epoch = self._manual_image_float(progress.get("updated_at_epoch"))
+        elapsed_seconds = round(now_epoch - submitted_epoch, 1) if submitted_epoch is not None else None
+        updated_ago_seconds = round(now_epoch - updated_epoch, 1) if updated_epoch is not None else None
+        node_id = str(progress.get("node") or "").strip()
+        node = self._manual_image_template_node(job=job, node_id=node_id) if node_id else {}
+        class_type = str(node.get("class_type") or "").strip()
+        phase, label = MANUAL_IMAGE_PROGRESS_NODE_LABELS.get(class_type, ("running", class_type or "Working"))
+        percent = self._manual_image_float(progress.get("percent"))
+        value = progress.get("value")
+        maximum = progress.get("max")
+        stale = bool(progress.get("stale_prompt_id")) or (
+            status in {"submitted", "queued", "running"} and updated_ago_seconds is not None and updated_ago_seconds > 30
+        )
+        if status == "queued":
+            phase = "queued"
+            label = "Queued"
+        elif status == "submitted":
+            phase = "submitted"
+            label = "Submitted"
+        elif status == "completed":
+            phase = "completed"
+            label = "Completed"
+            percent = 100.0
+        elif status == "completed_with_fallback":
+            phase = "completed"
+            label = "Completed with RGB fallback"
+            percent = 100.0
+        elif status == "failed":
+            phase = "failed"
+            label = "Failed"
+        elif not node_id and status == "running":
+            phase = "running"
+            label = "Waiting for ComfyUI progress"
+        message = self._manual_image_progress_message(
+            status=status,
+            label=label,
+            value=value,
+            maximum=maximum,
+            percent=percent,
+            runtime_failure=runtime_failure,
+            completed_output_count=completed_output_count,
+            stale=stale,
+        )
+        return {
+            "status": status,
+            "phase": phase,
+            "label": label,
+            "message": message,
+            "prompt_id": str(progress.get("prompt_id") or prompt_id or "").strip() or None,
+            "prompt_ids": prompt_ids,
+            "node_id": node_id or None,
+            "node_class": class_type or None,
+            "value": value,
+            "max": maximum,
+            "percent": percent,
+            "elapsed_seconds": elapsed_seconds,
+            "updated_ago_seconds": updated_ago_seconds,
+            "stale": stale,
+            "queue_active": bool(session.get("queue_active")),
+            "running_count": int(session.get("running_count") or 0),
+            "pending_count": int(session.get("pending_count") or 0),
+            "runtime_pid": runtime_service.get("pid"),
+            "runtime_restart_count": runtime_service.get("restart_count"),
+            "runtime_oom_killed": bool(runtime_service.get("last_oom_killed")),
+            "failure_reason": runtime_failure.get("reason") if isinstance(runtime_failure, dict) else None,
+            "failure_detail": runtime_failure if isinstance(runtime_failure, dict) else None,
+        }
+
+    @staticmethod
+    def _manual_image_progress_message(
+        *,
+        status: str,
+        label: str,
+        value,
+        maximum,
+        percent: float | None,
+        runtime_failure: dict | None,
+        completed_output_count: int,
+        stale: bool,
+    ) -> str:
+        if runtime_failure:
+            reason = str(runtime_failure.get("reason") or "comfyui_runtime_failed")
+            if reason == "comfyui_runtime_oom":
+                return "ComfyUI restarted after an out-of-memory failure during this job."
+            return "ComfyUI restarted before this job produced an output."
+        if status == "completed":
+            return f"Completed with {completed_output_count} output file(s)."
+        if status == "completed_with_fallback":
+            return "Transparent output was missing; using the RGB fallback image."
+        if status == "failed":
+            return "Job failed before producing an output."
+        if stale:
+            return "Waiting for a fresh ComfyUI progress event."
+        if label == "Sampling" and value is not None and maximum is not None:
+            return f"Sampling step {value} of {maximum}."
+        if percent is not None:
+            return f"{label} is {percent:.1f}% complete."
+        return f"{label} is active."
+
+    def _manual_image_runtime_failure(self, *, job: dict, runtime_service: dict) -> dict | None:
+        if not isinstance(runtime_service, dict) or not runtime_service:
+            return None
+        submitted_epoch = self._manual_image_parse_epoch(job.get("submitted_at"))
+        runtime_started_epoch = self._manual_image_parse_epoch(runtime_service.get("started_at"))
+        runtime_restarted_after_submit = (
+            submitted_epoch is not None
+            and runtime_started_epoch is not None
+            and runtime_started_epoch > submitted_epoch + 1.0
+        )
+        job_pid = self._manual_image_int(job.get("runtime_pid"))
+        current_pid = self._manual_image_int(runtime_service.get("pid"))
+        pid_changed = bool(job_pid and current_pid and job_pid != current_pid)
+        job_restart_count = self._manual_image_int(job.get("runtime_restart_count"))
+        current_restart_count = self._manual_image_int(runtime_service.get("restart_count"))
+        restart_count_increased = (
+            job_restart_count is not None
+            and current_restart_count is not None
+            and current_restart_count > job_restart_count
+        )
+        if not (runtime_restarted_after_submit or pid_changed or restart_count_increased):
+            return None
+        oom_killed = bool(runtime_service.get("last_oom_killed"))
+        return {
+            "reason": "comfyui_runtime_oom" if oom_killed else "comfyui_runtime_restarted",
+            "runtime_restarted": True,
+            "oom_killed": oom_killed,
+            "runtime_pid": current_pid,
+            "previous_runtime_pid": job_pid,
+            "runtime_restart_count": current_restart_count,
+            "previous_runtime_restart_count": job_restart_count,
+            "runtime_started_at": runtime_service.get("started_at"),
+        }
+
+    def _manual_image_template_node(self, *, job: dict, node_id: str) -> dict:
+        template_id = self._manual_image_job_template_id(job=job)
+        if not template_id or not node_id:
+            return {}
+        try:
+            template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
+            workflow_path = Path(str(template.get("api_workflow_path") or ""))
+            workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+            node = workflow.get(str(node_id)) if isinstance(workflow, dict) else {}
+            return node if isinstance(node, dict) else {}
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _manual_image_job_template_id(*, job: dict) -> str:
+        template_id = str(job.get("template_id") or "").strip()
+        if template_id:
+            return template_id
+        metadata = job.get("lora_metadata") if isinstance(job.get("lora_metadata"), dict) else {}
+        return str(metadata.get("template_id") or "").strip()
+
+    @staticmethod
+    def _manual_image_parse_epoch(value) -> float | None:
+        raw = str(value or "").strip()
+        if not raw or raw.startswith("0001-01-01"):
+            return None
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.timestamp()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _manual_image_float(value) -> float | None:
+        try:
+            return float(value)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _manual_image_int(value) -> int | None:
+        try:
+            return int(value)
+        except Exception:
+            return None
 
     def _manual_image_job_uses_transparent_background(self, *, job: dict) -> bool:
         template_id = str(job.get("template_id") or "").strip()

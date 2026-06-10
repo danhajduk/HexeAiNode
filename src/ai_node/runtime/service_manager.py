@@ -826,7 +826,8 @@ class UserSystemdServiceManager:
         health_socket_path = self._comfyui_cpu_health_socket if runtime_key == "cpu" else self._comfyui_gpu_health_socket
         socket_ready = bool(socket_path and os.path.exists(socket_path))
         health_socket_ready = bool(health_socket_path and os.path.exists(health_socket_path))
-        pid = self._query_container_pid(self._comfyui_container_name) if script_exists else 0
+        container_state = self._query_container_state(self._comfyui_container_name) if script_exists else {}
+        pid = int(container_state.get("pid") or 0)
         state = "running" if pid and socket_ready and health_socket_ready else "stopped"
         if pid and not (socket_ready and health_socket_ready):
             state = "starting"
@@ -847,6 +848,12 @@ class UserSystemdServiceManager:
             "health_socket_ready": health_socket_ready,
             "api_transport": "unix_socket",
             "model_residency": "on_demand",
+            "container_status": container_state.get("status") or None,
+            "restart_count": container_state.get("restart_count"),
+            "last_exit_code": container_state.get("exit_code"),
+            "last_oom_killed": container_state.get("oom_killed"),
+            "started_at": container_state.get("started_at") or None,
+            "finished_at": container_state.get("finished_at") or None,
         }
 
     def _comfyui_webui_status(self) -> dict:
@@ -1376,6 +1383,39 @@ class UserSystemdServiceManager:
             return max(int(raw or 0), 0)
         except Exception:
             return 0
+
+    def _query_container_state(self, container_name: str) -> dict:
+        if not container_name:
+            return {}
+        try:
+            result = subprocess.run(
+                [
+                    self._docker_bin,
+                    "inspect",
+                    "--format",
+                    "{{.State.Pid}}\t{{.State.Status}}\t{{.State.ExitCode}}\t{{.State.OOMKilled}}\t{{.State.StartedAt}}\t{{.State.FinishedAt}}\t{{.RestartCount}}",
+                    container_name,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                return {}
+            parts = str(result.stdout or "").strip().split("\t")
+            if len(parts) < 7:
+                return {}
+            return {
+                "pid": max(int(parts[0] or 0), 0),
+                "status": parts[1] or None,
+                "exit_code": int(parts[2] or 0),
+                "oom_killed": str(parts[3]).strip().lower() == "true",
+                "started_at": parts[4] or None,
+                "finished_at": parts[5] or None,
+                "restart_count": max(int(parts[6] or 0), 0),
+            }
+        except Exception:
+            return {}
 
     def _local_llm_model_map(self) -> dict[str, dict]:
         try:
