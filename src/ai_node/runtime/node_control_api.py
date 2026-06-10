@@ -2360,14 +2360,15 @@ class NodeControlState:
                 "Analyze this adult avatar full-body/body reference for reusable image-generation body identity data. "
                 "Return a very detailed, non-repetitive, non-erotic, anatomy-preserving description that can help keep the same body shape in future generations. "
                 "Use compact bullet-style detail. Avoid generic praise, health/damage/deformity claims, and repeated preservation statements. "
-                "Do not estimate exact measurements; use relative visible descriptions only. "
+                "Do not estimate exact measurements; use relative visible descriptions only. Do not use 'average' as a default filler; use it only when the visible trait is clearly neutral compared with nearby body proportions. "
+                "Prefer comparative silhouette language such as narrower, wider, longer, shorter, fuller, slimmer, straighter, rounded, tapered, compact, elongated, or occluded/uncertain. "
                 "Separate stable body shape from temporary pose, crop, clothing, and accessories. "
-                "Describe height impression, shoulder width and slope, neck length, torso length, ribcage, abdomen, waist definition, hip width, pelvis shape, and overall silhouette. "
+                "Describe shoulder-to-waist-to-hip ratio, torso-to-leg proportion, bust-waist-hip silhouette, height impression, shoulder width and slope, neck length, torso length, ribcage, abdomen, waist definition, hip width, pelvis shape, and overall silhouette. "
                 "Describe bust/breasts by visible relative size, shape, position, symmetry, spacing, and silhouette; describe buttocks/glutes by visible width, roundness, projection, and placement. "
                 "For clothed or covered regions, describe only visible silhouette and mark hidden details as occluded or uncertain. "
-                "Describe arms, elbows, wrists, hands, finger length/shape, hand size, legs, leg length, thighs, knees, calves, ankles, feet, and foot stance. "
+                "Describe arm thickness and length, elbows, wrists, hands, finger length/shape, hand size, legs, leg length relative to torso, thigh/calf fullness, knees, ankles, feet, and foot stance. "
                 "Describe skin tone, skin texture, visible marks, body asymmetries, posture, pose angle, head/shoulder/hip orientation, hand and arm placement, leg and foot placement, clothing, accessories, and body-preservation notes. "
-                "If a trait is hidden by clothing, cropped out, or unclear, mark it as occluded or uncertain instead of inventing it."
+                "If a trait is hidden by clothing, cropped out, or unclear, mark it as occluded or uncertain instead of inventing it or calling it average."
             ),
             max_tokens=1700,
             timeout_s=60,
@@ -2852,7 +2853,8 @@ class NodeControlState:
                         "permanent_identity must include stable face, skin, eyes, brows, nose, lips, cheekbones, jaw_chin, hair, visible_age_range, expression, and identity_prompt. "
                         "body_profile must be a JSON object with separate keys: proportions, silhouette, build, shoulders_neck, torso_waist_abdomen, bust_breasts, hips_pelvis, buttocks_glutes, arms_hands_fingers, legs_feet, skin_texture_marks, and body_prompt. "
                         "Do not return body_profile as a single markdown body_prompt only. "
-                        "body_prompt must be a dense, non-repetitive, prompt-ready paragraph, not markdown, preserving all visible stable body details including hands, legs, bust/breasts, hips, and buttocks/glutes while marking occluded traits as uncertain. "
+                        "body_prompt must be a dense, non-repetitive, prompt-ready paragraph, not markdown, preserving shoulder-to-waist-to-hip ratio, torso-to-leg proportions, bust-waist-hip silhouette, limb thickness, hands, legs, bust/breasts, hips, and buttocks/glutes while marking occluded traits as uncertain. "
+                        "Avoid using average as filler. If the vision notes say average without useful detail, convert it into visible comparative shape language or mark the trait uncertain/occluded. "
                         "Avoid exact measurements, health/damage/deformity claims, and repeated preservation phrases unless directly visible and useful. "
                         "removable_clothing must describe only currently worn clothing and must not be mixed into identity unless it is truly permanent. "
                         "accessories must separate permanent_accessories from removable_accessories and mark uncertain items as uncertain. "
@@ -3008,6 +3010,7 @@ class NodeControlState:
             body_profile["body_prompt"] = cls._avatar_profile_compact_text(body_profile) or body_description
         body_profile["body_prompt"] = cls._clean_avatar_profile_body_description(body_profile.get("body_prompt"))
         cls._populate_avatar_profile_body_sections(body_profile=body_profile, body_description=body_description)
+        cls._clean_avatar_profile_body_profile_fields(body_profile)
 
         removable_clothing = cls._avatar_profile_dict_value(source.get("removable_clothing") or source.get("clothing_reference"))
         accessories = cls._avatar_profile_dict_value(source.get("accessories"))
@@ -3022,7 +3025,7 @@ class NodeControlState:
             "identity": str(prompt_sections.get("identity") or permanent_identity.get("identity_prompt") or "").strip(),
             "face": str(prompt_sections.get("face") or cls._avatar_profile_compact_text(permanent_identity.get("face"))).strip(),
             "hair": str(prompt_sections.get("hair") or cls._avatar_profile_compact_text(permanent_identity.get("hair"))).strip(),
-            "body_shape": str(prompt_sections.get("body_shape") or body_profile.get("body_prompt") or "").strip(),
+            "body_shape": cls._clean_avatar_profile_body_description(str(prompt_sections.get("body_shape") or body_profile.get("body_prompt") or "").strip()),
             "pose": str(prompt_sections.get("pose") or cls._avatar_profile_compact_text(pose_reference)).strip(),
             "clothing": str(prompt_sections.get("clothing") or cls._avatar_profile_compact_text(removable_clothing)).strip(),
             "accessories": str(prompt_sections.get("accessories") or cls._avatar_profile_compact_text(accessories)).strip(),
@@ -3086,6 +3089,24 @@ class NodeControlState:
                 body_profile[field] = text
 
     @classmethod
+    def _clean_avatar_profile_body_profile_fields(cls, body_profile: dict) -> None:
+        for field in (
+            "proportions",
+            "silhouette",
+            "build",
+            "shoulders_neck",
+            "torso_waist_abdomen",
+            "bust_breasts",
+            "hips_pelvis",
+            "buttocks_glutes",
+            "arms_hands_fingers",
+            "legs_feet",
+            "skin_texture_marks",
+        ):
+            if field in body_profile:
+                body_profile[field] = cls._clean_avatar_profile_inline_body_text(body_profile.get(field))
+
+    @classmethod
     def _avatar_profile_markdown_sections(cls, text: str) -> list[tuple[str, str]]:
         sections: list[tuple[str, str]] = []
         current_heading = ""
@@ -3128,7 +3149,9 @@ class NodeControlState:
 
     @classmethod
     def _avatar_profile_bullet_label(cls, line: str) -> tuple[str, str] | None:
-        candidate = line.lstrip("-* ").strip()
+        candidate = str(line or "").strip()
+        if candidate.startswith(("- ", "* ")):
+            candidate = candidate[2:].strip()
         if candidate.startswith("**") and "**:" in candidate:
             heading, body = candidate[2:].split("**:", 1)
             return heading.strip(), body.strip()
@@ -3278,10 +3301,29 @@ class NodeControlState:
         return "\n".join(line for line in cleaned_lines if line is not None).strip()
 
     @classmethod
+    def _clean_avatar_profile_inline_body_text(cls, value) -> str:
+        text = cls._avatar_profile_compact_text(value)
+        if not text:
+            return ""
+        parts = []
+        seen = set()
+        for raw_part in re.split(r"(?<=[.!?])\s+|;\s+", text):
+            cleaned = cls._avatar_profile_clean_body_clause_text(raw_part, heading="")
+            if not cleaned:
+                continue
+            normalized = " ".join(cleaned.lower().split())
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            parts.append(cleaned)
+        return " ".join(parts).strip()
+
+    @classmethod
     def _avatar_profile_clean_body_clause_text(cls, text: str, *, heading: str) -> str:
         source = str(text or "").strip()
         if not source:
             return ""
+        source = cls._avatar_profile_reduce_average_filler(source)
         heading_lower = str(heading or "").lower()
         clauses = [
             cls._avatar_profile_clean_prompt_fragment(item)
@@ -3297,6 +3339,8 @@ class NodeControlState:
             if any(fragment in lowered for fragment in ("health", "damage", "deformit")):
                 noisy_count += 1
                 continue
+            clause = cls._avatar_profile_reduce_average_filler(clause)
+            lowered = clause.lower()
             normalized = " ".join(lowered.split())
             if normalized in seen:
                 continue
@@ -3310,6 +3354,38 @@ class NodeControlState:
         if len(cleaned) == 1 and source.rstrip().endswith((".", "!", "?")) and not result.endswith((".", "!", "?")):
             result += "."
         return result or source
+
+    @staticmethod
+    def _avatar_profile_reduce_average_filler(clause: str) -> str:
+        text = str(clause or "").strip()
+        if not text:
+            return ""
+        lowered = text.lower()
+        if not lowered.startswith("average "):
+            return text
+        remainder = text[len("average ") :].strip()
+        if "," in remainder:
+            return remainder
+        if any(
+            cue in lowered
+            for cue in (
+                "slight",
+                "rounded",
+                "straight",
+                "symmetrical",
+                "narrow",
+                "wide",
+                "wider",
+                "bent",
+                "apart",
+                "protruding",
+                "central",
+                "smooth",
+                "standing",
+            )
+        ):
+            return remainder
+        return text
 
     @classmethod
     def _avatar_profile_compact_text(cls, value) -> str:

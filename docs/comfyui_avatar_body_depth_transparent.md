@@ -131,8 +131,13 @@ prompt fields are compacted before they are stored. If the local LLM merge fails
 the fallback now builds bounded `identity_prompt`, `face_prompt`, `hair_prompt`,
 and `expression_prompt` fields from visible face traits instead of copying all raw
 vision notes into the prompt. Body extraction also deduplicates repeated
-preservation clauses and removes low-value health/damage/deformity loops before
-saving `body_description` and `body_profile.body_prompt`.
+preservation clauses, removes low-value health/damage/deformity loops, fixes
+markdown body-heading formatting, and reduces generic leading `average` filler
+when a line already contains more useful visible shape detail. The body vision and
+local-LLM prompts ask for comparative silhouette language such as
+shoulder-to-waist-to-hip ratio, torso-to-leg proportion, bust-waist-hip silhouette,
+limb thickness, and occluded/uncertain markers instead of defaulting unclear
+traits to `average`.
 
 The Body Depth profile tab can submit a lightweight ComfyUI preprocessing job with
 `POST /api/avatar-generation/profiles/{profile_id}/body-depth/generate`. For each

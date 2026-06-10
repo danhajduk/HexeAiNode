@@ -4113,6 +4113,24 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(structured["reference_quality_notes"]["structured_source"], "vision_descriptions_local_rules")
         self.assertEqual(structured["reference_quality_notes"]["local_llm_model_id"], "local-model")
 
+    def test_avatar_generation_body_cleanup_reduces_average_filler_and_keeps_markdown_headings(self):
+        raw_body = (
+            "- **Height Impression**: Average height, standing posture.\n"
+            "- **Hip Width**: Average hip width, slightly wider than the waist.\n"
+            "- **Bust/Breasts**: Average bust size, slightly rounded, positioned centrally.\n"
+            "- **Body-Preservation Notes**: No visible marks, no visible health damage, no visible health deformities, "
+            "no visible health marks, no visible health stance."
+        )
+
+        cleaned = NodeControlState._clean_avatar_profile_body_description(raw_body)
+
+        self.assertIn("- **Height Impression**: height, standing posture", cleaned)
+        self.assertIn("- **Hip Width**: hip width, slightly wider than the waist", cleaned)
+        self.assertIn("- **Bust/Breasts**: bust size, slightly rounded, positioned centrally", cleaned)
+        self.assertIn("- **Body-Preservation Notes**: Preserve visible silhouette", cleaned)
+        self.assertNotIn("****:", cleaned)
+        self.assertNotIn("health damage", cleaned)
+
     def test_avatar_generation_body_depth_profile_submits_preprocess_workflow(self):
         class _AvatarBodyDepthServiceManager:
             def __init__(self, input_dir: Path, output_dir: Path):
@@ -4468,11 +4486,14 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("buttocks/glutes", body_prompt)
         self.assertIn("finger length", body_prompt)
         self.assertIn("legs", body_prompt)
+        self.assertIn("Do not use 'average'", body_prompt)
+        self.assertIn("shoulder-to-waist-to-hip ratio", body_prompt)
         self.assertEqual(llm_request["timeout_s"], 90)
         self.assertIn("bust_breasts", llm_system_prompt)
         self.assertIn("buttocks_glutes", llm_system_prompt)
         self.assertIn("arms_hands_fingers", llm_system_prompt)
         self.assertIn("legs_feet", llm_system_prompt)
+        self.assertIn("Avoid using average as filler", llm_system_prompt)
         self.assertEqual(result["extraction"]["vision_model_id"], "vision-model")
         self.assertEqual(result["extraction"]["local_llm_model_id"], "local-model")
         self.assertEqual(result["extraction"]["structured"]["identity_prompt"], "same Jane Avatar identity")
