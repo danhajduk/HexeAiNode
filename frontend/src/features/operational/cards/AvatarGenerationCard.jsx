@@ -77,6 +77,265 @@ function noBgBodyReferences(profile) {
   return profileReferences(profile, "body_depth").filter((reference) => Boolean(reference?.background_removed));
 }
 
+const AVATAR_PROFILE_TEMPLATE_ID = "template.avatar_profile_depth_pulid.realvisxl.v1";
+const AVATAR_BODY_REFERENCE_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1";
+const DEFAULT_AVATAR_NEGATIVE_TERMS = [
+  "busy background",
+  "detailed background",
+  "cropped head",
+  "cropped face",
+  "cropped body",
+  "out of frame",
+  "close-up crop",
+  "torso crop",
+  "missing legs",
+  "missing feet",
+  "different body shape",
+  "changed identity",
+  "altered face",
+  "low quality",
+  "blurry",
+  "distorted face",
+  "distorted hands",
+  "extra limbs",
+  "malformed body",
+  "watermark",
+  "text",
+];
+
+function compactPromptText(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => compactPromptText(item)).filter(Boolean).join(", ");
+  }
+  if (value && typeof value === "object") {
+    if (typeof value.description === "string") {
+      return compactPromptText(value.description);
+    }
+    if (typeof value.current === "string") {
+      return compactPromptText(value.current);
+    }
+    return Object.values(value).map((item) => compactPromptText(item)).filter(Boolean).join(", ");
+  }
+  return String(value || "")
+    .replace(/\*\*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function firstPromptText(...values) {
+  for (const value of values) {
+    const text = compactPromptText(value);
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+}
+
+function mergedNegativeTerms(...values) {
+  const seen = new Set();
+  const terms = [];
+  values.flatMap((value) => splitTerms(compactPromptText(value))).forEach((term) => {
+    const key = term.toLowerCase();
+    if (!key || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    terms.push(term);
+  });
+  return terms.join(", ");
+}
+
+function profileReferenceInputImage(profile, role, reference) {
+  const existing = String(reference?.input_image || "").trim();
+  if (existing) {
+    return existing;
+  }
+  const filename = String(reference?.filename || "").trim();
+  const profileId = String(profile?.profile_id || "").trim();
+  if (!filename || !profileId) {
+    return "";
+  }
+  return `avatar_profiles/${profileId}/refs/${role}/${filename}`;
+}
+
+function referenceOption({ profile, role, reference, fallbackName }) {
+  const inputImage = profileReferenceInputImage(profile, role, reference);
+  if (!inputImage) {
+    return null;
+  }
+  return {
+    inputImage,
+    filename: String(reference?.filename || "").trim(),
+    label: String(reference?.name || reference?.filename || fallbackName || inputImage).trim(),
+    url: String(reference?.url || "").trim(),
+    primary: Boolean(reference?.primary),
+    backgroundRemoved: Boolean(reference?.background_removed),
+  };
+}
+
+function uniqueReferenceOptions(options) {
+  const seen = new Set();
+  return options.filter((option) => {
+    if (!option?.inputImage || seen.has(option.inputImage)) {
+      return false;
+    }
+    seen.add(option.inputImage);
+    return true;
+  });
+}
+
+function faceReferenceOptions(profile) {
+  const profileId = String(profile?.profile_id || "").trim();
+  const primaryInput = String(profile?.pulid_face_reference_image || profile?.primary_face_input_image || "").trim();
+  const refs = profileReferences(profile, "face");
+  const primary = refs.find((reference) => profileReferenceInputImage(profile, "face", reference) === primaryInput || reference?.primary);
+  const baseFace = String(profile?.face_input_image || "").trim();
+  return uniqueReferenceOptions([
+    primary ? referenceOption({ profile, role: "face", reference: primary, fallbackName: "Primary face" }) : null,
+    ...refs.map((reference) => referenceOption({ profile, role: "face", reference, fallbackName: "Face reference" })),
+    baseFace
+      ? {
+          inputImage: baseFace,
+          filename: String(profile?.face_image || "face").trim(),
+          label: `${profileId || "Profile"} base face`,
+          url: String(profile?.face_url || "").trim(),
+          primary: !primaryInput,
+        }
+      : null,
+  ].filter(Boolean));
+}
+
+function bodyReferenceOptions(profile) {
+  const profileId = String(profile?.profile_id || "").trim();
+  const baseBody = String(profile?.body_input_image || "").trim();
+  return uniqueReferenceOptions([
+    ...noBgBodyReferences(profile).map((reference) =>
+      referenceOption({ profile, role: "body_depth", reference, fallbackName: "No-BG body reference" })
+    ),
+    ...rawBodyReferences(profile).map((reference) =>
+      referenceOption({ profile, role: "body_depth", reference, fallbackName: "Body reference" })
+    ),
+    baseBody
+      ? {
+          inputImage: baseBody,
+          filename: String(profile?.body_image || "body").trim(),
+          label: `${profileId || "Profile"} base body`,
+          url: String(profile?.body_url || "").trim(),
+        }
+      : null,
+  ].filter(Boolean));
+}
+
+function bodyDepthMapOptions(profile) {
+  return uniqueReferenceOptions(
+    profileReferences(profile, "body_depth_map").map((reference) =>
+      referenceOption({ profile, role: "body_depth_map", reference, fallbackName: "Body depth map" })
+    )
+  );
+}
+
+function poseReferenceOptions(profile) {
+  return uniqueReferenceOptions(
+    profileReferences(profile, "pose").map((reference) =>
+      referenceOption({ profile, role: "pose", reference, fallbackName: "Pose reference" })
+    )
+  );
+}
+
+function selectedReferenceOption(options, inputImage) {
+  return options.find((option) => option.inputImage === inputImage) || null;
+}
+
+function buildAvatarGenerationPrompt(editor) {
+  const parts = [
+    "full body portrait, head to toe, complete body visible",
+    editor.identity,
+    editor.face,
+    editor.hair,
+    editor.body_shape,
+    editor.pose,
+    editor.clothing,
+    editor.accessories,
+    editor.scene,
+    editor.style,
+    editor.preservation,
+    "transparent background, isolated subject, photorealistic, realistic skin texture, detailed face, detailed hands",
+  ];
+  return parts.map((part) => compactPromptText(part)).filter(Boolean).join(", ");
+}
+
+function generationEditorState(profile) {
+  const extraction = objectValue(profile?.extraction);
+  const structured = objectValue(extraction.structured);
+  const promptSections = objectValue(structured.prompt_sections);
+  const bodyProfile = objectValue(structured.body_profile);
+  const removableClothing = objectValue(structured.removable_clothing);
+  const poseReference = objectValue(structured.pose_reference);
+  const faceStructured = objectValue(faceProfile(profile).structured);
+  const faceOptions = faceReferenceOptions(profile);
+  const bodyOptions = bodyReferenceOptions(profile);
+  const depthOptions = bodyDepthMapOptions(profile);
+  const poseOptions = poseReferenceOptions(profile);
+  const identity = firstPromptText(
+    faceStructured.identity_prompt,
+    promptSections.identity,
+    structured.identity_prompt,
+    objectValue(structured.permanent_identity).identity_prompt
+  );
+  const face = firstPromptText(faceStructured.face_prompt, promptSections.face, objectValue(structured.permanent_identity).face);
+  const hair = firstPromptText(faceStructured.hair_prompt, promptSections.hair);
+  const bodyShape = firstPromptText(
+    promptSections.body_shape,
+    bodyProfile.body_prompt,
+    bodyProfile.silhouette,
+    extraction.body_description
+  );
+  return {
+    template_id: depthOptions.length ? AVATAR_PROFILE_TEMPLATE_ID : AVATAR_BODY_REFERENCE_TEMPLATE_ID,
+    face_reference_image: faceOptions[0]?.inputImage || "",
+    body_reference_image: bodyOptions[0]?.inputImage || "",
+    body_depth_image: depthOptions[0]?.inputImage || "",
+    pose_reference_image: poseOptions[0]?.inputImage || "",
+    identity,
+    face,
+    hair,
+    body_shape: bodyShape,
+    pose: firstPromptText(promptSections.pose, poseReference.current_pose, poseReference.description),
+    clothing: firstPromptText(promptSections.clothing, removableClothing.current, removableClothing.description),
+    accessories: firstPromptText(promptSections.accessories, structured.accessories, faceStructured.accessories),
+    scene: "",
+    style: "high-end editorial photography, cinematic lighting, sharp focus",
+    preservation: firstPromptText(
+      promptSections.preservation,
+      structured.preservation_notes,
+      "preserve the same face identity, same body proportions, same silhouette, same shoulder waist hip relationship"
+    ),
+    negative: mergedNegativeTerms(
+      DEFAULT_AVATAR_NEGATIVE_TERMS,
+      structured.negative_prompt_terms,
+      promptSections.negative,
+      faceStructured.negative_prompt_terms,
+      faceStructured.negative_identity_prompt
+    ),
+    width: "768",
+    height: "1152",
+    seed: "",
+    steps: "4",
+    cfg: "1.2",
+    denoise: "1",
+    batch_count: "1",
+    face_strength: "0.8",
+    body_depth_strength: depthOptions.length ? "0.8" : "0.75",
+    body_depth_start: "0",
+    body_depth_end: depthOptions.length ? "0.9" : "0.8",
+    randomize_seed: false,
+    randomize_reference_strengths: false,
+    reference_strength_jitter: "0.05",
+    create_lora_metadata: false,
+  };
+}
+
 function extractionEditorState(profile) {
   const extraction = objectValue(profile?.extraction);
   const structured = objectValue(extraction.structured);
@@ -172,6 +431,9 @@ export function AvatarGenerationCard({
   onSetPrimaryFace,
   onExtractFaceProfile,
   onGenerateBodyDepthProfile,
+  onSubmitGeneration,
+  generationBusy = false,
+  generationResult = null,
   onBackToProfiles,
   onRefresh,
   visionBusy = false,
@@ -198,6 +460,7 @@ export function AvatarGenerationCard({
   const [activeProfileAction, setActiveProfileAction] = useState("");
   const [activeReferenceAction, setActiveReferenceAction] = useState("");
   const [editorState, setEditorState] = useState(() => extractionEditorState(routeProfile));
+  const [generationState, setGenerationState] = useState(() => generationEditorState(routeProfile));
   const latestProfile = result?.profile || profiles[0] || null;
   const canSave = Boolean(characterName.trim()) && Boolean(faceFile) && Boolean(bodyFile) && !busy;
   const detailMode = Boolean(routeProfileId);
@@ -205,11 +468,16 @@ export function AvatarGenerationCard({
   useEffect(() => {
     if (routeProfile) {
       setEditorState(extractionEditorState(routeProfile));
+      setGenerationState(generationEditorState(routeProfile));
     }
   }, [routeProfile]);
 
   function updateEditorField(name, value) {
     setEditorState((current) => ({ ...current, [name]: value }));
+  }
+
+  function updateGenerationField(name, value) {
+    setGenerationState((current) => ({ ...current, [name]: value }));
   }
 
   async function saveProfile(event) {
@@ -361,6 +629,83 @@ export function AvatarGenerationCard({
     }
   }
 
+  async function submitGeneration(event) {
+    event.preventDefault();
+    if (!routeProfile?.profile_id || busy || generationBusy) {
+      return;
+    }
+    const prompt = buildAvatarGenerationPrompt(generationState);
+    const templateId = String(generationState.template_id || "").trim() || AVATAR_PROFILE_TEMPLATE_ID;
+    const faceReferenceImage = String(generationState.face_reference_image || "").trim();
+    const bodyReferenceImage = String(generationState.body_reference_image || "").trim();
+    const bodyDepthImage = String(generationState.body_depth_image || "").trim();
+    if (!prompt || !faceReferenceImage) {
+      return;
+    }
+    if (templateId === AVATAR_PROFILE_TEMPLATE_ID && !bodyDepthImage) {
+      return;
+    }
+    if (templateId === AVATAR_BODY_REFERENCE_TEMPLATE_ID && !bodyReferenceImage) {
+      return;
+    }
+    const integerValue = (value, fallback = undefined) => {
+      const text = String(value ?? "").trim();
+      if (!text) {
+        return fallback;
+      }
+      const parsed = Number.parseInt(text, 10);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+    const numberValue = (value, fallback = undefined) => {
+      const text = String(value ?? "").trim();
+      if (!text) {
+        return fallback;
+      }
+      const parsed = Number.parseFloat(text);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+    const templateVariables = {
+      avatar_name: profileName(routeProfile),
+      face_reference_image: faceReferenceImage,
+      face_strength: numberValue(generationState.face_strength, 0.8),
+      body_depth_strength: numberValue(generationState.body_depth_strength, 0.8),
+      body_depth_start: numberValue(generationState.body_depth_start, 0),
+      body_depth_end: numberValue(generationState.body_depth_end, 0.9),
+    };
+    if (templateId === AVATAR_PROFILE_TEMPLATE_ID) {
+      templateVariables.body_depth_image = bodyDepthImage;
+    } else {
+      templateVariables.body_reference_image = bodyReferenceImage;
+    }
+    setActiveReferenceAction("generate:avatar");
+    setLocalStatus("");
+    try {
+      const result = await onSubmitGeneration?.({
+        template_id: templateId,
+        mode: "txt2img",
+        prompt,
+        negative_prompt: generationState.negative,
+        width: integerValue(generationState.width, 768),
+        height: integerValue(generationState.height, 1152),
+        seed: String(generationState.seed || "").trim() || null,
+        steps: integerValue(generationState.steps, 4),
+        cfg: numberValue(generationState.cfg, 1.2),
+        denoise: numberValue(generationState.denoise, 1),
+        batch_count: integerValue(generationState.batch_count, 1),
+        randomize_seed: Boolean(generationState.randomize_seed),
+        randomize_reference_strengths: Boolean(generationState.randomize_reference_strengths),
+        reference_strength_jitter: numberValue(generationState.reference_strength_jitter, 0.05),
+        create_lora_metadata: Boolean(generationState.create_lora_metadata),
+        template_variables: templateVariables,
+      });
+      if (result) {
+        setLocalStatus("generation_submitted");
+      }
+    } finally {
+      setActiveReferenceAction("");
+    }
+  }
+
   function renderReferenceCards(role, references = profileReferences(routeProfile, role)) {
     if (!references.length) {
       return <p className="muted tiny">No saved references.</p>;
@@ -422,6 +767,34 @@ export function AvatarGenerationCard({
         </article>
       );
     }
+
+    const generationFaceOptions = faceReferenceOptions(routeProfile);
+    const generationBodyOptions = bodyReferenceOptions(routeProfile);
+    const generationDepthOptions = bodyDepthMapOptions(routeProfile);
+    const generationPoseOptions = poseReferenceOptions(routeProfile);
+    const selectedFaceOption = selectedReferenceOption(generationFaceOptions, generationState.face_reference_image);
+    const selectedBodyOption = selectedReferenceOption(generationBodyOptions, generationState.body_reference_image);
+    const selectedDepthOption = selectedReferenceOption(generationDepthOptions, generationState.body_depth_image);
+    const selectedPoseOption = selectedReferenceOption(generationPoseOptions, generationState.pose_reference_image);
+    const generationPrompt = buildAvatarGenerationPrompt(generationState);
+    const usesProfileDepthTemplate = generationState.template_id === AVATAR_PROFILE_TEMPLATE_ID;
+    const canSubmitGeneration =
+      Boolean(generationPrompt) &&
+      Boolean(generationState.face_reference_image) &&
+      (usesProfileDepthTemplate ? Boolean(generationState.body_depth_image) : Boolean(generationState.body_reference_image)) &&
+      !busy &&
+      !generationBusy;
+    const renderGenerationPreview = (option, label) => (
+      <div className={option?.inputImage ? "manual-reference-summary-item is-ready" : "manual-reference-summary-item"} key={label}>
+        <span>{label}</span>
+        {option?.url ? (
+          <a href={profileImageUrl(apiBase, option.url)} target="_blank" rel="noreferrer">
+            <img src={profileImageUrl(apiBase, option.url)} alt={option.label || label} />
+          </a>
+        ) : null}
+        <code>{option?.label || "none"}</code>
+      </div>
+    );
 
     return (
       <article className="card operational-card-full-span avatar-profile-detail">
@@ -678,7 +1051,7 @@ export function AvatarGenerationCard({
         ) : null}
 
         {activeDetailTab === "generation" ? (
-          <section className="setup-form avatar-reference-upload-panel">
+          <form className="setup-form avatar-reference-upload-panel avatar-generation-panel" onSubmit={submitGeneration}>
             <div className="state-grid compact-grid">
               <span>Profile</span>
               <code>{routeProfile.profile_id}</code>
@@ -686,8 +1059,225 @@ export function AvatarGenerationCard({
               <StatusBadge value={routeProfile.selected || routeProfile.profile_id === selectedProfileId ? "selected" : "ready"} />
               <span>Extraction</span>
               <StatusBadge value={hasExtraction(routeProfile) ? "ready" : "missing"} />
+              <span>Face Profile</span>
+              <StatusBadge value={faceProfile(routeProfile).status || "missing"} />
+              <span>Depth Profile</span>
+              <StatusBadge value={bodyDepthProfile(routeProfile).status || "missing"} />
+              <span>Depth Maps</span>
+              <code>{generationDepthOptions.length}</code>
+              <span>Pose Refs</span>
+              <code>{generationPoseOptions.length}</code>
             </div>
-          </section>
+
+            <div className="form-grid avatar-generation-reference-grid">
+              <label>
+                Template
+                <select value={generationState.template_id} onChange={(event) => updateGenerationField("template_id", event.target.value)}>
+                  <option value={AVATAR_PROFILE_TEMPLATE_ID} disabled={!generationDepthOptions.length}>
+                    Avatar Profile Generation
+                  </option>
+                  <option value={AVATAR_BODY_REFERENCE_TEMPLATE_ID}>Simple Avatar Generation</option>
+                </select>
+              </label>
+              <label>
+                Face Reference
+                <select
+                  value={generationState.face_reference_image}
+                  onChange={(event) => updateGenerationField("face_reference_image", event.target.value)}
+                >
+                  {generationFaceOptions.map((option) => (
+                    <option value={option.inputImage} key={option.inputImage}>
+                      {option.primary ? `${option.label} (primary)` : option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Body Depth Map
+                <select
+                  value={generationState.body_depth_image}
+                  onChange={(event) => updateGenerationField("body_depth_image", event.target.value)}
+                  disabled={!generationDepthOptions.length}
+                >
+                  <option value="">No saved depth map</option>
+                  {generationDepthOptions.map((option) => (
+                    <option value={option.inputImage} key={option.inputImage}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Body Reference
+                <select
+                  value={generationState.body_reference_image}
+                  onChange={(event) => updateGenerationField("body_reference_image", event.target.value)}
+                  disabled={!generationBodyOptions.length}
+                >
+                  <option value="">No body reference</option>
+                  {generationBodyOptions.map((option) => (
+                    <option value={option.inputImage} key={option.inputImage}>
+                      {option.backgroundRemoved ? `${option.label} (no BG)` : option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Pose Reference
+                <select value={generationState.pose_reference_image} onChange={(event) => updateGenerationField("pose_reference_image", event.target.value)}>
+                  <option value="">Prompt only</option>
+                  {generationPoseOptions.map((option) => (
+                    <option value={option.inputImage} key={option.inputImage}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="avatar-generation-preview-grid">
+              {renderGenerationPreview(selectedFaceOption, "Face")}
+              {renderGenerationPreview(selectedDepthOption, "Depth")}
+              {renderGenerationPreview(selectedBodyOption, "Body")}
+              {renderGenerationPreview(selectedPoseOption, "Pose")}
+            </div>
+
+            <div className="form-grid two-column-form-grid avatar-generation-prompt-grid">
+              <label>
+                Identity
+                <textarea rows={4} value={generationState.identity} onChange={(event) => updateGenerationField("identity", event.target.value)} />
+              </label>
+              <label>
+                Face
+                <textarea rows={4} value={generationState.face} onChange={(event) => updateGenerationField("face", event.target.value)} />
+              </label>
+              <label>
+                Hair
+                <textarea rows={3} value={generationState.hair} onChange={(event) => updateGenerationField("hair", event.target.value)} />
+              </label>
+              <label>
+                Body Shape
+                <textarea rows={5} value={generationState.body_shape} onChange={(event) => updateGenerationField("body_shape", event.target.value)} />
+              </label>
+              <label>
+                Pose
+                <textarea rows={4} value={generationState.pose} onChange={(event) => updateGenerationField("pose", event.target.value)} />
+              </label>
+              <label>
+                Clothing
+                <textarea rows={4} value={generationState.clothing} onChange={(event) => updateGenerationField("clothing", event.target.value)} />
+              </label>
+              <label>
+                Accessories
+                <textarea rows={3} value={generationState.accessories} onChange={(event) => updateGenerationField("accessories", event.target.value)} />
+              </label>
+              <label>
+                Scene
+                <textarea rows={3} value={generationState.scene} onChange={(event) => updateGenerationField("scene", event.target.value)} />
+              </label>
+              <label>
+                Style
+                <textarea rows={3} value={generationState.style} onChange={(event) => updateGenerationField("style", event.target.value)} />
+              </label>
+              <label>
+                Preservation
+                <textarea rows={3} value={generationState.preservation} onChange={(event) => updateGenerationField("preservation", event.target.value)} />
+              </label>
+              <label className="avatar-generation-wide-field">
+                Negative Prompt
+                <textarea rows={4} value={generationState.negative} onChange={(event) => updateGenerationField("negative", event.target.value)} />
+              </label>
+              <label className="avatar-generation-wide-field avatar-generation-compiled-prompt">
+                Compiled Prompt
+                <textarea rows={7} readOnly value={generationPrompt} />
+              </label>
+            </div>
+
+            <div className="form-grid avatar-generation-settings-grid">
+              <label>
+                Width
+                <input type="number" min="256" max="1920" step="64" value={generationState.width} onChange={(event) => updateGenerationField("width", event.target.value)} />
+              </label>
+              <label>
+                Height
+                <input type="number" min="256" max="1920" step="64" value={generationState.height} onChange={(event) => updateGenerationField("height", event.target.value)} />
+              </label>
+              <label>
+                Seed
+                <input type="text" value={generationState.seed} onChange={(event) => updateGenerationField("seed", event.target.value)} placeholder="random" />
+              </label>
+              <label>
+                Batch Count
+                <input type="number" min="1" max="25" step="1" value={generationState.batch_count} onChange={(event) => updateGenerationField("batch_count", event.target.value)} />
+              </label>
+              <label>
+                Steps
+                <input type="number" min="1" max="60" step="1" value={generationState.steps} onChange={(event) => updateGenerationField("steps", event.target.value)} />
+              </label>
+              <label>
+                CFG
+                <input type="number" min="0" max="20" step="0.1" value={generationState.cfg} onChange={(event) => updateGenerationField("cfg", event.target.value)} />
+              </label>
+              <label>
+                Denoise
+                <input type="number" min="0" max="1" step="0.01" value={generationState.denoise} onChange={(event) => updateGenerationField("denoise", event.target.value)} />
+              </label>
+              <label>
+                Face Strength
+                <input type="number" min="0" max="1" step="0.01" value={generationState.face_strength} onChange={(event) => updateGenerationField("face_strength", event.target.value)} />
+              </label>
+              <label>
+                Body Strength
+                <input type="number" min="0" max="1.5" step="0.01" value={generationState.body_depth_strength} onChange={(event) => updateGenerationField("body_depth_strength", event.target.value)} />
+              </label>
+              <label>
+                Body Start
+                <input type="number" min="0" max="1" step="0.01" value={generationState.body_depth_start} onChange={(event) => updateGenerationField("body_depth_start", event.target.value)} />
+              </label>
+              <label>
+                Body End
+                <input type="number" min="0" max="1" step="0.01" value={generationState.body_depth_end} onChange={(event) => updateGenerationField("body_depth_end", event.target.value)} />
+              </label>
+              <label>
+                Strength Jitter
+                <input type="number" min="0" max="1" step="0.01" value={generationState.reference_strength_jitter} onChange={(event) => updateGenerationField("reference_strength_jitter", event.target.value)} />
+              </label>
+            </div>
+
+            <div className="row">
+              <label className="manual-lora-metadata-toggle">
+                <input
+                  type="checkbox"
+                  checked={generationState.randomize_seed}
+                  onChange={(event) => updateGenerationField("randomize_seed", event.target.checked)}
+                />
+                Randomize Seed
+              </label>
+              <label className="manual-lora-metadata-toggle">
+                <input
+                  type="checkbox"
+                  checked={generationState.randomize_reference_strengths}
+                  onChange={(event) => updateGenerationField("randomize_reference_strengths", event.target.checked)}
+                />
+                Randomize Strengths
+              </label>
+              <label className="manual-lora-metadata-toggle">
+                <input
+                  type="checkbox"
+                  checked={generationState.create_lora_metadata}
+                  onChange={(event) => updateGenerationField("create_lora_metadata", event.target.checked)}
+                />
+                Create LoRA Metadata
+              </label>
+            </div>
+
+            <div className="row">
+              <button className="btn btn-primary" type="submit" disabled={!canSubmitGeneration}>
+                {activeReferenceAction === "generate:avatar" || generationBusy ? "Generating..." : "Generate Avatar"}
+              </button>
+              {generationResult?.prompt_id ? <code>{`Prompt ${generationResult.prompt_id}`}</code> : null}
+            </div>
+          </form>
         ) : null}
       </article>
     );

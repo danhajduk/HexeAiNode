@@ -708,6 +708,18 @@ describe("OperationalDashboard", () => {
         })}
       />
     );
+    const generationMarkup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "avatar_generation",
+          avatarGenerationProps: {
+            routeProfileId: "Jane_Avatar",
+            initialDetailTab: "generation",
+            payload: profilePayload,
+          },
+        })}
+      />
+    );
 
     expect(bodyMarkup).toContain("Upload Body Images");
     expect(bodyMarkup).toContain("Generate Depth Profile");
@@ -731,6 +743,18 @@ describe("OperationalDashboard", () => {
     expect(poseMarkup).toContain("Upload Pose Images");
     expect(poseMarkup).toContain("Open Pose");
     expect(poseMarkup).toContain("Pose Notes");
+    expect(generationMarkup).toContain("Avatar Profile Generation");
+    expect(generationMarkup).toContain("Simple Avatar Generation");
+    expect(generationMarkup).toContain("Body Depth Map");
+    expect(generationMarkup).toContain("avatar_body_depth_standing_body.png");
+    expect(generationMarkup).toContain("Body Reference");
+    expect(generationMarkup).toContain("Pose Reference");
+    expect(generationMarkup).toContain("Clothing");
+    expect(generationMarkup).toContain("Scene");
+    expect(generationMarkup).toContain("Compiled Prompt");
+    expect(generationMarkup).toContain("Generate Avatar");
+    expect(generationMarkup).toContain("same Jane Avatar face identity");
+    expect(generationMarkup).toContain("transparent background");
   });
 
   it("shows friendly task kind and schedule names and sorts the legend by duration", () => {

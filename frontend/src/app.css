@@ -954,6 +954,38 @@
   overflow-wrap: anywhere;
 }
 
+.avatar-generation-panel {
+  max-width: none;
+}
+
+.avatar-generation-reference-grid,
+.avatar-generation-settings-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.avatar-generation-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.avatar-generation-preview-grid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-bg));
+}
+
+.avatar-generation-wide-field {
+  grid-column: 1 / -1;
+}
+
+.avatar-generation-compiled-prompt textarea {
+  color: hsl(var(--sx-text-muted));
+}
+
 @media (max-width: 760px) {
   .avatar-profile-card {
     grid-template-columns: 1fr;
@@ -966,6 +998,12 @@
   .avatar-profile-images {
     grid-column: 1;
     grid-row: auto;
+  }
+
+  .avatar-generation-reference-grid,
+  .avatar-generation-settings-grid,
+  .avatar-generation-preview-grid {
+    grid-template-columns: 1fr;
   }
 }
 

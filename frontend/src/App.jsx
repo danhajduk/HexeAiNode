@@ -2240,6 +2240,9 @@ export default function App() {
       onSetPrimaryFace: onSetAvatarPrimaryFace,
       onExtractFaceProfile: onExtractAvatarFaceProfile,
       onGenerateBodyDepthProfile: onGenerateAvatarBodyDepthProfile,
+      onSubmitGeneration: onSubmitManualImageGeneration,
+      generationBusy: manualImageGenerationBusy,
+      generationResult: manualImageGenerationResult,
       onBackToProfiles: () => {
         window.location.hash = buildOperationalRoute("avatar_generation");
       },
