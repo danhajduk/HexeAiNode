@@ -458,6 +458,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Hair Color");
     expect(markup).toContain("Character Type");
     expect(markup).toContain("Visual Style");
+    expect(markup).toContain("Stylized Realistic");
     expect(markup).toContain("NSFW");
     expect(markup).toContain("Initial Data");
     expect(markup).toContain("Save Profile");

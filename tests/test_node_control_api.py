@@ -3749,7 +3749,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     skin_color="warm olive",
                     hair_color="black",
                     character_type="humanlike",
-                    visual_style="semi-real",
+                    visual_style="stylized-realistic",
                     initial_data="reserved, observant, late twenties",
                     nsfw=True,
                 )
@@ -3765,7 +3765,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(profile["skin_color"], "warm olive")
         self.assertEqual(profile["hair_color"], "black")
         self.assertEqual(profile["character_type"], "humanlike")
-        self.assertEqual(profile["visual_style"], "semi-real")
+        self.assertEqual(profile["visual_style"], "stylized-realistic")
         self.assertEqual(profile["initial_data"], "reserved, observant, late twenties")
         self.assertTrue(profile["nsfw"])
         self.assertEqual(profile["face_url"], "")

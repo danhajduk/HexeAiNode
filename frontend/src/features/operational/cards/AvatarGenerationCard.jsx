@@ -531,7 +531,7 @@ export function AvatarGenerationCard({
   const [skinColor, setSkinColor] = useState("");
   const [hairColor, setHairColor] = useState("");
   const [characterType, setCharacterType] = useState("human");
-  const [visualStyle, setVisualStyle] = useState("semi-real");
+  const [visualStyle, setVisualStyle] = useState("stylized-realistic");
   const [nsfw, setNsfw] = useState(false);
   const [bodyDepthFiles, setBodyDepthFiles] = useState([]);
   const [faceAnalysisFiles, setFaceAnalysisFiles] = useState([]);
@@ -1463,30 +1463,44 @@ export function AvatarGenerationCard({
             </label>
             <label>
               Gender
-              <input
-                type="text"
-                value={gender}
-                onChange={(event) => setGender(event.target.value)}
-                placeholder="female, male, nonbinary"
-              />
+              <select value={gender} onChange={(event) => setGender(event.target.value)}>
+                <option value="">Unspecified</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="nonbinary">Nonbinary</option>
+              </select>
             </label>
             <label>
               Skin Color
-              <input
-                type="text"
-                value={skinColor}
-                onChange={(event) => setSkinColor(event.target.value)}
-                placeholder="warm brown, pale olive"
-              />
+              <select value={skinColor} onChange={(event) => setSkinColor(event.target.value)}>
+                <option value="">Unspecified</option>
+                <option value="fair">Fair</option>
+                <option value="light">Light</option>
+                <option value="olive">Olive</option>
+                <option value="tan">Tan</option>
+                <option value="brown">Brown</option>
+                <option value="dark-brown">Dark Brown</option>
+                <option value="deep">Deep</option>
+              </select>
             </label>
             <label>
               Hair Color
-              <input
-                type="text"
-                value={hairColor}
-                onChange={(event) => setHairColor(event.target.value)}
-                placeholder="black, silver, auburn"
-              />
+              <select value={hairColor} onChange={(event) => setHairColor(event.target.value)}>
+                <option value="">Unspecified</option>
+                <option value="black">Black</option>
+                <option value="brown">Brown</option>
+                <option value="blonde">Blonde</option>
+                <option value="auburn">Auburn</option>
+                <option value="red">Red</option>
+                <option value="gray">Gray</option>
+                <option value="white">White</option>
+                <option value="silver">Silver</option>
+                <option value="blue">Blue</option>
+                <option value="pink">Pink</option>
+                <option value="purple">Purple</option>
+                <option value="green">Green</option>
+                <option value="none">None / Bald</option>
+              </select>
             </label>
             <label>
               Character Type
@@ -1501,7 +1515,7 @@ export function AvatarGenerationCard({
               <select value={visualStyle} onChange={(event) => setVisualStyle(event.target.value)}>
                 <option value="cartoon">Cartoon</option>
                 <option value="manga">Manga</option>
-                <option value="semi-real">Semi-real</option>
+                <option value="stylized-realistic">Stylized Realistic</option>
                 <option value="real">Real</option>
               </select>
             </label>

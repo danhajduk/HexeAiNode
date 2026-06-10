@@ -104,8 +104,8 @@ The Avatar Generation profile detail page includes a `Generation` tab that assem
 The node UI includes an `Avatar Generation` menu with two tabs: `Create Profile`
 and `Saved Profiles`. Profile creation starts with typed character basics:
 character name, gender, skin color, hair color, character type (`human`,
-`humanlike`, or `non-human`), visual style (`cartoon`, `manga`, `semi-real`, or
-`real`), an NSFW boolean, and freeform initial data. This first step does not
+`humanlike`, or `non-human`), visual style (`cartoon`, `manga`,
+`stylized-realistic`, or `real`), an NSFW boolean, and freeform initial data. This first step does not
 upload source images, generate assets, or run vision extraction.
 
 ```text
