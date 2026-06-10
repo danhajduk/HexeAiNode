@@ -3858,25 +3858,27 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
     def test_avatar_generation_records_head_preview_history(self):
         class _AvatarProfileServiceManager:
-            def __init__(self, input_dir: str):
+            def __init__(self, input_dir: str, output_dir: str):
                 self.input_dir = input_dir
+                self.output_dir = output_dir
 
             def get_status(self):
                 return {
                     "comfyui_webui": {
                         "state": "running",
                         "runtime": "gpu",
-                        "manual_paths": {"input_dir": self.input_dir},
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
                     }
                 }
 
         with tempfile.TemporaryDirectory() as tmp:
             input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
             state = NodeControlState(
                 lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
                 config_path=str(Path(tmp) / "bootstrap_config.json"),
                 logger=logging.getLogger("node-control-api-test"),
-                service_manager=_AvatarProfileServiceManager(str(input_dir)),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
             )
             state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
 
@@ -3912,6 +3914,15 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
             profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
             metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+            preview_output = output_dir / "hexe" / "avatar_head_face_preview" / "Jane_Avatar_seed1211_00001_.png"
+            preview_output.parent.mkdir(parents=True, exist_ok=True)
+            preview_output.write_bytes(b"preview-image")
+            refreshed = state.avatar_generation_status()["profiles"][0]
+            refreshed_history = refreshed["prompt_workspaces"]["head_face"]["preview_history"]
+            imported_preview = refreshed_history[-1]
+            imported_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / imported_preview["filename"]
+            imported_bytes = imported_path.read_bytes()
+            imported_reference = refreshed["references"]["head_face"][0]
 
         preview_history = metadata["prompt_workspaces"]["head_face"]["preview_history"]
         self.assertEqual(result["status"], "preview_submitted")
@@ -3926,6 +3937,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(preview_history[-1]["prompt"], "head portrait 11")
         self.assertEqual(preview_history[-1]["prompt_id"], "prompt-face-preview-11")
         self.assertEqual(preview_history[-1]["seed"], 1211)
+        self.assertEqual(imported_preview["url"], f"/api/avatar-generation/profiles/Jane_Avatar/references/head_face/preview/{imported_preview['filename']}")
+        self.assertEqual(imported_preview["input_image"], f"avatar_profiles/Jane_Avatar/refs/head_face/preview/{imported_preview['filename']}")
+        self.assertEqual(imported_bytes, b"preview-image")
+        self.assertEqual(imported_reference["url"], imported_preview["url"])
 
     def test_avatar_generation_selects_and_deletes_profile(self):
         class _AvatarProfileServiceManager:

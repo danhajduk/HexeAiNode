@@ -3688,8 +3688,11 @@ class NodeControlState:
         root = self._avatar_profile_root()
         safe_profile_id = self._safe_filename_component(profile_id)
         safe_role = self._avatar_profile_reference_role(role)
-        safe_asset_name = Path(str(asset_name or "")).name
-        path = (root / safe_profile_id / "refs" / safe_role / safe_asset_name).resolve()
+        if safe_role == "head_face":
+            safe_asset_path = self._safe_relative_path(str(asset_name or ""))
+        else:
+            safe_asset_path = Path(Path(str(asset_name or "")).name)
+        path = (root / safe_profile_id / "refs" / safe_role / safe_asset_path).resolve()
         if root not in path.parents or not path.exists() or not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
             raise ValueError("avatar_profile_reference_not_found")
         return FileResponse(path)
@@ -3719,6 +3722,7 @@ class NodeControlState:
         if not metadata:
             return {}
         metadata = self._refresh_avatar_body_depth_profile_job(profile_dir=profile_dir, metadata=metadata)
+        metadata = self._refresh_avatar_head_face_preview_outputs(profile_dir=profile_dir, metadata=metadata)
         profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
         face_image = Path(str(metadata.get("face_image") or "")).name
         body_image = Path(str(metadata.get("body_image") or "")).name
@@ -3974,9 +3978,15 @@ class NodeControlState:
             "pose": "pose",
             "poses": "pose",
             "openpose": "pose",
+            "head": "head_face",
+            "headface": "head_face",
+            "head_face_preview": "head_face",
+            "headfacepreview": "head_face",
+            "face_preview": "head_face",
+            "facepreview": "head_face",
         }
         role = aliases.get(role, role)
-        if role not in {"body_depth", "body_depth_map", "face", "pose"}:
+        if role not in {"body_depth", "body_depth_map", "face", "pose", "head_face"}:
             raise ValueError("avatar_profile_reference_role_invalid")
         return role
 
@@ -3998,7 +4008,7 @@ class NodeControlState:
         return data
 
     def _avatar_profile_references(self, *, profile_dir: Path) -> dict:
-        references = {"body_depth": [], "body_depth_map": [], "face": [], "pose": []}
+        references = {"body_depth": [], "body_depth_map": [], "face": [], "pose": [], "head_face": []}
         refs_root = profile_dir / "refs"
         if not refs_root.exists() or not refs_root.is_dir():
             return references
@@ -4007,7 +4017,8 @@ class NodeControlState:
             if not role_dir.exists() or not role_dir.is_dir():
                 continue
             items = []
-            for path in role_dir.iterdir():
+            paths = role_dir.rglob("*") if role == "head_face" else role_dir.iterdir()
+            for path in paths:
                 if not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
                     continue
                 items.append(self._avatar_profile_reference_payload(path=path))
@@ -4021,17 +4032,19 @@ class NodeControlState:
             metadata = json.loads(sidecar.read_text(encoding="utf-8"))
         except Exception:
             metadata = {}
-        role = self._avatar_profile_reference_role(metadata.get("role") or path.parent.name)
+        inferred_role = path.parent.parent.name if path.parent.name == "preview" else path.parent.name
+        role = self._avatar_profile_reference_role(metadata.get("role") or inferred_role)
         profile_id = self._safe_filename_component(metadata.get("profile_id") or path.parent.parent.parent.name)
         filename = Path(str(metadata.get("filename") or path.name)).name
+        relative_name = str(metadata.get("relative_name") or filename)
         return {
             **(metadata if isinstance(metadata, dict) else {}),
             "profile_id": profile_id,
             "role": role,
             "filename": filename,
             "name": str((metadata if isinstance(metadata, dict) else {}).get("name") or Path(filename).stem),
-            "input_image": f"avatar_profiles/{profile_id}/refs/{role}/{filename}",
-            "url": f"/api/avatar-generation/profiles/{profile_id}/references/{role}/{filename}",
+            "input_image": str((metadata if isinstance(metadata, dict) else {}).get("input_image") or f"avatar_profiles/{profile_id}/refs/{role}/{relative_name}"),
+            "url": str((metadata if isinstance(metadata, dict) else {}).get("url") or f"/api/avatar-generation/profiles/{profile_id}/references/{role}/{relative_name}"),
         }
 
     def _avatar_body_depth_profile_sources(self, *, profile_dir: Path, metadata: dict, source_filenames: list[str] | None) -> list[dict]:
@@ -4155,6 +4168,100 @@ class NodeControlState:
 
     def _write_avatar_body_depth_profile_job(self, *, profile_dir: Path, payload: dict) -> None:
         (profile_dir / "body_depth_job.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    def _refresh_avatar_head_face_preview_outputs(self, *, profile_dir: Path, metadata: dict) -> dict:
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
+        preview_history = list(workspace.get("preview_history") or [])
+        if not preview_history:
+            return metadata
+        profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
+        avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
+        output_dir = self._manual_image_output_dir()
+        preview_dir = profile_dir / "refs" / "head_face" / "preview"
+        updated_history = []
+        changed = False
+        now = datetime.now(timezone.utc).isoformat()
+        for preview in preview_history:
+            if not isinstance(preview, dict):
+                updated_history.append(preview)
+                continue
+            existing_input = str(preview.get("input_image") or "").strip()
+            existing_filename = Path(str(preview.get("filename") or "")).name
+            if existing_input and existing_filename and (preview_dir / existing_filename).is_file():
+                updated_history.append(preview)
+                continue
+            seed = str(preview.get("seed") or "").strip()
+            if not seed:
+                updated_history.append(preview)
+                continue
+            prefix = f"hexe/avatar_head_face_preview/{avatar_name}_seed{seed}"
+            output_path = self._avatar_body_depth_profile_output_for_prefix(output_dir=output_dir, prefix=prefix)
+            if not output_path:
+                updated_history.append(preview)
+                continue
+            preview_id = self._safe_filename_component(preview.get("preview_id") or f"head_face_{seed}")
+            filename = f"{preview_id}_seed{seed}.png"
+            preview_dir.mkdir(parents=True, exist_ok=True)
+            target_path = (preview_dir / filename).resolve()
+            if profile_dir not in target_path.parents:
+                raise ValueError("avatar_head_face_preview_path_invalid")
+            shutil.copyfile(output_path, target_path)
+            relative_name = f"preview/{filename}"
+            sidecar = {
+                "profile_id": profile_id,
+                "role": "head_face",
+                "name": f"Head Face Preview {seed}",
+                "filename": filename,
+                "relative_name": relative_name,
+                "input_image": f"avatar_profiles/{profile_id}/refs/head_face/{relative_name}",
+                "url": f"/api/avatar-generation/profiles/{profile_id}/references/head_face/{relative_name}",
+                "source": "avatar_head_face_preview_generation",
+                "source_output": output_path.relative_to(output_dir).as_posix() if output_dir in output_path.parents else str(output_path),
+                "preview_id": preview.get("preview_id"),
+                "prompt_id": preview.get("prompt_id"),
+                "seed": preview.get("seed"),
+                "prompt": preview.get("prompt"),
+                "negative_prompt": preview.get("negative_prompt"),
+                "created_at": preview.get("created_at") or now,
+                "imported_at": now,
+            }
+            target_path.with_suffix(target_path.suffix + ".json").write_text(
+                json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            updated_history.append(
+                {
+                    **preview,
+                    "filename": filename,
+                    "input_image": sidecar["input_image"],
+                    "url": sidecar["url"],
+                    "imported_at": now,
+                    "source_output": sidecar["source_output"],
+                }
+            )
+            changed = True
+        if not changed:
+            return metadata
+        updated_workspace = {
+            **workspace,
+            "section": "head_face",
+            "preview_history": updated_history[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:],
+            "updated_at": now,
+        }
+        updated_metadata = self._avatar_profile_metadata_with_workspace(
+            metadata=metadata,
+            section="head_face",
+            workspace=updated_workspace,
+        )
+        references = self._avatar_profile_references(profile_dir=profile_dir)
+        existing_counts = metadata.get("reference_counts") if isinstance(metadata.get("reference_counts"), dict) else {}
+        updated_metadata["reference_counts"] = {
+            **existing_counts,
+            "head_face": len(references.get("head_face", [])),
+        }
+        updated_metadata["updated_at"] = now
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return updated_metadata
 
     def _refresh_avatar_body_depth_profile_job(self, *, profile_dir: Path, metadata: dict) -> dict:
         job = self._read_avatar_body_depth_profile_job(profile_dir=profile_dir)
@@ -10546,7 +10653,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.get("/api/avatar-generation/profiles/{profile_id}/references/{role}/{asset_name}")
+    @app.get("/api/avatar-generation/profiles/{profile_id}/references/{role}/{asset_name:path}")
     def get_avatar_generation_profile_reference(profile_id: str, role: str, asset_name: str):
         try:
             return state.avatar_profile_reference_response(profile_id=profile_id, role=role, asset_name=asset_name)

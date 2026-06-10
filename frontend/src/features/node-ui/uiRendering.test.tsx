@@ -592,6 +592,9 @@ describe("OperationalDashboard", () => {
                   template_id: "template.avatar_head_face_preview.realvisxl.v1",
                   prompt_id: "prompt-face-preview-latest",
                   seed: 1211,
+                  filename: "head_face_2_seed1211.png",
+                  input_image: "avatar_profiles/Jane_Avatar/refs/head_face/preview/head_face_2_seed1211.png",
+                  url: "/api/avatar-generation/profiles/Jane_Avatar/references/head_face/preview/head_face_2_seed1211.png",
                   created_at: "2026-06-10T10:05:00Z",
                 },
                 {
@@ -617,15 +620,6 @@ describe("OperationalDashboard", () => {
             routeProfileId: "Jane_Avatar",
             initialDetailTab: "head_face",
             payload: profilePayload,
-            manualImageGenerationPayload: {
-              outputs: [
-                {
-                  relative_path: "hexe/avatar_head_face_preview/Jane_Avatar_seed1211_00001_.png",
-                  filename: "Jane_Avatar_seed1211_00001_.png",
-                  url: "/api/manual-image-generation/outputs/hexe/avatar_head_face_preview/Jane_Avatar_seed1211_00001_.png",
-                },
-              ],
-            },
           },
         })}
       />
@@ -638,7 +632,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Create Preview");
     expect(markup).toContain("Latest Preview");
     expect(markup).toContain("Preview History");
-    expect(markup).toContain("Jane_Avatar_seed1211_00001_.png");
+    expect(markup).toContain("head_face_2_seed1211.png");
     expect(markup.indexOf("prompt-face-preview-latest")).toBeLessThan(markup.indexOf("prompt-face-preview</code>"));
     expect(markup).toContain("prompt-face-preview");
   });

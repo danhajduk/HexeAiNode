@@ -52,6 +52,11 @@ function headFacePreviewHistory(profile) {
 }
 
 function headFacePreviewOutput(preview, outputs, profile) {
+  const profileUrl = String(preview?.url || "").trim();
+  if (profileUrl) {
+    const filename = String(preview?.filename || profileUrl.split("/").pop() || "preview.png");
+    return { url: profileUrl, filename, relative_path: String(preview?.input_image || profileUrl) };
+  }
   const seed = preview?.seed === null || preview?.seed === undefined ? "" : String(preview.seed).trim();
   if (!seed) {
     return null;
