@@ -909,27 +909,44 @@ export function AvatarGenerationCard({
         negative_prompt: headNegativePrompt,
         user_message: userMessage,
       });
+      let refinedPromptParts = headPromptParts;
+      let refinedNegativePrompt = headNegativePrompt;
       if (result?.prompt_parts && typeof result.prompt_parts === "object") {
-        setHeadPromptParts((current) =>
-          HEAD_FACE_PROMPT_PARTS.reduce(
-            (parts, part) => ({ ...parts, [part.id]: String(result.prompt_parts?.[part.id] ?? current[part.id] ?? "") }),
-            {}
-          )
+        refinedPromptParts = HEAD_FACE_PROMPT_PARTS.reduce(
+          (parts, part) => ({ ...parts, [part.id]: String(result.prompt_parts?.[part.id] ?? headPromptParts[part.id] ?? "") }),
+          {}
         );
+        setHeadPromptParts(refinedPromptParts);
       }
       if (result?.negative_prompt !== undefined) {
-        setHeadNegativePrompt(String(result.negative_prompt || ""));
+        refinedNegativePrompt = String(result.negative_prompt || "");
+        setHeadNegativePrompt(refinedNegativePrompt);
       }
       if (result?.assistant_reply !== undefined) {
         setHeadAssistantReply(String(result.assistant_reply || ""));
       }
       if (result) {
         setHeadInstruction("");
-        setLocalStatus("head_prompt_refined");
+        setActiveReferenceAction("preview:head_face");
+        const previewResult = await submitHeadPreview({
+          profileId,
+          promptParts: refinedPromptParts,
+          negativePrompt: refinedNegativePrompt,
+        });
+        setLocalStatus(previewResult?.status || "preview_submitted");
       }
     } finally {
       setActiveReferenceAction("");
     }
+  }
+
+  async function submitHeadPreview({ profileId, promptParts, negativePrompt }) {
+    const prompt = composeHeadFacePrompt(promptParts);
+    return onCreateHeadPreview?.(profileId, {
+      prompt,
+      prompt_parts: promptParts,
+      negative_prompt: negativePrompt,
+    });
   }
 
   async function createHeadPreview() {
@@ -940,10 +957,10 @@ export function AvatarGenerationCard({
     setActiveReferenceAction("preview:head_face");
     setLocalStatus("");
     try {
-      const result = await onCreateHeadPreview?.(profileId, {
-        prompt: headPrompt,
-        prompt_parts: headPromptParts,
-        negative_prompt: headNegativePrompt,
+      const result = await submitHeadPreview({
+        profileId,
+        promptParts: headPromptParts,
+        negativePrompt: headNegativePrompt,
       });
       if (result) {
         setLocalStatus(result.status || "preview_submitted");
@@ -1224,7 +1241,11 @@ export function AvatarGenerationCard({
                 </label>
                 <div className="row">
                   <button className="btn btn-primary" type="submit" disabled={busy || !headInstruction.trim()}>
-                    {activeReferenceAction === "refine:head_face" ? "Refining..." : "Refine Prompt"}
+                    {activeReferenceAction === "refine:head_face"
+                      ? "Refining..."
+                      : activeReferenceAction === "preview:head_face"
+                        ? "Creating Preview..."
+                        : "Refine Prompt"}
                   </button>
                   <button className="btn" type="button" disabled={busy || !headPrompt.trim()} onClick={createHeadPreview}>
                     {activeReferenceAction === "preview:head_face" ? "Requesting..." : "Create Preview"}
