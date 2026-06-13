@@ -13149,10 +13149,20 @@ class NodeControlState:
 
     def _execution_queue_lane_admission(self, job: dict) -> dict:
         lane = str(job.get("runtime_lane") or "").strip().lower()
-        if lane not in {"visual_gpu", "visual_cpu", "training_runtime"}:
+        if lane not in {"vision_llm", "visual_gpu", "visual_cpu", "training_runtime"}:
             return {"allowed": True, "reason": "lane_does_not_require_admission"}
         request = job.get("request") if isinstance(job.get("request"), dict) else {}
         task_family = str(request.get("task_family") or "").strip().lower()
+        if lane == "vision_llm":
+            visual_work = self._local_visual_exclusive_work_snapshot_nowait()
+            if max(int(visual_work.get("active_count") or 0), 0) > 0:
+                return {
+                    "allowed": False,
+                    "reason": "visual_work_active",
+                    "runtime_lane": lane,
+                    "visual_work": visual_work,
+                }
+            return {"allowed": True, "reason": "vision_lane_ready", "runtime_lane": lane}
         if lane in {"visual_gpu", "visual_cpu"} and task_family not in {"task.image_generation", "task.generation.image"}:
             return {"allowed": True, "reason": "non_image_visual_lane_job"}
         if lane in {"visual_gpu", "visual_cpu"}:
@@ -13209,6 +13219,34 @@ class NodeControlState:
             "reason": "training_runtime_executor_not_ready",
             "runtime_lane": lane,
             "scheduler_request": scheduler_request,
+        }
+
+    def _local_visual_exclusive_work_snapshot_nowait(self) -> dict:
+        jobs = []
+        queued_count = 0
+        active_count = 0
+        for queue_key, task_families in (
+            ("visual_gpu", {"task.image_generation", "task.generation.image"}),
+            ("visual_cpu", {"task.image_generation", "task.generation.image"}),
+            ("training_runtime", {"task.training", "task.lora_training"}),
+        ):
+            if self._execution_queue is not None and hasattr(self._execution_queue, "matching_work_snapshot_nowait"):
+                snapshot = self._execution_queue.matching_work_snapshot_nowait(
+                    queue=queue_key,
+                    task_families=task_families,
+                    statuses={"queued", "running"},
+                )
+            else:
+                snapshot = {"jobs": [], "queued_count": 0, "active_count": 0}
+            jobs.extend(list(snapshot.get("jobs") or []))
+            queued_count += max(int(snapshot.get("queued_count") or 0), 0)
+            active_count += max(int(snapshot.get("active_count") or 0), 0)
+        return {
+            "queues": ["visual_gpu", "visual_cpu", "training_runtime"],
+            "statuses": ["queued", "running"],
+            "jobs": jobs,
+            "queued_count": queued_count,
+            "active_count": active_count,
         }
 
     def _local_vision_work_snapshot_nowait(self) -> dict:

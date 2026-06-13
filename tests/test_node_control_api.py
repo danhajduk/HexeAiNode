@@ -7348,6 +7348,85 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(visual_ran.is_set())
             self.assertEqual([call["component_id"] for call in service_manager.calls], ["visual_gpu"])
 
+    async def test_vision_lane_waits_for_active_visual_work(self):
+        class _VisualReadyServiceManager:
+            def request_local_scheduler_component(self, *, component_id: str, importance: str | None = None, request_metadata=None):
+                return {
+                    "status": "ok",
+                    "component_id": component_id,
+                    "start_result": {"target": component_id, "result": "ready_for_job_submission"},
+                    "decision": {"decision": "allowed", "reason": "compatible"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=_VisualReadyServiceManager(),
+            )
+            release_visual = asyncio.Event()
+            vision_ran = asyncio.Event()
+
+            async def _visual_runner():
+                await release_visual.wait()
+                return {"status": "ok"}
+
+            async def _vision_runner():
+                vision_ran.set()
+                return {"status": "ok"}
+
+            visual = await state._execution_queue.enqueue(
+                queue="visual_gpu",
+                importance="normal",
+                job_name="active-visual",
+                request_payload={
+                    "task_id": "active-visual",
+                    "task_family": "task.image_generation",
+                    "constraints": {"routing_policy": {"mode": "local_only"}},
+                },
+                runner=_visual_runner,
+            )
+            for _ in range(50):
+                visual_status = await state._execution_queue.job_status(job_id=visual["job_id"])
+                if visual_status.get("status") == "running":
+                    break
+                await asyncio.sleep(0.01)
+            self.assertEqual(visual_status["status"], "running")
+
+            vision = await state._execution_queue.enqueue(
+                queue="vision_llm",
+                importance="normal",
+                job_name="vision-after-visual",
+                request_payload={
+                    "task_id": "vision-after-visual",
+                    "task_family": "task.vision_analysis",
+                    "constraints": {"routing_policy": {"mode": "local_only"}},
+                },
+                runner=_vision_runner,
+            )
+
+            for _ in range(50):
+                vision_status = await state._execution_queue.job_status(job_id=vision["job_id"])
+                if vision_status.get("blocked_reason") == "visual_work_active":
+                    break
+                await asyncio.sleep(0.01)
+
+            self.assertEqual(vision_status["status"], "queued")
+            self.assertEqual(vision_status["blocked_reason"], "visual_work_active")
+            self.assertFalse(vision_ran.is_set())
+
+            release_visual.set()
+            for _ in range(50):
+                vision_status = await state._execution_queue.job_status(job_id=vision["job_id"])
+                if vision_status.get("status") == "completed":
+                    break
+                await asyncio.sleep(0.01)
+
+            self.assertEqual(vision_status["status"], "completed")
+            self.assertTrue(vision_ran.is_set())
+
     def test_execution_queue_visual_lane_admission_allows_ready_runtime(self):
         class _VisualReadyServiceManager:
             def request_local_scheduler_component(self, *, component_id: str, importance: str | None = None, request_metadata=None):
