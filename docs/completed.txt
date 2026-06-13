@@ -573,3 +573,4 @@ Task 998: Implement local scheduler transition executor - Completed on 06/13/202
 Task 999: Surface local scheduler status and controls in the node UI - Completed on 06/13/2026 09:40
 Task 1000: Add Prompt V3 queue importance and wait budget fields - Completed on 06/13/2026 09:40
 Task 1001: Redesign queue admission around importance and wait deadlines - Completed on 06/13/2026 09:40
+Task 1002: Add local-unavailable cloud spillover routing - Completed on 06/13/2026 09:40

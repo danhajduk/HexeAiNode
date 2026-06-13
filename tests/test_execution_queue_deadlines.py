@@ -77,6 +77,25 @@ class ExecutionQueueDeadlineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rejected["status"], "rejected")
         self.assertEqual(rejected["error_code"], "rejected_deadline_unreachable")
 
+    async def test_queue_start_estimate_reports_new_job_wait(self):
+        release = asyncio.Event()
+        queue = ExecutionQueueService(logger=logging.getLogger("queue-deadline-test"), local_concurrency=1, check_after_seconds=10)
+        blocker = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="blocker",
+            request_payload={"task_id": "blocker"},
+            runner=lambda: self._blocking(release),
+        )
+        await self._wait_for_status(queue, blocker["job_id"], "running")
+
+        estimate = await queue.queue_start_estimate(queue="local")
+
+        release.set()
+        await self._wait_for_status(queue, blocker["job_id"], "completed")
+        self.assertEqual(estimate["queue"], "local")
+        self.assertEqual(estimate["estimated_start_seconds"], 10)
+
     async def _completed(self):
         return {"status": "ok"}
 

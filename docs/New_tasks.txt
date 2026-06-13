@@ -48,7 +48,6 @@ Standards reference:
 Do not edit above this line:
 #######################################################################
 
-[TODO] Task 1002: Add local-unavailable cloud spillover routing
 [TODO] Task 1003: Add queue deadline monitoring and escalation
 [TODO] Task 1004: Surface queue priority wait and spillover decisions in UI and APIs
 [TODO] Task 1005: Standardize ecosystem names for image and training runtimes

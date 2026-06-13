@@ -11631,7 +11631,16 @@ class NodeControlState:
             routing_mode=routing_mode,
         )
         original_queue = queue_key
-        if await self._should_spill_local_preferred_to_cloud(
+        wait_budget_spillover = await self._should_spill_local_wait_budget_to_cloud(
+            request=request,
+            queue_intent=queue_intent,
+            queue_key=queue_key,
+        )
+        if wait_budget_spillover.get("spillover"):
+            queue_key = "cloud"
+            spillover = True
+            reason = "local_wait_budget_spillover"
+        elif await self._should_spill_local_preferred_to_cloud(
             request=request,
             importance=importance,
             routing_mode=routing_mode,
@@ -11667,6 +11676,9 @@ class NodeControlState:
                 "original_queue": original_queue,
                 "spillover": spillover,
                 "reason": reason,
+                "local_unavailable_reason": wait_budget_spillover.get("local_unavailable_reason") if wait_budget_spillover else None,
+                "cloud_selected_reason": wait_budget_spillover.get("cloud_selected_reason") if wait_budget_spillover else None,
+                "local_wait_estimate": wait_budget_spillover.get("local_wait_estimate") if wait_budget_spillover else None,
             },
         }
 
@@ -12102,6 +12114,40 @@ class NodeControlState:
         if int(pressure.get("pending_count") or 0) < threshold:
             return False
         return self._cloud_execution_queue_available(request=request)
+
+    async def _should_spill_local_wait_budget_to_cloud(
+        self,
+        *,
+        request: TaskExecutionRequest,
+        queue_intent: dict,
+        queue_key: str,
+    ) -> dict:
+        if queue_key != "local":
+            return {"spillover": False, "reason": "not_local_queue"}
+        if not isinstance(queue_intent, dict) or not bool(queue_intent.get("allow_cloud_spillover")):
+            return {"spillover": False, "reason": "cloud_spillover_not_allowed"}
+        try:
+            max_wait_seconds = int(queue_intent.get("max_wait_seconds"))
+        except (TypeError, ValueError):
+            return {"spillover": False, "reason": "no_wait_budget"}
+        if max_wait_seconds < 0:
+            return {"spillover": False, "reason": "invalid_wait_budget"}
+        estimate = await self._execution_queue.queue_start_estimate(queue="local")
+        if int(estimate.get("estimated_start_seconds") or 0) <= max_wait_seconds:
+            return {"spillover": False, "reason": "local_wait_budget_feasible", "local_wait_estimate": estimate}
+        if not self._cloud_execution_queue_available(request=request):
+            return {
+                "spillover": False,
+                "reason": "cloud_unavailable",
+                "local_unavailable_reason": "busy_until_after_deadline",
+                "local_wait_estimate": estimate,
+            }
+        return {
+            "spillover": True,
+            "local_unavailable_reason": "busy_until_after_deadline",
+            "cloud_selected_reason": "cloud_can_meet_wait_budget",
+            "local_wait_estimate": estimate,
+        }
 
     def _cloud_execution_queue_available(self, *, request: TaskExecutionRequest) -> bool:
         if self._provider_runtime_manager is None or not hasattr(self._provider_runtime_manager, "provider_selection_context_payload"):

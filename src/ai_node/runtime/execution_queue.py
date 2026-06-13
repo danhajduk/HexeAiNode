@@ -268,6 +268,19 @@ class ExecutionQueueService:
                 "pending_count": queued_count + active_count,
             }
 
+    async def queue_start_estimate(self, *, queue: str, new_job_position: int | None = None) -> dict:
+        queue_key = self._normalize_queue_key(queue)
+        async with self._lock:
+            position = int(new_job_position or (len(self._queues.get(queue_key) or []) + 1))
+            estimated_seconds = self._estimated_start_seconds_locked(queue_key=queue_key, position=position)
+            return {
+                "queue": queue_key,
+                "position": position,
+                "estimated_start_seconds": estimated_seconds,
+                "estimated_start_at": (local_now() + timedelta(seconds=estimated_seconds)).isoformat(),
+                "confidence": "rough",
+            }
+
     async def has_matching_work(
         self,
         *,
