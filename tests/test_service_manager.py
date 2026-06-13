@@ -169,6 +169,23 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(metrics["gpu_util_percent"], 73.0)
         self.assertEqual(metrics["gpu_mem_util_percent"], 44.0)
 
+    def test_gpu_process_metrics_treats_idle_pmon_dashes_as_zero(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+        def _fake_run(cmd, check, capture_output, text, env=None):
+            if cmd[:2] == ["nvidia-smi", "--query-compute-apps=pid,used_memory"]:
+                return _Completed("222, 4096\n")
+            if cmd[:3] == ["nvidia-smi", "pmon", "-c"]:
+                return _Completed("# gpu pid type sm mem enc dec command\n0 222 C - - - - llama-server\n")
+            return _Completed("", returncode=1)
+
+        with patch("subprocess.run", side_effect=_fake_run):
+            metrics = manager._gpu_process_metrics(222)
+
+        self.assertEqual(metrics["vram_mib"], 4096)
+        self.assertEqual(metrics["gpu_util_percent"], 0.0)
+        self.assertEqual(metrics["gpu_mem_util_percent"], 0.0)
+
     def test_local_scheduler_stats_record_execution_timing_separately(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = LocalSchedulerStateStore(state_dir=Path(tmp), logger=logging.getLogger("service-manager-test"))

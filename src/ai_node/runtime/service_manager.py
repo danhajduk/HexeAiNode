@@ -1969,8 +1969,12 @@ class UserSystemdServiceManager:
                     gpu_mem_util = self._parse_nvidia_number(parts[4])
                     if gpu_util is not None:
                         metrics["gpu_util_percent"] = round(gpu_util, 2)
+                    elif str(parts[3]).strip() == "-":
+                        metrics["gpu_util_percent"] = 0.0
                     if gpu_mem_util is not None:
                         metrics["gpu_mem_util_percent"] = round(gpu_mem_util, 2)
+                    elif str(parts[4]).strip() == "-":
+                        metrics["gpu_mem_util_percent"] = 0.0
                     break
         except Exception:
             pass
