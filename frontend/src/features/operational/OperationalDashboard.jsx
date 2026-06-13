@@ -8,7 +8,6 @@ import { ProviderRefreshCard } from "./cards/ProviderRefreshCard";
 import { ResolvedTasksCard } from "./cards/ResolvedTasksCard";
 import { RuntimeServicesCard } from "./cards/RuntimeServicesCard";
 import { LocalResidencyCard } from "./cards/LocalResidencyCard";
-import { ImageTemplatesCard } from "./cards/ImageTemplatesCard";
 import { ManualImageGenerationCard } from "./cards/ManualImageGenerationCard";
 import { AvatarGenerationCard } from "./cards/AvatarGenerationCard";
 import { RecentActivityCard } from "./cards/RecentActivityCard";
@@ -200,7 +199,6 @@ export function OperationalDashboard({
             </article>
             <RuntimeServicesCard {...runtimeServicesProps} />
             <LocalResidencyCard {...runtimeServicesProps} />
-            <ImageTemplatesCard {...imageTemplatesProps} />
             <OperationalActionsCard {...operationalActions} />
           </>
         ) : null}
