@@ -2128,6 +2128,87 @@
   background: hsl(var(--sx-bg));
 }
 
+.runtime-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.runtime-residency-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.runtime-residency-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-bg));
+}
+
+.runtime-residency-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.runtime-residency-card-header > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.runtime-residency-card-header strong,
+.runtime-residency-card-header code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-task-availability {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.runtime-task-availability h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.runtime-task-availability-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.runtime-task-availability-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(160px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  overflow: hidden;
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: var(--sx-radius-sm);
+}
+
+.runtime-task-availability-row code,
+.runtime-task-availability-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mini-model-card.is-selected {
   border-color: hsl(var(--sx-success));
   box-shadow: 0 0 0 1px hsl(var(--sx-success) / 0.22);

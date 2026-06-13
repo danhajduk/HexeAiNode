@@ -12716,6 +12716,38 @@ class NodeControlState:
         result = self._service_manager.stop(target=target)
         return {"status": "ok", **result, "services": self._service_manager.get_status()}
 
+    def local_scheduler_status(self) -> dict:
+        if self._service_manager is None or not hasattr(self._service_manager, "get_status"):
+            raise ValueError("service manager is not configured")
+        services = self._service_manager.get_status()
+        scheduler = services.get("local_scheduler") if isinstance(services, dict) else None
+        return {"status": "ok", "local_scheduler": scheduler or {}, "services": services}
+
+    def request_local_scheduler_component(
+        self,
+        *,
+        component_id: str,
+        importance: str | None = None,
+        request_metadata: dict | None = None,
+    ) -> dict:
+        if self._service_manager is None or not hasattr(self._service_manager, "request_local_scheduler_component"):
+            raise ValueError("local scheduler is not configured")
+        result = self._service_manager.request_local_scheduler_component(
+            component_id=component_id,
+            importance=importance,
+            request_metadata=request_metadata or {},
+        )
+        return {"status": result.get("status") or "ok", **result}
+
+    def release_local_scheduler_component(self, *, component_id: str, request_metadata: dict | None = None) -> dict:
+        if self._service_manager is None or not hasattr(self._service_manager, "release_local_scheduler_component"):
+            raise ValueError("local scheduler is not configured")
+        result = self._service_manager.release_local_scheduler_component(
+            component_id=component_id,
+            request_metadata=request_metadata or {},
+        )
+        return {"status": result.get("status") or "ok", **result}
+
     async def _assert_manual_comfyui_takeover_ready(self) -> dict:
         preflight = await self.manual_comfyui_takeover_preflight()
         if not preflight.get("ready"):
@@ -14488,6 +14520,12 @@ class ManualImageVisionDescribeRequest(BaseModel):
     image_data_base64: str | None = None
 
 
+class LocalSchedulerComponentRequest(BaseModel):
+    component_id: str
+    importance: str | None = None
+    request_metadata: dict | None = None
+
+
 class AvatarProfileSaveRequest(BaseModel):
     name: str
     description: str | None = None
@@ -15703,6 +15741,34 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/services/status")
     def get_services_status():
         return state.service_status_payload()
+
+    @app.get("/api/local-scheduler/status")
+    def get_local_scheduler_status():
+        try:
+            return state.local_scheduler_status()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/local-scheduler/request")
+    def post_local_scheduler_request(payload: LocalSchedulerComponentRequest):
+        try:
+            return state.request_local_scheduler_component(
+                component_id=payload.component_id,
+                importance=payload.importance,
+                request_metadata=payload.request_metadata or {},
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/local-scheduler/release")
+    def post_local_scheduler_release(payload: LocalSchedulerComponentRequest):
+        try:
+            return state.release_local_scheduler_component(
+                component_id=payload.component_id,
+                request_metadata=payload.request_metadata or {},
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/services/comfyui-webui/preflight")
     async def get_comfyui_webui_preflight():

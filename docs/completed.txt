@@ -570,3 +570,4 @@ Task 995: Add local residency scheduler state contract - Completed on 06/13/2026
 Task 996: Track local model resource usage statistics - Completed on 06/13/2026 09:40
 Task 997: Add local model priority and compatibility policy - Completed on 06/13/2026 09:40
 Task 998: Implement local scheduler transition executor - Completed on 06/13/2026 09:40
+Task 999: Surface local scheduler status and controls in the node UI - Completed on 06/13/2026 09:40

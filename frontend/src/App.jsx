@@ -147,6 +147,7 @@ export default function App() {
   const [redeclaringCapabilities, setRedeclaringCapabilities] = useState(false);
   const [rerequestingTrust, setRerequestingTrust] = useState(false);
   const [restartingServiceTarget, setRestartingServiceTarget] = useState("");
+  const [localSchedulerBusyTarget, setLocalSchedulerBusyTarget] = useState("");
   const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
   const [retryingBackend, setRetryingBackend] = useState(false);
   const [providerCredentials, setProviderCredentials] = useState(null);
@@ -937,6 +938,27 @@ export default function App() {
 
   async function onRestartService(target) {
     await onControlService("restart", target);
+  }
+
+  async function onControlLocalScheduler(action, componentId) {
+    if (localSchedulerBusyTarget) {
+      return;
+    }
+    setLocalSchedulerBusyTarget(componentId);
+    setError("");
+    try {
+      await apiPost(`/api/local-scheduler/${action}`, {
+        component_id: componentId,
+        importance: action === "request" ? "normal" : undefined,
+        request_metadata: { source: "runtime_ui" },
+      });
+      await loadStatus();
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+    } finally {
+      setLocalSchedulerBusyTarget("");
+    }
   }
 
   async function onSubmitManualImageGeneration(payload) {
@@ -2402,6 +2424,27 @@ export default function App() {
   const comfyuiWebuiService = uiState.serviceStatus?.comfyui_webui || {};
   const comfyuiWebuiObject = comfyuiWebuiService && typeof comfyuiWebuiService === "object" ? comfyuiWebuiService : {};
   const comfyuiWebuiBusy = restartingServiceTarget === "comfyui_webui";
+  const providerSet = new Set(uiState.capabilitySummary.enabledProviders || []);
+  const localProviderEnabled = providerSet.has("local");
+  const cloudProviderEnabled = Array.from(providerSet).some((providerId) => providerId && providerId !== "local");
+  const taskProviderMode =
+    localProviderEnabled && cloudProviderEnabled
+      ? "local+cloud"
+      : localProviderEnabled
+        ? "local"
+        : cloudProviderEnabled
+          ? "cloud"
+          : "unavailable";
+  const taskAvailability = resolvedNodeTasks.slice(0, 16).map((taskFamily) => ({
+    taskFamily,
+    providerMode: taskProviderMode,
+    reason:
+      taskProviderMode === "unavailable"
+        ? "no_enabled_provider"
+        : taskProviderMode === "local+cloud"
+          ? "local_and_cloud_providers_enabled"
+          : `${taskProviderMode}_provider_enabled`,
+  }));
   const operationalDashboardProps = {
     currentSection: currentOperationalSection,
     sections: operationalSections,
@@ -2473,8 +2516,12 @@ export default function App() {
     runtimeServicesProps: {
       serviceStatus: uiState.serviceStatus,
       comfyuiWebuiBusy,
+      localSchedulerBusyTarget,
+      taskAvailability,
       onStartComfyuiWebui: () => onControlService("start", "comfyui_webui"),
       onStopComfyuiWebui: () => onControlService("stop", "comfyui_webui"),
+      onRequestLocalScheduler: (componentId) => onControlLocalScheduler("request", componentId),
+      onReleaseLocalScheduler: (componentId) => onControlLocalScheduler("release", componentId),
       onOpenComfyuiWebui: () => {
         const browserUrl = buildComfyuiWebuiBrowserUrl(comfyuiWebuiObject.url);
         if (browserUrl) {
