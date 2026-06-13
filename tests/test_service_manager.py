@@ -19,9 +19,10 @@ from ai_node.runtime.service_manager import UserSystemdServiceManager
 
 
 class _Completed:
-    def __init__(self, stdout: str):
+    def __init__(self, stdout: str, returncode: int = 0):
         self.stdout = stdout
         self.stderr = ""
+        self.returncode = returncode
 
 
 class _UnixHTTPServer(socketserver.UnixStreamServer):
@@ -123,6 +124,50 @@ class ServiceManagerTests(unittest.TestCase):
             self.assertEqual(components["visual_runtime"]["usage_statistics"]["current"]["active"], 0)
             self.assertTrue((Path(tmp) / "visual_runtime.state.json").exists())
             self.assertTrue((Path(tmp) / "stats.json").exists())
+
+    def test_local_scheduler_visual_runtime_records_gpu_usage_statistics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LocalSchedulerStateStore(state_dir=Path(tmp), logger=logging.getLogger("service-manager-test"))
+
+            payload = store.status_from_services(
+                services={
+                    "comfyui_gpu": {
+                        "service_id": "comfyui_gpu",
+                        "state": "running",
+                        "pid": 5151,
+                        "vram_mib": 4096,
+                        "gpu_util_percent": 61.5,
+                        "gpu_mem_util_percent": 42.0,
+                    },
+                    "comfyui_cpu": {"service_id": "comfyui_cpu", "state": "stopped"},
+                    "comfyui_webui": {"service_id": "comfyui_webui", "state": "stopped"},
+                    "gpu_exclusive": {"sd_scripts_training_active": False},
+                }
+            )
+
+            components = {item["component_id"]: item for item in payload["components"]}
+            stats = components["visual_runtime"]["usage_statistics"]
+            self.assertEqual(stats["current"]["vram_mib"], 4096)
+            self.assertEqual(stats["current"]["gpu_util_percent"], 61.5)
+            self.assertEqual(stats["rolling_max"]["vram_mib"], 4096)
+            self.assertEqual(stats["rolling_max"]["gpu_util_percent"], 61.5)
+
+    def test_gpu_process_metrics_reads_vram_and_gpu_util_by_pid(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+        def _fake_run(cmd, check, capture_output, text, env=None):
+            if cmd[:2] == ["nvidia-smi", "--query-compute-apps=pid,used_memory"]:
+                return _Completed("111, 2048\n222, 4096\n")
+            if cmd[:3] == ["nvidia-smi", "pmon", "-c"]:
+                return _Completed("# gpu pid type sm mem enc dec command\n0 222 C 73 44 - - python3\n")
+            return _Completed("", returncode=1)
+
+        with patch("subprocess.run", side_effect=_fake_run):
+            metrics = manager._gpu_process_metrics(222)
+
+        self.assertEqual(metrics["vram_mib"], 4096)
+        self.assertEqual(metrics["gpu_util_percent"], 73.0)
+        self.assertEqual(metrics["gpu_mem_util_percent"], 44.0)
 
     def test_local_scheduler_stats_record_execution_timing_separately(self):
         with tempfile.TemporaryDirectory() as tmp:

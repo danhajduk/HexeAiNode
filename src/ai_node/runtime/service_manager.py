@@ -986,6 +986,7 @@ class UserSystemdServiceManager:
         pid = self._query_container_pid(self._local_llm_container_name) if script_exists else 0
         cpu_percent = self._process_cpu_percent(service_id, pid)
         mem_percent = self._process_mem_percent(pid)
+        gpu_metrics = self._gpu_process_metrics(pid)
         active_model_ids = self._active_local_llm_model_ids()
         return {
             "service_id": service_id,
@@ -993,6 +994,7 @@ class UserSystemdServiceManager:
             "state": state,
             "cpu_percent": cpu_percent,
             "mem_percent": mem_percent,
+            **gpu_metrics,
             "pid": pid or None,
             "boot_order": 30,
             "managed_by": "llamacpp-control",
@@ -1018,12 +1020,14 @@ class UserSystemdServiceManager:
             state = "loading"
         if not script_exists:
             state = "unknown"
+        gpu_metrics = self._gpu_process_metrics(pid)
         return {
             "service_id": service_id,
             "service_name": service_id,
             "state": state,
             "cpu_percent": cpu_percent,
             "mem_percent": mem_percent,
+            **gpu_metrics,
             "pid": pid or None,
             "boot_order": 35,
             "managed_by": "llamacpp-vision-control",
@@ -1050,11 +1054,17 @@ class UserSystemdServiceManager:
             state = "starting"
         if not script_exists:
             state = "unknown"
+        cpu_percent = self._process_cpu_percent(service_id, pid)
+        mem_percent = self._process_mem_percent(pid)
+        gpu_metrics = self._gpu_process_metrics(pid)
         return {
             "service_id": service_id,
             "service_name": service_id,
             "display_name": f"Visual Runtime {runtime_key.upper()}",
             "state": state,
+            "cpu_percent": cpu_percent,
+            "mem_percent": mem_percent,
+            **gpu_metrics,
             "pid": pid or None,
             "boot_order": 40 if runtime_key == "gpu" else 45,
             "managed_by": "comfyui-control",
@@ -1910,6 +1920,61 @@ class UserSystemdServiceManager:
             return None
         percent = (rss / total) * 100.0
         return max(0.0, min(100.0, round(percent, 2)))
+
+    @staticmethod
+    def _parse_nvidia_number(value: object) -> float | None:
+        raw = str(value or "").strip()
+        if not raw or raw in {"-", "[N/A]", "N/A"}:
+            return None
+        try:
+            return float(raw.split()[0])
+        except Exception:
+            return None
+
+    def _gpu_process_metrics(self, pid: int) -> dict:
+        if pid <= 0:
+            return {}
+        metrics: dict[str, float | int] = {}
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                for line in str(result.stdout or "").splitlines():
+                    parts = [part.strip() for part in line.split(",")]
+                    if len(parts) < 2 or parts[0] != str(pid):
+                        continue
+                    vram = self._parse_nvidia_number(parts[1])
+                    if vram is not None:
+                        metrics["vram_mib"] = int(round(vram))
+                    break
+        except Exception:
+            pass
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "pmon", "-c", "1", "-s", "um"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                for line in str(result.stdout or "").splitlines():
+                    parts = line.split()
+                    if not parts or parts[0].startswith("#") or len(parts) < 5 or parts[1] != str(pid):
+                        continue
+                    gpu_util = self._parse_nvidia_number(parts[3])
+                    gpu_mem_util = self._parse_nvidia_number(parts[4])
+                    if gpu_util is not None:
+                        metrics["gpu_util_percent"] = round(gpu_util, 2)
+                    if gpu_mem_util is not None:
+                        metrics["gpu_mem_util_percent"] = round(gpu_mem_util, 2)
+                    break
+        except Exception:
+            pass
+        return metrics
 
     @staticmethod
     def _read_cpu_total() -> float | None:

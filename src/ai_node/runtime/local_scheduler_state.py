@@ -522,7 +522,35 @@ def _resource_from_service(service: object) -> dict:
         "pid": service.get("pid"),
         "cpu_percent": _numeric(service.get("cpu_percent")),
         "mem_percent": _numeric(service.get("mem_percent")),
+        "vram_mib": _numeric(service.get("vram_mib")),
+        "gpu_util_percent": _numeric(service.get("gpu_util_percent")),
+        "gpu_mem_util_percent": _numeric(service.get("gpu_mem_util_percent")),
     }
+
+
+def _aggregate_resource_metrics(entries: list[dict]) -> dict:
+    resources = [_resource_from_service(entry) for entry in entries if isinstance(entry, dict)]
+    vram_values = [value for value in (resource.get("vram_mib") for resource in resources) if isinstance(value, (int, float))]
+    gpu_values = [
+        value for value in (resource.get("gpu_util_percent") for resource in resources) if isinstance(value, (int, float))
+    ]
+    gpu_mem_values = [
+        value for value in (resource.get("gpu_mem_util_percent") for resource in resources) if isinstance(value, (int, float))
+    ]
+    cpu_values = [value for value in (resource.get("cpu_percent") for resource in resources) if isinstance(value, (int, float))]
+    mem_values = [value for value in (resource.get("mem_percent") for resource in resources) if isinstance(value, (int, float))]
+    metrics = {}
+    if vram_values:
+        metrics["vram_mib"] = sum(vram_values)
+    if gpu_values:
+        metrics["gpu_util_percent"] = max(gpu_values)
+    if gpu_mem_values:
+        metrics["gpu_mem_util_percent"] = max(gpu_mem_values)
+    if cpu_values:
+        metrics["cpu_percent"] = min(sum(cpu_values), 100.0)
+    if mem_values:
+        metrics["mem_percent"] = min(sum(mem_values), 100.0)
+    return metrics
 
 
 def metrics_sample_from_observed(observed: dict) -> dict:
@@ -567,7 +595,7 @@ def _aggregate_visual_runtime(services: dict) -> tuple[str, str, list, dict]:
         for entry in entries
         if isinstance(entry, dict) and _observed_from_service_state(_service_state(entry)) in {"running", "starting"}
     ]
-    return observed, "runtime_observed", [], {"runtimes": active_entries}
+    return observed, "runtime_observed", [], {"runtimes": active_entries, **_aggregate_resource_metrics(entries)}
 
 
 def observed_component_state(*, component_id: str, services: dict) -> dict:

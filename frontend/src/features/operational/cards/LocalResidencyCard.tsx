@@ -9,6 +9,17 @@ function formatPercent(value) {
   return Number.isFinite(parsed) ? `${parsed.toFixed(1)}%` : "-";
 }
 
+function formatMib(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return "-";
+  }
+  if (parsed >= 1024) {
+    return `${(parsed / 1024).toFixed(1)}G`;
+  }
+  return `${Math.round(parsed)}M`;
+}
+
 function compactText(value, fallback = "unknown") {
   const text = String(value || "").trim();
   return text || fallback;
@@ -74,20 +85,28 @@ export function LocalResidencyCard({
               </div>
               <div className="runtime-residency-metrics">
                 <span>
-                  <b>CPU</b>
-                  <code>{formatPercent(stats.current.cpu_percent)}</code>
+                  <b>VRAM</b>
+                  <code>{formatMib(stats.current.vram_mib)}</code>
                 </span>
                 <span>
-                  <b>RAM</b>
-                  <code>{formatPercent(stats.current.ram_percent)}</code>
+                  <b>Avg VRAM</b>
+                  <code>{formatMib(stats.average.vram_mib)}</code>
                 </span>
                 <span>
-                  <b>Avg</b>
-                  <code>{formatPercent(stats.average.cpu_percent)}</code>
+                  <b>Max VRAM</b>
+                  <code>{formatMib(stats.max.vram_mib)}</code>
                 </span>
                 <span>
-                  <b>Max</b>
-                  <code>{formatPercent(stats.max.cpu_percent)}</code>
+                  <b>GPU</b>
+                  <code>{formatPercent(stats.current.gpu_util_percent)}</code>
+                </span>
+                <span>
+                  <b>Avg GPU</b>
+                  <code>{formatPercent(stats.average.gpu_util_percent)}</code>
+                </span>
+                <span>
+                  <b>Max GPU</b>
+                  <code>{formatPercent(stats.max.gpu_util_percent)}</code>
                 </span>
               </div>
               {reason ? (
