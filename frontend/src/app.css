@@ -2499,6 +2499,12 @@
   background: hsl(var(--sx-panel) / 0.45);
 }
 
+.runtime-residency-job-meta > div.is-empty {
+  border-style: dashed;
+  background: hsl(var(--sx-panel) / 0.25);
+  opacity: 0.72;
+}
+
 .runtime-residency-job-meta span {
   color: hsl(var(--sx-muted-foreground));
   font-size: 11px;

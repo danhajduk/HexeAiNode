@@ -145,19 +145,21 @@ function laneWorkMetadata({ executionQueue, laneName }) {
 }
 
 function RuntimeWorkMetadata({ items }) {
-  const visibleItems = Array.isArray(items) ? items.filter((item) => item?.job) : [];
-  if (!visibleItems.length) {
-    return null;
-  }
+  const rows = Array.isArray(items) ? items : [];
   return (
     <div className="runtime-residency-job-meta">
-      {visibleItems.map((item) => (
-        <div key={item.label}>
-          <span>{item.label}</span>
-          <strong>{compactJobName(item.job)}</strong>
-          <code>{compactJobMeta(item.job)}</code>
-        </div>
-      ))}
+      {rows.map((item) => {
+        const hasJob = Boolean(item?.job);
+        return (
+          <div className={hasJob ? "" : "is-empty"} key={item.label}>
+            <span>{item.label}</span>
+            <strong>
+              {hasJob ? compactJobName(item.job) : `No ${String(item.label || "queued").toLowerCase()} job`}
+            </strong>
+            <code>{hasJob ? compactJobMeta(item.job) : "empty"}</code>
+          </div>
+        );
+      })}
     </div>
   );
 }
