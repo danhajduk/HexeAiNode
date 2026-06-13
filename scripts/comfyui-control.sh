@@ -348,6 +348,20 @@ health_probe() {
   curl -fsS --unix-socket "$(target_health_socket "$runtime")" "http://comfyui/health"
 }
 
+unload_models() {
+  local runtime="$1"
+  if [[ ! -S "$(target_socket "$runtime")" ]]; then
+    echo "ComfyUI $runtime socket is not available; cannot unload models" >&2
+    return 1
+  fi
+  curl -fsS \
+    --unix-socket "$(target_socket "$runtime")" \
+    -H 'Content-Type: application/json' \
+    -X POST \
+    -d '{"unload_models": true, "free_memory": true}' \
+    "http://comfyui/free"
+}
+
 wait_ready() {
   local runtime="$1"
   local deadline
@@ -494,6 +508,12 @@ case "$command" in
     compose rm -f comfyui
     rm -f "$COMFYUI_GPU_SOCKET_PATH" "$COMFYUI_GPU_HEALTH_SOCKET" "$COMFYUI_CPU_SOCKET_PATH" "$COMFYUI_CPU_HEALTH_SOCKET"
     ;;
+  unload-model)
+    for runtime in $(each_target); do
+      unload_models "$runtime"
+      health_probe "$runtime" || true
+    done
+    ;;
   restart)
     "$0" "$target" stop
     "$0" "$target" start
@@ -514,8 +534,8 @@ case "$command" in
     done
     ;;
   *)
-    echo "Usage: $0 [gpu|cpu|all] {prepare|gate|download-controlnets|download-pulid|build|create|start|stop|restart|status|logs|ready}" >&2
-    echo "       $0 {prepare|gate|download-controlnets|download-pulid|build|create|start|stop|restart|status|logs|ready}  # defaults to gpu" >&2
+    echo "Usage: $0 [gpu|cpu|all] {prepare|gate|download-controlnets|download-pulid|build|create|start|stop|unload-model|restart|status|logs|ready}" >&2
+    echo "       $0 {prepare|gate|download-controlnets|download-pulid|build|create|start|stop|unload-model|restart|status|logs|ready}  # defaults to gpu" >&2
     exit 2
     ;;
 esac

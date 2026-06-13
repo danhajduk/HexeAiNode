@@ -127,6 +127,26 @@ class ModelResidencySchedulerTests(unittest.TestCase):
         fake_stop_webui.assert_not_called()
         fake_stop.assert_not_called()
 
+    def test_visual_model_unload_keeps_container_running(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("model-residency-scheduler-test"))
+
+        with (
+            patch.object(manager, "_run_comfyui_control") as fake_control,
+            patch.object(manager, "_wait_comfyui_model_unloaded", return_value=True) as fake_wait_model,
+            patch.object(manager, "_wait_comfyui_runtime_stopped") as fake_wait_stopped,
+            patch.object(manager, "stop_comfyui_webui") as fake_stop_webui,
+            patch.object(manager, "stop") as fake_stop,
+        ):
+            result = manager._execute_model_residency_unload("visual_gpu")
+
+        self.assertEqual(result["result"], "model_unloaded")
+        self.assertEqual(result["reason"], "comfyui_model_unloaded_container_kept_running")
+        fake_control.assert_called_once_with("gpu", "unload-model")
+        fake_wait_model.assert_called_once_with(runtime="gpu")
+        fake_wait_stopped.assert_not_called()
+        fake_stop_webui.assert_not_called()
+        fake_stop.assert_not_called()
+
     def test_text_unload_uses_container_stop_fallback_only_inside_scheduler(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("model-residency-scheduler-test"))
 

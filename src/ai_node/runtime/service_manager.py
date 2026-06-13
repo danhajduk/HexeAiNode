@@ -651,45 +651,25 @@ class UserSystemdServiceManager:
         if component_id == "visual_gpu":
             started = time.perf_counter()
             self.stop_comfyui_progress_listener()
-            if self._manual_comfyui_webui_active():
-                result = self.stop_comfyui_webui()
-                return {
-                    "target": "visual_gpu",
-                    "adapter": "comfyui_gpu",
-                    "result": "container_stopped_fallback",
-                    "unload_seconds": round(time.perf_counter() - started, 3),
-                    "webui_stop_result": result,
-                    "reason": "comfyui_model_unload_endpoint_not_available",
-                }
-            self._run_comfyui_control("gpu", "stop")
-            self._wait_comfyui_runtime_stopped(runtime="gpu")
+            self._run_comfyui_control("gpu", "unload-model")
+            self._wait_comfyui_model_unloaded(runtime="gpu")
             return {
                 "target": "visual_gpu",
                 "adapter": "comfyui_gpu",
-                "result": "container_stopped_fallback",
+                "result": "model_unloaded",
                 "unload_seconds": round(time.perf_counter() - started, 3),
-                "reason": "comfyui_model_unload_endpoint_not_available",
+                "reason": "comfyui_model_unloaded_container_kept_running",
             }
         if component_id == "visual_cpu":
             started = time.perf_counter()
-            if self._manual_comfyui_webui_active():
-                result = self.stop_comfyui_webui()
-                return {
-                    "target": "visual_cpu",
-                    "adapter": "comfyui_cpu",
-                    "result": "container_stopped_fallback",
-                    "unload_seconds": round(time.perf_counter() - started, 3),
-                    "webui_stop_result": result,
-                    "reason": "comfyui_model_unload_endpoint_not_available",
-                }
-            self._run_comfyui_control("cpu", "stop")
-            self._wait_comfyui_runtime_stopped(runtime="cpu")
+            self._run_comfyui_control("cpu", "unload-model")
+            self._wait_comfyui_model_unloaded(runtime="cpu")
             return {
                 "target": "visual_cpu",
                 "adapter": "comfyui_cpu",
-                "result": "container_stopped_fallback",
+                "result": "model_unloaded",
                 "unload_seconds": round(time.perf_counter() - started, 3),
-                "reason": "comfyui_model_unload_endpoint_not_available",
+                "reason": "comfyui_model_unloaded_container_kept_running",
             }
         if component_id == "training_runtime":
             if self._sd_scripts_training_active():
@@ -1764,6 +1744,22 @@ class UserSystemdServiceManager:
             if not os.path.exists(socket_path) and not os.path.exists(health_socket_path):
                 return True
             time.sleep(0.2)
+        return False
+
+    def _wait_comfyui_model_unloaded(self, *, runtime: str, timeout_seconds: float = 30.0) -> bool:
+        runtime_key = "cpu" if str(runtime or "").strip().lower() == "cpu" else "gpu"
+        health_socket_path = self._comfyui_health_socket_for_runtime(runtime_key)
+        deadline = time.monotonic() + max(float(timeout_seconds), 0.0)
+        while time.monotonic() <= deadline:
+            payload = self._uds_json_get(health_socket_path, "/health")
+            if not isinstance(payload, dict):
+                return True
+            residency = str(payload.get("model_residency") or "").strip().lower()
+            if residency in {"unloaded", "on_demand"}:
+                return True
+            if runtime_key == "gpu" and not self._comfyui_gpu_model_loaded():
+                return True
+            time.sleep(0.5)
         return False
 
     def _comfyui_health_socket_for_runtime(self, runtime: str) -> str:
