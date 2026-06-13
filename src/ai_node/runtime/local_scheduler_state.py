@@ -9,6 +9,8 @@ from ai_node.time_utils import local_now_iso
 
 
 LOCAL_SCHEDULER_STATE_SCHEMA_VERSION = "1.0"
+LOCAL_SCHEDULER_STATS_SCHEMA_VERSION = "1.0"
+LOCAL_SCHEDULER_STATS_EMA_ALPHA = 0.2
 LOCAL_SCHEDULER_COMPONENTS = (
     {
         "component_id": "text_llm",
@@ -109,9 +111,78 @@ def create_local_scheduler_component_state(
             "last_active_at": None,
         },
         "resource_snapshot": {},
+        "usage_statistics": {},
         "last_transition": None,
         "last_error": None,
         "updated_at": _now_iso(),
+    }
+
+
+def create_local_scheduler_stats_state() -> dict:
+    return {
+        "schema_version": LOCAL_SCHEDULER_STATS_SCHEMA_VERSION,
+        "components": {},
+        "updated_at": _now_iso(),
+    }
+
+
+def _normalize_metric_map(value: object) -> dict:
+    if not isinstance(value, dict):
+        return {}
+    out = {}
+    for key, raw in value.items():
+        if isinstance(raw, bool):
+            out[str(key)] = int(raw)
+        elif isinstance(raw, (int, float)):
+            out[str(key)] = raw
+        elif raw is None:
+            out[str(key)] = None
+    return out
+
+
+def _normalize_timing_stats(value: object) -> dict:
+    if not isinstance(value, dict):
+        return {"task_families": {}}
+    task_families = value.get("task_families") if isinstance(value.get("task_families"), dict) else {}
+    normalized_families = {}
+    for task_family, entry in task_families.items():
+        if not isinstance(entry, dict):
+            continue
+        normalized_families[str(task_family)] = {
+            "sample_count": max(int(entry.get("sample_count") or 0), 0),
+            "rolling_average_ms": _normalize_metric_map(entry.get("rolling_average_ms")),
+            "rolling_max_ms": _normalize_metric_map(entry.get("rolling_max_ms")),
+            "last_sample_ms": _normalize_metric_map(entry.get("last_sample_ms")),
+            "last_updated_at": str(entry.get("last_updated_at") or "").strip() or None,
+        }
+    return {"task_families": normalized_families}
+
+
+def normalize_local_scheduler_stats_state(data: object) -> dict:
+    if not isinstance(data, dict):
+        raise ValueError("invalid_local_scheduler_stats_state")
+    if str(data.get("schema_version") or "").strip() != LOCAL_SCHEDULER_STATS_SCHEMA_VERSION:
+        raise ValueError("invalid_local_scheduler_stats_schema")
+    components = data.get("components")
+    if not isinstance(components, dict):
+        raise ValueError("invalid_local_scheduler_stats_components")
+    normalized_components = {}
+    for component_id, entry in components.items():
+        if not isinstance(entry, dict):
+            continue
+        normalized_components[str(component_id)] = {
+            "component_id": str(entry.get("component_id") or component_id),
+            "sample_count": max(int(entry.get("sample_count") or 0), 0),
+            "current": _normalize_metric_map(entry.get("current")),
+            "rolling_average": _normalize_metric_map(entry.get("rolling_average")),
+            "rolling_max": _normalize_metric_map(entry.get("rolling_max")),
+            "timing": _normalize_timing_stats(entry.get("timing")),
+            "last_updated_at": str(entry.get("last_updated_at") or "").strip() or None,
+        }
+    return {
+        "schema_version": LOCAL_SCHEDULER_STATS_SCHEMA_VERSION,
+        "components": normalized_components,
+        "updated_at": str(data.get("updated_at") or _now_iso()).strip() or _now_iso(),
     }
 
 
@@ -138,6 +209,7 @@ def normalize_local_scheduler_component_state(data: object, *, component: dict) 
             "blockers": _safe_list(data.get("blockers")),
             "idle": {**normalized["idle"], **_safe_dict(data.get("idle"))},
             "resource_snapshot": _safe_dict(data.get("resource_snapshot")),
+            "usage_statistics": _safe_dict(data.get("usage_statistics")),
             "last_transition": _safe_dict(data.get("last_transition")) or None,
             "last_error": str(data.get("last_error") or "").strip() or None,
             "updated_at": str(data.get("updated_at") or _now_iso()).strip() or _now_iso(),
@@ -196,10 +268,16 @@ class LocalSchedulerStateStore:
         return self.save_component(component, payload)
 
     def status_from_services(self, *, services: dict) -> dict:
+        stats = self.load_or_create_stats()
         components = []
         for component in LOCAL_SCHEDULER_COMPONENTS:
             persisted = self.load_or_create_component(component)
             observed = observed_component_state(component_id=str(component["component_id"]), services=services)
+            component_stats = self.update_component_stats(
+                stats=stats,
+                component_id=str(component["component_id"]),
+                sample=metrics_sample_from_observed(observed),
+            )
             merged = {
                 **persisted,
                 "display_name": str(component.get("display_name") or persisted.get("display_name") or component["component_id"]),
@@ -209,14 +287,167 @@ class LocalSchedulerStateStore:
                 "blockers": observed["blockers"],
                 "idle": {**persisted.get("idle", {}), **observed["idle"]},
                 "resource_snapshot": observed["resource_snapshot"],
+                "usage_statistics": component_stats,
             }
             components.append(self.save_component(component, merged))
+        stats = self.save_stats(stats)
         return {
             "schema_version": LOCAL_SCHEDULER_STATE_SCHEMA_VERSION,
             "state_dir": str(self._state_dir),
             "components": components,
+            "statistics": stats,
             "updated_at": _now_iso(),
         }
+
+    @property
+    def stats_path(self) -> Path:
+        return self._state_dir / "stats.json"
+
+    def load_stats(self) -> dict | None:
+        path = self.stats_path
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            return normalize_local_scheduler_stats_state(payload)
+        except Exception as exc:
+            if self._logger is not None:
+                self._logger.warning("invalid local scheduler stats file %s: %s", path, exc)
+            return None
+
+    def save_stats(self, payload: dict) -> dict:
+        normalized = normalize_local_scheduler_stats_state(payload)
+        normalized["updated_at"] = _now_iso()
+        path = self.stats_path
+        with file_storage_lock(path):
+            self._state_dir.mkdir(parents=True, exist_ok=True)
+            temp_path = locked_json_temp_path(path)
+            temp_path.write_text(json.dumps(normalized, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            temp_path.replace(path)
+        return normalized
+
+    def load_or_create_stats(self) -> dict:
+        payload = self.load_stats()
+        if isinstance(payload, dict):
+            return payload
+        payload = create_local_scheduler_stats_state()
+        return self.save_stats(payload)
+
+    def update_component_stats(self, *, stats: dict, component_id: str, sample: dict) -> dict:
+        normalized_stats = normalize_local_scheduler_stats_state(stats)
+        components = normalized_stats.setdefault("components", {})
+        existing = components.get(component_id)
+        if not isinstance(existing, dict):
+            existing = {
+                "component_id": component_id,
+                "sample_count": 0,
+                "current": {},
+                "rolling_average": {},
+                "rolling_max": {},
+                "timing": {"task_families": {}},
+                "last_updated_at": None,
+            }
+        sample_count = max(int(existing.get("sample_count") or 0), 0) + 1
+        previous_average = _normalize_metric_map(existing.get("rolling_average"))
+        previous_max = _normalize_metric_map(existing.get("rolling_max"))
+        current = _normalize_metric_map(sample)
+        rolling_average = {}
+        rolling_max = {}
+        for key, value in current.items():
+            if value is None:
+                rolling_average[key] = previous_average.get(key)
+                rolling_max[key] = previous_max.get(key)
+                continue
+            previous = previous_average.get(key)
+            rolling_average[key] = value if not isinstance(previous, (int, float)) else round(
+                (previous * (1.0 - LOCAL_SCHEDULER_STATS_EMA_ALPHA)) + (value * LOCAL_SCHEDULER_STATS_EMA_ALPHA),
+                3,
+            )
+            previous_peak = previous_max.get(key)
+            rolling_max[key] = value if not isinstance(previous_peak, (int, float)) else max(previous_peak, value)
+        updated = {
+            **existing,
+            "component_id": component_id,
+            "sample_count": sample_count,
+            "current": current,
+            "rolling_average": rolling_average,
+            "rolling_max": rolling_max,
+            "last_updated_at": _now_iso(),
+        }
+        components[component_id] = updated
+        stats.clear()
+        stats.update(normalized_stats)
+        return updated
+
+    def record_execution_timing(
+        self,
+        *,
+        component_id: str,
+        task_family: str,
+        queued_duration_ms: float | int | None = None,
+        execution_duration_ms: float | int | None = None,
+        total_duration_ms: float | int | None = None,
+    ) -> dict:
+        stats = self.load_or_create_stats()
+        component_key = str(component_id or "").strip()
+        task_key = str(task_family or "unknown").strip() or "unknown"
+        components = stats.setdefault("components", {})
+        component = components.setdefault(
+            component_key,
+            {
+                "component_id": component_key,
+                "sample_count": 0,
+                "current": {},
+                "rolling_average": {},
+                "rolling_max": {},
+                "timing": {"task_families": {}},
+                "last_updated_at": None,
+            },
+        )
+        timing = component.setdefault("timing", {"task_families": {}})
+        families = timing.setdefault("task_families", {})
+        entry = families.setdefault(
+            task_key,
+            {
+                "sample_count": 0,
+                "rolling_average_ms": {},
+                "rolling_max_ms": {},
+                "last_sample_ms": {},
+                "last_updated_at": None,
+            },
+        )
+        sample = _normalize_metric_map(
+            {
+                "queued_duration_ms": queued_duration_ms,
+                "execution_duration_ms": execution_duration_ms,
+                "total_duration_ms": total_duration_ms,
+            }
+        )
+        previous_average = _normalize_metric_map(entry.get("rolling_average_ms"))
+        previous_max = _normalize_metric_map(entry.get("rolling_max_ms"))
+        rolling_average = {}
+        rolling_max = {}
+        for key, value in sample.items():
+            if value is None:
+                continue
+            previous = previous_average.get(key)
+            rolling_average[key] = value if not isinstance(previous, (int, float)) else round(
+                (previous * (1.0 - LOCAL_SCHEDULER_STATS_EMA_ALPHA)) + (value * LOCAL_SCHEDULER_STATS_EMA_ALPHA),
+                3,
+            )
+            previous_peak = previous_max.get(key)
+            rolling_max[key] = value if not isinstance(previous_peak, (int, float)) else max(previous_peak, value)
+        entry.update(
+            {
+                "sample_count": max(int(entry.get("sample_count") or 0), 0) + 1,
+                "rolling_average_ms": {**previous_average, **rolling_average},
+                "rolling_max_ms": {**previous_max, **rolling_max},
+                "last_sample_ms": sample,
+                "last_updated_at": _now_iso(),
+            }
+        )
+        component["last_updated_at"] = _now_iso()
+        return self.save_stats(stats)
 
 
 def _service_state(service: object) -> str:
@@ -248,6 +479,21 @@ def _resource_from_service(service: object) -> dict:
         "pid": service.get("pid"),
         "cpu_percent": _numeric(service.get("cpu_percent")),
         "mem_percent": _numeric(service.get("mem_percent")),
+    }
+
+
+def metrics_sample_from_observed(observed: dict) -> dict:
+    resource = observed.get("resource_snapshot") if isinstance(observed.get("resource_snapshot"), dict) else {}
+    idle = observed.get("idle") if isinstance(observed.get("idle"), dict) else {}
+    return {
+        "vram_mib": resource.get("vram_mib"),
+        "gpu_util_percent": resource.get("gpu_util_percent"),
+        "gpu_mem_util_percent": resource.get("gpu_mem_util_percent"),
+        "cpu_percent": resource.get("cpu_percent"),
+        "ram_percent": resource.get("mem_percent") if resource.get("mem_percent") is not None else resource.get("ram_percent"),
+        "active": 1 if bool(idle.get("active")) else 0,
+        "in_flight": idle.get("in_flight") if isinstance(idle.get("in_flight"), (int, float)) else 0,
+        "queued": idle.get("queued") if isinstance(idle.get("queued"), (int, float)) else 0,
     }
 
 

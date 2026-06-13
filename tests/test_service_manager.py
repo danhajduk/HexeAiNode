@@ -118,7 +118,35 @@ class ServiceManagerTests(unittest.TestCase):
             self.assertEqual(components["visual_runtime"]["display_name"], "Visual Runtime")
             self.assertEqual(components["visual_runtime"]["adapter_id"], "comfyui")
             self.assertEqual(components["visual_runtime"]["observed_state"], "unloaded")
+            self.assertIn("usage_statistics", components["visual_runtime"])
+            self.assertEqual(components["visual_runtime"]["usage_statistics"]["current"]["active"], 0)
             self.assertTrue((Path(tmp) / "visual_runtime.state.json").exists())
+            self.assertTrue((Path(tmp) / "stats.json").exists())
+
+    def test_local_scheduler_stats_record_execution_timing_separately(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LocalSchedulerStateStore(state_dir=Path(tmp), logger=logging.getLogger("service-manager-test"))
+
+            store.record_execution_timing(
+                component_id="vision_llm",
+                task_family="task.image_description",
+                queued_duration_ms=100,
+                execution_duration_ms=1500,
+                total_duration_ms=1600,
+            )
+            stats = store.record_execution_timing(
+                component_id="vision_llm",
+                task_family="task.image_description",
+                queued_duration_ms=300,
+                execution_duration_ms=1000,
+                total_duration_ms=1300,
+            )
+
+            timing = stats["components"]["vision_llm"]["timing"]["task_families"]["task.image_description"]
+            self.assertEqual(timing["sample_count"], 2)
+            self.assertEqual(timing["rolling_max_ms"]["queued_duration_ms"], 300)
+            self.assertEqual(timing["rolling_max_ms"]["execution_duration_ms"], 1500)
+            self.assertIn("execution_duration_ms", timing["rolling_average_ms"])
 
     def test_restart_node_restarts_both_units(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
