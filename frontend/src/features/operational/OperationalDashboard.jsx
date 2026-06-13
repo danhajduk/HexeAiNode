@@ -207,10 +207,17 @@ export function OperationalDashboard({
         ) : null}
 
         {currentSection === "jobs_queue" ? (
-          <JobsQueueCard
-            executionQueue={scheduledTasksProps?.executionQueue}
-            className="operational-card-full-span"
-          />
+          <>
+            <LocalResidencyCard
+              {...runtimeServicesProps}
+              executionQueue={scheduledTasksProps?.executionQueue}
+              className="operational-card-full-span"
+            />
+            <JobsQueueCard
+              executionQueue={scheduledTasksProps?.executionQueue}
+              className="operational-card-full-span"
+            />
+          </>
         ) : null}
 
         {currentSection === "manual_image" ? <ManualImageGenerationCard {...manualImageGenerationProps} /> : null}

@@ -288,6 +288,7 @@ describe("OperationalDashboard", () => {
     );
 
     expect(markup).toContain("Jobs Queue");
+    expect(markup).toContain("Local Residency");
     expect(markup).toContain("Scheduler Backlog");
     expect(markup).toContain("Queue test render");
     expect(markup).toContain("task.image_generation");
