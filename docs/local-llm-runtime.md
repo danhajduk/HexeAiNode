@@ -190,10 +190,23 @@ control scripts for residency transitions.
 The local residency scheduler uses registered VRAM
 reservations before admitting GPU work: Visual Runtime currently reserves 5 GiB and Training Runtime currently reserves
 9 GiB. When a Visual Runtime job is queued, the scheduler starts Visual Runtime if the reservation fits in free VRAM;
-otherwise it unloads Vision first and unloads Text only as a last resort. Training Runtime unloads Visual Runtime and
-Vision before admission, then unloads Text if the 9 GiB reservation still cannot fit. These registered values are
+otherwise it unloads Vision first and unloads Text only as a last resort. Training Runtime is exclusive and unloads
+Visual Runtime, Vision, and Text model residency before admission. These registered values are
 temporary policy hints until runtime-specific measured maxima are promoted into the scheduler statistics. Text
 always-on reloads wait while Visual Runtime or Training Runtime owns local GPU residency.
+
+The operator smoke script for live residency switching is:
+
+```bash
+./scripts/model-residency-switch-smoke.py --base-url http://127.0.0.1:9002
+```
+
+Use `--dry-run` first to inspect the planned direct-execution payloads. The smoke submits Text, Vision, and Visual GPU
+jobs through `/api/execution/direct`, polls `/api/execution/queues` and `/api/local-scheduler/status`, and writes a
+report under `runtime/smoke-reports/`. It validates that active lane jobs are not running while their required
+`model_state` is `unloaded`, captures lane blocked reasons, and records `container_state`, `model_state`, loaded model,
+VRAM, and final job status. Training Runtime is not submitted by default; pass `--include-training` only for an
+operator/internal maintenance smoke because training is local-only and intentionally unloads incompatible residency.
 
 CPU Visual Runtime is reserved for low-priority background image work. The direct execution queue exposes a
 `visual_cpu` lane with concurrency `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` defaulting to 1. Only `task.image_generation` or

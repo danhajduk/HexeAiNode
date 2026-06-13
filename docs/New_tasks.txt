@@ -47,4 +47,3 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 1018: Add live switching smoke test for forced residency load/unload jobs
