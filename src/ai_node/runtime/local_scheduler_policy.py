@@ -203,6 +203,8 @@ def plan_local_scheduler_request(
     elif requested == "training_runtime":
         _require_unload("visual_gpu", "training_runtime_requires_visual_gpu_unloaded")
         _require_unload("visual_cpu", "training_runtime_requires_visual_cpu_unloaded")
+        _require_unload("vision_llm", "training_runtime_requires_vision_llm_unloaded")
+        _require_unload("text_llm", "training_runtime_requires_text_llm_unloaded")
         _ensure_vram_for_runtime("training_runtime", ("vision_llm", "visual_gpu", "text_llm"))
 
     if any(action.get("action") == "wait_for_idle" for action in actions):
