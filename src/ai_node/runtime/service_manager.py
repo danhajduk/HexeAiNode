@@ -509,7 +509,7 @@ class UserSystemdServiceManager:
                 affected = str(action.get("component_id") or "").strip()
                 self._set_scheduler_control_active(True)
                 try:
-                    result = self._execute_local_scheduler_release(affected)
+                    result = self._execute_model_residency_unload(affected)
                 finally:
                     self._set_scheduler_control_active(False)
                 executed_actions.append({"action": action, "result": result})
@@ -519,22 +519,28 @@ class UserSystemdServiceManager:
 
             self._set_scheduler_control_active(True)
             try:
-                start_result = self._execute_local_scheduler_start(requested)
+                start_result = self._execute_model_residency_load(requested)
             finally:
                 self._set_scheduler_control_active(False)
-            desired_state = "running" if start_result.get("result") in {"started", "already_running", "ready_for_job_submission"} else "blocked"
+            desired_state = (
+                "loaded"
+                if start_result.get("result") in {"model_loaded", "already_loaded", "started", "already_running"}
+                else "running"
+                if start_result.get("result") == "ready_for_job_submission"
+                else "blocked"
+            )
             self._local_scheduler_state_store.update_desired_state(
                 component_id=requested,
                 desired_state=desired_state,
                 request_metadata=metadata,
                 last_transition={"action": "request_executed", "result": start_result, "decision": decision},
-                last_error=None if desired_state == "running" else str(start_result.get("reason") or "start_failed"),
+                last_error=None if desired_state in {"loaded", "running"} else str(start_result.get("reason") or "start_failed"),
             )
             self._local_scheduler_state_store.append_event(
                 {"event": "request_executed", "component_id": requested, "decision": decision, "start_result": start_result}
             )
             return {
-                "status": "ok" if desired_state == "running" else "blocked",
+                "status": "ok" if desired_state in {"loaded", "running"} else "blocked",
                 "component_id": requested,
                 "decision": decision,
                 "executed_actions": executed_actions,
@@ -553,10 +559,10 @@ class UserSystemdServiceManager:
             )
             self._set_scheduler_control_active(True)
             try:
-                result = self._execute_local_scheduler_release(requested)
+                result = self._execute_model_residency_unload(requested)
             finally:
                 self._set_scheduler_control_active(False)
-            desired_state = "unloaded" if result.get("result") in {"stopped", "model_unloaded", "already_unloaded", "not_directly_releasable"} else "blocked"
+            desired_state = "unloaded" if result.get("result") in {"stopped", "model_unloaded", "already_unloaded", "not_directly_releasable", "container_stopped_fallback"} else "blocked"
             self._local_scheduler_state_store.update_desired_state(
                 component_id=requested,
                 desired_state=desired_state,
@@ -574,18 +580,27 @@ class UserSystemdServiceManager:
                 "local_scheduler": self.get_status().get("local_scheduler", {}),
             }
 
-    def _execute_local_scheduler_start(self, component_id: str) -> dict:
+    def _execute_model_residency_load(self, component_id: str) -> dict:
         if component_id == "text_llm":
-            return self.start(target="local_llm")
+            started = time.perf_counter()
+            result = self.ensure_local_llm_model(model_id=self._local_llm_default_model_id)
+            return {
+                "target": "text_llm",
+                "adapter": "llamacpp",
+                "result": "model_loaded",
+                "load_seconds": round(time.perf_counter() - started, 3),
+                "model_result": result,
+            }
         if component_id == "vision_llm":
-            return {"target": "vision_llm", "result": "started", **self.ensure_vision_runtime_resident(local_in_flight=0)}
+            result = self.ensure_vision_runtime_resident(local_in_flight=0)
+            return {"target": "vision_llm", "adapter": "llamacpp_vision", "result": "model_loaded", **result}
         if component_id == "visual_gpu":
             started = time.perf_counter()
             self._run_comfyui_control("gpu", "ready")
             return {
                 "target": "visual_gpu",
                 "adapter": "comfyui_gpu",
-                "result": "started",
+                "result": "model_loaded",
                 "load_seconds": round(time.perf_counter() - started, 3),
             }
         if component_id == "visual_cpu":
@@ -594,7 +609,7 @@ class UserSystemdServiceManager:
             return {
                 "target": "visual_cpu",
                 "adapter": "comfyui_cpu",
-                "result": "started",
+                "result": "model_loaded",
                 "load_seconds": round(time.perf_counter() - started, 3),
             }
         if component_id == "training_runtime":
@@ -606,11 +621,33 @@ class UserSystemdServiceManager:
             }
         raise ValueError("unknown local scheduler component")
 
-    def _execute_local_scheduler_release(self, component_id: str) -> dict:
+    def _execute_local_scheduler_start(self, component_id: str) -> dict:
+        return self._execute_model_residency_load(component_id)
+
+    def _execute_model_residency_unload(self, component_id: str) -> dict:
         if component_id == "text_llm":
-            return self.stop(target="local_llm")
+            started = time.perf_counter()
+            model_result = self.unload_model("text_llm", metadata={"source": "local_scheduler_model_residency"})
+            if model_result.get("result") == "unsupported":
+                fallback = self.stop(target="local_llm")
+                return {
+                    "target": "text_llm",
+                    "adapter": "llamacpp",
+                    "result": "container_stopped_fallback",
+                    "unload_seconds": round(time.perf_counter() - started, 3),
+                    "reason": "text_llm_model_unload_requires_container_stop_fallback",
+                    "model_unload_result": model_result,
+                    "fallback_result": fallback,
+                }
+            return {
+                "target": "text_llm",
+                "adapter": "llamacpp",
+                "result": str(model_result.get("result") or "model_unloaded"),
+                "unload_seconds": round(time.perf_counter() - started, 3),
+                "model_unload_result": model_result,
+            }
         if component_id == "vision_llm":
-            return self.unload_vision_model()
+            return self.unload_model("vision_llm", metadata={"source": "local_scheduler_model_residency"})
         if component_id == "visual_gpu":
             started = time.perf_counter()
             self.stop_comfyui_progress_listener()
@@ -619,17 +656,19 @@ class UserSystemdServiceManager:
                 return {
                     "target": "visual_gpu",
                     "adapter": "comfyui_gpu",
-                    "result": "stopped",
+                    "result": "container_stopped_fallback",
                     "unload_seconds": round(time.perf_counter() - started, 3),
                     "webui_stop_result": result,
+                    "reason": "comfyui_model_unload_endpoint_not_available",
                 }
             self._run_comfyui_control("gpu", "stop")
             self._wait_comfyui_runtime_stopped(runtime="gpu")
             return {
                 "target": "visual_gpu",
                 "adapter": "comfyui_gpu",
-                "result": "stopped",
+                "result": "container_stopped_fallback",
                 "unload_seconds": round(time.perf_counter() - started, 3),
+                "reason": "comfyui_model_unload_endpoint_not_available",
             }
         if component_id == "visual_cpu":
             started = time.perf_counter()
@@ -638,17 +677,19 @@ class UserSystemdServiceManager:
                 return {
                     "target": "visual_cpu",
                     "adapter": "comfyui_cpu",
-                    "result": "stopped",
+                    "result": "container_stopped_fallback",
                     "unload_seconds": round(time.perf_counter() - started, 3),
                     "webui_stop_result": result,
+                    "reason": "comfyui_model_unload_endpoint_not_available",
                 }
             self._run_comfyui_control("cpu", "stop")
             self._wait_comfyui_runtime_stopped(runtime="cpu")
             return {
                 "target": "visual_cpu",
                 "adapter": "comfyui_cpu",
-                "result": "stopped",
+                "result": "container_stopped_fallback",
                 "unload_seconds": round(time.perf_counter() - started, 3),
+                "reason": "comfyui_model_unload_endpoint_not_available",
             }
         if component_id == "training_runtime":
             if self._sd_scripts_training_active():
@@ -665,6 +706,9 @@ class UserSystemdServiceManager:
                 "reason": "training_runtime_is_job_scoped",
             }
         raise ValueError("unknown local scheduler component")
+
+    def _execute_local_scheduler_release(self, component_id: str) -> dict:
+        return self._execute_model_residency_unload(component_id)
 
     def schedule_restart(self, *, target: str, delay_seconds: int) -> dict:
         value = str(target or "").strip().lower()

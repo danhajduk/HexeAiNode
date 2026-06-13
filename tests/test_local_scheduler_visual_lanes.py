@@ -1,4 +1,6 @@
 import unittest
+import tempfile
+from pathlib import Path
 
 from ai_node.execution.queue_contract import residency_component_for_lane
 from ai_node.runtime.local_scheduler_policy import plan_local_scheduler_request
@@ -21,11 +23,11 @@ class LocalSchedulerVisualLaneTests(unittest.TestCase):
         scheduler_status = {
             "gpu_resources": {"memory_free_mib": 1024},
             "components": [
-                {"component_id": "text_llm", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}, "usage_statistics": {"current": {"vram_mib": 4096}}},
-                {"component_id": "vision_llm", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}, "usage_statistics": {"current": {"vram_mib": 4096}}},
-                {"component_id": "visual_gpu", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
-                {"component_id": "visual_cpu", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
-                {"component_id": "training_runtime", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                {"component_id": "text_llm", "observed_state": "running", "model_state": "loaded", "idle": {"in_flight": 0, "queued": 0}, "usage_statistics": {"current": {"vram_mib": 4096}}},
+                {"component_id": "vision_llm", "observed_state": "running", "model_state": "loaded", "idle": {"in_flight": 0, "queued": 0}, "usage_statistics": {"current": {"vram_mib": 4096}}},
+                {"component_id": "visual_gpu", "observed_state": "unloaded", "model_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                {"component_id": "visual_cpu", "observed_state": "unloaded", "model_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                {"component_id": "training_runtime", "observed_state": "unloaded", "model_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
             ],
         }
 
@@ -41,6 +43,28 @@ class LocalSchedulerVisualLaneTests(unittest.TestCase):
             {"action": "unload", "component_id": "vision_llm", "reason": "visual_gpu_requires_vision_llm_vram"},
             decision["actions"],
         )
+
+    def test_visual_gpu_does_not_unload_vision_container_when_model_is_unloaded(self):
+        scheduler_status = {
+            "gpu_resources": {"memory_free_mib": 1024},
+            "components": [
+                {"component_id": "text_llm", "observed_state": "running", "model_state": "loaded", "idle": {"in_flight": 0, "queued": 0}, "usage_statistics": {"current": {"vram_mib": 4096}}},
+                {"component_id": "vision_llm", "observed_state": "running", "model_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}, "usage_statistics": {"current": {"vram_mib": 0}}},
+                {"component_id": "visual_gpu", "observed_state": "running", "model_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                {"component_id": "visual_cpu", "observed_state": "unloaded", "model_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                {"component_id": "training_runtime", "observed_state": "unloaded", "model_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+            ],
+        }
+
+        decision = plan_local_scheduler_request(
+            scheduler_status=scheduler_status,
+            component_id="visual_gpu",
+            importance="high",
+        )
+
+        self.assertEqual(decision["decision"], "needs_unload")
+        self.assertEqual(decision["affected_components"], ["text_llm"])
+        self.assertNotIn("vision_llm", decision["affected_components"])
 
     def test_visual_cpu_does_not_reserve_gpu_vram(self):
         scheduler_status = {
@@ -76,6 +100,46 @@ class LocalSchedulerVisualLaneTests(unittest.TestCase):
         self.assertEqual(gpu["observed_state"], "running")
         self.assertEqual(cpu["observed_state"], "unloaded")
         self.assertEqual(gpu["resource_snapshot"]["vram_mib"], 5120)
+
+    def test_observed_visual_lane_includes_model_residency_state(self):
+        services = {
+            "comfyui_gpu": {
+                "service_id": "comfyui_gpu",
+                "state": "running",
+                "pid": 123,
+                "model_residency_status": {
+                    "container_state": "running",
+                    "model_state": "unloaded",
+                    "loaded_models": [],
+                },
+            },
+        }
+
+        from ai_node.runtime.local_scheduler_state import LocalSchedulerStateStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = LocalSchedulerStateStore(state_dir=Path(tmp)).status_from_services(services=services)
+        components = {item["component_id"]: item for item in payload["components"]}
+
+        self.assertEqual(components["visual_gpu"]["observed_state"], "running")
+        self.assertEqual(components["visual_gpu"]["container_state"], "running")
+        self.assertEqual(components["visual_gpu"]["model_state"], "unloaded")
+
+    def test_scheduler_model_residency_falls_back_to_observed_state(self):
+        services = {
+            "gpu_exclusive": {
+                "sd_scripts_training_active": True,
+            },
+        }
+
+        from ai_node.runtime.local_scheduler_state import LocalSchedulerStateStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = LocalSchedulerStateStore(state_dir=Path(tmp)).status_from_services(services=services)
+        components = {item["component_id"]: item for item in payload["components"]}
+
+        self.assertEqual(components["training_runtime"]["observed_state"], "running")
+        self.assertEqual(components["training_runtime"]["model_state"], "loaded")
 
 
 if __name__ == "__main__":

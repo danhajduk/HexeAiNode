@@ -33,7 +33,14 @@ def _observed_state(component: dict | None) -> str:
     return str((component or {}).get("observed_state") or "unknown").strip().lower()
 
 
+def _model_state(component: dict | None) -> str:
+    return str((component or {}).get("model_state") or "").strip().lower()
+
+
 def _is_resident(component: dict | None) -> bool:
+    model_state = _model_state(component)
+    if model_state:
+        return model_state in {"loaded", "loading", "unloading"}
     return _observed_state(component) in {"running", "starting", "idle", "paused", "pausing"}
 
 
@@ -47,7 +54,12 @@ def _is_busy(component: dict | None) -> bool:
         queued = int(idle.get("queued") or 0)
     except Exception:
         queued = 0
-    return bool(in_flight > 0 or queued > 0 or _observed_state(component) in {"starting", "pausing", "unloading"})
+    return bool(
+        in_flight > 0
+        or queued > 0
+        or _observed_state(component) in {"starting", "pausing", "unloading"}
+        or _model_state(component) in {"loading", "unloading"}
+    )
 
 
 def _component_vram_mib(component: dict | None) -> float:

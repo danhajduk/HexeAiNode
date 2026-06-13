@@ -53,6 +53,7 @@ LOCAL_SCHEDULER_COMPONENTS = (
     },
 )
 LOCAL_SCHEDULER_ALLOWED_STATES = {
+    "loaded",
     "requested",
     "starting",
     "running",
@@ -110,6 +111,10 @@ def create_local_scheduler_component_state(
         "adapter_id": str(component.get("adapter_id") or "").strip() or None,
         "desired_state": _safe_state(desired_state, default="unloaded"),
         "observed_state": _safe_state(observed_state),
+        "container_state": "unknown",
+        "model_state": "unloaded",
+        "loaded_model": None,
+        "loaded_models": [],
         "phase": str(phase or "unknown").strip() or "unknown",
         "request_metadata": {},
         "blockers": [],
@@ -214,6 +219,10 @@ def normalize_local_scheduler_component_state(data: object, *, component: dict) 
             "adapter_id": str(data.get("adapter_id") or component.get("adapter_id") or "").strip() or None,
             "desired_state": _safe_state(data.get("desired_state"), default="unloaded"),
             "observed_state": _safe_state(data.get("observed_state")),
+            "container_state": str(data.get("container_state") or "unknown").strip().lower() or "unknown",
+            "model_state": str(data.get("model_state") or "unloaded").strip().lower() or "unloaded",
+            "loaded_model": str(data.get("loaded_model") or "").strip() or None,
+            "loaded_models": _safe_list(data.get("loaded_models")),
             "phase": str(data.get("phase") or "unknown").strip() or "unknown",
             "request_metadata": _safe_dict(data.get("request_metadata")),
             "blockers": _safe_list(data.get("blockers")),
@@ -316,6 +325,11 @@ class LocalSchedulerStateStore:
         for component in LOCAL_SCHEDULER_COMPONENTS:
             persisted = self.load_or_create_component(component)
             observed = observed_component_state(component_id=str(component["component_id"]), services=services)
+            model_residency = model_residency_from_services(
+                component_id=str(component["component_id"]),
+                services=services,
+                observed_state=observed["observed_state"],
+            )
             component_stats = self.update_component_stats(
                 stats=stats,
                 component_id=str(component["component_id"]),
@@ -331,6 +345,10 @@ class LocalSchedulerStateStore:
                     services=services,
                 ),
                 "observed_state": observed["observed_state"],
+                "container_state": model_residency["container_state"],
+                "model_state": model_residency["model_state"],
+                "loaded_model": model_residency["loaded_model"],
+                "loaded_models": model_residency["loaded_models"],
                 "phase": observed["phase"],
                 "blockers": observed["blockers"],
                 "idle": {**persisted.get("idle", {}), **observed["idle"]},
@@ -721,4 +739,35 @@ def observed_component_state(*, component_id: str, services: dict) -> dict:
         "blockers": [],
         "idle": {"active": False},
         "resource_snapshot": {},
+    }
+
+
+def model_residency_from_services(*, component_id: str, services: dict, observed_state: str | None = None) -> dict:
+    service_key = {
+        "text_llm": "local_llm",
+        "vision_llm": "vision_llm",
+        "visual_gpu": "comfyui_gpu",
+        "visual_cpu": "comfyui_cpu",
+        "training_runtime": "training_runtime",
+    }.get(component_id)
+    service = services.get(service_key) if service_key and isinstance(services.get(service_key), dict) else {}
+    residency = service.get("model_residency_status") if isinstance(service.get("model_residency_status"), dict) else None
+    if residency is None and isinstance(service.get("model_residency"), dict):
+        residency = service.get("model_residency")
+    if not isinstance(residency, dict):
+        observed = str(observed_state or "unknown").strip().lower()
+        legacy_loaded = observed in {"running", "starting", "idle", "paused", "pausing"}
+        return {
+            "container_state": observed if observed else "unknown",
+            "model_state": "loaded" if legacy_loaded else "unloaded",
+            "loaded_model": None,
+            "loaded_models": [],
+        }
+    loaded_models = [str(item) for item in list(residency.get("loaded_models") or []) if str(item or "").strip()]
+    loaded_model = str(residency.get("loaded_model") or "").strip() or (loaded_models[0] if loaded_models else None)
+    return {
+        "container_state": str(residency.get("container_state") or "unknown").strip().lower() or "unknown",
+        "model_state": str(residency.get("model_state") or "unloaded").strip().lower() or "unloaded",
+        "loaded_model": loaded_model,
+        "loaded_models": loaded_models,
     }

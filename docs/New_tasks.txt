@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 1015: Refactor residency scheduler to manage VRAM-loaded models separately from containers
 [TODO] Task 1016: Add automated tests for model-residency load/unload scheduling
 [TODO] Task 1017: Surface container state and model residency state in runtime APIs and UI
 [TODO] Task 1018: Add live switching smoke test for forced residency load/unload jobs

@@ -143,6 +143,43 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(load["status"], "blocked")
         self.assertEqual(unload["result"], "service_manager_unconfigured")
 
+    def test_local_scheduler_request_uses_model_residency_execution(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {"HEXE_LOCAL_SCHEDULER_STATE_DIR": str(Path(tmp) / "local-scheduler")},
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+            scheduler_status = {
+                "local_scheduler": {
+                    "gpu_resources": {"memory_free_mib": 1024},
+                    "components": [
+                        {"component_id": "text_llm", "observed_state": "running", "model_state": "loaded", "idle": {"in_flight": 0, "queued": 0}, "usage_statistics": {"current": {"vram_mib": 4096}}},
+                        {"component_id": "vision_llm", "observed_state": "running", "model_state": "loaded", "idle": {"in_flight": 0, "queued": 0}, "usage_statistics": {"current": {"vram_mib": 4096}}},
+                        {"component_id": "visual_gpu", "observed_state": "running", "model_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                        {"component_id": "visual_cpu", "observed_state": "unloaded", "model_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                        {"component_id": "training_runtime", "observed_state": "unloaded", "model_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                    ],
+                }
+            }
+
+            with (
+                patch.object(manager, "get_status", return_value=scheduler_status),
+                patch.object(manager, "_execute_model_residency_unload", return_value={"target": "vision_llm", "result": "model_unloaded"}) as fake_unload,
+                patch.object(manager, "_execute_model_residency_load", return_value={"target": "visual_gpu", "result": "model_loaded"}) as fake_load,
+                patch.object(manager, "_execute_local_scheduler_release") as fake_container_release,
+                patch.object(manager, "_execute_local_scheduler_start") as fake_container_start,
+            ):
+                result = manager.request_local_scheduler_component(component_id="visual_gpu", importance="high")
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["decision"]["decision"], "needs_unload")
+        fake_unload.assert_called_once_with("vision_llm")
+        fake_load.assert_called_once_with("visual_gpu")
+        fake_container_release.assert_not_called()
+        fake_container_start.assert_not_called()
+
     def test_get_status_maps_systemctl_states(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             "os.environ",
