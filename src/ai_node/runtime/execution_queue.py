@@ -118,6 +118,7 @@ class ExecutionQueueService:
             "_runner": runner,
         }
         async with self._lock:
+            self._monitor_deadlines_locked()
             if client_key and self._max_pending_per_client:
                 pending_count = self._client_pending_count_locked(client_id=client_key)
                 if pending_count >= self._max_pending_per_client:
@@ -156,6 +157,7 @@ class ExecutionQueueService:
 
     async def job_status(self, *, job_id: str) -> dict:
         async with self._lock:
+            self._monitor_deadlines_locked()
             job = self._jobs.get(str(job_id or "").strip())
             if not isinstance(job, dict):
                 return {"status": "not_found", "job_id": job_id}
@@ -194,6 +196,7 @@ class ExecutionQueueService:
 
     async def diagnostics(self) -> dict:
         async with self._lock:
+            self._monitor_deadlines_locked()
             queues = {}
             for queue_key, entries in self._queues.items():
                 queued_ids = [self._job_id_from_queue_entry(item) for item in sorted(entries)]
@@ -258,6 +261,7 @@ class ExecutionQueueService:
     async def queue_pressure(self, *, queue: str) -> dict:
         queue_key = self._normalize_queue_key(queue)
         async with self._lock:
+            self._monitor_deadlines_locked()
             queued_count = len(self._queues.get(queue_key) or [])
             active_count = self._active_counts.get(queue_key, 0)
             return {
@@ -271,6 +275,7 @@ class ExecutionQueueService:
     async def queue_start_estimate(self, *, queue: str, new_job_position: int | None = None) -> dict:
         queue_key = self._normalize_queue_key(queue)
         async with self._lock:
+            self._monitor_deadlines_locked()
             position = int(new_job_position or (len(self._queues.get(queue_key) or []) + 1))
             estimated_seconds = self._estimated_start_seconds_locked(queue_key=queue_key, position=position)
             return {
@@ -464,6 +469,91 @@ class ExecutionQueueService:
         jobs_ahead = max(active_count + max(int(position), 1) - 1, 0)
         waves_ahead = (jobs_ahead + concurrency - 1) // concurrency if jobs_ahead else 0
         return int(waves_ahead * self._check_after_seconds)
+
+    def _monitor_deadlines_locked(self) -> dict:
+        now = local_now()
+        changed = False
+        expired = []
+        rerouted = []
+        for job_id, job in list(self._jobs.items()):
+            if not isinstance(job, dict) or str(job.get("status") or "").strip().lower() != "queued":
+                continue
+            queue_intent = job.get("queue_intent") if isinstance(job.get("queue_intent"), dict) else {}
+            max_wait = self._queue_intent_max_wait_seconds(queue_intent)
+            deadline_at = self._queue_intent_deadline_at(queue_intent)
+            queued_at = self._job_queued_at(job) or now
+            wait_deadline = queued_at + timedelta(seconds=max_wait) if max_wait is not None else None
+            effective_deadline = min([item for item in (deadline_at, wait_deadline) if item is not None], default=None)
+            if effective_deadline is None or now <= effective_deadline:
+                continue
+            queue_key = str(job.get("queue") or "")
+            if queue_key == "local" and bool(queue_intent.get("allow_cloud_spillover")):
+                self._remove_from_queue_locked(queue_key=queue_key, job_id=job_id)
+                job["queue"] = "cloud"
+                job["status"] = "queued"
+                routing_decision = job.get("routing_decision") if isinstance(job.get("routing_decision"), dict) else {}
+                job["routing_decision"] = {
+                    **routing_decision,
+                    "original_queue": routing_decision.get("original_queue") or "local",
+                    "selected_queue": "cloud",
+                    "spillover": True,
+                    "reason": "rerouted_to_cloud",
+                    "local_unavailable_reason": "expired_wait_budget",
+                }
+                heapq.heappush(
+                    self._queues["cloud"],
+                    self._queue_entry(
+                        rank=IMPORTANCE_RANK.get(str(job.get("importance") or "normal"), IMPORTANCE_RANK["normal"]),
+                        deadline_sort=self._deadline_sort_value(queue_intent=queue_intent),
+                        sequence=int(job.get("sequence") or 0),
+                        job_id=job_id,
+                    ),
+                )
+                rerouted.append(job_id)
+                changed = True
+                self._ensure_dispatcher_locked("cloud")
+                continue
+            self._remove_from_queue_locked(queue_key=queue_key, job_id=job_id)
+            job["status"] = "expired_wait_budget"
+            job["completed_at"] = local_now_iso()
+            job["error"] = {"code": "expired_wait_budget", "message": "queue wait budget expired before execution"}
+            job["_runner"] = None
+            expired.append(job_id)
+            changed = True
+        if changed:
+            self._persist_jobs_locked()
+        return {"expired": expired, "rerouted_to_cloud": rerouted, "changed": changed}
+
+    def _remove_from_queue_locked(self, *, queue_key: str, job_id: str) -> None:
+        entries = [item for item in list(self._queues.get(queue_key) or []) if self._job_id_from_queue_entry(item) != job_id]
+        heapq.heapify(entries)
+        self._queues[queue_key] = entries
+
+    @staticmethod
+    def _job_queued_at(job: dict) -> datetime | None:
+        try:
+            parsed = datetime.fromisoformat(str(job.get("queued_at") or ""))
+        except Exception:
+            return None
+        try:
+            local_now() - parsed
+            return parsed
+        except TypeError:
+            return parsed.replace(tzinfo=local_now().tzinfo)
+
+    @staticmethod
+    def _queue_intent_deadline_at(queue_intent: dict) -> datetime | None:
+        if not isinstance(queue_intent, dict) or not queue_intent.get("deadline_at"):
+            return None
+        try:
+            parsed = datetime.fromisoformat(str(queue_intent.get("deadline_at")))
+        except Exception:
+            return None
+        try:
+            local_now() - parsed
+            return parsed
+        except TypeError:
+            return parsed.replace(tzinfo=local_now().tzinfo)
 
     @staticmethod
     def _job_id_from_queue_entry(entry) -> str:

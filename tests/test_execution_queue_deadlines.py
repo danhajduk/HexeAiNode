@@ -96,6 +96,52 @@ class ExecutionQueueDeadlineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(estimate["queue"], "local")
         self.assertEqual(estimate["estimated_start_seconds"], 10)
 
+    async def test_deadline_monitor_expires_overdue_local_only_job(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("queue-deadline-test"), local_concurrency=1, check_after_seconds=10)
+        old = (local_now() - timedelta(seconds=30)).isoformat()
+        queue._jobs["job-expire"] = {
+            "job_id": "job-expire",
+            "job_name": "expire",
+            "queue": "local",
+            "importance": "normal",
+            "queue_intent": {"max_wait_seconds": 1, "allow_cloud_spillover": False},
+            "status": "queued",
+            "queued_at": old,
+            "created_at": old,
+            "sequence": 1,
+            "_runner": lambda: self._completed(),
+        }
+        queue._queues["local"].append(queue._queue_entry(rank=2, deadline_sort=0, sequence=1, job_id="job-expire"))
+
+        status = await queue.job_status(job_id="job-expire")
+
+        self.assertEqual(status["status"], "expired_wait_budget")
+        self.assertEqual(status["error"]["code"], "expired_wait_budget")
+
+    async def test_deadline_monitor_reroutes_cloud_allowed_job(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("queue-deadline-test"), local_concurrency=1, check_after_seconds=10)
+        old = (local_now() - timedelta(seconds=30)).isoformat()
+        queue._jobs["job-reroute"] = {
+            "job_id": "job-reroute",
+            "job_name": "reroute",
+            "queue": "local",
+            "importance": "high",
+            "queue_intent": {"max_wait_seconds": 1, "allow_cloud_spillover": True},
+            "routing_decision": {"selected_queue": "local"},
+            "status": "queued",
+            "queued_at": old,
+            "created_at": old,
+            "sequence": 1,
+            "_runner": lambda: self._completed(),
+        }
+        queue._queues["local"].append(queue._queue_entry(rank=1, deadline_sort=0, sequence=1, job_id="job-reroute"))
+
+        status = await queue.job_status(job_id="job-reroute")
+
+        self.assertEqual(status["status"], "queued")
+        self.assertEqual(status["queue"], "cloud")
+        self.assertEqual(status["routing_decision"]["reason"], "rerouted_to_cloud")
+
     async def _completed(self):
         return {"status": "ok"}
 
