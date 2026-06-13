@@ -2170,3 +2170,188 @@ Validation:
 - Examples use the final request/response schema, not planning placeholders.
 - Existing technical adapter names remain documented only where still exposed by API/debug metadata.
 - Markdown examples are internally consistent and readable.
+
+## Task 1014
+Original task details:
+- Add runtime model-residency adapters while keeping containers running.
+- The node should separate container/process uptime from model/VRAM residency.
+
+Implementation notes:
+- Define a common adapter contract for local runtimes:
+  - `ensure_container_running(component_id)`
+  - `load_model(component_id, model_id, metadata=None)`
+  - `unload_model(component_id, metadata=None)`
+  - `model_residency_status(component_id)`
+- Keep containers/process shells running where supported:
+  - Text LLM container remains running while its model may be loaded/unloaded.
+  - Vision LLM container remains running while its model may be loaded/unloaded.
+  - Visual Runtime container remains running while checkpoints/CLIP/VAE/ControlNet/LoRA model residency is managed.
+  - Training Runtime container may remain available, but training work/processes should not stay resident by default.
+- Add explicit state fields:
+  - container_state: stopped, starting, running, unhealthy
+  - model_state: unloaded, loading, loaded, unloading, failed, unsupported
+  - loaded_model or loaded_models
+  - observed_vram_mib
+  - active_jobs
+  - last_transition_at
+  - last_transition_reason
+- Where a runtime cannot unload a model without stopping a process/container yet, expose `model_state=unsupported` and retain a compatibility fallback internally.
+- Do not rely on container stop/start as the primary residency mechanism once an unload API exists.
+
+Validation:
+- Unit tests cover adapter status normalization.
+- Unit tests cover supported and unsupported unload behavior.
+- Container status and model status can differ in diagnostics.
+- Existing runtime start/stop behavior remains available as a fallback.
+- Python compile and targeted backend tests pass.
+
+## Task 1015
+Original task details:
+- Refactor residency scheduler to manage VRAM-loaded models separately from containers.
+- Residency decisions should load/unload model residency, not stop/start containers, except fallback cases.
+
+Implementation notes:
+- Scheduler decisions should consider:
+  - container_state
+  - model_state
+  - observed and historical max VRAM
+  - active/staged/queued work
+  - lane priority/importance
+  - idle policy
+- Default operational residency:
+  - Text LLM model loaded.
+  - Vision LLM model loaded.
+  - Visual Runtime model unloaded unless visual work is active or within idle window.
+  - Training Runtime model/process unloaded/off.
+- Training Runtime:
+  - always off by default.
+  - always local-only.
+  - never triggered as a normal client request.
+  - may be queued only by explicit local node/operator/internal job.
+  - must unload all incompatible local model residency before training starts.
+- Visual Runtime:
+  - may keep the container running.
+  - load required checkpoint/model set only when visual work is admitted.
+  - unload visual model residency after configured idle timeout.
+  - should not unload active Vision/Text model residency unless VRAM estimates require it.
+- Text and Vision:
+  - should normally stay loaded.
+  - may be unloaded only for Visual/Training jobs when VRAM estimates require it.
+  - Text remains last-resort unload.
+- Preserve the current queue-admission guards:
+  - Visual waits for active/queued Vision work.
+  - Vision waits for active Visual/Training work.
+  - Training remains exclusive.
+
+Validation:
+- Scheduler can keep containers running while unloading/loading only model residency.
+- Visual job causes Vision model unload only when required by VRAM budget.
+- Vision job does not stop an active Visual job; it waits until active visual work drains.
+- Visual job does not start while Vision work is active/queued.
+- Training job unloads all incompatible model residency and restores default operational model residency after completion.
+- Targeted backend tests pass.
+
+## Task 1016
+Original task details:
+- Add automated tests for model-residency load/unload scheduling.
+- Tests must prove the new model-residency behavior, not just queue status.
+
+Implementation notes:
+- Add fake residency adapters for:
+  - Text LLM
+  - Vision LLM
+  - Visual Runtime
+  - Training Runtime
+- Test container/model separation:
+  - container running + model loaded
+  - container running + model unloaded
+  - container stopped + model unloaded
+  - unsupported unload fallback
+- Test scheduler decisions:
+  - default Text/Vision loaded, Visual/Training unloaded.
+  - Visual job loads Visual model residency without stopping container when possible.
+  - Vision job waits while Visual active.
+  - Visual job waits while Vision active/queued.
+  - Training job is exclusive and local-only.
+  - default residency is restored after Visual/Training idle policy expires.
+- Add regression tests for current live-smoke race cases:
+  - Vision submitted while Visual is running.
+  - Visual submitted while Vision is running.
+  - Visual -> Vision -> Visual order.
+  - Vision -> Visual -> Vision order.
+
+Validation:
+- Tests assert model_state transitions and container_state remains running where supported.
+- Tests assert no runtime job is marked running while its required model residency is unloaded.
+- Tests assert lane blocked reasons are stable and user-readable.
+- Targeted backend test suite passes.
+
+## Task 1017
+Original task details:
+- Surface container state and model residency state in runtime APIs and UI.
+- Operators should see whether a runtime is up but its model is unloaded.
+
+Implementation notes:
+- Update runtime/residency API payloads to include:
+  - container_state
+  - model_state
+  - loaded_model or loaded_models
+  - desired_model_state
+  - observed_vram_mib
+  - avg_vram_mib
+  - max_vram_mib
+  - active/staged/queued work counts
+  - blocker reason
+  - next transition action
+- Runtime UI should distinguish:
+  - container running
+  - model loaded
+  - model unloaded
+  - loading/unloading
+  - unsupported model unload fallback
+- Keep cards compact.
+- Avoid layout jumping when metadata is empty; show stable placeholders.
+- Training Runtime should be visible as off/unloaded by default and clearly marked local-only/internal.
+
+Validation:
+- Runtime UI shows Text/Vision containers running with models loaded by default.
+- Runtime UI can show Visual container running with model unloaded.
+- Runtime UI can show Training container/process off/unloaded.
+- Queue/Residency UI agrees with API state.
+- Frontend build passes.
+
+## Task 1018
+Original task details:
+- Add live switching smoke test for forced residency load/unload jobs.
+- After model-residency implementation, schedule jobs that force real load/unload transitions and verify actual runtime switching.
+
+Implementation notes:
+- Add a script or documented operator command that schedules jobs over time to force transitions:
+  - Text job while Text model loaded.
+  - Vision job while Vision model loaded.
+  - Visual GPU job that forces Visual model load.
+  - Vision job submitted while Visual is active; should wait and then run.
+  - Visual job submitted while Vision is active/queued; should wait and then run.
+  - Visual -> Vision -> Visual sequence.
+  - Vision -> Visual -> Vision sequence.
+- Include optional heavier Visual job if needed to force VRAM pressure.
+- Include a local-only Training Runtime smoke path, but do not run it automatically by default:
+  - training is always off by default.
+  - training is always local-only.
+  - training is an operator/internal node job, not a normal client request.
+  - training should unload incompatible model residency and restore default operational residency after completion.
+- The smoke should capture:
+  - queue state
+  - lane blocked reasons
+  - container_state
+  - model_state
+  - observed VRAM
+  - final job status
+  - final default residency state
+
+Validation:
+- Smoke run completes without failed jobs.
+- No job is marked running while required model residency is unloaded.
+- Visual and Vision do not preempt each other while active.
+- Default Text/Vision model residency is restored when visual work completes.
+- Training smoke, when manually enabled, unloads incompatible residency and restores defaults.
