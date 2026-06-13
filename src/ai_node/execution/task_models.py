@@ -4,6 +4,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ai_node.capabilities.task_families import canonicalize_task_family, validate_task_family_capabilities
+from ai_node.execution.queue_contract import (
+    QueueRoutingPolicy,
+    RuntimeLane,
+    infer_runtime_lane,
+)
 
 
 TaskExecutionPriority = Literal["background", "low", "normal", "high", "critical"]
@@ -26,21 +31,26 @@ class TaskExecutionQueueIntent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     importance: TaskExecutionQueueImportance = "normal"
+    priority: TaskExecutionPriority | None = None
     queue_class: TaskExecutionQueueClass | None = None
+    runtime_lane: RuntimeLane | None = None
     max_wait_seconds: int | None = None
     deadline_at: datetime | None = None
     allow_cloud_spillover: bool | None = None
     local_preferred: bool | None = None
+    routing_policy: QueueRoutingPolicy | None = None
+    estimated_vram_mib: int | None = None
+    estimated_runtime_seconds: int | None = None
     reason: str | None = None
 
-    @field_validator("max_wait_seconds")
+    @field_validator("max_wait_seconds", "estimated_vram_mib", "estimated_runtime_seconds")
     @classmethod
-    def _validate_max_wait_seconds(cls, value: int | None) -> int | None:
+    def _validate_non_negative_int(cls, value: int | None, info) -> int | None:
         if value is None:
             return None
         normalized = int(value)
         if normalized < 0:
-            raise ValueError("queue_max_wait_seconds_must_be_non_negative")
+            raise ValueError(f"{info.field_name}_must_be_non_negative")
         return normalized
 
     @field_validator("reason")
@@ -168,6 +178,8 @@ class TaskExecutionRequest(BaseModel):
             self.service_id = self.requested_by
         if self.queue.importance == "normal" and self.priority != "normal":
             self.queue.importance = self.priority
+        if self.queue.priority is None:
+            self.queue.priority = self.queue.importance
         if self.queue.queue_class is None:
             task_key = str(self.task_family or "").strip().lower()
             image_background = task_key in {"task.image_generation", "task.generation.image"} and self.priority in {
@@ -180,6 +192,23 @@ class TaskExecutionRequest(BaseModel):
                 self.queue.queue_class = "interactive"
         if self.queue.max_wait_seconds is None:
             self.queue.max_wait_seconds = 6 * 60 * 60 if self.queue.queue_class == "background" else 5 * 60
+        if self.queue.routing_policy is None:
+            routing_policy = self.constraints.get("routing_policy") if isinstance(self.constraints.get("routing_policy"), dict) else {}
+            mode = str(routing_policy.get("mode") or "").strip().lower()
+            if mode in {"local_only", "local_preferred", "cloud_fallback", "cloud_only"}:
+                self.queue.routing_policy = mode  # type: ignore[assignment]
+            elif self.requested_provider and str(self.requested_provider).strip().lower() not in {"local", "local_vision"}:
+                self.queue.routing_policy = "cloud_only"
+            else:
+                self.queue.routing_policy = "local_preferred"
+        if self.queue.local_preferred is None:
+            self.queue.local_preferred = self.queue.routing_policy in {"local_preferred", "cloud_fallback"}
+        if self.queue.runtime_lane is None:
+            self.queue.runtime_lane = infer_runtime_lane(
+                queue=None,
+                task_family=self.task_family,
+                requested_provider=self.requested_provider,
+            )  # type: ignore[assignment]
         return self
 
 

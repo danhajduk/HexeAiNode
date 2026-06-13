@@ -73,6 +73,40 @@ The repo also participates in Core-scheduled execution compatibility through:
 
 This is not a separate local scheduler authority. It is compatibility with the Core-owned lease lifecycle.
 
+## Local Queue Lane Contract
+
+The node now defines one global execution-intent contract and a dedicated runtime-lane vocabulary. Existing local/cloud
+queue names remain available for compatibility, but queue diagnostics and job state should expose the inferred
+`runtime_lane` so the residency scheduler and Runtime UI do not have to guess what a local job needs.
+
+Runtime lanes:
+
+- `cloud`: externally executed work; no local residency requirement.
+- `text_llm`: local text LLM work.
+- `vision_llm`: local vision LLM work.
+- `visual_gpu`: GPU Visual Runtime image generation work.
+- `visual_cpu`: CPU/low-resource Visual Runtime work where supported.
+- `training_runtime`: local LoRA/training work.
+
+Lane capacity contract:
+
+- The scheduler owns the backlog.
+- Each local runtime lane has at most one active job and one staged job.
+- Runtimes must not hide extra queue depth from the scheduler beyond the staged slot.
+
+Queue intent separates urgency from ordering:
+
+- `importance` is business/user urgency and is the first scheduling key.
+- `priority` is an ordering hint inside the same importance bucket and defaults to `importance`.
+
+Non-V3 or incomplete requests default conservatively:
+
+- `importance: normal`
+- `priority: normal`
+- `routing_policy: local_preferred`
+- interactive wait budgets for text/vision work
+- long background wait budgets for visual/training work unless overridden
+
 ## Provider-Specific Refresh Behavior
 
 Provider-related recurring work currently includes:

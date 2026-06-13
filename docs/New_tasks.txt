@@ -47,7 +47,6 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 1007: Define unified queue lane contract
 [TODO] Task 1008: Implement global intake queue and runtime lane dispatch
 [TODO] Task 1009: Integrate lane dispatch with local residency scheduler
 [TODO] Task 1010: Implement local-preferred cloud spillover decisions

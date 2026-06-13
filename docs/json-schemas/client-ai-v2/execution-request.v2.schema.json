@@ -96,9 +96,13 @@
         "background",
         "low",
         "normal",
-        "high"
+        "high",
+        "critical"
       ],
       "default": "normal"
+    },
+    "queue": {
+      "$ref": "#/$defs/queueIntent"
     },
     "response_mode": {
       "type": "string",
@@ -199,6 +203,128 @@
             "cloud_fallback"
           ],
           "description": "Per-request routing mode. The request may narrow a V3 prompt routing boundary but must not broaden it."
+        }
+      }
+    },
+    "queueIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "importance": {
+          "type": "string",
+          "enum": [
+            "background",
+            "low",
+            "normal",
+            "high",
+            "critical"
+          ],
+          "default": "normal",
+          "description": "Business/user urgency. The scheduler sorts by importance before per-bucket priority."
+        },
+        "priority": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "background",
+            "low",
+            "normal",
+            "high",
+            "critical",
+            null
+          ],
+          "description": "Ordering hint within the same importance bucket. Defaults to importance."
+        },
+        "queue_class": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "interactive",
+            "background",
+            "scheduled",
+            null
+          ],
+          "description": "Interactive work gets a short default wait budget; background work gets a long default wait budget."
+        },
+        "runtime_lane": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "cloud",
+            "text_llm",
+            "vision_llm",
+            "visual_gpu",
+            "visual_cpu",
+            "training_runtime",
+            null
+          ],
+          "description": "Dedicated runtime lane. If omitted, the node infers it from task family, requested provider, and routing."
+        },
+        "max_wait_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "deadline_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "allow_cloud_spillover": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "local_preferred": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "routing_policy": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "local_only",
+            "local_preferred",
+            "cloud_fallback",
+            "cloud_only",
+            null
+          ]
+        },
+        "estimated_vram_mib": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "estimated_runtime_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 512
         }
       }
     }

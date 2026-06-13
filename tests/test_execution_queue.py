@@ -23,6 +23,7 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response["status"], "queued")
         self.assertEqual(response["job_name"], "smoke-job")
         self.assertEqual(response["queue"], "local")
+        self.assertEqual(response["queue_state"]["runtime_lane"], "text_llm")
         self.assertEqual(response["routing_decision"]["reason"], "test")
         self.assertIn("eta", response)
         self.assertIn("/api/execution/jobs/", response["status_url"])
@@ -136,10 +137,46 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cpu_queue["active_count"], 1)
         self.assertEqual(cpu_queue["queued_count"], 1)
         self.assertEqual(cpu_queue["concurrency"], 1)
+        self.assertEqual(cpu_queue["runtime_lane"], "visual_cpu")
         self.assertEqual(cpu_queue["active_job"]["task_id"], "cpu-image-first")
         self.assertIsNotNone(cpu_queue["oldest_queued_at"])
         self.assertIsNotNone(cpu_queue["oldest_queued_age_seconds"])
+        self.assertEqual(diagnostics["lanes"]["visual_cpu"]["active_count"], 1)
+        self.assertEqual(diagnostics["lanes"]["visual_cpu"]["queued_count"], 1)
         release_first.set()
+
+    async def test_runtime_lane_contract_reports_visual_gpu_and_visual_cpu_separately(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
+        release_gpu = asyncio.Event()
+        release_cpu = asyncio.Event()
+        gpu = await queue.enqueue(
+            queue="visual_gpu",
+            importance="normal",
+            job_name="gpu image",
+            request_payload={"task_id": "gpu-image", "task_family": "task.image_generation"},
+            runner=lambda: _blocking_job(name="gpu", order=[], release=release_gpu),
+        )
+        cpu = await queue.enqueue(
+            queue="visual_cpu",
+            importance="background",
+            job_name="cpu image",
+            request_payload={"task_id": "cpu-image", "task_family": "task.image_generation"},
+            runner=lambda: _blocking_job(name="cpu", order=[], release=release_cpu),
+        )
+        await _wait_for_status(queue, job_id=gpu["job_id"], status="running")
+        await _wait_for_status(queue, job_id=cpu["job_id"], status="running")
+
+        diagnostics = await queue.diagnostics()
+
+        self.assertIn("lane_contract", diagnostics)
+        self.assertEqual(diagnostics["queues"]["visual_gpu"]["runtime_lane"], "visual_gpu")
+        self.assertEqual(diagnostics["queues"]["visual_cpu"]["runtime_lane"], "visual_cpu")
+        self.assertEqual(diagnostics["lanes"]["visual_gpu"]["active_count"], 1)
+        self.assertEqual(diagnostics["lanes"]["visual_cpu"]["active_count"], 1)
+        self.assertEqual(diagnostics["lanes"]["visual_gpu"]["capacity"]["max_active"], 1)
+        self.assertEqual(diagnostics["lanes"]["visual_gpu"]["capacity"]["max_staged"], 1)
+        release_gpu.set()
+        release_cpu.set()
 
     async def test_queue_eta_estimates_start_time_from_position_and_active_jobs(self):
         queue = ExecutionQueueService(

@@ -8,6 +8,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Awaitable, Callable
 
+from ai_node.execution.queue_contract import (
+    RUNTIME_LANES,
+    infer_runtime_lane,
+    lane_capacity,
+    lane_contract_snapshot,
+    normalize_runtime_lane,
+)
 from ai_node.time_utils import local_now, local_now_iso
 
 
@@ -46,6 +53,11 @@ class ExecutionQueueService:
             "local": self._local_concurrency,
             "cloud": self._cloud_concurrency,
             "cpu_comfyui": 1,
+            "text_llm": 1,
+            "vision_llm": 1,
+            "visual_gpu": 1,
+            "visual_cpu": 1,
+            "training_runtime": 1,
         }
         for queue_name, concurrency in (extra_queue_concurrency or {}).items():
             normalized = self._normalize_queue_key(queue_name)
@@ -98,13 +110,22 @@ class ExecutionQueueService:
         now = local_now()
         client_key = str(client_id or "").strip()
         normalized_queue_intent = deepcopy(queue_intent) if isinstance(queue_intent, dict) else {}
+        runtime_lane = self._runtime_lane_for_job(
+            queue_key=queue_key,
+            request_payload=request_payload,
+            queue_intent=normalized_queue_intent,
+        )
+        normalized_queue_intent.setdefault("runtime_lane", runtime_lane)
+        normalized_queue_intent.setdefault("priority", importance_key if importance_key in IMPORTANCE_RANK else "normal")
         deadline_sort = self._deadline_sort_value(queue_intent=normalized_queue_intent)
         job = {
             "job_id": job_id,
             "job_name": str(job_name or job_id).strip() or job_id,
             "client_id": client_key or None,
             "queue": queue_key,
+            "runtime_lane": runtime_lane,
             "importance": importance_key if importance_key in IMPORTANCE_RANK else "normal",
+            "priority": normalized_queue_intent.get("priority"),
             "queue_intent": normalized_queue_intent or None,
             "routing_decision": deepcopy(routing_decision) if isinstance(routing_decision, dict) else None,
             "status": "queued",
@@ -113,6 +134,7 @@ class ExecutionQueueService:
             "error": None,
             "created_at": now.isoformat(),
             "queued_at": now.isoformat(),
+            "staged_at": None,
             "started_at": None,
             "completed_at": None,
             "expires_at": (now + timedelta(seconds=self._job_ttl_seconds)).isoformat(),
@@ -206,6 +228,7 @@ class ExecutionQueueService:
                 per_client_pending: dict[str, int] = {}
                 oldest_queued_at = None
                 active_job = None
+                staged_job = None
                 for job_id in queued_ids:
                     job = self._jobs.get(job_id) or {}
                     importance = str(job.get("importance") or "normal")
@@ -239,20 +262,28 @@ class ExecutionQueueService:
                 queues[queue_key] = {
                     "queued_count": len(queued_ids),
                     "active_count": self._active_counts.get(queue_key, 0),
+                    "staged_count": 0,
                     "concurrency": self._concurrency(queue_key),
+                    "runtime_lane": self._queue_runtime_lane(queue_key=queue_key, next_job=next_job),
                     "oldest_queued_at": oldest_queued_at,
                     "oldest_queued_age_seconds": oldest_queued_age_seconds,
                     "active_job": active_job,
+                    "staged_job": staged_job,
                     "next_job": self._queue_job_summary(next_job) if isinstance(next_job, dict) else None,
                     "per_importance": per_importance,
                     "per_client_pending": per_client_pending,
                 }
+            lanes = self._lane_diagnostics_locked(queues=queues)
             return {
                 "configured": True,
+                "schema_version": "2.0",
                 "fairness": {
                     "max_pending_per_client": self._max_pending_per_client,
                     "scope": "all_queues",
                 },
+                "lane_contract": lane_contract_snapshot(),
+                "lanes": lanes,
+                "global_backlog_count": sum(int(item.get("queued_count") or 0) for item in lanes.values()),
                 "persistence": {
                     "configured": self._state_path is not None,
                     "path": str(self._state_path) if self._state_path is not None else None,
@@ -483,7 +514,13 @@ class ExecutionQueueService:
             remaining_wait_seconds = round(max((effective_deadline - local_now()).total_seconds(), 0.0), 3)
         return {
             "queue": job.get("queue"),
+            "runtime_lane": job.get("runtime_lane") or self._runtime_lane_for_job(
+                queue_key=str(job.get("queue") or ""),
+                request_payload=job.get("request") if isinstance(job.get("request"), dict) else {},
+                queue_intent=queue_intent,
+            ),
             "importance": job.get("importance"),
+            "priority": job.get("priority") or queue_intent.get("priority") or job.get("importance"),
             "queue_class": queue_intent.get("queue_class"),
             "max_wait_seconds": max_wait_seconds,
             "deadline_at": deadline_at.isoformat() if deadline_at is not None else None,
@@ -491,6 +528,12 @@ class ExecutionQueueService:
             "remaining_wait_seconds": remaining_wait_seconds,
             "estimated_start_seconds": (eta or {}).get("estimated_start_seconds") if isinstance(eta, dict) else None,
             "estimated_start_at": (eta or {}).get("estimated_start_at") if isinstance(eta, dict) else None,
+            "staged_at": job.get("staged_at"),
+            "started_at": job.get("started_at"),
+            "completed_at": job.get("completed_at"),
+            "estimated_vram_mib": queue_intent.get("estimated_vram_mib"),
+            "estimated_runtime_seconds": queue_intent.get("estimated_runtime_seconds"),
+            "lane_capacity": lane_capacity(job.get("runtime_lane") or queue_intent.get("runtime_lane")),
             "spillover_allowed": bool(queue_intent.get("allow_cloud_spillover")),
             "spillover_selected": bool(routing_decision.get("spillover")),
             "routing_reason": routing_decision.get("reason"),
@@ -507,9 +550,12 @@ class ExecutionQueueService:
             "job_name": job.get("job_name"),
             "task_id": request.get("task_id"),
             "task_family": request.get("task_family"),
+            "runtime_lane": job.get("runtime_lane"),
             "status": job.get("status"),
             "created_at": job.get("created_at"),
             "queued_at": job.get("queued_at"),
+            "staged_at": job.get("staged_at"),
+            "started_at": job.get("started_at"),
             "client_id": job.get("client_id"),
             "queue_position": self._queue_position(job_id=job_id),
             "queue_state": self._queue_state(job=job, eta=eta),
@@ -656,12 +702,15 @@ class ExecutionQueueService:
                 "job_name",
                 "client_id",
                 "queue",
+                "runtime_lane",
                 "importance",
+                "priority",
                 "queue_intent",
                 "routing_decision",
                 "status",
                 "created_at",
                 "queued_at",
+                "staged_at",
                 "started_at",
                 "completed_at",
                 "expires_at",
@@ -703,7 +752,14 @@ class ExecutionQueueService:
             sequence = max(int(job.get("sequence") or 0), 0)
             max_sequence = max(max_sequence, sequence)
             job["queue"] = queue_key
+            job["runtime_lane"] = job.get("runtime_lane") or self._runtime_lane_for_job(
+                queue_key=queue_key,
+                request_payload=job.get("request") if isinstance(job.get("request"), dict) else {},
+                queue_intent=job.get("queue_intent") if isinstance(job.get("queue_intent"), dict) else {},
+            )
             job["importance"] = importance if importance in IMPORTANCE_RANK else "normal"
+            job["priority"] = job.get("priority") or (job.get("queue_intent") or {}).get("priority") or job["importance"]
+            job.setdefault("staged_at", None)
             job["_runner"] = None
             if str(job.get("status") or "").strip().lower() in {"queued", "running"}:
                 self._recovered_unfinished_count += 1
@@ -757,9 +813,67 @@ class ExecutionQueueService:
         normalized = str(value or "").strip().lower().replace("-", "_")
         if normalized == "local":
             return "local"
+        if normalized in RUNTIME_LANES:
+            return normalized
+        if normalized in {"visual_runtime", "comfyui", "comfyui_gpu", "gpu_comfyui"}:
+            return "visual_gpu"
+        if normalized in {"visual_cpu", "comfyui_cpu"}:
+            return "visual_cpu"
+        if normalized in {"training", "sd_scripts", "sd_scripts_training"}:
+            return "training_runtime"
+        if normalized in {"vision", "local_vision"}:
+            return "vision_llm"
         if normalized in self._queue_concurrency or normalized == "cpu_comfyui":
             return normalized
         return "cloud"
+
+    @staticmethod
+    def _runtime_lane_for_job(*, queue_key: str, request_payload: dict, queue_intent: dict) -> str:
+        requested_lane = queue_intent.get("runtime_lane") if isinstance(queue_intent, dict) else None
+        if requested_lane:
+            return normalize_runtime_lane(requested_lane)
+        request = request_payload if isinstance(request_payload, dict) else {}
+        return infer_runtime_lane(
+            queue=queue_key,
+            task_family=request.get("task_family"),
+            requested_provider=request.get("requested_provider"),
+        )
+
+    @staticmethod
+    def _queue_runtime_lane(*, queue_key: str, next_job: dict | None = None) -> str:
+        if isinstance(next_job, dict) and next_job.get("runtime_lane"):
+            return normalize_runtime_lane(next_job.get("runtime_lane"))
+        return infer_runtime_lane(queue=queue_key)
+
+    def _lane_diagnostics_locked(self, *, queues: dict) -> dict:
+        lanes = {
+            lane: {
+                "lane": lane,
+                "queued_count": 0,
+                "active_count": 0,
+                "staged_count": 0,
+                "capacity": lane_capacity(lane),
+                "active_job": None,
+                "staged_job": None,
+                "next_job": None,
+                "blocked_reason": None,
+            }
+            for lane in RUNTIME_LANES
+        }
+        for queue_key, queue_payload in queues.items():
+            lane = normalize_runtime_lane(queue_payload.get("runtime_lane") or queue_key)
+            if lane not in lanes:
+                continue
+            lanes[lane]["queued_count"] += int(queue_payload.get("queued_count") or 0)
+            lanes[lane]["active_count"] += int(queue_payload.get("active_count") or 0)
+            lanes[lane]["staged_count"] += int(queue_payload.get("staged_count") or 0)
+            if lanes[lane]["active_job"] is None and queue_payload.get("active_job"):
+                lanes[lane]["active_job"] = queue_payload.get("active_job")
+            if lanes[lane]["staged_job"] is None and queue_payload.get("staged_job"):
+                lanes[lane]["staged_job"] = queue_payload.get("staged_job")
+            if lanes[lane]["next_job"] is None and queue_payload.get("next_job"):
+                lanes[lane]["next_job"] = queue_payload.get("next_job")
+        return lanes
 
     @staticmethod
     def _age_seconds(*, iso_value: str) -> float | None:
