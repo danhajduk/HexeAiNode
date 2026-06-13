@@ -33,8 +33,25 @@ function componentStats(component) {
   return { stats, current, average, max };
 }
 
+function componentWork({ component, executionQueue }) {
+  const idle = serviceObject(component.idle);
+  if (component.component_id === "text_llm") {
+    const queues = serviceObject(executionQueue?.queues);
+    const localQueue = serviceObject(queues.local);
+    return {
+      inFlight: Number.isFinite(Number(localQueue.active_count)) ? Number(localQueue.active_count) : idle.in_flight ?? 0,
+      queued: Number.isFinite(Number(localQueue.queued_count)) ? Number(localQueue.queued_count) : idle.queued ?? 0,
+    };
+  }
+  return {
+    inFlight: idle.in_flight ?? 0,
+    queued: idle.queued ?? 0,
+  };
+}
+
 export function LocalResidencyCard({
   serviceStatus = {},
+  executionQueue = null,
   localSchedulerBusyTarget = "",
   className = "",
   onRequestLocalScheduler,
@@ -49,10 +66,10 @@ export function LocalResidencyCard({
       <CardHeader title="Local Residency" subtitle="Scheduler view of local model and runtime residency." />
       <div className="runtime-residency-grid">
         {localSchedulerComponents.map((component) => {
-          const idle = serviceObject(component.idle);
           const blockers = Array.isArray(component.blockers) ? component.blockers : [];
           const preview = serviceObject(requestPreviews[component.component_id]);
           const stats = componentStats(component);
+          const work = componentWork({ component, executionQueue });
           const busy = localSchedulerBusyTarget === component.component_id;
           const reason = compactText(preview.reason || blockers.join(", "), "");
           return (
@@ -76,7 +93,7 @@ export function LocalResidencyCard({
                 <div>
                   <span>Work</span>
                   <code>
-                    {idle.in_flight ?? 0} running / {idle.queued ?? 0} queued
+                    {work.inFlight} running / {work.queued} queued
                   </code>
                 </div>
                 <div>

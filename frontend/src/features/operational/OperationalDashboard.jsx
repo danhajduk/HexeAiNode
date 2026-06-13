@@ -198,7 +198,11 @@ export function OperationalDashboard({
             </article>
             <RuntimeServicesCard {...runtimeServicesProps} className="operational-runtime-services-card" />
             <OperationalActionsCard {...operationalActions} className="operational-runtime-actions-card" />
-            <LocalResidencyCard {...runtimeServicesProps} className="operational-runtime-residency-card" />
+            <LocalResidencyCard
+              {...runtimeServicesProps}
+              executionQueue={scheduledTasksProps?.executionQueue}
+              className="operational-runtime-residency-card"
+            />
             <JobsQueueCard
               executionQueue={scheduledTasksProps?.executionQueue}
               className="operational-runtime-jobs-card"
