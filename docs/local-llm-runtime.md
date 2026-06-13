@@ -181,19 +181,19 @@ curl --unix-socket /run/hexe/ai-node/comfyui-gpu-health.sock http://comfyui/heal
 curl --unix-socket /run/hexe/ai-node/comfyui-cpu.sock http://comfyui/system_stats
 ```
 
-GPU ComfyUI startup is gated on vision VRAM release by default. Before `scripts/comfyui-control.sh gpu start` or
-`ready` recreates the GPU container, the control script checks the vision socket/container, calls
-`scripts/llamacpp-vision-control.sh unload-model` when vision is resident, and waits until the vision sockets/container
-are gone. Gate latency is written to `.run/comfyui-gpu-vision-gate.json` as `vision_unload_seconds`; the later reload is
-tracked separately by the vision residency scheduler, so the artifact keeps `vision_reload_pending: true` after an
-unload. Set `COMFYUI_GPU_VISION_GATE_ENABLED=false` only for manual maintenance.
+Text and vision llama.cpp runtimes are resident by default. Runtime load/unload ownership belongs to the local
+residency scheduler: service API compatibility paths, manual ComfyUI Web UI startup, Vision residency, and Text
+always-on checks request or release scheduler components instead of starting or stopping model runtimes directly.
+The scheduler is the only backend path that may invoke the low-level llama.cpp, Visual Runtime, or Training Runtime
+control scripts for residency transitions.
 
-Text and vision llama.cpp runtimes are resident by default. The local residency scheduler uses registered VRAM
+The local residency scheduler uses registered VRAM
 reservations before admitting GPU work: Visual Runtime currently reserves 5 GiB and Training Runtime currently reserves
 9 GiB. When a Visual Runtime job is queued, the scheduler starts Visual Runtime if the reservation fits in free VRAM;
 otherwise it unloads Vision first and unloads Text only as a last resort. Training Runtime unloads Visual Runtime and
 Vision before admission, then unloads Text if the 9 GiB reservation still cannot fit. These registered values are
-temporary policy hints until runtime-specific measured maxima are promoted into the scheduler statistics.
+temporary policy hints until runtime-specific measured maxima are promoted into the scheduler statistics. Text
+always-on reloads wait while Visual Runtime or Training Runtime owns local GPU residency.
 
 CPU ComfyUI is reserved for low-priority background image work. The direct execution queue exposes a `cpu_comfyui` lane
 with concurrency `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` defaulting to 1. Only `task.image_generation` or

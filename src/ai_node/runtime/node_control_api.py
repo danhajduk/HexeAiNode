@@ -13803,30 +13803,60 @@ class NodeControlState:
         return {"status": "ok", "result": result if isinstance(result, dict) else {}}
 
     async def _local_llm_always_on_job_once(self) -> dict | None:
-        if self._service_manager is None or not hasattr(self._service_manager, "ensure_local_llm_always_on"):
+        if self._service_manager is None or not hasattr(self._service_manager, "request_local_scheduler_component"):
             return {"status": "skipped", "reason": "service_manager_not_configured"}
         admission = self.direct_execution_admission_payload()
         local_in_flight = max(int(admission.get("in_flight") or 0), 0)
         if self._local_llm_switch_lock.locked():
             local_in_flight = max(local_in_flight, 1)
         result = await asyncio.to_thread(
-            self._service_manager.ensure_local_llm_always_on,
-            local_in_flight=local_in_flight,
+            self._service_manager.request_local_scheduler_component,
+            component_id="text_llm",
+            importance="normal",
+            request_metadata={"source": "local_llm_always_on_job", "local_in_flight": local_in_flight},
         )
         return {"status": "ok", "result": result if isinstance(result, dict) else {}}
 
     async def _vision_runtime_residency_job_once(self) -> dict | None:
-        if self._service_manager is None or not hasattr(self._service_manager, "ensure_vision_runtime_resident"):
+        if self._service_manager is None or not hasattr(self._service_manager, "request_local_scheduler_component"):
             return {"status": "skipped", "reason": "service_manager_not_configured"}
         admission = self.direct_execution_admission_payload()
         local_in_flight = max(int(admission.get("in_flight") or 0), 0)
         if self._local_llm_switch_lock.locked():
             local_in_flight = max(local_in_flight, 1)
         gpu_comfyui_critical_in_flight = await self._gpu_comfyui_critical_work_pending()
+        scheduler_status = self.local_scheduler_status().get("local_scheduler", {})
+        components = scheduler_status.get("components") if isinstance(scheduler_status, dict) else []
+        runtime_components = {
+            str(component.get("component_id") or ""): component
+            for component in components
+            if isinstance(component, dict)
+        }
+        for component_id in ("visual_runtime", "training_runtime"):
+            component = runtime_components.get(component_id) or {}
+            observed = str(component.get("observed_state") or "").strip().lower()
+            desired = str(component.get("desired_state") or "").strip().lower()
+            if observed in {"running", "starting", "idle", "pausing", "unloading"} or desired in {
+                "requested",
+                "starting",
+                "running",
+            }:
+                return {
+                    "status": "skipped",
+                    "reason": f"{component_id}_owns_gpu_residency",
+                    "component_id": component_id,
+                    "observed_state": observed,
+                    "desired_state": desired,
+                }
         result = await asyncio.to_thread(
-            self._service_manager.ensure_vision_runtime_resident,
-            local_in_flight=local_in_flight,
-            gpu_comfyui_critical_in_flight=gpu_comfyui_critical_in_flight,
+            self._service_manager.request_local_scheduler_component,
+            component_id="vision_llm",
+            importance="normal",
+            request_metadata={
+                "source": "vision_runtime_residency_job",
+                "local_in_flight": local_in_flight,
+                "gpu_comfyui_critical_in_flight": gpu_comfyui_critical_in_flight,
+            },
         )
         return {"status": "ok", "result": result if isinstance(result, dict) else {}}
 

@@ -166,6 +166,10 @@ def plan_local_scheduler_request(
             reasons.append(f"{runtime_id}_vram_budget_unavailable")
 
     if requested == "text_llm":
+        if _is_resident(visual):
+            actions.append({"action": "wait_for_idle", "component_id": "visual_runtime", "reason": "text_llm_waits_for_visual_runtime"})
+            affected.append("visual_runtime")
+            reasons.append("visual_runtime_resident")
         if _is_resident(training) and _is_busy(training):
             actions.append({"action": "wait_for_idle", "component_id": "training_runtime", "reason": "text_llm_priority"})
             affected.append("training_runtime")

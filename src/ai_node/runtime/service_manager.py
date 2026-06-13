@@ -174,6 +174,13 @@ class UserSystemdServiceManager:
         self._bus_address = f"unix:path={self._runtime_dir}/bus"
         self._local_scheduler_state_store = LocalSchedulerStateStore(logger=logger)
         self._local_scheduler_transition_lock = threading.Lock()
+        self._local_scheduler_control_context = threading.local()
+
+    def _scheduler_control_active(self) -> bool:
+        return bool(getattr(self._local_scheduler_control_context, "active", False))
+
+    def _set_scheduler_control_active(self, active: bool) -> None:
+        self._local_scheduler_control_context.active = bool(active)
 
     def get_status(self) -> dict:
         backend = self._unit_status(self._backend_unit, service_id="backend")
@@ -211,14 +218,51 @@ class UserSystemdServiceManager:
             self._restart_unit(self._frontend_unit)
             return {"target": "node", "result": "restarted"}
         if value == "local_llm":
-            self._run_local_llm_control("restart")
-            return {"target": "local_llm", "result": "restarted"}
+            if self._scheduler_control_active():
+                self._run_local_llm_control("restart")
+                return {"target": "local_llm", "result": "restarted"}
+            release = self.release_local_scheduler_component(
+                component_id="text_llm",
+                request_metadata={"source": "service_restart", "target": value},
+            )
+            request = self.request_local_scheduler_component(
+                component_id="text_llm",
+                importance="high",
+                request_metadata={"source": "service_restart", "target": value},
+            )
+            return {"target": "local_llm", "result": request.get("status"), "release": release, "request": request}
         if value == "vision_llm":
-            self._run_vision_llm_control("restart")
-            return {"target": "vision_llm", "result": "restarted"}
+            if self._scheduler_control_active():
+                self._run_vision_llm_control("restart")
+                return {"target": "vision_llm", "result": "restarted"}
+            release = self.release_local_scheduler_component(
+                component_id="vision_llm",
+                request_metadata={"source": "service_restart", "target": value},
+            )
+            request = self.request_local_scheduler_component(
+                component_id="vision_llm",
+                importance="high",
+                request_metadata={"source": "service_restart", "target": value},
+            )
+            return {"target": "vision_llm", "result": request.get("status"), "release": release, "request": request}
         if value == "comfyui_webui":
-            self.stop_comfyui_webui()
-            return self.start_comfyui_webui()
+            release = self.release_local_scheduler_component(
+                component_id="visual_runtime",
+                request_metadata={"source": "service_restart", "target": value},
+            )
+            request = self.request_local_scheduler_component(
+                component_id="visual_runtime",
+                importance="high",
+                request_metadata={"source": "service_restart", "target": value},
+            )
+            if request.get("status") != "ok":
+                return {"target": "comfyui_webui", "result": request.get("status"), "release": release, "request": request}
+            self._set_scheduler_control_active(True)
+            try:
+                started = self.start_comfyui_webui()
+            finally:
+                self._set_scheduler_control_active(False)
+            return {"target": "comfyui_webui", "result": started.get("result"), "release": release, "request": request, "webui": started}
         raise ValueError("unsupported restart target")
 
     def start(self, *, target: str) -> dict:
@@ -234,6 +278,12 @@ class UserSystemdServiceManager:
             self._start_unit(self._frontend_unit)
             return {"target": "node", "result": "started"}
         if value == "local_llm":
+            if not self._scheduler_control_active():
+                return self.request_local_scheduler_component(
+                    component_id="text_llm",
+                    importance="high",
+                    request_metadata={"source": "service_start", "target": value},
+                )
             gpu_exclusive = self.gpu_exclusive_workload_status()
             if gpu_exclusive.get("active") and gpu_exclusive.get("local_llm_blocked"):
                 return {
@@ -245,6 +295,12 @@ class UserSystemdServiceManager:
             self._run_local_llm_control("start")
             return {"target": "local_llm", "result": "started"}
         if value == "vision_llm":
+            if not self._scheduler_control_active():
+                return self.request_local_scheduler_component(
+                    component_id="vision_llm",
+                    importance="high",
+                    request_metadata={"source": "service_start", "target": value},
+                )
             gpu_exclusive = self.gpu_exclusive_workload_status()
             if gpu_exclusive.get("active") and gpu_exclusive.get("vision_llm_blocked"):
                 return {
@@ -256,6 +312,20 @@ class UserSystemdServiceManager:
             self._run_vision_llm_control("start")
             return {"target": "vision_llm", "result": "started"}
         if value == "comfyui_webui":
+            if not self._scheduler_control_active():
+                request = self.request_local_scheduler_component(
+                    component_id="visual_runtime",
+                    importance="high",
+                    request_metadata={"source": "service_start", "target": value},
+                )
+                if request.get("status") != "ok":
+                    return {"target": "comfyui_webui", "result": request.get("status"), "request": request}
+                self._set_scheduler_control_active(True)
+                try:
+                    started = self.start_comfyui_webui()
+                finally:
+                    self._set_scheduler_control_active(False)
+                return {"target": "comfyui_webui", "result": started.get("result"), "request": request, "webui": started}
             return self.start_comfyui_webui()
         raise ValueError("unsupported start target")
 
@@ -272,11 +342,26 @@ class UserSystemdServiceManager:
             self._stop_unit(self._frontend_unit)
             return {"target": "node", "result": "stopped"}
         if value == "local_llm":
+            if not self._scheduler_control_active():
+                return self.release_local_scheduler_component(
+                    component_id="text_llm",
+                    request_metadata={"source": "service_stop", "target": value},
+                )
             self._run_local_llm_control("stop")
             return {"target": "local_llm", "result": "stopped"}
         if value == "vision_llm":
+            if not self._scheduler_control_active():
+                return self.release_local_scheduler_component(
+                    component_id="vision_llm",
+                    request_metadata={"source": "service_stop", "target": value},
+                )
             return self.unload_vision_model()
         if value == "comfyui_webui":
+            if not self._scheduler_control_active():
+                return self.release_local_scheduler_component(
+                    component_id="visual_runtime",
+                    request_metadata={"source": "service_stop", "target": value},
+                )
             return self.stop_comfyui_webui()
         raise ValueError("unsupported stop target")
 
@@ -322,13 +407,21 @@ class UserSystemdServiceManager:
                 if action.get("action") != "unload":
                     continue
                 affected = str(action.get("component_id") or "").strip()
-                result = self._execute_local_scheduler_release(affected)
+                self._set_scheduler_control_active(True)
+                try:
+                    result = self._execute_local_scheduler_release(affected)
+                finally:
+                    self._set_scheduler_control_active(False)
                 executed_actions.append({"action": action, "result": result})
                 self._local_scheduler_state_store.append_event(
                     {"event": "action_executed", "component_id": affected, "action": action, "result": result}
                 )
 
-            start_result = self._execute_local_scheduler_start(requested)
+            self._set_scheduler_control_active(True)
+            try:
+                start_result = self._execute_local_scheduler_start(requested)
+            finally:
+                self._set_scheduler_control_active(False)
             desired_state = "running" if start_result.get("result") in {"started", "already_running", "ready_for_job_submission"} else "blocked"
             self._local_scheduler_state_store.update_desired_state(
                 component_id=requested,
@@ -358,7 +451,11 @@ class UserSystemdServiceManager:
                 request_metadata=dict(request_metadata or {}),
                 last_transition={"action": "release", "component_id": requested},
             )
-            result = self._execute_local_scheduler_release(requested)
+            self._set_scheduler_control_active(True)
+            try:
+                result = self._execute_local_scheduler_release(requested)
+            finally:
+                self._set_scheduler_control_active(False)
             desired_state = "unloaded" if result.get("result") in {"stopped", "model_unloaded", "already_unloaded", "not_directly_releasable"} else "blocked"
             self._local_scheduler_state_store.update_desired_state(
                 component_id=requested,
@@ -819,6 +916,16 @@ class UserSystemdServiceManager:
         local_in_flight: int = 0,
         gpu_comfyui_critical_in_flight: bool = False,
     ) -> dict:
+        if not self._scheduler_control_active():
+            return self.request_local_scheduler_component(
+                component_id="vision_llm",
+                importance="normal",
+                request_metadata={
+                    "source": "vision_residency_compat",
+                    "local_in_flight": max(int(local_in_flight), 0),
+                    "gpu_comfyui_critical_in_flight": bool(gpu_comfyui_critical_in_flight),
+                },
+            )
         status = self.vision_runtime_status(
             local_in_flight=local_in_flight,
             gpu_comfyui_critical_in_flight=gpu_comfyui_critical_in_flight,
@@ -843,6 +950,11 @@ class UserSystemdServiceManager:
         return {"started": True, "load_seconds": load_seconds, **self.vision_runtime_status()}
 
     def unload_vision_model(self) -> dict:
+        if not self._scheduler_control_active():
+            return self.release_local_scheduler_component(
+                component_id="vision_llm",
+                request_metadata={"source": "vision_unload_compat", "target": "vision_llm"},
+            )
         started = time.perf_counter()
         self._run_vision_llm_control("unload-model")
         unload_seconds = round(time.perf_counter() - started, 3)
@@ -858,12 +970,25 @@ class UserSystemdServiceManager:
         }
 
     def start_comfyui_webui(self) -> dict:
-        vision_unload = self.unload_vision_model()
+        if not self._scheduler_control_active():
+            request = self.request_local_scheduler_component(
+                component_id="visual_runtime",
+                importance="high",
+                request_metadata={"source": "comfyui_webui_start", "target": "comfyui_webui"},
+            )
+            if request.get("status") != "ok":
+                return {"target": "comfyui_webui", "result": request.get("status"), "request": request}
+            self._set_scheduler_control_active(True)
+            try:
+                started = self.start_comfyui_webui()
+            finally:
+                self._set_scheduler_control_active(False)
+            return {"target": "comfyui_webui", "result": started.get("result"), "request": request, "webui": started}
         current = self._comfyui_webui_status()
         if current.get("state") == "running":
             manual_mounts_active = self._comfyui_manual_mounts_active(runtime=self._comfyui_webui_runtime)
             if manual_mounts_active is not False:
-                return {"target": "comfyui_webui", "result": "already_running", "vision_unload": vision_unload, **current}
+                return {"target": "comfyui_webui", "result": "already_running", **current}
             self._logger.info(
                 "restarting ComfyUI Web UI because active container is not mounted to manual %s paths",
                 self._comfyui_webui_runtime,
@@ -913,13 +1038,18 @@ class UserSystemdServiceManager:
                         reason="manual_webui_bridge_running",
                         last_active_epoch=time.time(),
                     )
-                    return {"target": "comfyui_webui", "result": "started", "vision_unload": vision_unload, **status}
+                    return {"target": "comfyui_webui", "result": "started", **status}
             raise ValueError("ComfyUI web UI bridge did not become ready")
         except Exception:
             self._write_comfyui_webui_session(state="failed", reason="manual_webui_start_failed")
             raise
 
     def stop_comfyui_webui(self) -> dict:
+        if not self._scheduler_control_active():
+            return self.release_local_scheduler_component(
+                component_id="visual_runtime",
+                request_metadata={"source": "comfyui_webui_stop", "target": "comfyui_webui"},
+            )
         self.stop_comfyui_progress_listener()
         self._write_comfyui_webui_session(state="closing", reason="manual_webui_stop_requested")
         pid = self._read_pid_file(self._comfyui_webui_pid_file)
@@ -967,8 +1097,15 @@ class UserSystemdServiceManager:
             return {"closed": False, "reason": "idle_timer_started", "session": self.comfyui_webui_session_status()}
         if float(idle_seconds) < self._comfyui_webui_idle_timeout_seconds:
             return {"closed": False, "reason": "idle_timeout_not_reached", "session": session_status}
-        result = self.stop_comfyui_webui()
-        vision_restore = self.ensure_vision_runtime_resident(local_in_flight=0, gpu_comfyui_critical_in_flight=False)
+        result = self.release_local_scheduler_component(
+            component_id="visual_runtime",
+            request_metadata={"source": "comfyui_webui_idle_close", "target": "comfyui_webui"},
+        )
+        vision_restore = self.request_local_scheduler_component(
+            component_id="vision_llm",
+            importance="normal",
+            request_metadata={"source": "comfyui_webui_idle_close", "target": "vision_llm"},
+        )
         return {
             "closed": True,
             "reason": "idle_timeout_reached",
