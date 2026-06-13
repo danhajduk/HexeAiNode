@@ -1887,3 +1887,224 @@ Validation:
 - Communication MD accurately describes implemented request/response fields.
 - Existing endpoint/API paths remain accurate.
 - Markdown examples are internally consistent with current code.
+
+## Task 1007
+Original task details:
+- Define the unified queue lane contract for the node.
+- Preserve one global intake queue, then dispatch into dedicated runtime lanes:
+  - cloud
+  - text_llm
+  - vision_llm
+  - visual_gpu
+  - visual_cpu
+  - training_runtime
+- Split Visual Runtime into GPU and CPU lanes.
+- Preserve Prompt V3 queue intent fields and define default behavior for non-V3 clients.
+
+Implementation notes:
+- Add or standardize queue/lane identifiers and metadata:
+  - job_id
+  - task_family
+  - runtime_lane
+  - importance
+  - priority
+  - queue_class
+  - max_wait_seconds
+  - deadline_at
+  - local/cloud routing policy
+  - estimated_vram_mib
+  - estimated_runtime_seconds
+  - submitted_at, queued_at, staged_at, started_at, completed_at
+- Non-V3/default request behavior:
+  - importance `normal`
+  - priority `normal`
+  - routing `local_preferred`
+  - interactive text/vision default wait budget
+  - long background wait budget for visual/training unless overridden
+- Define distinction:
+  - importance = business/user urgency
+  - priority = ordering within the same importance bucket
+- Document lane capacity model:
+  - scheduler queue owns backlog
+  - each runtime lane has max 1 active and max 1 staged job
+  - no hidden model/runtime backlog beyond the staged slot
+
+Validation:
+- Queue/lane contract is documented in code or docs.
+- Existing request model remains backwards compatible.
+- Non-V3 requests get expected defaults.
+- Python compile checks pass.
+
+## Task 1008
+Original task details:
+- Implement global intake queue and runtime lane dispatch.
+- One queue manager should own all job ordering and dispatch jobs into lanes based on lane capacity, importance, priority, deadline, and routing policy.
+
+Implementation notes:
+- Replace or extend the current local/cloud/cpu_comfyui queue model with global intake plus lane snapshots.
+- Lanes:
+  - cloud
+  - text_llm
+  - vision_llm
+  - visual_gpu
+  - visual_cpu
+  - training_runtime
+- Queue manager chooses dispatch candidates by:
+  - importance first
+  - explicit priority inside importance
+  - deadline/max wait feasibility
+  - age/fairness
+  - runtime lane capacity
+  - local/cloud policy
+- Add dispatch tokens:
+  - active token
+  - staged token
+- Job only leaves the global backlog when a lane has available staged/active capacity.
+- Existing per-client pending limits still apply at global intake level.
+- Preserve job status/history and queue diagnostics.
+
+Validation:
+- 10 queued jobs with lane concurrency 1 show one active, one staged, remaining in scheduler backlog.
+- Importance/priority ordering is deterministic.
+- Queue diagnostics show global backlog and per-lane active/staged/backlog.
+- Existing `/api/execution/queues` remains usable or has compatible migration fields.
+- Targeted backend tests pass.
+
+## Task 1009
+Original task details:
+- Integrate runtime lane dispatch with the local residency scheduler.
+- Queue dispatch should request/release local runtimes, not bypass residency rules.
+
+Implementation notes:
+- Map lanes to residency components:
+  - text_llm -> Text LLM
+  - vision_llm -> Vision LLM
+  - visual_gpu -> Visual Runtime GPU
+  - visual_cpu -> Visual Runtime CPU
+  - training_runtime -> Training Runtime
+  - cloud -> no local residency
+- Before staging/running a lane job, scheduler must confirm residency is allowed and enough VRAM is available based on max/avg stats and configured estimates.
+- Runtime lanes expose:
+  - desired residency
+  - observed residency
+  - active job
+  - staged job
+  - blocked reason
+  - required unloads
+  - last transition
+- Training Runtime should be exclusive:
+  - unload text, vision, visual_gpu, visual_cpu as needed
+  - restore default residency after training completes
+- Visual GPU should unload vision/text only if needed by max VRAM estimates; text is last resort.
+- Visual CPU should not require GPU residency unless the template/runtime says otherwise.
+
+Validation:
+- Text lane work requests Text LLM.
+- Vision lane work requests Vision LLM and blocks/unloads incompatible visual/training runtimes.
+- Visual GPU lane work requests Visual Runtime GPU.
+- Visual CPU lane work can run without taking GPU residency.
+- Training lane unloads incompatible runtimes and restores defaults.
+- Runtime UI Work counts match lane active/staged state.
+- Python compile checks pass.
+
+## Task 1010
+Original task details:
+- Implement local-preferred cloud spillover decisions.
+- If the local text queue is too long and a high-importance local-preferred job arrives, queue manager may divert it to cloud.
+
+Implementation notes:
+- Apply spillover only when:
+  - routing allows cloud
+  - local lane estimated wait exceeds max wait/deadline
+  - cloud provider is configured and allowed
+  - job has not started locally
+- For local_only jobs:
+  - never spill to cloud
+  - remain queued/blocked until deadline or expire with explicit reason
+- For local_preferred jobs:
+  - prefer local while wait budget is feasible
+  - divert to cloud when local wait exceeds budget
+- Rerouted jobs must not run twice.
+- Record decision metadata:
+  - original lane
+  - selected lane
+  - spillover_allowed
+  - spillover_selected
+  - local_wait_estimate
+  - cloud_selected_reason
+  - local_unavailable_reason
+  - decision timestamp
+
+Validation:
+- High-importance local_preferred text job diverts to cloud when local text wait budget is exceeded.
+- Normal local_preferred job waits locally while feasible.
+- Local_only job does not divert.
+- Rerouted job cannot execute locally later.
+- API/job status shows clear spillover reason.
+
+## Task 1011
+Original task details:
+- Route visual GPU, visual CPU, and training work through unified queue lanes.
+- Remove direct hidden queue behavior for local visual/training flows where possible.
+
+Implementation notes:
+- Split visual runtime queues:
+  - visual_gpu for normal/interactive GPU image jobs
+  - visual_cpu for low/background CPU image jobs
+- Preserve existing ComfyUI technical adapter names internally, but expose Visual Runtime GPU/CPU in UI/API.
+- Route avatar/manual image generation through queue lanes instead of direct ComfyUI prompt submission where feasible.
+- Runtime internal queues should be capped:
+  - 1 active prompt/job
+  - 1 staged prompt/job
+  - rest stays in scheduler queue
+- Training Runtime lane:
+  - long wait budget by default
+  - background queue class by default
+  - exclusive local runtime policy
+- Non-V3 visual/training requests default to background-capable local_preferred unless existing endpoint semantics require interactive.
+
+Validation:
+- Queue card shows visual_gpu and visual_cpu lane states separately.
+- Visual GPU jobs do not disappear into ComfyUI hidden queue.
+- Visual CPU jobs can run while GPU lanes are unavailable where supported.
+- Training jobs show long-wait/background state.
+- Existing avatar/manual image flows still work.
+- Frontend build and targeted backend tests pass.
+
+## Task 1012
+Original task details:
+- Surface unified queue lanes in APIs and Runtime UI.
+- Operators should see the global queue and every lane state clearly.
+
+Implementation notes:
+- Update queue diagnostics APIs to show:
+  - global backlog count
+  - per-lane active/staged/queued counts
+  - lane capacity
+  - lane blocked reason
+  - active/staged job summaries
+  - next dispatch candidate
+  - spillover/routing decision
+  - ETA/deadline/wait budget
+- Runtime UI layout:
+  - Jobs Queue card shows global queue plus lanes:
+    - Cloud
+    - Text LLM
+    - Vision LLM
+    - Visual GPU
+    - Visual CPU
+    - Training
+  - Local Residency Work reads lane active/staged counts.
+  - Runtime service cards show desired/observed residency and blocker reasons.
+- Add UI refresh/polling while the Runtime page is open, especially when any queue/lane has active/staged/queued work.
+- Keep controls conservative:
+  - refresh
+  - cancel queued job
+  - optionally escalate importance later
+
+Validation:
+- Runtime page shows active/staged/queued work without manual refresh.
+- Jobs Queue and Local Residency Work agree for local lanes.
+- Visual GPU/CPU lanes are distinguishable.
+- Cloud spillover decisions are visible.
+- Frontend build passes.
