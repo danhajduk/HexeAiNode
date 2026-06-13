@@ -437,6 +437,72 @@
   background: hsl(var(--sx-panel));
 }
 
+.execution-queue-summary {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.execution-queue-summary-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.execution-queue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.execution-queue-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid hsl(var(--sx-border) / 0.8);
+  border-radius: var(--sx-radius-md);
+  background: hsl(var(--sx-panel));
+  overflow: hidden;
+}
+
+.execution-queue-card-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.execution-queue-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.execution-queue-meta div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.execution-queue-meta dt {
+  color: hsl(var(--sx-muted-foreground));
+  font-size: 11px;
+}
+
+.execution-queue-meta dd {
+  margin: 0;
+  overflow: hidden;
+  color: hsl(var(--sx-text));
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .client-cost-group {
   display: grid;
   gap: 8px;

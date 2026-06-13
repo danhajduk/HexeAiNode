@@ -182,6 +182,7 @@ export default function App() {
   const [popupPricingOutput, setPopupPricingOutput] = useState("");
   const [savingPopupPricing, setSavingPopupPricing] = useState(false);
   const [capabilityDiagnostics, setCapabilityDiagnostics] = useState(null);
+  const [executionQueueDiagnostics, setExecutionQueueDiagnostics] = useState(null);
   const [clientUsageSummary, setClientUsageSummary] = useState({ currentMonth: "", clients: [] });
   const [promptServicesPayload, setPromptServicesPayload] = useState(null);
   const [imageTemplatePayload, setImageTemplatePayload] = useState(null);
@@ -267,6 +268,7 @@ export default function App() {
       comfyuiTemplatesResult,
       manualImageGenerationStatusResult,
       avatarGenerationStatusResult,
+      executionQueueResult,
       capabilityDiagnosticsResult,
     ] = await Promise.allSettled([
       apiGet("/api/governance/status"),
@@ -288,6 +290,7 @@ export default function App() {
       apiGet("/api/comfyui/templates"),
       apiGet("/api/manual-image-generation"),
       apiGet("/api/avatar-generation"),
+      apiGet("/api/execution/queues"),
       apiAdminGet("/api/capabilities/diagnostics"),
     ]);
     const payload = nodePayload || {};
@@ -312,6 +315,7 @@ export default function App() {
       manualImageGenerationStatusResult.status === "fulfilled" ? manualImageGenerationStatusResult.value : null;
     const avatarGenerationPayload =
       avatarGenerationStatusResult.status === "fulfilled" ? avatarGenerationStatusResult.value : null;
+    const executionQueuePayload = executionQueueResult.status === "fulfilled" ? executionQueueResult.value : null;
     const capabilityDiagnosticsPayload = capabilityDiagnosticsResult.status === "fulfilled" ? capabilityDiagnosticsResult.value : null;
     const partialFailures = [];
     if (governanceResult.status !== "fulfilled") {
@@ -371,6 +375,9 @@ export default function App() {
     if (avatarGenerationStatusResult.status !== "fulfilled") {
       partialFailures.push("avatar_generation_unavailable");
     }
+    if (executionQueueResult.status !== "fulfilled") {
+      partialFailures.push("execution_queue_unavailable");
+    }
     setBackendStatus(payload.status || "unknown");
     setPendingApprovalUrl(payload.pending_approval_url || "");
     setNodeId(payload.node_id || "");
@@ -393,6 +400,7 @@ export default function App() {
     setOpenaiModelFeatures(Array.isArray(modelFeaturesPayload?.entries) ? modelFeaturesPayload.entries : []);
     setResolvedNodeCapabilities(nodeCapabilitiesPayload);
     setCapabilityDiagnostics(capabilityDiagnosticsPayload);
+    setExecutionQueueDiagnostics(executionQueuePayload);
     setClientUsageSummary(normalizeClientUsagePayload(clientUsagePayload, promptServicesPayload));
     setPromptServicesPayload(promptServicesPayload);
     setImageTemplatePayload(imageTemplatesPayload);
@@ -2600,6 +2608,7 @@ export default function App() {
     governanceStatus: governanceStatusPayload,
     scheduledTasksProps: {
       scheduler: capabilityDiagnostics?.internal_scheduler || null,
+      executionQueue: executionQueueDiagnostics,
     },
     localLlmSetupProps: {
       enabled: localLlmEnabled,

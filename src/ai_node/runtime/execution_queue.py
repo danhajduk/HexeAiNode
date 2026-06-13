@@ -61,6 +61,7 @@ class ExecutionQueueService:
     def queued_response(self, *, job_id: str, base_path: str = "/api/execution/jobs") -> dict:
         job = self._jobs.get(job_id) or {}
         eta = self._queue_eta(job_id=job_id)
+        queue_state = self._queue_state(job=job, eta=eta)
         return {
             "status": "queued",
             "job_id": job_id,
@@ -73,6 +74,7 @@ class ExecutionQueueService:
             "importance": job.get("importance"),
             "queue_intent": deepcopy(job.get("queue_intent")) if isinstance(job.get("queue_intent"), dict) else None,
             "routing_decision": deepcopy(job.get("routing_decision")) if isinstance(job.get("routing_decision"), dict) else None,
+            "queue_state": queue_state,
             "expires_at": job.get("expires_at"),
         }
 
@@ -225,6 +227,7 @@ class ExecutionQueueService:
                             "importance": job.get("importance"),
                             "started_at": job.get("started_at"),
                             "client_id": job.get("client_id"),
+                            "queue_state": self._queue_state(job=job, eta=self._queue_eta(job_id=str(job.get("job_id") or ""))),
                         }
                     client_id = str(job.get("client_id") or "").strip()
                     if client_id:
@@ -232,6 +235,7 @@ class ExecutionQueueService:
                 oldest_queued_age_seconds = None
                 if oldest_queued_at:
                     oldest_queued_age_seconds = self._age_seconds(iso_value=str(oldest_queued_at))
+                next_job = self._jobs.get(queued_ids[0]) if queued_ids else None
                 queues[queue_key] = {
                     "queued_count": len(queued_ids),
                     "active_count": self._active_counts.get(queue_key, 0),
@@ -239,6 +243,7 @@ class ExecutionQueueService:
                     "oldest_queued_at": oldest_queued_at,
                     "oldest_queued_age_seconds": oldest_queued_age_seconds,
                     "active_job": active_job,
+                    "next_job": self._queue_job_summary(next_job) if isinstance(next_job, dict) else None,
                     "per_importance": per_importance,
                     "per_client_pending": per_client_pending,
                 }
@@ -463,6 +468,53 @@ class ExecutionQueueService:
             "confidence": "rough",
         }
 
+    def _queue_state(self, *, job: dict, eta: dict | None = None) -> dict | None:
+        if not isinstance(job, dict) or not job.get("job_id"):
+            return None
+        queue_intent = job.get("queue_intent") if isinstance(job.get("queue_intent"), dict) else {}
+        routing_decision = job.get("routing_decision") if isinstance(job.get("routing_decision"), dict) else {}
+        queued_at = self._job_queued_at(job)
+        max_wait_seconds = self._queue_intent_max_wait_seconds(queue_intent)
+        deadline_at = self._queue_intent_deadline_at(queue_intent)
+        wait_budget_deadline = queued_at + timedelta(seconds=max_wait_seconds) if queued_at is not None and max_wait_seconds is not None else None
+        effective_deadline = min([item for item in (deadline_at, wait_budget_deadline) if item is not None], default=None)
+        remaining_wait_seconds = None
+        if effective_deadline is not None:
+            remaining_wait_seconds = round(max((effective_deadline - local_now()).total_seconds(), 0.0), 3)
+        return {
+            "queue": job.get("queue"),
+            "importance": job.get("importance"),
+            "queue_class": queue_intent.get("queue_class"),
+            "max_wait_seconds": max_wait_seconds,
+            "deadline_at": deadline_at.isoformat() if deadline_at is not None else None,
+            "wait_budget_deadline_at": wait_budget_deadline.isoformat() if wait_budget_deadline is not None else None,
+            "remaining_wait_seconds": remaining_wait_seconds,
+            "estimated_start_seconds": (eta or {}).get("estimated_start_seconds") if isinstance(eta, dict) else None,
+            "estimated_start_at": (eta or {}).get("estimated_start_at") if isinstance(eta, dict) else None,
+            "spillover_allowed": bool(queue_intent.get("allow_cloud_spillover")),
+            "spillover_selected": bool(routing_decision.get("spillover")),
+            "routing_reason": routing_decision.get("reason"),
+            "local_unavailable_reason": routing_decision.get("local_unavailable_reason"),
+            "cloud_selected_reason": routing_decision.get("cloud_selected_reason"),
+        }
+
+    def _queue_job_summary(self, job: dict) -> dict:
+        job_id = str(job.get("job_id") or "")
+        eta = self._queue_eta(job_id=job_id)
+        request = job.get("request") if isinstance(job.get("request"), dict) else {}
+        return {
+            "job_id": job_id,
+            "job_name": job.get("job_name"),
+            "task_id": request.get("task_id"),
+            "task_family": request.get("task_family"),
+            "status": job.get("status"),
+            "created_at": job.get("created_at"),
+            "queued_at": job.get("queued_at"),
+            "client_id": job.get("client_id"),
+            "queue_position": self._queue_position(job_id=job_id),
+            "queue_state": self._queue_state(job=job, eta=eta),
+        }
+
     def _estimated_start_seconds_locked(self, *, queue_key: str, position: int) -> int:
         concurrency = max(self._concurrency(queue_key), 1)
         active_count = max(int(self._active_counts.get(queue_key, 0) or 0), 0)
@@ -620,6 +672,7 @@ class ExecutionQueueService:
         }
         payload["queue_position"] = self._queue_position(job_id=str(job.get("job_id") or ""))
         payload["eta"] = self._queue_eta(job_id=str(job.get("job_id") or ""))
+        payload["queue_state"] = self._queue_state(job=job, eta=payload["eta"])
         payload["check_after_seconds"] = self._check_after_seconds
         return payload
 

@@ -831,3 +831,9 @@ Step objective: Add structured upper torso prompt parts.
 Chosen fix: Added upper torso prompt part order/defaults in the backend, seeded new profiles with an upper_torso workspace, preserved prompt_parts for preview/training/review actions, and changed the Upper Torso tab from a single editable prompt box to split part fields plus a composed prompt preview.
 What changed: Prompt parts are General, Neck / Shoulders, Chest / Torso Shape, Arms / Upper Arms, Clothing / Outfit, Skin / Body Details, Pose / Framing, and Style / Lighting; the clothing default enforces a fitted bodysuit baseline.
 Verification: python3 -m py_compile src/ai_node/runtime/node_control_api.py scripts/prepare-avatar-head-lora-kohya.py passed; npm --prefix frontend run build passed; restart-stack passed; live API smoke confirmed new profile upper_torso prompt_parts exist and clothing_outfit contains bodysuit; temporary profile deleted; prod mode confirmed with text and vision LLMs running and ComfyUI unloaded.
+###########
+Task #1004
+Step objective: Surface queue priority, wait budget, and spillover decisions.
+Chosen fix: Added a compact `queue_state` payload to queued job responses, job status responses, and queue diagnostics, then rendered the diagnostics in the Scheduled Tasks dashboard.
+What changed: Queue payloads now expose queue class, importance, wait budget/deadline, remaining wait, estimated start, and spillover/routing reasons. The UI loads `/api/execution/queues` and shows execution queue cards with next-job decision details.
+Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_execution_queue_deadlines tests.test_execution_queue`, `python3 -m py_compile src/ai_node/runtime/execution_queue.py tests/test_execution_queue_deadlines.py`, and `npm --prefix frontend run build` passed.

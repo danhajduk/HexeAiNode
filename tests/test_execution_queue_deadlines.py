@@ -96,6 +96,50 @@ class ExecutionQueueDeadlineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(estimate["queue"], "local")
         self.assertEqual(estimate["estimated_start_seconds"], 10)
 
+    async def test_queue_state_surfaces_wait_budget_and_spillover(self):
+        release = asyncio.Event()
+        queue = ExecutionQueueService(logger=logging.getLogger("queue-deadline-test"), local_concurrency=1, check_after_seconds=10)
+        blocker = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="blocker",
+            request_payload={"task_id": "blocker"},
+            runner=lambda: self._blocking(release),
+        )
+        await self._wait_for_status(queue, blocker["job_id"], "running")
+
+        queued = await queue.enqueue(
+            queue="local",
+            importance="background",
+            job_name="background visual work",
+            request_payload={"task_id": "visual", "task_family": "task.image_generation"},
+            runner=lambda: self._completed(),
+            routing_decision={
+                "selected_queue": "local",
+                "reason": "local_available",
+                "cloud_selected_reason": None,
+            },
+            queue_intent={
+                "importance": "background",
+                "queue_class": "background",
+                "max_wait_seconds": 60,
+                "allow_cloud_spillover": True,
+            },
+        )
+
+        status = await queue.job_status(job_id=queued["job_id"])
+        diagnostics = await queue.diagnostics()
+
+        release.set()
+        await self._wait_for_status(queue, blocker["job_id"], "completed")
+        self.assertEqual(queued["queue_state"]["importance"], "background")
+        self.assertEqual(queued["queue_state"]["queue_class"], "background")
+        self.assertEqual(queued["queue_state"]["max_wait_seconds"], 60)
+        self.assertGreaterEqual(queued["queue_state"]["remaining_wait_seconds"], 0)
+        self.assertTrue(queued["queue_state"]["spillover_allowed"])
+        self.assertEqual(status["queue_state"]["estimated_start_seconds"], 10)
+        self.assertEqual(diagnostics["queues"]["local"]["next_job"]["queue_state"]["queue_class"], "background")
+
     async def test_deadline_monitor_expires_overdue_local_only_job(self):
         queue = ExecutionQueueService(logger=logging.getLogger("queue-deadline-test"), local_concurrency=1, check_after_seconds=10)
         old = (local_now() - timedelta(seconds=30)).isoformat()
