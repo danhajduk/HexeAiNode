@@ -27,9 +27,10 @@ function ActionGroup({ title, subtitle, actions = [], className = "" }) {
 
 export function OperationalActionsCard({
   runtimeActions = [],
+  className = "",
 }) {
   return (
-    <article className="card">
+    <article className={`card ${className}`.trim()}>
       <div className="card-header">
         <h2>Actions</h2>
       </div>

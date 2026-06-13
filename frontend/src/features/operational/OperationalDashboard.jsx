@@ -13,7 +13,7 @@ import { AvatarGenerationCard } from "./cards/AvatarGenerationCard";
 import { RecentActivityCard } from "./cards/RecentActivityCard";
 import { ClientCostCard } from "./cards/ClientCostCard";
 import { OperationalActionsCard } from "./cards/OperationalActionsCard";
-import { ScheduledTasksSection } from "./ScheduledTasksSection";
+import { JobsQueueCard, ScheduledTasksSection } from "./ScheduledTasksSection";
 import { DiagnosticsPage } from "../diagnostics/DiagnosticsPage";
 
 function maskOnboardingRef(value) {
@@ -114,7 +114,6 @@ export function OperationalDashboard({
   providerRefreshProps,
   resolvedTasks = [],
   runtimeServicesProps,
-  imageTemplatesProps,
   manualImageGenerationProps,
   avatarGenerationProps,
   operationalActions,
@@ -181,7 +180,7 @@ export function OperationalDashboard({
 
         {currentSection === "runtime" ? (
           <>
-            <article className="card">
+            <article className="card operational-runtime-health-card">
               <CardHeader title="Runtime Health" subtitle="Runtime-only health signals live here instead of repeating across overview cards." />
               <div className="state-grid">
                 <span>Core API</span>
@@ -197,9 +196,13 @@ export function OperationalDashboard({
               </div>
               <TaskAvailabilitySection items={runtimeServicesProps?.taskAvailability} />
             </article>
-            <RuntimeServicesCard {...runtimeServicesProps} />
-            <LocalResidencyCard {...runtimeServicesProps} />
-            <OperationalActionsCard {...operationalActions} />
+            <RuntimeServicesCard {...runtimeServicesProps} className="operational-runtime-services-card" />
+            <OperationalActionsCard {...operationalActions} className="operational-runtime-actions-card" />
+            <LocalResidencyCard {...runtimeServicesProps} className="operational-runtime-residency-card" />
+            <JobsQueueCard
+              executionQueue={scheduledTasksProps?.executionQueue}
+              className="operational-runtime-jobs-card"
+            />
           </>
         ) : null}
 

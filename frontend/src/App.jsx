@@ -2537,11 +2537,6 @@ export default function App() {
         }
       },
     },
-    imageTemplatesProps: {
-      imageTemplatePayload,
-      comfyuiTemplateCatalogPayload,
-      promptServicesPayload,
-    },
     manualImageGenerationProps: {
       payload: manualImageGenerationPayload,
       busy: manualImageGenerationBusy,

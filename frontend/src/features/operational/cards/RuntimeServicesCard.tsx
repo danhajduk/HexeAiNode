@@ -25,6 +25,7 @@ function serviceObject(value) {
 export function RuntimeServicesCard({
   serviceStatus = {},
   comfyuiWebuiBusy = false,
+  className = "",
   onStartComfyuiWebui,
   onStopComfyuiWebui,
   onOpenComfyuiWebui,
@@ -51,7 +52,7 @@ export function RuntimeServicesCard({
   }
 
   return (
-    <article className="card">
+    <article className={`card ${className}`.trim()}>
       <CardHeader title="Runtime Services" subtitle="Primary home for backend, frontend, node, local LLM, vision, and visual runtime state." />
       <div className="state-grid">
         <span>Backend</span>

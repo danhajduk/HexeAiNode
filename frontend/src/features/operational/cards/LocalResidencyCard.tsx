@@ -36,6 +36,7 @@ function componentStats(component) {
 export function LocalResidencyCard({
   serviceStatus = {},
   localSchedulerBusyTarget = "",
+  className = "",
   onRequestLocalScheduler,
   onReleaseLocalScheduler,
 }) {
@@ -44,7 +45,7 @@ export function LocalResidencyCard({
   const requestPreviews = serviceObject(localScheduler.request_previews);
 
   return (
-    <article className="card">
+    <article className={`card ${className}`.trim()}>
       <CardHeader title="Local Residency" subtitle="Scheduler view of local model and runtime residency." />
       <div className="runtime-residency-grid">
         {localSchedulerComponents.map((component) => {

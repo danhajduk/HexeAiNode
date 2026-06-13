@@ -169,9 +169,6 @@ export function ScheduledTasksSection({ scheduler = null, executionQueue = null,
     ? Object.values(scheduler.tasks).sort((left, right) => String(left?.display_name || left?.task_id || "").localeCompare(String(right?.display_name || right?.task_id || "")))
     : [];
   const scheduleCatalog = Array.isArray(scheduler?.schedule_catalog) ? sortScheduleCatalog(scheduler.schedule_catalog) : [];
-  const queues = executionQueue?.queues && typeof executionQueue.queues === "object"
-    ? Object.entries(executionQueue.queues).sort(([left], [right]) => left.localeCompare(right))
-    : [];
 
   return (
     <article className={`card operational-card-full-span ${className}`.trim()}>
@@ -228,49 +225,72 @@ export function ScheduledTasksSection({ scheduler = null, executionQueue = null,
           ))}
         </div>
       ) : null}
-      {queues.length ? (
-        <section className="execution-queue-summary" aria-label="Execution queue summary">
-          <div className="execution-queue-summary-header">
-            <strong>Execution Queues</strong>
-            <span className="muted tiny">
-              priority, wait budget, and cloud spillover decisions
-            </span>
-          </div>
-          <div className="execution-queue-grid">
-            {queues.map(([queueName, queue]) => {
-              const nextJob = queue.next_job || queue.active_job || null;
-              const queueState = nextJob?.queue_state || {};
-              return (
-                <div key={queueName} className="execution-queue-card">
-                  <div className="execution-queue-card-title">
-                    <strong>{friendlyQueueName(queueName)}</strong>
-                    <StatusBadge value={`${queue.active_count || 0} active / ${queue.queued_count || 0} queued`} tone={queue.active_count || queue.queued_count ? "success" : "meta"} />
-                  </div>
-                  <div className="muted tiny">{queueDecisionLine(queue)}</div>
-                  {nextJob ? (
-                    <dl className="execution-queue-meta">
-                      <div>
-                        <dt>Next</dt>
-                        <dd>{nextJob.job_name || nextJob.task_id || nextJob.job_id}</dd>
-                      </div>
-                      <div>
-                        <dt>ETA</dt>
-                        <dd>{formatSeconds(queueState.estimated_start_seconds)}</dd>
-                      </div>
-                      <div>
-                        <dt>Deadline</dt>
-                        <dd>{formatTimestamp(queueState.deadline_at || queueState.wait_budget_deadline_at)}</dd>
-                      </div>
-                    </dl>
-                  ) : (
-                    <p className="muted tiny">No queued or active execution work.</p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
+      <ExecutionQueueSummary executionQueue={executionQueue} />
     </article>
+  );
+}
+
+export function JobsQueueCard({ executionQueue = null, className = "" }) {
+  return (
+    <article className={`card ${className}`.trim()}>
+      <CardHeader title="Jobs Queue" subtitle="Shared local and cloud execution queue." />
+      <ExecutionQueueSummary executionQueue={executionQueue} compact />
+    </article>
+  );
+}
+
+function ExecutionQueueSummary({ executionQueue = null, compact = false }) {
+  const queues = executionQueue?.queues && typeof executionQueue.queues === "object"
+    ? Object.entries(executionQueue.queues).sort(([left], [right]) => left.localeCompare(right))
+    : [];
+
+  if (!queues.length) {
+    return <p className="muted tiny">No shared execution queue data is available yet.</p>;
+  }
+
+  return (
+    <section className={`execution-queue-summary ${compact ? "execution-queue-summary-compact" : ""}`.trim()} aria-label="Execution queue summary">
+      {compact ? null : (
+        <div className="execution-queue-summary-header">
+          <strong>Execution Queues</strong>
+          <span className="muted tiny">
+            priority, wait budget, and cloud spillover decisions
+          </span>
+        </div>
+      )}
+      <div className="execution-queue-grid">
+        {queues.map(([queueName, queue]) => {
+          const nextJob = queue.next_job || queue.active_job || null;
+          const queueState = nextJob?.queue_state || {};
+          return (
+            <div key={queueName} className="execution-queue-card">
+              <div className="execution-queue-card-title">
+                <strong>{friendlyQueueName(queueName)}</strong>
+                <StatusBadge value={`${queue.active_count || 0} active / ${queue.queued_count || 0} queued`} tone={queue.active_count || queue.queued_count ? "success" : "meta"} />
+              </div>
+              <div className="muted tiny">{queueDecisionLine(queue)}</div>
+              {nextJob ? (
+                <dl className="execution-queue-meta">
+                  <div>
+                    <dt>Next</dt>
+                    <dd>{nextJob.job_name || nextJob.task_id || nextJob.job_id}</dd>
+                  </div>
+                  <div>
+                    <dt>ETA</dt>
+                    <dd>{formatSeconds(queueState.estimated_start_seconds)}</dd>
+                  </div>
+                  <div>
+                    <dt>Deadline</dt>
+                    <dd>{formatTimestamp(queueState.deadline_at || queueState.wait_budget_deadline_at)}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="muted tiny">No queued or active execution work.</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }

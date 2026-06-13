@@ -341,6 +341,26 @@
   grid-column: 1 / -1;
 }
 
+.operational-runtime-health-card {
+  grid-column: 1;
+}
+
+.operational-runtime-services-card {
+  grid-column: 2;
+}
+
+.operational-runtime-actions-card {
+  grid-column: 3;
+}
+
+.operational-runtime-residency-card {
+  grid-column: 1 / span 2;
+}
+
+.operational-runtime-jobs-card {
+  grid-column: 3;
+}
+
 .dashboard-stack {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -441,6 +461,14 @@
   display: grid;
   gap: 10px;
   margin-top: 16px;
+}
+
+.execution-queue-summary-compact {
+  margin-top: 0;
+}
+
+.execution-queue-summary-compact .execution-queue-grid {
+  grid-template-columns: 1fr;
 }
 
 .execution-queue-summary-header {
@@ -2888,6 +2916,14 @@ h2 {
   .grid,
   .operational-dashboard-grid {
     grid-template-columns: 1fr;
+  }
+
+  .operational-runtime-health-card,
+  .operational-runtime-services-card,
+  .operational-runtime-actions-card,
+  .operational-runtime-residency-card,
+  .operational-runtime-jobs-card {
+    grid-column: auto;
   }
 
   .flow-sidebar,
