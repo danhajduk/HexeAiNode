@@ -11,6 +11,7 @@ import socket
 import struct
 import subprocess
 import time
+import uuid
 import zlib
 from collections import deque
 from dataclasses import dataclass
@@ -73,7 +74,55 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
 
 MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID = "template.avatar_head_face_preview.realvisxl.v1"
+AVATAR_UPPER_TORSO_PREVIEW_TEMPLATE_ID = "template.avatar_upper_torso_preview.realvisxl.v1"
+AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID = "template.avatar_head_lora_pose_control.realvisxl.v1"
+AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID = "template.avatar_head_lora_epoch_review.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT = 9
+AVATAR_HEAD_FACE_SEED_BATCH_SUBMISSION_LIMIT = 2
+AVATAR_HEAD_FACE_LORA_DATASET_POSES = (
+    ("front_neutral", "front-facing neutral head-and-shoulders portrait, direct gaze, relaxed expression"),
+    ("front_smile", "front-facing head-and-shoulders portrait, natural confident smile, direct gaze"),
+    (
+        "three_quarter_left",
+        "near side-profile head-and-shoulders portrait, not a beauty front portrait, head yaw rotated 70 degrees to the left side of the image, "
+        "nose and chin clearly point left in profile silhouette, face centerline strongly angled left, one cheek dominant and far cheek mostly hidden, "
+        "far eye mostly hidden behind the nose bridge, one visible ear on the near side, only one nostril clearly visible, "
+        "eyes looking off camera toward the left edge of the image, no direct eye contact, not a straight-on frontal face",
+    ),
+    (
+        "three_quarter_right",
+        "near side-profile head-and-shoulders portrait, not a beauty front portrait, head yaw rotated 70 degrees to the right side of the image, "
+        "nose and chin clearly point right in profile silhouette, face centerline strongly angled right, one cheek dominant and far cheek mostly hidden, "
+        "far eye mostly hidden behind the nose bridge, one visible ear on the near side, only one nostril clearly visible, "
+        "eyes looking off camera toward the right edge of the image, no direct eye contact, not a straight-on frontal face",
+    ),
+    ("slight_down", "head-and-shoulders portrait with face angled slightly downward, eyes toward viewer"),
+    ("slight_up", "head-and-shoulders portrait with face angled slightly upward, eyes toward viewer"),
+)
+AVATAR_HEAD_FACE_LORA_DATASET_LEGACY_POSE_PROMPTS = {
+    "three_quarter_left": "three-quarter head-and-shoulders portrait turned slightly left, eyes toward viewer",
+    "three_quarter_right": "three-quarter head-and-shoulders portrait turned slightly right, eyes toward viewer",
+}
+AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE = 9
+AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE = 6
+AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_PER_EPOCH = 3
+AVATAR_HEAD_FACE_LORA_DATASET_WIDTH = 512
+AVATAR_HEAD_FACE_LORA_DATASET_HEIGHT = 512
+AVATAR_HEAD_FACE_LORA_DATASET_CFG_JITTER = 0.2
+AVATAR_HEAD_FACE_LORA_APPROVED_SUBDIR = "lora_dataset/approved"
+AVATAR_HEAD_FACE_LORA_UPLOADED_SUBDIR = "lora_dataset_uploaded"
+AVATAR_HEAD_FACE_LORA_EXTERNAL_SUBDIR = "lora_external"
+AVATAR_HEAD_FACE_LORA_UPLOAD_ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+AVATAR_HEAD_FACE_LORA_UPLOAD_MAX_IMAGES = 512
+AVATAR_HEAD_FACE_LORA_UPLOAD_MAX_IMAGE_BYTES = 30 * 1024 * 1024
+AVATAR_HEAD_FACE_LORA_UPLOAD_MAX_MODEL_BYTES = 1024 * 1024 * 1024
+AVATAR_HEAD_FACE_LORA_POSE_REFERENCE_IMAGES = {
+    "three_quarter_left": "references/pose/300w_lp/three_quarter_left/three_quarter_left_001_idx00007_control.png",
+}
+AVATAR_HEAD_FACE_LORA_VISION_READY_TIMEOUT_SECONDS = 90
+AVATAR_HEAD_FACE_LORA_VISION_READY_POLL_SECONDS = 2
+AVATAR_HEAD_FACE_LORA_VISION_RETRY_ATTEMPTS = 3
+AVATAR_HEAD_FACE_LORA_VISION_IMPORT_SETTLE_SECONDS = 8
 AVATAR_HEAD_FACE_PROMPT_PART_ORDER = (
     "general",
     "hair",
@@ -86,6 +135,16 @@ AVATAR_HEAD_FACE_PROMPT_PART_ORDER = (
     "ears",
     "skin",
     "expression",
+    "style_lighting",
+)
+AVATAR_UPPER_TORSO_PROMPT_PART_ORDER = (
+    "general",
+    "neck_shoulders",
+    "chest_torso_shape",
+    "arms_upper_arms",
+    "clothing_outfit",
+    "skin_body_details",
+    "pose_framing",
     "style_lighting",
 )
 AVATAR_BODY_DEPTH_PROFILE_CLIENT_ID = "hexe-node-avatar-body-depth"
@@ -822,6 +881,7 @@ class NodeControlState:
         self._supervisor_last_error = None
         self._supervisor_last_seen = None
         self._local_llm_switch_lock = asyncio.Lock()
+        self._avatar_profile_refresh_lock = Lock()
         self._local_llm_default_revert_check_interval_seconds = max(
             _env_int("HEXE_LOCAL_LLM_DEFAULT_REVERT_CHECK_INTERVAL_SECONDS", 60),
             1,
@@ -2128,8 +2188,27 @@ class NodeControlState:
                     "prompt_parts": head_prompt_parts,
                     "prompt": self._avatar_profile_head_prompt_from_parts(prompt_parts=head_prompt_parts, profile=metadata),
                     "negative_prompt": "",
+                    "locked_prompt_parts": {},
+                    "context_summary": "",
                     "conversation": [],
                     "preview_history": [],
+                    "selected_preview_id": "",
+                    "created_at": now,
+                    "updated_at": now,
+                    "source": "profile_creation_baseline",
+                },
+            }
+        if "upper_torso" not in prompt_workspaces:
+            upper_torso_prompt_parts = self._avatar_profile_default_upper_torso_prompt_parts(profile={**metadata, "general_prompt": general_prompt})
+            prompt_workspaces = {
+                **prompt_workspaces,
+                "upper_torso": {
+                    "section": "upper_torso",
+                    "prompt_parts": upper_torso_prompt_parts,
+                    "prompt": self._avatar_profile_upper_torso_prompt_from_parts(prompt_parts=upper_torso_prompt_parts, profile=metadata),
+                    "negative_prompt": "",
+                    "preview_history": [],
+                    "selected_preview_id": "",
                     "created_at": now,
                     "updated_at": now,
                     "source": "profile_creation_baseline",
@@ -2164,6 +2243,9 @@ class NodeControlState:
             prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
             fallback_prompt=str(payload.current_prompt or workspace.get("prompt") or "").strip(),
         )
+        locked_prompt_parts = self._avatar_profile_normalized_head_prompt_locks(
+            payload.locked_prompt_parts if isinstance(payload.locked_prompt_parts, dict) else workspace.get("locked_prompt_parts")
+        )
         current_prompt = str(payload.current_prompt or "").strip() or self._avatar_profile_head_prompt_from_parts(
             prompt_parts=prompt_parts,
             profile=metadata,
@@ -2171,13 +2253,49 @@ class NodeControlState:
         if not current_prompt:
             current_prompt = self._avatar_profile_default_head_prompt(profile=metadata)
         current_negative = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
-        prompt, refined_prompt_parts, negative_prompt, assistant_reply, model_id = self._avatar_profile_head_prompt_from_local_llm(
-            profile=metadata,
-            current_prompt=current_prompt,
-            current_prompt_parts=prompt_parts,
-            current_negative_prompt=current_negative,
-            user_message=user_message,
-        )
+        tagged_updates = self._avatar_profile_parse_head_tagged_adjustments(user_message)
+        applicable_tagged_updates = {
+            key: value
+            for key, value in tagged_updates.items()
+            if value and not bool(locked_prompt_parts.get(key))
+        }
+        if tagged_updates:
+            refined_prompt_parts = self._avatar_profile_normalized_head_prompt_parts(
+                profile=metadata,
+                prompt_parts={**prompt_parts, **applicable_tagged_updates},
+                fallback_prompt=current_prompt,
+            )
+            prompt = self._avatar_profile_head_prompt_from_parts(prompt_parts=refined_prompt_parts, profile=metadata)
+            negative_prompt = current_negative
+            changed_labels = [
+                self._avatar_profile_head_prompt_part_label(key)
+                for key in AVATAR_HEAD_FACE_PROMPT_PART_ORDER
+                if key in applicable_tagged_updates
+            ]
+            skipped_labels = [
+                self._avatar_profile_head_prompt_part_label(key)
+                for key in AVATAR_HEAD_FACE_PROMPT_PART_ORDER
+                if key in tagged_updates and key not in applicable_tagged_updates
+            ]
+            assistant_reply = (
+                f"Applied tagged edits to {', '.join(changed_labels)}."
+                if changed_labels
+                else "No tagged edits were applied because the tagged prompt parts are locked."
+            )
+            if changed_labels and skipped_labels:
+                assistant_reply += f" Preserved locked {', '.join(skipped_labels)}."
+            model_id = "tagged_adjustments"
+        else:
+            prompt, refined_prompt_parts, negative_prompt, assistant_reply, model_id = self._avatar_profile_head_prompt_from_local_llm(
+                profile=metadata,
+                current_prompt=current_prompt,
+                current_prompt_parts=prompt_parts,
+                current_negative_prompt=current_negative,
+                locked_prompt_parts=locked_prompt_parts,
+                target_prompt_part=str(payload.target_prompt_part or "").strip(),
+                workspace=workspace,
+                user_message=user_message,
+            )
         now = datetime.now(timezone.utc).isoformat()
         conversation = list(workspace.get("conversation") or [])
         conversation.append({"role": "user", "content": user_message, "created_at": now})
@@ -2199,11 +2317,14 @@ class NodeControlState:
             "prompt": prompt,
             "prompt_parts": refined_prompt_parts,
             "negative_prompt": negative_prompt,
+            "locked_prompt_parts": locked_prompt_parts,
             "assistant_reply": assistant_reply,
+            "context_summary": str(workspace.get("context_summary") or "").strip(),
             "updated_at": now,
             "local_llm_model_id": model_id,
             "conversation": conversation[-50:],
             "preview_history": list(workspace.get("preview_history") or [])[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:],
+            "selected_preview_id": str(workspace.get("selected_preview_id") or "").strip(),
         }
         updated_metadata = self._avatar_profile_metadata_with_workspace(
             metadata=metadata,
@@ -2221,7 +2342,75 @@ class NodeControlState:
             "prompt": prompt,
             "prompt_parts": refined_prompt_parts,
             "negative_prompt": negative_prompt,
+            "locked_prompt_parts": locked_prompt_parts,
             "assistant_reply": assistant_reply,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    def update_avatar_profile_head_prompt(self, *, profile_id: str, payload: "AvatarProfileHeadPromptUpdateRequest") -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
+        prompt_parts = self._avatar_profile_normalized_head_prompt_parts(
+            profile=metadata,
+            prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
+            fallback_prompt=str(payload.prompt or workspace.get("prompt") or "").strip(),
+        )
+        prompt = str(payload.prompt or "").strip() or self._avatar_profile_head_prompt_from_parts(
+            prompt_parts=prompt_parts,
+            profile=metadata,
+        )
+        if not prompt:
+            prompt = self._avatar_profile_default_head_prompt(profile=metadata)
+        locked_prompt_parts = self._avatar_profile_normalized_head_prompt_locks(
+            payload.locked_prompt_parts if isinstance(payload.locked_prompt_parts, dict) else workspace.get("locked_prompt_parts")
+        )
+        negative_prompt = str(payload.negative_prompt if payload.negative_prompt is not None else workspace.get("negative_prompt") or "").strip()
+        preview_seed_locked = (
+            bool(payload.preview_seed_locked)
+            if payload.preview_seed_locked is not None
+            else bool(workspace.get("preview_seed_locked"))
+        )
+        preview_seed = (
+            self._coerce_manual_image_seed(payload.preview_seed)
+            if payload.preview_seed is not None
+            else self._coerce_manual_image_seed(workspace.get("preview_seed"))
+            if workspace.get("preview_seed") is not None
+            else None
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        updated_workspace = {
+            **workspace,
+            "section": "head_face",
+            "prompt": prompt,
+            "prompt_parts": prompt_parts,
+            "locked_prompt_parts": locked_prompt_parts,
+            "negative_prompt": negative_prompt,
+            "preview_seed": preview_seed,
+            "preview_seed_locked": preview_seed_locked,
+            "updated_at": now,
+        }
+        updated_metadata = self._avatar_profile_metadata_with_workspace(
+            metadata=metadata,
+            section="head_face",
+            workspace=updated_workspace,
+        )
+        updated_metadata["updated_at"] = now
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        return {
+            "status": "head_prompt_saved",
+            "profile": saved_profile,
+            "workspace": saved_profile.get("prompt_workspaces", {}).get("head_face", {}),
+            "prompt": prompt,
+            "prompt_parts": prompt_parts,
+            "locked_prompt_parts": locked_prompt_parts,
+            "negative_prompt": negative_prompt,
+            "preview_seed": preview_seed,
+            "preview_seed_locked": preview_seed_locked,
             "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
         }
 
@@ -2235,6 +2424,9 @@ class NodeControlState:
             profile=metadata,
             prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
             fallback_prompt=str(payload.prompt or workspace.get("prompt") or "").strip(),
+        )
+        locked_prompt_parts = self._avatar_profile_normalized_head_prompt_locks(
+            payload.locked_prompt_parts if isinstance(payload.locked_prompt_parts, dict) else workspace.get("locked_prompt_parts")
         )
         prompt = str(payload.prompt or "").strip() or self._avatar_profile_head_prompt_from_parts(
             prompt_parts=prompt_parts,
@@ -2252,7 +2444,12 @@ class NodeControlState:
         steps = int(defaults.get("steps") or 4)
         cfg = float(defaults.get("cfg") or 1.2)
         denoise = float(defaults.get("denoise") or 1.0)
+        lock_seed = bool(payload.lock_seed)
+        requested_seed = self._coerce_manual_image_seed(payload.seed) if payload.seed is not None else None
+        workspace_seed = self._coerce_manual_image_seed(workspace.get("preview_seed")) if workspace.get("preview_seed") is not None else None
+        seed = requested_seed if requested_seed is not None else workspace_seed if lock_seed else None
         avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
+        submitted_at = datetime.now(timezone.utc).isoformat()
         generation = await self.submit_manual_image_generation(
             payload=ManualImageGenerationRequest(
                 template_id=AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID,
@@ -2265,7 +2462,8 @@ class NodeControlState:
                 cfg=cfg,
                 denoise=denoise,
                 batch_count=1,
-                randomize_seed=True,
+                seed=seed,
+                randomize_seed=not lock_seed,
                 template_variables={"avatar_name": avatar_name},
             )
         )
@@ -2280,13 +2478,18 @@ class NodeControlState:
             "prompt_id": generation.get("prompt_id"),
             "prompt_ids": generation.get("prompt_ids") or [],
             "seed": first_submission.get("seed"),
+            "seed_locked": lock_seed,
             "width": width,
             "height": height,
             "steps": steps,
             "cfg": cfg,
             "denoise": denoise,
             "prompt": prompt,
+            "prompt_parts": prompt_parts,
+            "locked_prompt_parts": locked_prompt_parts,
             "negative_prompt": negative_prompt,
+            "skip_background_removal": True,
+            "submitted_at": submitted_at,
             "created_at": now,
         }
         preview_history = list(workspace.get("preview_history") or [])
@@ -2296,7 +2499,10 @@ class NodeControlState:
             "section": "head_face",
             "prompt": prompt,
             "prompt_parts": prompt_parts,
+            "locked_prompt_parts": locked_prompt_parts,
             "negative_prompt": negative_prompt,
+            "preview_seed": first_submission.get("seed"),
+            "preview_seed_locked": lock_seed,
             "updated_at": now,
             "preview_history": preview_history[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:],
         }
@@ -2317,6 +2523,2941 @@ class NodeControlState:
             "workspace": saved_profile.get("prompt_workspaces", {}).get("head_face", {}),
             "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
         }
+
+    async def create_avatar_profile_upper_torso_preview(self, *, profile_id: str, payload: "AvatarProfileHeadPreviewRequest") -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="upper_torso")
+        prompt_parts = self._avatar_profile_normalized_upper_torso_prompt_parts(
+            profile=metadata,
+            prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
+            fallback_prompt=str(payload.prompt or workspace.get("prompt") or "").strip(),
+        )
+        prompt = str(payload.prompt or "").strip() or self._avatar_profile_upper_torso_prompt_from_parts(
+            prompt_parts=prompt_parts,
+            profile=metadata,
+        )
+        if not prompt:
+            prompt = self._avatar_profile_default_upper_torso_prompt(profile=metadata)
+        negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
+        template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_UPPER_TORSO_PREVIEW_TEMPLATE_ID)["template"]
+        defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+        if not negative_prompt:
+            negative_prompt = str(defaults.get("negative_prompt") or "").strip()
+        width = int(defaults.get("width") or 512)
+        height = int(defaults.get("height") or 512)
+        steps = int(defaults.get("steps") or 4)
+        cfg = float(defaults.get("cfg") or 1.2)
+        denoise = float(defaults.get("denoise") or 1.0)
+        requested_seed = self._coerce_manual_image_seed(payload.seed) if payload.seed is not None else None
+        avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
+        submitted_at = datetime.now(timezone.utc).isoformat()
+        generation = await self.submit_manual_image_generation(
+            payload=ManualImageGenerationRequest(
+                template_id=AVATAR_UPPER_TORSO_PREVIEW_TEMPLATE_ID,
+                mode="txt2img",
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                width=width,
+                height=height,
+                steps=steps,
+                cfg=cfg,
+                denoise=denoise,
+                batch_count=1,
+                seed=requested_seed,
+                randomize_seed=requested_seed is None,
+                template_variables={"avatar_name": avatar_name},
+            )
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        submissions = generation.get("submissions") if isinstance(generation.get("submissions"), list) else []
+        first_submission = submissions[0] if submissions and isinstance(submissions[0], dict) else {}
+        preview = {
+            "preview_id": f"upper_torso_{int(time.time())}",
+            "section": "upper_torso",
+            "status": str(generation.get("status") or "submitted"),
+            "template_id": AVATAR_UPPER_TORSO_PREVIEW_TEMPLATE_ID,
+            "prompt_id": generation.get("prompt_id"),
+            "prompt_ids": generation.get("prompt_ids") or [],
+            "seed": first_submission.get("seed"),
+            "width": width,
+            "height": height,
+            "steps": steps,
+            "cfg": cfg,
+            "denoise": denoise,
+            "prompt": prompt,
+            "prompt_parts": prompt_parts,
+            "negative_prompt": negative_prompt,
+            "submitted_at": submitted_at,
+            "created_at": now,
+        }
+        preview_history = list(workspace.get("preview_history") or [])
+        preview_history.append(preview)
+        updated_workspace = {
+            **workspace,
+            "section": "upper_torso",
+            "prompt": prompt,
+            "prompt_parts": prompt_parts,
+            "negative_prompt": negative_prompt,
+            "updated_at": now,
+            "preview_history": preview_history[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:],
+        }
+        updated_metadata = self._avatar_profile_metadata_with_workspace(
+            metadata=metadata,
+            section="upper_torso",
+            workspace=updated_workspace,
+        )
+        updated_metadata["updated_at"] = now
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        return {
+            "status": "upper_torso_preview_submitted",
+            "preview": preview,
+            "generation": generation,
+            "profile": saved_profile,
+            "workspace": saved_profile.get("prompt_workspaces", {}).get("upper_torso", {}),
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    async def create_avatar_profile_head_seed_batch(self, *, profile_id: str, payload: "AvatarProfileHeadSeedBatchRequest") -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
+        prompt_parts = self._avatar_profile_normalized_head_prompt_parts(
+            profile=metadata,
+            prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
+            fallback_prompt=str(payload.prompt or workspace.get("prompt") or "").strip(),
+        )
+        locked_prompt_parts = self._avatar_profile_normalized_head_prompt_locks(
+            payload.locked_prompt_parts if isinstance(payload.locked_prompt_parts, dict) else workspace.get("locked_prompt_parts")
+        )
+        prompt = str(payload.prompt or "").strip() or self._avatar_profile_head_prompt_from_parts(
+            prompt_parts=prompt_parts,
+            profile=metadata,
+        )
+        if not prompt:
+            prompt = self._avatar_profile_default_head_prompt(profile=metadata)
+        negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
+        template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID)["template"]
+        defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+        if not negative_prompt:
+            negative_prompt = str(defaults.get("negative_prompt") or "").strip()
+        width = int(defaults.get("width") or 512)
+        height = int(defaults.get("height") or 512)
+        steps = int(defaults.get("steps") or 4)
+        cfg = float(defaults.get("cfg") or 1.2)
+        denoise = float(defaults.get("denoise") or 1.0)
+        target_count = min(max(int(payload.batch_size or 20), 1), 20)
+        seed_batch = workspace.get("seed_batch") if isinstance(workspace.get("seed_batch"), dict) else {}
+        existing_previews = [item for item in list(seed_batch.get("previews") or []) if isinstance(item, dict)]
+        keep_ids = {
+            str(item or "").strip()
+            for item in list(payload.keep_preview_ids or [])
+            if str(item or "").strip()
+        }
+        preserve_existing = bool(payload.preserve_existing)
+        if preserve_existing:
+            kept_previews = [
+                {
+                    **preview,
+                    "kept": str(preview.get("preview_id") or "").strip() in keep_ids or bool(preview.get("kept")),
+                }
+                for preview in existing_previews
+                if str(preview.get("seed") or "").strip()
+            ][:target_count]
+        else:
+            kept_previews = [
+                {**preview, "kept": True}
+                for preview in existing_previews
+                if str(preview.get("preview_id") or "").strip() in keep_ids
+                and self._avatar_head_face_seed_batch_preview_is_usable(preview=preview)
+            ][:target_count]
+        now = datetime.now(timezone.utc).isoformat()
+        batch_id = str(seed_batch.get("batch_id") or f"head_face_seed_batch_{int(time.time())}")
+        requested_selected_preview_id = str(payload.selected_preview_id or "").strip()
+        selected_preview_id = requested_selected_preview_id or str(seed_batch.get("selected_preview_id") or "").strip()
+        manual_seed_preview_id = str(payload.manual_seed_preview_id or "").strip()
+        manual_seed = self._coerce_manual_image_seed(payload.manual_seed) if payload.manual_seed is not None else None
+        if manual_seed_preview_id and manual_seed is None:
+            raise ValueError("avatar_head_seed_batch_manual_seed_required")
+
+        if manual_seed_preview_id:
+            existing_by_id = {
+                str(preview.get("preview_id") or "").strip(): preview
+                for preview in existing_previews
+                if str(preview.get("preview_id") or "").strip()
+            }
+            kept_previews = [
+                {
+                    **preview,
+                    "kept": str(preview.get("preview_id") or "").strip() in keep_ids or bool(preview.get("kept")),
+                }
+                for preview in existing_previews
+                if str(preview.get("preview_id") or "").strip() != manual_seed_preview_id
+                and str(preview.get("seed") or "").strip()
+            ][: max(target_count - 1, 0)]
+            replaced_preview = existing_by_id.get(manual_seed_preview_id, {})
+            kept_previews.append(
+                self._avatar_head_face_seed_batch_local_preview(
+                    batch_id=batch_id,
+                    prompt=prompt,
+                    prompt_parts=prompt_parts,
+                    locked_prompt_parts=locked_prompt_parts,
+                    negative_prompt=negative_prompt,
+                    seed=manual_seed,
+                    width=width,
+                    height=height,
+                    steps=steps,
+                    cfg=cfg,
+                    denoise=denoise,
+                    now=now,
+                    replaces_preview_id=manual_seed_preview_id,
+                    slot_index=int(replaced_preview.get("slot_index") or len(kept_previews) + 1),
+                )
+            )
+
+        previews = kept_previews[:target_count]
+        while len(previews) < target_count:
+            previews.append(
+                self._avatar_head_face_seed_batch_local_preview(
+                    batch_id=batch_id,
+                    prompt=prompt,
+                    prompt_parts=prompt_parts,
+                    locked_prompt_parts=locked_prompt_parts,
+                    negative_prompt=negative_prompt,
+                    seed=secrets.randbelow(2**63),
+                    width=width,
+                    height=height,
+                    steps=steps,
+                    cfg=cfg,
+                    denoise=denoise,
+                    now=now,
+                    slot_index=len(previews) + 1,
+                )
+            )
+        previews = [
+            {
+                **preview,
+                "slot_index": index + 1,
+                "selected": str(preview.get("preview_id") or "").strip() == selected_preview_id,
+                "prompt": prompt if str(preview.get("status") or "") == "local_queued" else preview.get("prompt", prompt),
+                "prompt_parts": prompt_parts if str(preview.get("status") or "") == "local_queued" else preview.get("prompt_parts", prompt_parts),
+                "locked_prompt_parts": locked_prompt_parts
+                if str(preview.get("status") or "") == "local_queued"
+                else preview.get("locked_prompt_parts", locked_prompt_parts),
+                "negative_prompt": negative_prompt
+                if str(preview.get("status") or "") == "local_queued"
+                else preview.get("negative_prompt", negative_prompt),
+            }
+            for index, preview in enumerate(previews[:target_count])
+        ]
+        selected_preview = next(
+            (preview for preview in previews if str(preview.get("preview_id") or "").strip() == selected_preview_id),
+            None,
+        )
+        if selected_preview is None:
+            selected_preview_id = ""
+        pending_count = sum(
+            1
+            for preview in previews
+            if str(preview.get("status") or "").strip() not in {"completed", "completed_with_fallback"}
+        )
+        updated_batch = {
+            "batch_id": batch_id,
+            "status": "queued" if pending_count else "completed",
+            "target_count": target_count,
+            "kept_count": sum(1 for preview in previews if bool(preview.get("kept"))),
+            "generated_count": len(previews),
+            "submission_limit": AVATAR_HEAD_FACE_SEED_BATCH_SUBMISSION_LIMIT,
+            "remaining_count": pending_count,
+            "prompt": prompt,
+            "prompt_parts": prompt_parts,
+            "locked_prompt_parts": locked_prompt_parts,
+            "negative_prompt": negative_prompt,
+            "selected_preview_id": selected_preview_id,
+            "selected_seed": selected_preview.get("seed") if isinstance(selected_preview, dict) else None,
+            "previews": previews,
+            "updated_at": now,
+        }
+        updated_workspace = {
+            **workspace,
+            "section": "head_face",
+            "prompt": prompt,
+            "prompt_parts": prompt_parts,
+            "locked_prompt_parts": locked_prompt_parts,
+            "negative_prompt": negative_prompt,
+            "seed_batch": updated_batch,
+            "updated_at": now,
+        }
+        updated_metadata = self._avatar_profile_metadata_with_workspace(
+            metadata=metadata,
+            section="head_face",
+            workspace=updated_workspace,
+        )
+        updated_metadata["updated_at"] = now
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        saved_workspace = saved_profile.get("prompt_workspaces", {}).get("head_face", {})
+        return {
+            "status": "seed_batch_queued",
+            "batch": saved_workspace.get("seed_batch", updated_batch),
+            "generation": saved_workspace.get("seed_batch", updated_batch).get("dispatch", {}),
+            "profile": saved_profile,
+            "workspace": saved_workspace,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    async def create_avatar_profile_head_jitter_batch(self, *, profile_id: str, payload: "AvatarProfileHeadJitterBatchRequest") -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
+        seed_batch = workspace.get("seed_batch") if isinstance(workspace.get("seed_batch"), dict) else {}
+        seed_batch_previews = [item for item in list(seed_batch.get("previews") or []) if isinstance(item, dict)]
+        anchor_preview_id = str(payload.anchor_preview_id or seed_batch.get("selected_preview_id") or "").strip()
+        anchor_preview = next(
+            (
+                preview
+                for preview in seed_batch_previews
+                if str(preview.get("preview_id") or "").strip() == anchor_preview_id
+            ),
+            None,
+        )
+        anchor_seed = self._coerce_manual_image_seed(payload.anchor_seed) if payload.anchor_seed is not None else None
+        if anchor_seed is None and isinstance(anchor_preview, dict):
+            anchor_seed = self._coerce_manual_image_seed(anchor_preview.get("seed"))
+        if anchor_seed is None:
+            anchor_seed = self._coerce_manual_image_seed(seed_batch.get("selected_seed"))
+        if anchor_seed is None:
+            raise ValueError("avatar_head_jitter_anchor_seed_required")
+
+        prompt_parts = self._avatar_profile_normalized_head_prompt_parts(
+            profile=metadata,
+            prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
+            fallback_prompt=str(payload.prompt or workspace.get("prompt") or seed_batch.get("prompt") or "").strip(),
+        )
+        locked_prompt_parts = self._avatar_profile_normalized_head_prompt_locks(
+            payload.locked_prompt_parts if isinstance(payload.locked_prompt_parts, dict) else workspace.get("locked_prompt_parts")
+        )
+        prompt = str(payload.prompt or "").strip() or self._avatar_profile_head_prompt_from_parts(
+            prompt_parts=prompt_parts,
+            profile=metadata,
+        )
+        if not prompt:
+            prompt = self._avatar_profile_default_head_prompt(profile=metadata)
+        negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or seed_batch.get("negative_prompt") or "").strip()
+        template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID)["template"]
+        defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+        if not negative_prompt:
+            negative_prompt = str(defaults.get("negative_prompt") or "").strip()
+        width = AVATAR_HEAD_FACE_LORA_DATASET_WIDTH
+        height = AVATAR_HEAD_FACE_LORA_DATASET_HEIGHT
+        steps = int(defaults.get("steps") or 4)
+        cfg = float(defaults.get("cfg") or 1.2)
+        denoise = float(defaults.get("denoise") or 1.0)
+        target_count = min(max(int(payload.batch_size or 20), 12), 20)
+        jitter_batch = workspace.get("jitter_batch") if isinstance(workspace.get("jitter_batch"), dict) else {}
+        existing_previews = [item for item in list(jitter_batch.get("previews") or []) if isinstance(item, dict)]
+        now = datetime.now(timezone.utc).isoformat()
+        batch_id = str(jitter_batch.get("batch_id") or f"head_face_jitter_batch_{int(time.time())}")
+        approved_ids = {
+            str(item or "").strip()
+            for item in list(payload.approved_preview_ids or jitter_batch.get("approved_preview_ids") or [])
+            if str(item or "").strip()
+        }
+        rejected_ids = {
+            str(item or "").strip()
+            for item in list(payload.rejected_preview_ids or [])
+            if str(item or "").strip()
+        }
+        existing_by_id = {
+            str(preview.get("preview_id") or "").strip(): preview
+            for preview in existing_previews
+            if str(preview.get("preview_id") or "").strip()
+        }
+        previews: list[dict] = []
+        used_seeds: set[int] = set()
+
+        def _append_candidate(preview: dict, *, source: str, approved: bool = False) -> None:
+            seed = self._coerce_manual_image_seed(preview.get("seed"))
+            preview_id = str(preview.get("preview_id") or "").strip()
+            if seed is None or seed in used_seeds or len(previews) >= target_count:
+                return
+            used_seeds.add(seed)
+            previews.append(
+                {
+                    **preview,
+                    "preview_id": preview_id or f"{batch_id}_{uuid.uuid4().hex[:10]}",
+                    "batch_id": batch_id,
+                    "batch_kind": "lora_seed",
+                    "section": "head_face",
+                    "template_id": AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID,
+                    "seed": seed,
+                    "seed_locked": True,
+                    "approved": approved or preview_id in approved_ids,
+                    "rejected": False,
+                    "candidate_source": source,
+                    "anchor_seed": anchor_seed,
+                    "anchor_preview_id": anchor_preview_id,
+                    "skip_background_removal": True,
+                    "width": int(preview.get("width") or width),
+                    "height": int(preview.get("height") or height),
+                    "steps": int(preview.get("steps") or steps),
+                    "cfg": float(preview.get("cfg") if preview.get("cfg") is not None else cfg),
+                    "denoise": float(preview.get("denoise") if preview.get("denoise") is not None else denoise),
+                    "prompt": str(preview.get("prompt") or prompt).strip(),
+                    "prompt_parts": preview.get("prompt_parts") if isinstance(preview.get("prompt_parts"), dict) else prompt_parts,
+                    "locked_prompt_parts": preview.get("locked_prompt_parts")
+                    if isinstance(preview.get("locked_prompt_parts"), dict)
+                    else locked_prompt_parts,
+                    "negative_prompt": str(preview.get("negative_prompt") or negative_prompt).strip(),
+                    "created_at": preview.get("created_at") or now,
+                }
+            )
+
+        if isinstance(anchor_preview, dict):
+            _append_candidate(anchor_preview, source="selected_seed", approved=True)
+        for preview_id in approved_ids:
+            preview = existing_by_id.get(preview_id)
+            if isinstance(preview, dict) and preview_id not in rejected_ids:
+                _append_candidate(preview, source=str(preview.get("candidate_source") or "approved"), approved=True)
+        if not bool(payload.preserve_existing) and not existing_previews:
+            for preview in seed_batch_previews:
+                preview_id = str(preview.get("preview_id") or "").strip()
+                if preview_id == anchor_preview_id:
+                    continue
+                _append_candidate(preview, source="seed_batch")
+        else:
+            for preview in existing_previews:
+                preview_id = str(preview.get("preview_id") or "").strip()
+                if preview_id in rejected_ids or preview_id in approved_ids:
+                    continue
+                _append_candidate(preview, source=str(preview.get("candidate_source") or "lora_seed"))
+
+        while len(previews) < target_count:
+            seed = secrets.randbelow(2**63)
+            if seed in used_seeds:
+                continue
+            used_seeds.add(seed)
+            previews.append(
+                self._avatar_head_face_seed_batch_local_preview(
+                    batch_id=batch_id,
+                    prompt=prompt,
+                    prompt_parts=prompt_parts,
+                    locked_prompt_parts=locked_prompt_parts,
+                    negative_prompt=negative_prompt,
+                    seed=seed,
+                    width=width,
+                    height=height,
+                    steps=steps,
+                    cfg=cfg,
+                    denoise=denoise,
+                    now=now,
+                    slot_index=len(previews) + 1,
+                    batch_kind="lora_seed",
+                    anchor_seed=anchor_seed,
+                )
+            )
+        previews = [
+            {
+                **preview,
+                "slot_index": index + 1,
+                "approved": bool(preview.get("approved")),
+                "rejected": False,
+                "anchor_seed": anchor_seed,
+                "anchor_preview_id": anchor_preview_id,
+            }
+            for index, preview in enumerate(previews[:target_count])
+        ]
+        approved_previews = [preview for preview in previews if bool(preview.get("approved"))]
+        approved_seeds = [self._coerce_manual_image_seed(preview.get("seed")) for preview in approved_previews]
+        approved_seeds = [seed for seed in approved_seeds if seed is not None]
+        pending_count = sum(
+            1
+            for preview in previews
+            if str(preview.get("status") or "").strip() not in {"completed", "completed_with_fallback"}
+        )
+        lora_seed_set = None
+        if bool(payload.save_lora_seeds):
+            if len(set(approved_seeds)) < 12:
+                raise ValueError("avatar_head_lora_seed_count_required")
+            lora_seed_set = {
+                "status": "ready",
+                "source": "head_face_lora_seed_selection",
+                "minimum_count": 12,
+                "seed_count": len(set(approved_seeds)),
+                "seeds": list(dict.fromkeys(approved_seeds)),
+                "preview_ids": [
+                    str(preview.get("preview_id") or "").strip()
+                    for preview in approved_previews
+                    if str(preview.get("preview_id") or "").strip()
+                ],
+                "anchor_seed": anchor_seed,
+                "anchor_preview_id": anchor_preview_id,
+                "created_at": now,
+            }
+        updated_batch = {
+            "batch_id": batch_id,
+            "status": "queued" if pending_count else "completed",
+            "target_count": target_count,
+            "generated_count": len(previews),
+            "remaining_count": pending_count,
+            "submission_limit": AVATAR_HEAD_FACE_SEED_BATCH_SUBMISSION_LIMIT,
+            "anchor_preview_id": anchor_preview_id,
+            "anchor_seed": anchor_seed,
+            "center_preview": anchor_preview if isinstance(anchor_preview, dict) else {},
+            "approved_preview_ids": [
+                str(preview.get("preview_id") or "").strip()
+                for preview in approved_previews
+                if str(preview.get("preview_id") or "").strip()
+            ],
+            "approved_seed_count": len(set(approved_seeds)),
+            "required_seed_count": 12,
+            "ready_for_lora": len(set(approved_seeds)) >= 12,
+            "prompt": prompt,
+            "prompt_parts": prompt_parts,
+            "locked_prompt_parts": locked_prompt_parts,
+            "negative_prompt": negative_prompt,
+            "previews": previews,
+            "updated_at": now,
+        }
+        if lora_seed_set:
+            updated_batch["lora_seed_set_saved_at"] = now
+        updated_workspace = {
+            **workspace,
+            "section": "head_face",
+            "prompt": prompt,
+            "prompt_parts": prompt_parts,
+            "locked_prompt_parts": locked_prompt_parts,
+            "negative_prompt": negative_prompt,
+            "jitter_batch": updated_batch,
+            "updated_at": now,
+        }
+        if lora_seed_set:
+            updated_workspace["lora_seed_set"] = lora_seed_set
+        updated_metadata = self._avatar_profile_metadata_with_workspace(
+            metadata=metadata,
+            section="head_face",
+            workspace=updated_workspace,
+        )
+        updated_metadata["updated_at"] = now
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        saved_workspace = saved_profile.get("prompt_workspaces", {}).get("head_face", {})
+        return {
+            "status": "jitter_batch_queued",
+            "batch": saved_workspace.get("jitter_batch", updated_batch),
+            "generation": saved_workspace.get("jitter_batch", updated_batch).get("dispatch", {}),
+            "profile": saved_profile,
+            "workspace": saved_workspace,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    async def update_avatar_profile_head_lora_dataset(self, *, profile_id: str, payload: "AvatarProfileHeadLoraDatasetRequest") -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
+        lora_seed_set = workspace.get("lora_seed_set") if isinstance(workspace.get("lora_seed_set"), dict) else {}
+        approved_seeds = [
+            self._coerce_manual_image_seed(seed)
+            for seed in list(lora_seed_set.get("seeds") or [])
+        ]
+        approved_seeds = [seed for seed in approved_seeds if seed is not None]
+
+        prompt_parts = self._avatar_profile_normalized_head_prompt_parts(
+            profile=metadata,
+            prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
+            fallback_prompt=str(payload.prompt or workspace.get("prompt") or "").strip(),
+        )
+        locked_prompt_parts = self._avatar_profile_normalized_head_prompt_locks(
+            payload.locked_prompt_parts if isinstance(payload.locked_prompt_parts, dict) else workspace.get("locked_prompt_parts")
+        )
+        prompt = str(payload.prompt or "").strip() or self._avatar_profile_head_prompt_from_parts(
+            prompt_parts=prompt_parts,
+            profile=metadata,
+        )
+        if not prompt:
+            prompt = self._avatar_profile_default_head_prompt(profile=metadata)
+        negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
+        template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID)["template"]
+        defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+        if not negative_prompt:
+            negative_prompt = str(defaults.get("negative_prompt") or "").strip()
+        width = AVATAR_HEAD_FACE_LORA_DATASET_WIDTH
+        height = AVATAR_HEAD_FACE_LORA_DATASET_HEIGHT
+        steps = int(defaults.get("steps") or 4)
+        cfg = float(defaults.get("cfg") or 1.2)
+        denoise = float(defaults.get("denoise") or 1.0)
+        now = datetime.now(timezone.utc).isoformat()
+        dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
+        poses = dataset.get("poses") if isinstance(dataset.get("poses"), list) else []
+        if not poses:
+            poses = [
+                {
+                    "pose_id": pose_id,
+                    "label": pose_id.replace("_", " ").title(),
+                    "pose_prompt": pose_prompt,
+                    "items": [],
+                    "approved_count": 0,
+                    "required_count": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+                    "status": "pending",
+                }
+                for pose_id, pose_prompt in AVATAR_HEAD_FACE_LORA_DATASET_POSES
+            ]
+        else:
+            default_pose_prompts = dict(AVATAR_HEAD_FACE_LORA_DATASET_POSES)
+            for pose in poses:
+                if not isinstance(pose, dict):
+                    continue
+                pose_id = str(pose.get("pose_id") or "").strip()
+                pose_prompt = str(pose.get("pose_prompt") or "").strip()
+                if not pose_prompt or pose_prompt == AVATAR_HEAD_FACE_LORA_DATASET_LEGACY_POSE_PROMPTS.get(pose_id):
+                    updated_pose_prompt = default_pose_prompts.get(pose_id)
+                    if updated_pose_prompt:
+                        pose["pose_prompt"] = updated_pose_prompt
+        active_pose_index = min(max(int(dataset.get("active_pose_index") or 0), 0), max(len(poses) - 1, 0))
+        requested_pose_id = str(payload.pose_id or "").strip()
+        if requested_pose_id:
+            for index, pose in enumerate(poses):
+                if str(pose.get("pose_id") or "") == requested_pose_id:
+                    active_pose_index = index
+                    break
+        action = str(payload.action or "ensure").strip().lower()
+        generated_dataset_actions = {"generate", "next", "approve", "reject", "reset_pose", "retry_vision"}
+        if action in generated_dataset_actions:
+            raise ValueError("avatar_head_lora_node_dataset_generation_disabled")
+        active_pose = poses[active_pose_index] if poses else {}
+        item_id = str(payload.item_id or "").strip()
+        if action in {"generate"} and len(set(approved_seeds)) < 12:
+            raise ValueError("avatar_head_lora_seed_set_required")
+        if action in {"next", "reject"} and len(set(approved_seeds)) < 12:
+            has_prepared_dataset = any(
+                sum(
+                    1
+                    for record in list(pose.get("approved_dataset") or [])
+                    if isinstance(record, dict) and str(record.get("status") or "").strip() == "ready"
+                )
+                >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE
+                for pose in poses
+                if isinstance(pose, dict)
+            )
+            if not has_prepared_dataset:
+                raise ValueError("avatar_head_lora_seed_set_required")
+        if action == "reset_pose" and active_pose:
+            self._delete_avatar_head_lora_pose_files(profile_dir=profile_dir, pose=active_pose)
+            active_pose = {
+                **active_pose,
+                "items": [],
+                "approved_dataset": [],
+                "approved_count": 0,
+                "approved_dataset_count": 0,
+                "required_count": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+                "status": "pending",
+                "status_detail": "No pose images generated yet.",
+                "phase_status": "pending",
+                "vision_wait_reason": "",
+                "vision_status": "pending",
+                "vision_reviewed_count": 0,
+                "vision_updated_at": now,
+                "updated_at": now,
+            }
+            poses[active_pose_index] = active_pose
+
+        if action in {"approve", "reject"} and item_id:
+            for pose in poses:
+                updated_items = []
+                for item in list(pose.get("items") or []):
+                    if not isinstance(item, dict):
+                        continue
+                    if str(item.get("preview_id") or "") == item_id:
+                        item = {**item, "approved": action == "approve", "rejected": action == "reject", "reviewed_at": now}
+                    updated_items.append(item)
+                pose["items"] = updated_items
+
+        if action == "retry_vision":
+            retry_pose_indexes = [active_pose_index]
+            if requested_pose_id:
+                retry_pose_indexes = [
+                    index
+                    for index, pose in enumerate(poses)
+                    if str(pose.get("pose_id") or "") == requested_pose_id
+                ]
+            for pose_index in retry_pose_indexes:
+                if pose_index < 0 or pose_index >= len(poses):
+                    continue
+                pose = poses[pose_index]
+                retry_items = []
+                changed_retry_items = False
+                for item in list(pose.get("items") or []):
+                    if not isinstance(item, dict):
+                        continue
+                    if str(item.get("vision_status") or "").strip() == "failed":
+                        item = {
+                            key: value
+                            for key, value in item.items()
+                            if key
+                            not in {
+                                "vision_error",
+                                "vision_review",
+                                "vision_reviewed_at",
+                            }
+                        }
+                        item = {
+                            **item,
+                            "vision_status": "pending",
+                            "vision_approved": False,
+                            "vision_retry_count": int(item.get("vision_retry_count") or 0) + 1,
+                        }
+                        changed_retry_items = True
+                    retry_items.append(item)
+                if changed_retry_items:
+                    pose["items"] = retry_items
+                    pose["vision_status"] = "pending"
+                    pose["vision_updated_at"] = now
+                    pose["vision_reviewed_count"] = sum(
+                        1
+                        for item in retry_items
+                        if str(item.get("vision_status") or "").strip() in {"approved", "rejected"}
+                        or isinstance(item.get("vision_review"), dict)
+                    )
+                    poses[pose_index] = pose
+            active_pose = poses[active_pose_index] if poses else {}
+
+        training_manifest = dataset.get("training_manifest") if isinstance(dataset.get("training_manifest"), dict) else {}
+        training_job = dataset.get("training_job") if isinstance(dataset.get("training_job"), dict) else {}
+        if training_job:
+            training_job = self._avatar_head_lora_training_job_status(job=training_job)
+        epoch_review = dataset.get("epoch_review") if isinstance(dataset.get("epoch_review"), dict) else {}
+        if action in {"prepare_train_lora", "train_lora"}:
+            training_manifest = self._prepare_avatar_head_lora_training_manifest(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                metadata=metadata,
+                dataset=dataset,
+                poses=poses,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                now=now,
+            )
+        if action == "train_lora":
+            training_job = self._launch_avatar_head_lora_training_job(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                training_manifest=training_manifest,
+                existing_job=training_job,
+                now=now,
+            )
+
+        if action == "generate_epoch_review":
+            epoch_review = self._prepare_avatar_head_lora_epoch_review(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                metadata=metadata,
+                dataset=dataset,
+                training_job=training_job,
+                prompt=prompt,
+                prompt_parts=prompt_parts,
+                locked_prompt_parts=locked_prompt_parts,
+                negative_prompt=negative_prompt,
+                now=now,
+            )
+            service = await self.start_service(target="comfyui_webui")
+            services = service.get("services") if isinstance(service.get("services"), dict) else self.service_status_payload().get("services", {})
+            webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+            epoch_review = {
+                **epoch_review,
+                "comfyui_start": {
+                    "status": service.get("status"),
+                    "result": service.get("result"),
+                    "state": webui.get("state") if isinstance(webui, dict) else "",
+                    "socket_path": webui.get("socket_path") if isinstance(webui, dict) else "",
+                    "updated_at": now,
+                },
+            }
+
+        if action == "select_epoch_review" and item_id:
+            selected_preview = None
+            updated_epoch_previews = []
+            for preview in list(epoch_review.get("previews") or []):
+                if not isinstance(preview, dict):
+                    continue
+                is_selected = str(preview.get("preview_id") or "").strip() == item_id
+                if is_selected:
+                    selected_preview = preview
+                updated_epoch_previews.append({**preview, "selected": is_selected})
+            if selected_preview is None:
+                raise ValueError("avatar_head_lora_epoch_review_item_not_found")
+            epoch_review = {
+                **epoch_review,
+                "status": "selected",
+                "selected_preview_id": item_id,
+                "selected_epoch": selected_preview.get("epoch"),
+                "selected_model": selected_preview.get("source_model"),
+                "selected_at": now,
+                "previews": updated_epoch_previews,
+                "updated_at": now,
+            }
+
+        if action == "next":
+            approved_count = sum(1 for item in list(active_pose.get("items") or []) if bool(item.get("approved")))
+            if approved_count < AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE:
+                raise ValueError("avatar_head_lora_pose_minimum_required")
+            active_pose, preparation_changed = self._prepare_avatar_head_lora_pose_approved_dataset(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                pose=active_pose,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                now=now,
+            )
+            if preparation_changed:
+                poses[active_pose_index] = active_pose
+            active_pose["status"] = "completed"
+            active_pose_index = min(active_pose_index + 1, max(len(poses) - 1, 0))
+            active_pose = poses[active_pose_index]
+
+        if action in {"ensure", "generate", "next", "reject"} and len(set(approved_seeds)) >= 12:
+            existing_items = [item for item in list(active_pose.get("items") or []) if isinstance(item, dict) and not bool(item.get("rejected"))]
+            avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
+            pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
+            excluded_seeds = set(approved_seeds)
+            excluded_seeds.update(
+                seed
+                for seed in (
+                    self._coerce_manual_image_seed(item.get("seed"))
+                    for item in existing_items
+                    if isinstance(item, dict)
+                )
+                if seed is not None
+            )
+            identity_control = self._avatar_head_lora_dataset_identity_control(
+                workspace=workspace,
+                lora_seed_set=lora_seed_set,
+            )
+            while len(existing_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
+                identity_source_seed = secrets.choice(approved_seeds)
+                seed = self._random_seed_excluding(excluded_seeds)
+                excluded_seeds.add(seed)
+                item_cfg = self._avatar_head_lora_dataset_jittered_cfg(cfg)
+                item_token = uuid.uuid4().hex[:10]
+                output_avatar_name = self._safe_filename_component(f"{avatar_name}_lora_{pose_id}_{item_token}")
+                pose_prompt = str(active_pose.get("pose_prompt") or "").strip()
+                pose_base_prompt = self._avatar_head_lora_dataset_pose_base_prompt(prompt=prompt, pose_id=pose_id)
+                pose_geometry_prompt = self._avatar_head_lora_dataset_pose_geometry_prompt(pose_id=pose_id)
+                pose_control = self._avatar_head_lora_dataset_pose_control(pose_id=pose_id)
+                pose_negative_prompt = self._avatar_head_lora_dataset_pose_negative_prompt(
+                    negative_prompt=negative_prompt,
+                    pose_id=pose_id,
+                )
+                item_prompt = ", ".join(
+                    part
+                    for part in [
+                        pose_prompt,
+                        pose_geometry_prompt,
+                        pose_base_prompt,
+                        "512x512 face LoRA dataset image, pose-varied avatar training reference",
+                    ]
+                    if part
+                )
+                existing_items.append(
+                    self._avatar_head_face_seed_batch_local_preview(
+                        batch_id=str(dataset.get("dataset_id") or f"head_face_lora_dataset_{int(time.time())}"),
+                        prompt=item_prompt,
+                        prompt_parts=prompt_parts,
+                        locked_prompt_parts=locked_prompt_parts,
+                        negative_prompt=pose_negative_prompt,
+                        seed=seed,
+                        width=width,
+                        height=height,
+                        steps=steps,
+                        cfg=item_cfg,
+                        denoise=denoise,
+                        now=now,
+                        slot_index=len(existing_items) + 1,
+                        batch_kind="lora_dataset",
+                        anchor_seed=self._coerce_manual_image_seed(lora_seed_set.get("anchor_seed")),
+                        template_id=str(pose_control.get("template_id") or AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID),
+                        template_variables={
+                            key: value
+                            for key, value in {
+                                **identity_control,
+                                "pose_reference_image": pose_control.get("pose_reference_image"),
+                                "pose_controlnet": pose_control.get("pose_controlnet"),
+                                "pose_strength": pose_control.get("pose_strength"),
+                                "pose_start": pose_control.get("pose_start"),
+                                "pose_end": pose_control.get("pose_end"),
+                            }.items()
+                            if value not in (None, "")
+                        },
+                    )
+                    | {
+                        "preview_id": f"lora_{pose_id}_{item_token}",
+                        "dataset_id": str(dataset.get("dataset_id") or f"head_face_lora_dataset_{int(time.time())}"),
+                        "pose_id": pose_id,
+                        "output_avatar_name": output_avatar_name,
+                        "target_subdir": f"lora_dataset/{pose_id}",
+                        "approved": False,
+                        "rejected": False,
+                        "vision_status": "pending",
+                        "vision_approved": False,
+                        "identity_source_seed": identity_source_seed,
+                        "identity_control": identity_control,
+                        "cfg_jitter": round(item_cfg - cfg, 2),
+                        "pose_control": pose_control,
+                    }
+                )
+            active_pose["items"] = existing_items[:AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE]
+
+        for pose in poses:
+            approved_count = sum(1 for item in list(pose.get("items") or []) if bool(item.get("approved")))
+            pose["approved_count"] = approved_count
+            pose["required_count"] = AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE
+            if approved_count >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE:
+                pose["status"] = "ready" if str(pose.get("status") or "") != "completed" else "completed"
+            elif list(pose.get("items") or []):
+                pose["status"] = "reviewing"
+            else:
+                pose["status"] = "pending"
+
+        dataset_id = str(dataset.get("dataset_id") or f"head_face_lora_dataset_{int(time.time())}")
+        updated_dataset = {
+            **dataset,
+            "dataset_id": dataset_id,
+            "status": "completed" if all(int(pose.get("approved_count") or 0) >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE for pose in poses) else "in_progress",
+            "poses": poses,
+            "pose_count": len(poses),
+            "active_pose_index": active_pose_index,
+            "active_pose_id": poses[active_pose_index].get("pose_id") if poses else "",
+            "seed_set": lora_seed_set,
+            "batch_size": AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE,
+            "required_per_pose": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+            "training_manifest": training_manifest,
+            "training_status": training_manifest.get("status") if isinstance(training_manifest, dict) else dataset.get("training_status"),
+            "training_job": training_job,
+            "epoch_review": epoch_review,
+            "updated_at": now,
+        }
+        updated_workspace = {
+            **workspace,
+            "section": "head_face",
+            "prompt": prompt,
+            "prompt_parts": prompt_parts,
+            "locked_prompt_parts": locked_prompt_parts,
+            "negative_prompt": negative_prompt,
+            "lora_dataset": updated_dataset,
+            "updated_at": now,
+        }
+        updated_metadata = self._avatar_profile_metadata_with_workspace(metadata=metadata, section="head_face", workspace=updated_workspace)
+        updated_metadata["updated_at"] = now
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        saved_workspace = saved_profile.get("prompt_workspaces", {}).get("head_face", {})
+        return {
+            "status": (
+                "lora_training_started"
+                if action == "train_lora"
+                else "lora_training_manifest_ready"
+                if action == "prepare_train_lora"
+                else "lora_epoch_review_queued"
+                if action == "generate_epoch_review"
+                else "lora_epoch_review_selected"
+                if action == "select_epoch_review"
+                else "lora_dataset_updated"
+            ),
+            "dataset": saved_workspace.get("lora_dataset", updated_dataset),
+            "profile": saved_profile,
+            "workspace": saved_workspace,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    async def update_avatar_profile_upper_torso_lora_dataset(self, *, profile_id: str, payload: "AvatarProfileHeadLoraDatasetRequest") -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="upper_torso")
+        dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
+        action = str(payload.action or "ensure").strip().lower()
+        item_id = str(payload.item_id or "").strip()
+        if action not in {"ensure", "prepare_train_lora", "train_lora", "generate_epoch_review", "select_epoch_review"}:
+            raise ValueError("avatar_upper_torso_lora_dataset_action_unsupported")
+        now = datetime.now(timezone.utc).isoformat()
+        prompt_parts = self._avatar_profile_normalized_upper_torso_prompt_parts(
+            profile=metadata,
+            prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
+            fallback_prompt=str(payload.prompt or workspace.get("prompt") or "").strip(),
+        )
+        prompt = str(payload.prompt or "").strip() or self._avatar_profile_upper_torso_prompt_from_parts(
+            prompt_parts=prompt_parts,
+            profile=metadata,
+        )
+        if not prompt:
+            prompt = self._avatar_profile_default_upper_torso_prompt(profile=metadata)
+        negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
+        training_manifest = dataset.get("training_manifest") if isinstance(dataset.get("training_manifest"), dict) else {}
+        training_job = dataset.get("training_job") if isinstance(dataset.get("training_job"), dict) else {}
+        if training_job:
+            training_job = self._avatar_head_lora_training_job_status(job=training_job)
+        epoch_review = dataset.get("epoch_review") if isinstance(dataset.get("epoch_review"), dict) else {}
+        if action in {"prepare_train_lora", "train_lora"}:
+            uploaded_manifest = dataset.get("uploaded_dataset") if isinstance(dataset.get("uploaded_dataset"), dict) else {}
+            if not uploaded_manifest:
+                raise ValueError("avatar_upper_torso_lora_uploaded_dataset_required")
+            training_manifest = self._prepare_avatar_head_lora_training_manifest_from_uploaded(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                metadata=metadata,
+                section="upper_torso",
+                uploaded_manifest=uploaded_manifest,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                now=now,
+            )
+        if action == "train_lora":
+            training_job = self._launch_avatar_head_lora_training_job(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                training_manifest=training_manifest,
+                existing_job=training_job,
+                now=now,
+                section="upper_torso",
+            )
+        if action == "generate_epoch_review":
+            epoch_review = self._prepare_avatar_head_lora_epoch_review(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                section="upper_torso",
+                metadata=metadata,
+                dataset=dataset,
+                training_job=training_job,
+                prompt=prompt,
+                prompt_parts=prompt_parts,
+                locked_prompt_parts={},
+                negative_prompt=negative_prompt,
+                now=now,
+            )
+            service = await self.start_service(target="comfyui_webui")
+            services = service.get("services") if isinstance(service.get("services"), dict) else self.service_status_payload().get("services", {})
+            webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+            epoch_review = {
+                **epoch_review,
+                "comfyui_start": {
+                    "status": service.get("status"),
+                    "result": service.get("result"),
+                    "state": webui.get("state") if isinstance(webui, dict) else "",
+                    "socket_path": webui.get("socket_path") if isinstance(webui, dict) else "",
+                    "updated_at": now,
+                },
+            }
+        if action == "select_epoch_review" and item_id:
+            selected_preview = None
+            updated_epoch_previews = []
+            for preview in list(epoch_review.get("previews") or []):
+                if not isinstance(preview, dict):
+                    continue
+                is_selected = str(preview.get("preview_id") or "").strip() == item_id
+                if is_selected:
+                    selected_preview = preview
+                updated_epoch_previews.append({**preview, "selected": is_selected})
+            if selected_preview is None:
+                raise ValueError("avatar_upper_torso_lora_epoch_review_item_not_found")
+            epoch_review = {
+                **epoch_review,
+                "status": "selected",
+                "selected_preview_id": item_id,
+                "selected_epoch": selected_preview.get("epoch"),
+                "selected_model": selected_preview.get("source_model"),
+                "selected_at": now,
+                "previews": updated_epoch_previews,
+                "updated_at": now,
+            }
+        updated_dataset = {
+            **dataset,
+            "source": "uploaded",
+            "status": dataset.get("status") or "waiting",
+            "training_manifest": training_manifest,
+            "training_status": training_manifest.get("status") if isinstance(training_manifest, dict) else dataset.get("training_status"),
+            "training_job": training_job,
+            "epoch_review": epoch_review,
+            "updated_at": now,
+        }
+        updated_workspace = {
+            **workspace,
+            "section": "upper_torso",
+            "prompt": prompt,
+            "prompt_parts": prompt_parts,
+            "negative_prompt": negative_prompt,
+            "lora_dataset": updated_dataset,
+            "updated_at": now,
+        }
+        updated_metadata = self._avatar_profile_metadata_with_workspace(metadata=metadata, section="upper_torso", workspace=updated_workspace)
+        updated_metadata["updated_at"] = now
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        saved_workspace = saved_profile.get("prompt_workspaces", {}).get("upper_torso", {})
+        return {
+            "status": (
+                "upper_torso_lora_training_started"
+                if action == "train_lora"
+                else "upper_torso_lora_training_manifest_ready"
+                if action == "prepare_train_lora"
+                else "upper_torso_lora_epoch_review_queued"
+                if action == "generate_epoch_review"
+                else "upper_torso_lora_epoch_review_selected"
+                if action == "select_epoch_review"
+                else "upper_torso_lora_dataset_ready"
+            ),
+            "dataset": saved_workspace.get("lora_dataset", updated_dataset),
+            "profile": saved_profile,
+            "workspace": saved_workspace,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    def _delete_avatar_head_lora_pose_files(self, *, profile_dir: Path, pose: dict) -> None:
+        pose_id = self._safe_filename_component(pose.get("pose_id") or "pose")
+        refs_dir = (profile_dir / "refs" / "head_face").resolve()
+        candidate_dirs = [
+            (refs_dir / "lora_dataset" / pose_id).resolve(),
+            (refs_dir / AVATAR_HEAD_FACE_LORA_APPROVED_SUBDIR / pose_id).resolve(),
+        ]
+        for candidate_dir in candidate_dirs:
+            if refs_dir not in candidate_dir.parents or not candidate_dir.exists():
+                continue
+            if candidate_dir.is_dir():
+                shutil.rmtree(candidate_dir)
+
+    def upload_avatar_profile_head_lora_dataset(
+        self,
+        *,
+        profile_id: str,
+        payload: "AvatarProfileHeadLoraDatasetUploadRequest",
+        section: str = "head_face",
+    ) -> dict:
+        section = self._avatar_profile_reference_role(section)
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section=section)
+        now = datetime.now(timezone.utc).isoformat()
+        input_dir = self._manual_image_input_dir().resolve()
+        target_dir = (profile_dir / "refs" / section / AVATAR_HEAD_FACE_LORA_UPLOADED_SUBDIR).resolve()
+        if profile_dir not in target_dir.parents:
+            raise ValueError("avatar_head_lora_dataset_path_invalid")
+        if bool(payload.replace if payload.replace is not None else True) and target_dir.exists():
+            shutil.rmtree(target_dir)
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        imported: list[dict] = []
+        source_paths = self._avatar_head_lora_dataset_upload_source_paths(payload=payload)
+        upload_items = list(payload.images or [])
+        if len(source_paths) + len(upload_items) > AVATAR_HEAD_FACE_LORA_UPLOAD_MAX_IMAGES:
+            raise ValueError("avatar_head_lora_uploaded_dataset_too_large")
+
+        for source in source_paths:
+            imported.append(
+                self._copy_avatar_head_lora_uploaded_dataset_image(
+                    profile_id=profile_id,
+                    section=section,
+                    input_dir=input_dir,
+                    target_dir=target_dir,
+                    source=source,
+                    display_name=source.stem,
+                    index=len(imported) + 1,
+                    now=now,
+                )
+            )
+        for item in upload_items:
+            imported.append(
+                self._write_avatar_head_lora_uploaded_dataset_image(
+                    profile_id=profile_id,
+                    section=section,
+                    input_dir=input_dir,
+                    target_dir=target_dir,
+                    filename=item.filename,
+                    display_name=item.name,
+                    data_base64=item.data_base64,
+                    index=len(imported) + 1,
+                    now=now,
+                )
+            )
+        imported = [item for item in imported if item]
+        if not imported:
+            raise ValueError("avatar_head_lora_uploaded_dataset_empty")
+
+        reference_filename = Path(str(payload.reference_filename or "")).name
+        reference_item = next((item for item in imported if item.get("filename") == reference_filename), imported[0])
+        manifest = self._write_avatar_head_lora_uploaded_dataset_manifest(
+            profile_dir=profile_dir,
+            profile_id=profile_id,
+            section=section,
+            items=imported,
+            reference_item=reference_item,
+            now=now,
+        )
+        dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
+        updated_dataset = {
+            **dataset,
+            "dataset_id": str(dataset.get("dataset_id") or f"head_face_lora_dataset_{int(time.time())}"),
+            "source": "uploaded",
+            "status": manifest["validation"]["status"],
+            "uploaded_dataset": manifest,
+            "training_manifest": {},
+            "training_status": "waiting",
+            "updated_at": now,
+        }
+        updated_workspace = {
+            **workspace,
+            "section": section,
+            "lora_dataset": updated_dataset,
+            "updated_at": now,
+        }
+        updated_metadata = self._avatar_profile_metadata_with_workspace(metadata=metadata, section=section, workspace=updated_workspace)
+        updated_metadata["updated_at"] = now
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        saved_workspace = saved_profile.get("prompt_workspaces", {}).get(section, {})
+        return {
+            "status": "lora_dataset_uploaded",
+            "dataset": saved_workspace.get("lora_dataset", updated_dataset),
+            "uploaded_dataset": saved_workspace.get("lora_dataset", updated_dataset).get("uploaded_dataset", manifest),
+            "profile": saved_profile,
+            "workspace": saved_workspace,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    def upload_avatar_profile_head_lora(
+        self,
+        *,
+        profile_id: str,
+        payload: "AvatarProfileHeadLoraUploadRequest",
+        section: str = "head_face",
+    ) -> dict:
+        section = self._avatar_profile_reference_role(section)
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+        if not metadata:
+            raise ValueError("avatar_profile_not_found")
+        profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section=section)
+        now = datetime.now(timezone.utc).isoformat()
+        target_dir = (profile_dir / "refs" / section / AVATAR_HEAD_FACE_LORA_EXTERNAL_SUBDIR).resolve()
+        if profile_dir not in target_dir.parents:
+            raise ValueError("avatar_head_lora_external_path_invalid")
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        source_path = str(payload.source_path or "").strip()
+        filename = Path(str(payload.filename or source_path or "external_lora.safetensors")).name
+        if Path(filename).suffix.lower() != ".safetensors":
+            raise ValueError("avatar_head_lora_external_file_type_invalid")
+        safe_stem = self._safe_filename_component(Path(filename).stem)
+        target_name = f"{safe_stem}_{int(time.time())}.safetensors"
+        target_path = (target_dir / target_name).resolve()
+        if source_path:
+            source = Path(source_path).expanduser().resolve()
+            if not source.is_file() or source.suffix.lower() != ".safetensors":
+                raise ValueError("avatar_head_lora_external_file_missing")
+            if source.stat().st_size > AVATAR_HEAD_FACE_LORA_UPLOAD_MAX_MODEL_BYTES:
+                raise ValueError("avatar_head_lora_external_file_too_large")
+            shutil.copy2(source, target_path)
+        else:
+            data = self._decode_base64_payload(
+                payload.data_base64,
+                empty_error="avatar_head_lora_external_file_required",
+                invalid_error="avatar_head_lora_external_file_invalid",
+                too_large_error="avatar_head_lora_external_file_too_large",
+                max_bytes=AVATAR_HEAD_FACE_LORA_UPLOAD_MAX_MODEL_BYTES,
+            )
+            target_path.write_bytes(data)
+        stat = target_path.stat()
+        relative_name = target_path.relative_to(profile_dir / "refs" / section).as_posix()
+        lora_id = self._safe_filename_component(target_path.stem)
+        record = {
+            "lora_id": lora_id,
+            "profile_id": profile_id,
+            "section": section,
+            "source": "external_upload",
+            "source_label": str(payload.source_label or "external").strip() or "external",
+            "filename": target_name,
+            "relative_name": relative_name,
+            "input_lora": f"avatar_profiles/{profile_id}/refs/{section}/{relative_name}",
+            "url": f"/api/avatar-generation/profiles/{profile_id}/references/{section}/{relative_name}",
+            "size_bytes": stat.st_size,
+            "created_at": now,
+            "updated_at": now,
+        }
+        target_path.with_suffix(target_path.suffix + ".json").write_text(
+            json.dumps(record, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        lora_manifest = self._avatar_head_lora_external_manifest(profile_dir=profile_dir, section=section)
+        existing = [
+            item
+            for item in list(lora_manifest.get("items") or [])
+            if isinstance(item, dict) and str(item.get("filename") or "") != target_name
+        ]
+        existing.append(record)
+        active_lora_id = lora_id if bool(payload.activate if payload.activate is not None else True) else str(lora_manifest.get("active_lora_id") or "")
+        updated_lora_manifest = {
+            "schema_version": "avatar_head_face_external_lora_manifest_v1",
+            "status": "ready" if existing else "empty",
+            "profile_id": profile_id,
+            "section": section,
+            "active_lora_id": active_lora_id,
+            "items": existing,
+            "count": len(existing),
+            "updated_at": now,
+        }
+        manifest_path = target_dir / "manifest.json"
+        manifest_path.write_text(json.dumps(updated_lora_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
+        updated_workspace = {
+            **workspace,
+            "section": section,
+            "lora_dataset": {
+                **dataset,
+                "external_loras": updated_lora_manifest,
+                "active_lora": record if active_lora_id == lora_id else dataset.get("active_lora"),
+                "updated_at": now,
+            },
+            "updated_at": now,
+        }
+        updated_metadata = self._avatar_profile_metadata_with_workspace(metadata=metadata, section=section, workspace=updated_workspace)
+        updated_metadata["updated_at"] = now
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        selected_profile_id = self._selected_avatar_profile_id()
+        saved_profile = self._avatar_profile_payload(profile_dir=profile_dir, selected_profile_id=selected_profile_id)
+        saved_workspace = saved_profile.get("prompt_workspaces", {}).get(section, {})
+        return {
+            "status": "lora_uploaded",
+            "lora": record,
+            "external_loras": saved_workspace.get("lora_dataset", {}).get("external_loras", updated_lora_manifest),
+            "profile": saved_profile,
+            "workspace": saved_workspace,
+            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
+        }
+
+    def _avatar_head_lora_dataset_upload_source_paths(self, *, payload: "AvatarProfileHeadLoraDatasetUploadRequest") -> list[Path]:
+        source_dir = str(payload.source_dir or "").strip()
+        if not source_dir:
+            return []
+        root = Path(source_dir).expanduser().resolve()
+        if not root.is_dir():
+            raise ValueError("avatar_head_lora_uploaded_dataset_source_missing")
+        paths = [
+            path
+            for path in root.iterdir()
+            if path.is_file() and path.suffix.lower() in AVATAR_HEAD_FACE_LORA_UPLOAD_ALLOWED_IMAGE_SUFFIXES
+        ]
+        paths.sort(key=lambda item: item.name.lower())
+        return paths
+
+    def _copy_avatar_head_lora_uploaded_dataset_image(
+        self,
+        *,
+        profile_id: str,
+        section: str,
+        input_dir: Path,
+        target_dir: Path,
+        source: Path,
+        display_name: str,
+        index: int,
+        now: str,
+    ) -> dict:
+        if source.stat().st_size > AVATAR_HEAD_FACE_LORA_UPLOAD_MAX_IMAGE_BYTES:
+            raise ValueError("avatar_head_lora_uploaded_image_too_large")
+        data = source.read_bytes()
+        self._validate_avatar_head_lora_uploaded_image(data=data, suffix=source.suffix)
+        safe_stem = self._safe_filename_component(display_name or source.stem)
+        target_name = f"{index:03d}_{safe_stem}{source.suffix.lower()}"
+        target_path = (target_dir / target_name).resolve()
+        shutil.copy2(source, target_path)
+        return self._avatar_head_lora_uploaded_dataset_item(
+            profile_id=profile_id,
+            section=section,
+            input_dir=input_dir,
+            target_dir=target_dir,
+            target_path=target_path,
+            name=display_name or source.stem,
+            now=now,
+        )
+
+    def _write_avatar_head_lora_uploaded_dataset_image(
+        self,
+        *,
+        profile_id: str,
+        section: str,
+        input_dir: Path,
+        target_dir: Path,
+        filename: str | None,
+        display_name: str | None,
+        data_base64: str | None,
+        index: int,
+        now: str,
+    ) -> dict:
+        raw_name = Path(str(filename or f"dataset_{index:03d}.png")).name
+        suffix = Path(raw_name).suffix.lower()
+        if suffix not in AVATAR_HEAD_FACE_LORA_UPLOAD_ALLOWED_IMAGE_SUFFIXES:
+            raise ValueError("avatar_head_lora_uploaded_image_type_invalid")
+        data = self._decode_base64_payload(
+            data_base64,
+            empty_error="avatar_head_lora_uploaded_image_required",
+            invalid_error="avatar_head_lora_uploaded_image_invalid",
+            too_large_error="avatar_head_lora_uploaded_image_too_large",
+            max_bytes=AVATAR_HEAD_FACE_LORA_UPLOAD_MAX_IMAGE_BYTES,
+        )
+        self._validate_avatar_head_lora_uploaded_image(data=data, suffix=suffix)
+        safe_stem = self._safe_filename_component(display_name or Path(raw_name).stem)
+        target_name = f"{index:03d}_{safe_stem}{suffix}"
+        target_path = (target_dir / target_name).resolve()
+        target_path.write_bytes(data)
+        return self._avatar_head_lora_uploaded_dataset_item(
+            profile_id=profile_id,
+            section=section,
+            input_dir=input_dir,
+            target_dir=target_dir,
+            target_path=target_path,
+            name=display_name or Path(raw_name).stem,
+            now=now,
+        )
+
+    def _avatar_head_lora_uploaded_dataset_item(
+        self,
+        *,
+        profile_id: str,
+        section: str,
+        input_dir: Path,
+        target_dir: Path,
+        target_path: Path,
+        name: str,
+        now: str,
+    ) -> dict:
+        if input_dir not in target_path.parents:
+            raise ValueError("avatar_head_lora_uploaded_dataset_path_invalid")
+        stat = target_path.stat()
+        relative_to_head = target_path.relative_to(target_dir.parent).as_posix()
+        input_image = target_path.relative_to(input_dir).as_posix()
+        item = {
+            "item_id": self._safe_filename_component(target_path.stem),
+            "profile_id": profile_id,
+            "section": section,
+            "source": "uploaded",
+            "name": str(name or target_path.stem),
+            "filename": target_path.name,
+            "relative_name": relative_to_head,
+            "image": input_image,
+            "input_image": input_image,
+            "url": f"/api/avatar-generation/profiles/{profile_id}/references/{section}/{relative_to_head}",
+            "size_bytes": stat.st_size,
+            "created_at": now,
+        }
+        target_path.with_suffix(target_path.suffix + ".json").write_text(
+            json.dumps(item, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return item
+
+    def _write_avatar_head_lora_uploaded_dataset_manifest(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        section: str,
+        items: list[dict],
+        reference_item: dict,
+        now: str,
+    ) -> dict:
+        target_dir = (profile_dir / "refs" / section / AVATAR_HEAD_FACE_LORA_UPLOADED_SUBDIR).resolve()
+        minimum_required = AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE
+        recommended_count = AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE * len(AVATAR_HEAD_FACE_LORA_DATASET_POSES)
+        errors = []
+        warnings = []
+        if len(items) < minimum_required:
+            errors.append(f"minimum_{minimum_required}_images_required")
+        if len(items) < recommended_count:
+            warnings.append(f"recommended_{recommended_count}_images_for_pose_variety")
+        manifest = {
+            "schema_version": "avatar_head_face_uploaded_lora_dataset_v1",
+            "status": "ready" if not errors else "invalid",
+            "profile_id": profile_id,
+            "section": section,
+            "source": "uploaded",
+            "manifest": f"refs/{section}/{AVATAR_HEAD_FACE_LORA_UPLOADED_SUBDIR}/manifest.json",
+            "created_at": now,
+            "updated_at": now,
+            "image_count": len(items),
+            "minimum_required": minimum_required,
+            "recommended_count": recommended_count,
+            "reference_item_id": reference_item.get("item_id"),
+            "reference_image": reference_item.get("input_image"),
+            "reference_url": reference_item.get("url"),
+            "items": items,
+            "validation": {
+                "status": "ready" if not errors else "invalid",
+                "errors": errors,
+                "warnings": warnings,
+                "image_count": len(items),
+                "minimum_required": minimum_required,
+                "recommended_count": recommended_count,
+                "updated_at": now,
+            },
+        }
+        (target_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return manifest
+
+    def _avatar_head_lora_external_manifest(self, *, profile_dir: Path, section: str = "head_face") -> dict:
+        path = profile_dir / "refs" / section / AVATAR_HEAD_FACE_LORA_EXTERNAL_SUBDIR / "manifest.json"
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {"schema_version": "avatar_head_face_external_lora_manifest_v1", "items": [], "active_lora_id": ""}
+        return payload if isinstance(payload, dict) else {"schema_version": "avatar_head_face_external_lora_manifest_v1", "items": [], "active_lora_id": ""}
+
+    @staticmethod
+    def _validate_avatar_head_lora_uploaded_image(*, data: bytes, suffix: str) -> None:
+        suffix = str(suffix or "").lower()
+        if suffix not in AVATAR_HEAD_FACE_LORA_UPLOAD_ALLOWED_IMAGE_SUFFIXES:
+            raise ValueError("avatar_head_lora_uploaded_image_type_invalid")
+        if suffix == ".png" and not data.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise ValueError("avatar_head_lora_uploaded_image_invalid")
+        if suffix in {".jpg", ".jpeg"} and not data.startswith(b"\xff\xd8"):
+            raise ValueError("avatar_head_lora_uploaded_image_invalid")
+        if suffix == ".webp" and not (len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"):
+            raise ValueError("avatar_head_lora_uploaded_image_invalid")
+
+    @staticmethod
+    def _decode_base64_payload(
+        data_base64: str | None,
+        *,
+        empty_error: str,
+        invalid_error: str,
+        too_large_error: str,
+        max_bytes: int,
+    ) -> bytes:
+        encoded = str(data_base64 or "")
+        if not encoded:
+            raise ValueError(empty_error)
+        if "," in encoded and encoded.split(",", 1)[0].lower().startswith("data:"):
+            encoded = encoded.split(",", 1)[1]
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(invalid_error) from exc
+        if not data:
+            raise ValueError(empty_error)
+        if len(data) > max_bytes:
+            raise ValueError(too_large_error)
+        return data
+
+    def _prepare_avatar_head_lora_training_manifest(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        metadata: dict,
+        dataset: dict,
+        poses: list,
+        prompt: str,
+        negative_prompt: str,
+        now: str,
+    ) -> dict:
+        uploaded_manifest = dataset.get("uploaded_dataset") if isinstance(dataset.get("uploaded_dataset"), dict) else {}
+        if uploaded_manifest:
+            return self._prepare_avatar_head_lora_training_manifest_from_uploaded(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                metadata=metadata,
+                section="head_face",
+                uploaded_manifest=uploaded_manifest,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                now=now,
+            )
+        raise ValueError("avatar_head_lora_uploaded_dataset_required")
+        input_dir = self._manual_image_input_dir().resolve()
+        required_per_pose = AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE
+        manifest_poses = []
+        all_items = []
+        missing = []
+        for pose in poses:
+            if not isinstance(pose, dict):
+                continue
+            pose_id = self._safe_filename_component(pose.get("pose_id") or "pose")
+            ready_records = [
+                record
+                for record in list(pose.get("approved_dataset") or [])
+                if isinstance(record, dict) and str(record.get("status") or "").strip() == "ready"
+            ]
+            pose_items = []
+            for record in ready_records:
+                input_image = str(record.get("input_image") or "").strip()
+                if not input_image:
+                    continue
+                try:
+                    safe_relative = self._safe_relative_path(input_image)
+                except ValueError:
+                    continue
+                image_path = (input_dir / safe_relative).resolve()
+                if input_dir not in image_path.parents or not image_path.is_file():
+                    continue
+                lora_meta = record.get("lora_meta") if isinstance(record.get("lora_meta"), dict) else {}
+                meta_path = image_path.with_suffix(image_path.suffix + ".json")
+                lora_sidecar_path = image_path.with_suffix(image_path.suffix + ".lora.json")
+                item = {
+                    "approved_id": record.get("approved_id"),
+                    "pose_id": pose_id,
+                    "image": input_image,
+                    "image_path": image_path.as_posix(),
+                    "caption": str(lora_meta.get("prompt") or prompt or "").strip(),
+                    "negative_prompt": str(lora_meta.get("negative_prompt") or negative_prompt or "").strip(),
+                    "seed": record.get("seed"),
+                    "metadata": meta_path.relative_to(input_dir).as_posix() if meta_path.is_file() else "",
+                    "lora_metadata": lora_sidecar_path.relative_to(input_dir).as_posix() if lora_sidecar_path.is_file() else "",
+                }
+                pose_items.append(item)
+                all_items.append(item)
+            if len(pose_items) < required_per_pose:
+                missing.append({"pose_id": pose_id, "ready": len(pose_items), "required": required_per_pose})
+            manifest_poses.append(
+                {
+                    "pose_id": pose_id,
+                    "label": str(pose.get("label") or pose_id.replace("_", " ").title()),
+                    "pose_prompt": str(pose.get("pose_prompt") or ""),
+                    "ready_count": len(pose_items),
+                    "required_count": required_per_pose,
+                    "items": pose_items,
+                }
+            )
+        if missing:
+            raise ValueError("avatar_head_lora_training_dataset_not_ready")
+        manifest_dir = profile_dir / "refs" / "head_face" / "lora_dataset"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = (manifest_dir / "training_manifest.json").resolve()
+        if profile_dir not in manifest_path.parents:
+            raise ValueError("avatar_head_lora_dataset_path_invalid")
+        manifest = {
+            "schema_version": "avatar_head_face_lora_training_manifest_v1",
+            "status": "ready_to_train",
+            "profile_id": self._safe_filename_component(profile_id),
+            "profile_name": str(metadata.get("name") or profile_dir.name),
+            "section": "head_face",
+            "trigger_word": self._safe_filename_component(metadata.get("name") or profile_dir.name),
+            "created_at": now,
+            "updated_at": now,
+            "required_per_pose": required_per_pose,
+            "pose_count": len(manifest_poses),
+            "image_count": len(all_items),
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "poses": manifest_poses,
+            "items": all_items,
+        }
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return {
+            "status": "ready_to_train",
+            "manifest": manifest_path.relative_to(profile_dir).as_posix(),
+            "manifest_input_image": manifest_path.relative_to(input_dir).as_posix() if input_dir in manifest_path.parents else "",
+            "image_count": len(all_items),
+            "pose_count": len(manifest_poses),
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    def _prepare_avatar_head_lora_training_manifest_from_uploaded(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        metadata: dict,
+        section: str,
+        uploaded_manifest: dict,
+        prompt: str,
+        negative_prompt: str,
+        now: str,
+    ) -> dict:
+        input_dir = self._manual_image_input_dir().resolve()
+        validation = uploaded_manifest.get("validation") if isinstance(uploaded_manifest.get("validation"), dict) else {}
+        if str(validation.get("status") or uploaded_manifest.get("status") or "").strip() != "ready":
+            raise ValueError("avatar_head_lora_uploaded_dataset_not_ready")
+        source_items = [item for item in list(uploaded_manifest.get("items") or []) if isinstance(item, dict)]
+        if len(source_items) < AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE:
+            raise ValueError("avatar_head_lora_uploaded_dataset_not_ready")
+        all_items = []
+        for index, source_item in enumerate(source_items, start=1):
+            input_image = str(source_item.get("input_image") or source_item.get("image") or "").strip()
+            if not input_image:
+                continue
+            try:
+                safe_relative = self._safe_relative_path(input_image)
+            except ValueError:
+                continue
+            image_path = (input_dir / safe_relative).resolve()
+            if input_dir not in image_path.parents or not image_path.is_file():
+                continue
+            caption = str(source_item.get("caption") or prompt or "").strip()
+            item = {
+                "approved_id": source_item.get("item_id") or f"uploaded_{index:03d}",
+                "pose_id": str(source_item.get("pose_id") or "uploaded").strip() or "uploaded",
+                "image": input_image,
+                "image_path": image_path.as_posix(),
+                "caption": caption,
+                "negative_prompt": str(source_item.get("negative_prompt") or negative_prompt or "").strip(),
+                "seed": source_item.get("seed"),
+                "metadata": image_path.with_suffix(image_path.suffix + ".json").relative_to(input_dir).as_posix()
+                if image_path.with_suffix(image_path.suffix + ".json").is_file()
+                else "",
+                "lora_metadata": "",
+            }
+            all_items.append(item)
+        if len(all_items) < AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE:
+            raise ValueError("avatar_head_lora_uploaded_dataset_images_missing")
+        section = self._avatar_profile_reference_role(section)
+        manifest_dir = profile_dir / "refs" / section / AVATAR_HEAD_FACE_LORA_UPLOADED_SUBDIR
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = (manifest_dir / "training_manifest.json").resolve()
+        if profile_dir not in manifest_path.parents:
+            raise ValueError("avatar_head_lora_dataset_path_invalid")
+        manifest = {
+            "schema_version": "avatar_lora_training_manifest_v2",
+            "status": "ready_to_train",
+            "source": "uploaded",
+            "profile_id": self._safe_filename_component(profile_id),
+            "profile_name": str(metadata.get("name") or profile_dir.name),
+            "section": section,
+            "trigger_word": self._safe_filename_component(metadata.get("name") or profile_dir.name),
+            "created_at": now,
+            "updated_at": now,
+            "image_count": len(all_items),
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "uploaded_dataset_manifest": str(uploaded_manifest.get("manifest") or f"refs/{section}/{AVATAR_HEAD_FACE_LORA_UPLOADED_SUBDIR}/manifest.json"),
+            "items": all_items,
+            "poses": [
+                {
+                    "pose_id": "uploaded",
+                    "label": "Uploaded Dataset",
+                    "pose_prompt": "externally uploaded face LoRA dataset",
+                    "ready_count": len(all_items),
+                    "required_count": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+                    "items": all_items,
+                }
+            ],
+        }
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return {
+            "status": "ready_to_train",
+            "source": "uploaded",
+            "manifest": manifest_path.relative_to(profile_dir).as_posix(),
+            "manifest_input_image": manifest_path.relative_to(input_dir).as_posix() if input_dir in manifest_path.parents else "",
+            "image_count": len(all_items),
+            "pose_count": 1,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    @staticmethod
+    def _pid_running(pid: int | str | None) -> bool:
+        try:
+            value = int(str(pid or "0").strip() or 0)
+        except Exception:
+            return False
+        if value <= 0:
+            return False
+        try:
+            os.kill(value, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
+    def _refresh_avatar_head_lora_training_job(self, *, profile_dir: Path, metadata: dict) -> dict:
+        updated_metadata = metadata
+        changed = False
+        for section in ("head_face", "upper_torso"):
+            workspace = self._avatar_profile_prompt_workspace(metadata=updated_metadata, section=section)
+            dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
+            job = dataset.get("training_job") if isinstance(dataset.get("training_job"), dict) else {}
+            if not job:
+                continue
+            if not str(job.get("profile_output_dir") or job.get("copied_output_dir") or "").strip():
+                job_id = self._safe_filename_component(
+                    str(job.get("job_id") or f"legacy_completed_{int(time.time())}")
+                )
+                profile_output_dir = (profile_dir / "refs" / section / "lora_training" / job_id).resolve()
+                if profile_dir in profile_output_dir.parents:
+                    job = {
+                        **job,
+                        "job_id": job_id,
+                        "profile_output_dir": profile_output_dir.as_posix(),
+                        "cleanup_job_dir": False,
+                        "storage_policy": str(job.get("storage_policy") or "legacy_job_outputs_copy_to_profile"),
+                    }
+            refreshed = self._avatar_head_lora_training_job_status(job=job)
+            if refreshed == job:
+                continue
+            updated_dataset = {**dataset, "training_job": refreshed}
+            updated_workspace = {**workspace, "lora_dataset": updated_dataset}
+            updated_metadata = self._avatar_profile_metadata_with_workspace(metadata=updated_metadata, section=section, workspace=updated_workspace)
+            changed = True
+        if not changed:
+            return metadata
+        updated_metadata["updated_at"] = datetime.now(timezone.utc).isoformat()
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return updated_metadata
+
+    def _avatar_head_lora_training_job_status(self, *, job: dict) -> dict:
+        refreshed = dict(job)
+        now = datetime.now(timezone.utc).isoformat()
+        if str(refreshed.get("status") or "").strip() == "completed" and refreshed.get("copied_output_models"):
+            refreshed["updated_at"] = now
+            return refreshed
+        log_value = str(job.get("log") or "").strip()
+        output_value = str(job.get("output_dir") or "").strip()
+        log_path = Path(log_value).expanduser() if log_value else None
+        output_dir = Path(output_value).expanduser() if output_value else None
+        if output_dir and not output_dir.is_absolute():
+            output_dir = (Path.cwd() / output_dir).resolve()
+        output_files = []
+        if output_dir and output_dir.is_dir():
+            output_files = sorted(
+                (path for path in output_dir.glob("*.safetensors") if path.is_file()),
+                key=lambda path: path.stat().st_mtime,
+                reverse=True,
+            )
+        running = self._pid_running(job.get("pid"))
+        log_text = ""
+        if log_path and log_path.is_file():
+            try:
+                log_text = log_path.read_text(encoding="utf-8", errors="replace")[-12000:]
+            except Exception:
+                log_text = ""
+        last_line = ""
+        error_line = ""
+        if log_text:
+            useful_lines = [
+                line.strip()
+                for line in log_text.splitlines()
+                if line.strip() and not line.strip().startswith(("read caption:", "0%|", "100%|"))
+            ]
+            if useful_lines:
+                last_line = useful_lines[-1][-240:]
+                for line in reversed(useful_lines):
+                    if any(marker in line for marker in ("CUDA out of memory", "ValueError:", "RuntimeError:", "No such file or directory")):
+                        error_line = line[-360:]
+                        break
+        failed_markers = (
+            "Traceback (most recent call last)",
+            "returned non-zero exit status",
+            "ValueError:",
+            "RuntimeError:",
+            "CUDA out of memory",
+            "No such file or directory",
+        )
+        if output_files and not running:
+            finalized = self._finalize_avatar_head_lora_training_job_outputs(
+                job=refreshed,
+                output_files=list(reversed(output_files)),
+                now=now,
+            )
+            copied_models = finalized.get("copied_output_models") if isinstance(finalized.get("copied_output_models"), list) else []
+            output_model = str((copied_models[-1] if copied_models else output_files[0].as_posix()) or "")
+            return {
+                **finalized,
+                "status": "completed",
+                "phase": "completed",
+                "status_detail": f"Saved {Path(output_model).name}",
+                "output_model": output_model,
+                "output_models": copied_models or [path.as_posix() for path in reversed(output_files)],
+                "checkpoint_count": len(output_files),
+                "completed_at": finalized.get("completed_at") or now,
+                "updated_at": now,
+            }
+        if any(marker in log_text for marker in failed_markers):
+            status = "failed"
+            phase = "failed"
+            if "pretrained_model_name_or_path" in log_text and "neither a valid local path nor a valid repo id" in log_text:
+                detail = "SDXL checkpoint path was invalid in train.toml; regenerate/retry training to use the fixed absolute path."
+            else:
+                detail = error_line or last_line or "Training failed; check train.log"
+        elif running:
+            status = "running"
+            if "load Diffusers pretrained" in log_text or "loading model for process" in log_text:
+                phase = "loading_model"
+                detail = "Loading SDXL checkpoint"
+            elif "prepare dataset" in log_text or "prepare images" in log_text:
+                phase = "preparing_dataset"
+                detail = "Preparing image dataset"
+            elif "Stopping hexe-ai-node-llamacpp-vision" in log_text:
+                phase = "stopping_vision"
+                detail = "Stopping vision runtime before training"
+            else:
+                phase = "running"
+                detail = last_line or "Training process is running"
+            if output_files:
+                detail = f"{detail}; latest checkpoint {output_files[0].name}"
+        elif str(job.get("status") or "").strip() == "running":
+            status = "failed"
+            phase = "failed"
+            detail = last_line or "Training process exited before output was created"
+        else:
+            status = str(job.get("status") or "prepared").strip() or "prepared"
+            phase = str(job.get("phase") or status).strip()
+            detail = str(job.get("status_detail") or last_line).strip()
+        refreshed.update(
+            {
+                "status": status,
+                "phase": phase,
+                "status_detail": detail,
+                "last_log_line": last_line,
+                "updated_at": now,
+            }
+        )
+        if output_files:
+            refreshed["latest_checkpoint"] = output_files[0].as_posix()
+            refreshed["checkpoint_count"] = len(output_files)
+        if status == "failed" and not refreshed.get("failed_at"):
+            refreshed["failed_at"] = now
+        return refreshed
+
+    def _finalize_avatar_head_lora_training_job_outputs(self, *, job: dict, output_files: list[Path], now: str) -> dict:
+        if not output_files:
+            return dict(job)
+        refreshed = dict(job)
+        profile_output_value = str(refreshed.get("profile_output_dir") or "").strip()
+        copied_models: list[str] = []
+        if profile_output_value:
+            profile_output_dir = Path(profile_output_value).expanduser()
+            if not profile_output_dir.is_absolute():
+                profile_output_dir = (Path.cwd() / profile_output_dir).resolve()
+            profile_output_dir.mkdir(parents=True, exist_ok=True)
+            for source in output_files:
+                if not source.is_file():
+                    continue
+                target = (profile_output_dir / source.name).resolve()
+                if profile_output_dir not in target.parents:
+                    raise ValueError("avatar_head_lora_training_output_path_invalid")
+                if not target.is_file() or target.stat().st_mtime < source.stat().st_mtime:
+                    shutil.copy2(source, target)
+                copied_models.append(target.as_posix())
+            manifest_path = profile_output_dir / "training_job.json"
+            manifest_payload = {
+                **refreshed,
+                "status": "completed",
+                "phase": "completed",
+                "copied_output_models": copied_models,
+                "copied_output_dir": profile_output_dir.as_posix(),
+                "completed_at": refreshed.get("completed_at") or now,
+                "updated_at": now,
+            }
+            manifest_path.write_text(json.dumps(manifest_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            refreshed["copied_output_dir"] = profile_output_dir.as_posix()
+            refreshed["copied_output_models"] = copied_models
+            refreshed["profile_output_manifest"] = manifest_path.as_posix()
+        if bool(refreshed.get("cleanup_job_dir")):
+            job_dir_value = str(refreshed.get("job_dir") or "").strip()
+            if job_dir_value:
+                job_dir = Path(job_dir_value).expanduser()
+                if not job_dir.is_absolute():
+                    job_dir = (Path.cwd() / job_dir).resolve()
+                jobs_root = (Path.cwd() / "runtime" / "lora-training" / "jobs").resolve()
+                if job_dir.is_dir() and jobs_root in job_dir.parents:
+                    shutil.rmtree(job_dir)
+                    refreshed["job_dir_removed"] = True
+                    refreshed["job_dir_removed_at"] = now
+        return refreshed
+
+    def _launch_avatar_head_lora_training_job(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        training_manifest: dict,
+        existing_job: dict,
+        now: str,
+        section: str = "head_face",
+    ) -> dict:
+        section = self._avatar_profile_reference_role(section)
+        existing_pid = existing_job.get("pid") if isinstance(existing_job, dict) else None
+        if self._pid_running(existing_pid):
+            return {
+                **existing_job,
+                "status": "running",
+                "reason": "already_running",
+                "updated_at": now,
+            }
+        manifest_relative = str(training_manifest.get("manifest") or "").strip()
+        if not manifest_relative:
+            raise ValueError("avatar_head_lora_training_manifest_required")
+        manifest_path = (profile_dir / manifest_relative).resolve()
+        if profile_dir not in manifest_path.parents or not manifest_path.is_file():
+            raise ValueError("avatar_head_lora_training_manifest_missing")
+        prepare_script = (Path.cwd() / "scripts" / "prepare-avatar-head-lora-kohya.py").resolve()
+        if not prepare_script.is_file():
+            raise ValueError("avatar_head_lora_training_prepare_script_missing")
+        job_token = uuid.uuid4().hex[:10]
+        job_id = self._safe_filename_component(f"{profile_id}_{section}_{int(time.time())}_{job_token}")
+        profile_output_dir = (profile_dir / "refs" / section / "lora_training" / job_id).resolve()
+        if profile_dir not in profile_output_dir.parents:
+            raise ValueError("avatar_head_lora_training_output_path_invalid")
+        try:
+            prepared = subprocess.run(
+                [str(prepare_script), "--manifest", str(manifest_path), "--job-id", job_id],
+                cwd=str(Path.cwd()),
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise ValueError(str(exc.stderr or exc.stdout or exc)) from exc
+        try:
+            prepared_payload = json.loads(str(prepared.stdout or "{}"))
+        except json.JSONDecodeError as exc:
+            raise ValueError("avatar_head_lora_training_prepare_invalid_json") from exc
+        run_script = Path(str(prepared_payload.get("run_script") or "")).resolve()
+        job_dir = Path(str(prepared_payload.get("job_dir") or run_script.parent)).resolve()
+        if not run_script.is_file():
+            raise ValueError("avatar_head_lora_training_run_script_missing")
+        log_path = job_dir / "train.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_handle = log_path.open("ab")
+        try:
+            process = subprocess.Popen(
+                [str(run_script)],
+                cwd=str(job_dir),
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        finally:
+            log_handle.close()
+        return {
+            "status": "running",
+            "job_id": str(prepared_payload.get("job_id") or job_id),
+            "profile_id": profile_id,
+            "section": section,
+            "pid": process.pid,
+            "started_at": now,
+            "updated_at": now,
+            "job_dir": job_dir.as_posix(),
+            "run_script": run_script.as_posix(),
+            "log": log_path.as_posix(),
+            "output_dir": str(prepared_payload.get("output_dir") or (job_dir / "output").as_posix()),
+            "profile_output_dir": profile_output_dir.as_posix(),
+            "cleanup_job_dir": True,
+            "storage_policy": "job_dir_is_temporary_outputs_copy_to_profile",
+            "image_count": prepared_payload.get("image_count"),
+            "text_llm_policy": "left_running",
+            "vision_policy": "stop_before_training_when_enabled",
+        }
+
+    def _avatar_head_lora_training_epoch_models(self, *, training_job: dict) -> list[dict]:
+        copied_models = [
+            Path(str(item or "")).expanduser()
+            for item in list(training_job.get("copied_output_models") or [])
+            if str(item or "").strip()
+        ]
+        if copied_models:
+            models = []
+            for path in copied_models:
+                if not path.is_absolute():
+                    path = (Path.cwd() / path).resolve()
+                if not path.is_file():
+                    continue
+                match = re.search(r"-(\d{6})\.safetensors$", path.name)
+                epoch = int(match.group(1)) if match else len(models) + 1
+                models.append(
+                    {
+                        "epoch": epoch,
+                        "filename": path.name,
+                        "source_model": path.resolve().as_posix(),
+                        "modified_at": datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat(),
+                    }
+                )
+            if models:
+                return sorted(models, key=lambda item: int(item.get("epoch") or 0))
+        output_value = str(training_job.get("copied_output_dir") or training_job.get("output_dir") or "").strip()
+        if not output_value:
+            return []
+        output_dir = Path(output_value).expanduser()
+        if not output_dir.is_absolute():
+            output_dir = (Path.cwd() / output_dir).resolve()
+        if not output_dir.is_dir():
+            return []
+        models = []
+        for path in sorted(output_dir.glob("*.safetensors")):
+            if not path.is_file():
+                continue
+            match = re.search(r"-(\d{6})\.safetensors$", path.name)
+            epoch = int(match.group(1)) if match else len(models) + 1
+            models.append(
+                {
+                    "epoch": epoch,
+                    "filename": path.name,
+                    "source_model": path.resolve().as_posix(),
+                    "modified_at": datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat(),
+                }
+            )
+        return sorted(models, key=lambda item: int(item.get("epoch") or 0))
+
+    def _ensure_avatar_head_lora_epoch_model_for_comfyui(self, *, profile_id: str, source_model: str, section: str = "head_face") -> str:
+        source_path = Path(str(source_model or "")).expanduser().resolve()
+        if not source_path.is_file():
+            raise ValueError("avatar_head_lora_epoch_model_missing")
+        lora_root = Path(os.environ.get("COMFYUI_GPU_LORA_DIR") or Path.cwd() / "runtime" / "models" / "comfyui-gpu" / "loras").resolve()
+        safe_section = self._avatar_profile_reference_role(section)
+        relative_dir = Path("avatar_profiles") / self._safe_filename_component(profile_id) / f"{safe_section}_lora_epochs"
+        target_dir = (lora_root / relative_dir).absolute()
+        if lora_root not in target_dir.parents and target_dir != lora_root:
+            raise ValueError("avatar_head_lora_epoch_model_path_invalid")
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = (target_dir / source_path.name).absolute()
+        if lora_root not in target_path.parents:
+            raise ValueError("avatar_head_lora_epoch_model_path_invalid")
+        if target_path.is_symlink():
+            target_path.unlink()
+        elif target_path.exists():
+            try:
+                if target_path.resolve() == source_path:
+                    if target_path.is_file():
+                        return (relative_dir / source_path.name).as_posix()
+            except OSError:
+                pass
+            if target_path.is_file():
+                target_path.unlink()
+        shutil.copyfile(source_path, target_path)
+        return (relative_dir / source_path.name).as_posix()
+
+    def _prepare_avatar_head_lora_epoch_review(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        section: str = "head_face",
+        metadata: dict,
+        dataset: dict,
+        training_job: dict,
+        prompt: str,
+        prompt_parts: dict,
+        locked_prompt_parts: dict,
+        negative_prompt: str,
+        now: str,
+    ) -> dict:
+        safe_section = self._avatar_profile_reference_role(section)
+        if self._pid_running(training_job.get("pid")) or str(training_job.get("status") or "").strip() == "running":
+            raise ValueError("avatar_head_lora_training_still_running")
+        epoch_models = self._avatar_head_lora_training_epoch_models(training_job=training_job)
+        if not epoch_models:
+            raise ValueError("avatar_head_lora_epoch_models_required")
+        try:
+            template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID)["template"]
+        except Exception as exc:
+            raise ValueError("avatar_head_lora_epoch_review_template_not_configured") from exc
+        defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+        width = int(defaults.get("width") or 1024)
+        height = int(defaults.get("height") or 1024)
+        steps = int(defaults.get("steps") or 24)
+        cfg = float(defaults.get("cfg") or 5.5)
+        denoise = float(defaults.get("denoise") or 1.0)
+        avatar_name = self._safe_filename_component(metadata.get("name") or profile_id or "avatar")
+        review = dataset.get("epoch_review") if isinstance(dataset.get("epoch_review"), dict) else {}
+        existing_previews = [
+            item
+            for item in list(review.get("previews") or [])
+            if isinstance(item, dict)
+        ]
+        existing_by_key = {
+            (int(item.get("epoch") or 0), int(item.get("sample_index") or 0)): item
+            for item in existing_previews
+        }
+        previews = []
+        for model in epoch_models:
+            epoch = int(model.get("epoch") or 0)
+            lora_name = self._ensure_avatar_head_lora_epoch_model_for_comfyui(
+                profile_id=profile_id,
+                source_model=str(model.get("source_model") or ""),
+                section=safe_section,
+            )
+            for sample_index in range(1, AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_PER_EPOCH + 1):
+                existing = existing_by_key.get((epoch, sample_index))
+                if existing:
+                    previews.append({**existing, "avatar_lora_name": lora_name, "source_model": model.get("source_model")})
+                    continue
+                seed = secrets.randbelow(9_000_000_000_000_000_000)
+                item_token = uuid.uuid4().hex[:8]
+                output_avatar_name = self._safe_filename_component(
+                    f"{avatar_name}_lora_epoch_{epoch:06d}_{sample_index}_{item_token}"
+                )
+                item_prompt = ", ".join(
+                    part
+                    for part in [
+                        prompt,
+                        "trained upper torso LoRA checkpoint evaluation, fitted bodysuit baseline, readable shoulder width, chest form, waist transition and upper arm proportions"
+                        if safe_section == "upper_torso"
+                        else "trained face LoRA checkpoint evaluation portrait",
+                        "same avatar body proportions, polished semi-realistic CGI upper torso reference, high quality studio avatar render"
+                        if safe_section == "upper_torso"
+                        else "same avatar identity, polished semi-realistic CGI face, high quality head-and-shoulders portrait",
+                    ]
+                    if part
+                )
+                preview = self._avatar_head_face_seed_batch_local_preview(
+                    batch_id=str(review.get("review_id") or f"{safe_section}_lora_epoch_review_{int(time.time())}"),
+                    prompt=item_prompt,
+                    prompt_parts=prompt_parts,
+                    locked_prompt_parts=locked_prompt_parts,
+                    negative_prompt=negative_prompt,
+                    seed=seed,
+                    width=width,
+                    height=height,
+                    steps=steps,
+                    cfg=cfg,
+                    denoise=denoise,
+                    now=now,
+                    slot_index=len(previews) + 1,
+                    batch_kind="lora_epoch_review",
+                    template_id=AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID,
+                    template_variables={
+                        "avatar_lora_name": lora_name,
+                        "avatar_lora_strength": float(defaults.get("avatar_lora_strength") or 1.0),
+                    },
+                )
+                previews.append(
+                    {
+                        **preview,
+                        "section": safe_section,
+                        "preview_id": f"lora_epoch_{epoch:06d}_{sample_index}_{item_token}",
+                        "epoch": epoch,
+                        "sample_index": sample_index,
+                        "source_model": model.get("source_model"),
+                        "avatar_lora_name": lora_name,
+                        "output_avatar_name": output_avatar_name,
+                        "target_subdir": f"lora_epoch_review/epoch_{epoch:06d}",
+                    }
+                )
+        completed = sum(1 for item in previews if str(item.get("status") or "").strip() in {"completed", "completed_with_fallback"})
+        pending = max(0, len(previews) - completed)
+        return {
+            **review,
+            "review_id": str(review.get("review_id") or f"{safe_section}_lora_epoch_review_{int(time.time())}"),
+            "section": safe_section,
+            "status": "queued" if pending else "ready_for_selection",
+            "epoch_count": len(epoch_models),
+            "per_epoch": AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_PER_EPOCH,
+            "preview_count": len(previews),
+            "completed_count": completed,
+            "pending_count": pending,
+            "epochs": epoch_models,
+            "previews": previews,
+            "updated_at": now,
+        }
+
+    def _avatar_head_lora_pose_phase(self, *, profile_dir: Path, pose: dict) -> dict:
+        pose_items = [item for item in list(pose.get("items") or []) if isinstance(item, dict) and not bool(item.get("rejected"))]
+        total_count = len(pose_items)
+        completed_items = [
+            item
+            for item in pose_items
+            if str(item.get("status") or "").strip() in {"completed", "completed_with_fallback"}
+            and not bool(item.get("placeholder"))
+        ]
+        imported_items = [
+            item
+            for item in completed_items
+            if self._avatar_head_lora_dataset_item_image_path(profile_dir=profile_dir, item=item) is not None
+        ]
+        reviewed_items = [
+            item
+            for item in imported_items
+            if str(item.get("vision_status") or "").strip() in {"approved", "rejected", "failed"}
+            or isinstance(item.get("vision_review"), dict)
+        ]
+        approved_count = sum(1 for item in pose_items if bool(item.get("approved")))
+        vision_approved_count = sum(1 for item in imported_items if str(item.get("vision_status") or "").strip() == "approved")
+        vision_failed_count = sum(1 for item in imported_items if str(item.get("vision_status") or "").strip() == "failed")
+        vision_rejected_count = sum(1 for item in imported_items if str(item.get("vision_status") or "").strip() == "rejected")
+        generated_count = len(completed_items)
+        imported_count = len(imported_items)
+        required_batch_count = AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE
+        required_approved_count = AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE
+        newest_imported_at = max(
+            (
+                self._parse_iso_datetime(str(item.get("imported_at") or ""))
+                for item in imported_items[:required_batch_count]
+                if str(item.get("imported_at") or "").strip()
+                and str(item.get("source_output") or "").strip()
+            ),
+            default=None,
+        )
+        settle_remaining = 0
+        if newest_imported_at is not None:
+            settle_remaining = max(
+                int(AVATAR_HEAD_FACE_LORA_VISION_IMPORT_SETTLE_SECONDS - (datetime.now(timezone.utc) - newest_imported_at).total_seconds()),
+                0,
+            )
+
+        status = "pending"
+        detail = "No pose images generated yet."
+        wait_reason = ""
+        if total_count < required_batch_count:
+            status = "creating_pose_batch"
+            detail = f"Preparing pose batch {total_count}/{required_batch_count}."
+            wait_reason = "creating_pose_batch"
+        elif generated_count < required_batch_count:
+            status = "generating"
+            detail = f"Generating pose images {generated_count}/{required_batch_count}."
+            wait_reason = "waiting_for_comfyui_generation"
+        elif imported_count < required_batch_count:
+            status = "importing"
+            detail = f"Importing generated images into the profile folder {imported_count}/{required_batch_count}."
+            wait_reason = "waiting_for_profile_import"
+        elif settle_remaining > 0:
+            status = "waiting_for_vision"
+            detail = f"Waiting {settle_remaining}s for the last imported image to settle before vision review."
+            wait_reason = "waiting_for_import_settle"
+        elif len(reviewed_items) < required_batch_count:
+            status = "waiting_for_vision"
+            detail = f"Waiting for vision review {len(reviewed_items)}/{required_batch_count}."
+            wait_reason = "waiting_for_vision_review"
+        elif approved_count >= required_approved_count:
+            status = "ready"
+            detail = f"Ready for next pose: {approved_count}/{required_approved_count} human-approved."
+            wait_reason = ""
+        else:
+            status = "vision_reviewed"
+            detail = (
+                f"Vision reviewed {len(reviewed_items)}/{required_batch_count}; "
+                f"{vision_approved_count} approved, {vision_rejected_count} rejected, {vision_failed_count} failed. "
+                f"Human approval needed {approved_count}/{required_approved_count}."
+            )
+            wait_reason = "waiting_for_human_approval"
+
+        return {
+            "status": status,
+            "phase_status": status,
+            "status_detail": detail,
+            "vision_wait_reason": wait_reason,
+            "generated_count": generated_count,
+            "imported_count": imported_count,
+            "vision_reviewed_count": len(reviewed_items),
+            "vision_approved_count": vision_approved_count,
+            "vision_rejected_count": vision_rejected_count,
+            "vision_failed_count": vision_failed_count,
+            "required_count": required_approved_count,
+            "required_batch_count": required_batch_count,
+        }
+
+    def _maybe_review_avatar_head_lora_dataset_pose_with_vision(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        pose: dict,
+        now: str,
+    ) -> tuple[dict, bool]:
+        if self._service_manager is None:
+            return pose, False
+        if not hasattr(self._service_manager, "stop") or not hasattr(self._service_manager, "start"):
+            return pose, False
+        if not hasattr(self._service_manager, "ensure_vision_runtime_resident") or not hasattr(self._service_manager, "unload_vision_model"):
+            return pose, False
+        pose_items = [item for item in list(pose.get("items") or []) if isinstance(item, dict)]
+        if len([item for item in pose_items if not bool(item.get("rejected"))]) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
+            return pose, False
+        queue_snapshot = self._avatar_head_face_seed_batch_queue_snapshot()
+        active_prompt_ids = {
+            str(prompt_id or "").strip()
+            for prompt_id in set(queue_snapshot.get("active_prompt_ids") or set())
+            if str(prompt_id or "").strip()
+        }
+        reviewable_items = [
+            item
+            for item in pose_items
+            if not bool(item.get("rejected"))
+            and str(item.get("status") or "").strip() in {"completed", "completed_with_fallback"}
+            and not bool(item.get("placeholder"))
+            and str(item.get("input_image") or "").strip()
+            and self._avatar_head_lora_dataset_item_image_path(profile_dir=profile_dir, item=item) is not None
+            and (
+                not str(item.get("prompt_id") or "").strip()
+                or str(item.get("prompt_id") or "").strip() not in active_prompt_ids
+            )
+        ]
+        if len(reviewable_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
+            return pose, False
+        newest_imported_at = max(
+            (
+                self._parse_iso_datetime(str(item.get("imported_at") or ""))
+                for item in reviewable_items[:AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE]
+                if str(item.get("imported_at") or "").strip()
+                and str(item.get("source_output") or "").strip()
+            ),
+            default=None,
+        )
+        if newest_imported_at is not None:
+            try:
+                if (datetime.now(timezone.utc) - newest_imported_at).total_seconds() < AVATAR_HEAD_FACE_LORA_VISION_IMPORT_SETTLE_SECONDS:
+                    return pose, False
+            except Exception:
+                pass
+        pending_items = [
+            item
+            for item in reviewable_items[:AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE]
+            if str(item.get("vision_status") or "").strip() not in {"approved", "rejected", "failed"}
+            and not isinstance(item.get("vision_review"), dict)
+        ]
+        if not pending_items:
+            return pose, False
+
+        reviewed_by_id: dict[str, dict] = {}
+        pose_prompt = str(pose.get("pose_prompt") or "").strip()
+        pose_id = str(pose.get("pose_id") or "").strip()
+        try:
+            self._service_manager.stop(target="comfyui_webui")
+            self._service_manager.ensure_vision_runtime_resident(local_in_flight=0, gpu_comfyui_critical_in_flight=False)
+            self._wait_for_avatar_head_lora_vision_runtime_ready(timeout_s=AVATAR_HEAD_FACE_LORA_VISION_READY_TIMEOUT_SECONDS)
+            for item in pending_items:
+                try:
+                    reviewed_by_id[str(item.get("preview_id") or "")] = self._avatar_head_lora_dataset_item_vision_review(
+                        profile_dir=profile_dir,
+                        profile_id=profile_id,
+                        pose_id=pose_id,
+                        pose_prompt=pose_prompt,
+                        item=item,
+                        now=now,
+                    )
+                except Exception as exc:
+                    reviewed_by_id[str(item.get("preview_id") or "")] = {
+                        **item,
+                        "vision_status": "failed",
+                        "vision_approved": False,
+                        "vision_error": str(exc),
+                        "vision_reviewed_at": now,
+                    }
+        except Exception as exc:
+            reviewed_by_id = {
+                str(item.get("preview_id") or ""): {
+                    **item,
+                    "vision_status": "failed",
+                    "vision_approved": False,
+                    "vision_error": str(exc),
+                    "vision_reviewed_at": now,
+                }
+                for item in pending_items
+            }
+        finally:
+            try:
+                self._service_manager.unload_vision_model()
+            except Exception as exc:
+                self._logger.debug("avatar head lora vision unload unavailable: %s", exc)
+            try:
+                self._service_manager.start(target="comfyui_webui")
+            except Exception as exc:
+                self._logger.debug("avatar head lora comfyui restart unavailable: %s", exc)
+
+        updated_items = []
+        for item in pose_items:
+            preview_id = str(item.get("preview_id") or "")
+            updated_items.append(reviewed_by_id.get(preview_id, item))
+        vision_reviewed_count = sum(
+            1
+            for item in updated_items
+            if str(item.get("vision_status") or "").strip() in {"approved", "rejected", "failed"}
+            or isinstance(item.get("vision_review"), dict)
+        )
+        return {
+            **pose,
+            "items": updated_items,
+            "vision_status": "reviewed" if vision_reviewed_count >= AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE else "reviewing",
+            "vision_reviewed_count": vision_reviewed_count,
+            "vision_updated_at": now,
+        }, True
+
+    def _avatar_head_lora_dataset_item_image_path(self, *, profile_dir: Path, item: dict) -> Path | None:
+        input_image = str(item.get("input_image") or "").strip()
+        if not input_image:
+            return None
+        try:
+            safe_relative = self._safe_relative_path(input_image)
+        except ValueError:
+            return None
+        input_dir = self._manual_image_input_dir().resolve()
+        image_path = (input_dir / safe_relative).resolve()
+        if input_dir not in image_path.parents or not image_path.is_file():
+            return None
+        if profile_dir.resolve() not in image_path.parents:
+            return None
+        return image_path
+
+    @staticmethod
+    def _parse_iso_datetime(value: str) -> datetime | None:
+        normalized = str(value or "").strip()
+        if not normalized:
+            return None
+        try:
+            parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+
+    def _wait_for_avatar_head_lora_vision_runtime_ready(self, *, timeout_s: float) -> None:
+        deadline = time.monotonic() + max(float(timeout_s), 1.0)
+        last_error = "vision_runtime_unavailable"
+        while time.monotonic() <= deadline:
+            services = self.service_status_payload().get("services", {})
+            vision_llm = services.get("vision_llm") if isinstance(services, dict) else {}
+            state = str(vision_llm.get("state") or "").strip().lower() if isinstance(vision_llm, dict) else ""
+            socket_path = str(vision_llm.get("socket_path") or "").strip() if isinstance(vision_llm, dict) else ""
+            health_socket_path = str(vision_llm.get("health_socket_path") or "").strip() if isinstance(vision_llm, dict) else ""
+            if state in {"running", "healthy"} and socket_path:
+                main_socket_error = ""
+                if not health_socket_path:
+                    return
+                try:
+                    health = self._uds_json_request(
+                        socket_path=health_socket_path,
+                        method="GET",
+                        path="/health",
+                        host="vision-llm-health",
+                        error_label="vision_health_failed",
+                        timeout_s=5,
+                    )
+                    ready = bool(health.get("ready")) or str(health.get("status") or "").strip().lower() == "ok"
+                    if ready:
+                        return
+                    last_error = f"vision_health_not_ready:{json.dumps(health, sort_keys=True)[:250]}"
+                except Exception as exc:
+                    last_error = str(exc)
+                try:
+                    self._uds_json_request(
+                        socket_path=socket_path,
+                        method="GET",
+                        path="/v1/models",
+                        host="vision-llm",
+                        error_label="vision_models_failed",
+                        timeout_s=5,
+                    )
+                    return
+                except Exception as exc:
+                    main_socket_error = str(exc)
+                if main_socket_error:
+                    last_error = f"{last_error}; {main_socket_error}"
+            else:
+                last_error = state or "vision_runtime_unavailable"
+            time.sleep(AVATAR_HEAD_FACE_LORA_VISION_READY_POLL_SECONDS)
+        raise ValueError(f"vision_runtime_not_ready:{last_error}")
+
+    def _prepare_avatar_head_lora_pose_approved_dataset(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        pose: dict,
+        prompt: str,
+        negative_prompt: str,
+        now: str,
+    ) -> tuple[dict, bool]:
+        pose_id = self._safe_filename_component(pose.get("pose_id") or "pose")
+        approved_items = [
+            item
+            for item in list(pose.get("items") or [])
+            if isinstance(item, dict) and bool(item.get("approved")) and not bool(item.get("rejected"))
+        ]
+        if len(approved_items) < AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE:
+            return pose, False
+        existing_records = [
+            item
+            for item in list(pose.get("approved_dataset") or [])
+            if isinstance(item, dict)
+        ]
+        existing_by_source = {
+            str(item.get("source_preview_id") or "").strip(): item
+            for item in existing_records
+            if str(item.get("source_preview_id") or "").strip()
+        }
+        updated_records = list(existing_records)
+        changed = False
+        for index, item in enumerate(approved_items, start=1):
+            source_preview_id = str(item.get("preview_id") or "").strip()
+            if source_preview_id in existing_by_source:
+                continue
+            record = self._create_avatar_head_lora_approved_dataset_record(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                pose_id=pose_id,
+                pose_prompt=str(pose.get("pose_prompt") or ""),
+                item=item,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                index=index,
+                now=now,
+            )
+            updated_records.append(record)
+            changed = True
+        if not changed:
+            return pose, False
+        return {
+            **pose,
+            "approved_dataset": updated_records,
+            "approved_dataset_count": len(updated_records),
+            "approved_dataset_status": "background_removal_submitted",
+            "approved_dataset_updated_at": now,
+        }, True
+
+    def _create_avatar_head_lora_approved_dataset_record(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        pose_id: str,
+        pose_prompt: str,
+        item: dict,
+        prompt: str,
+        negative_prompt: str,
+        index: int,
+        now: str,
+    ) -> dict:
+        source_preview_id = self._safe_filename_component(item.get("preview_id") or f"approved_{index}")
+        approved_id = self._safe_filename_component(f"{pose_id}_{index:02d}_{source_preview_id}")
+        target_subdir = f"{AVATAR_HEAD_FACE_LORA_APPROVED_SUBDIR}/{pose_id}"
+        target_dir = profile_dir / "refs" / "head_face" / target_subdir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        output_prefix = f"hexe/avatar_head_lora_dataset/{self._safe_filename_component(profile_id)}/{pose_id}/{approved_id}"
+        lora_meta = {
+            "schema_version": "avatar_head_face_lora_dataset_v1",
+            "profile_id": self._safe_filename_component(profile_id),
+            "pose_id": pose_id,
+            "pose_prompt": pose_prompt,
+            "source_preview_id": item.get("preview_id"),
+            "source_input_image": item.get("input_image"),
+            "source_url": item.get("url"),
+            "seed": item.get("seed"),
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "prompt_parts": item.get("prompt_parts") if isinstance(item.get("prompt_parts"), dict) else {},
+            "vision_status": item.get("vision_status"),
+            "vision_approved": bool(item.get("vision_approved")),
+            "vision_review": item.get("vision_review") if isinstance(item.get("vision_review"), dict) else {},
+            "human_approved": True,
+            "created_at": now,
+        }
+        record = {
+            "approved_id": approved_id,
+            "source_preview_id": item.get("preview_id"),
+            "source_input_image": item.get("input_image"),
+            "source_url": item.get("url"),
+            "pose_id": pose_id,
+            "seed": item.get("seed"),
+            "status": "background_removal_pending",
+            "target_subdir": target_subdir,
+            "output_prefix": output_prefix,
+            "lora_meta": lora_meta,
+            "created_at": now,
+        }
+        submitted = self._submit_avatar_head_lora_approved_background_removal(
+            profile_dir=profile_dir,
+            record=record,
+            now=now,
+        )
+        record = {**record, **submitted}
+        self._write_avatar_head_lora_approved_dataset_meta(profile_dir=profile_dir, record=record)
+        return record
+
+    def _submit_avatar_head_lora_approved_background_removal(self, *, profile_dir: Path, record: dict, now: str) -> dict:
+        source_input_image = str(record.get("source_input_image") or "").strip()
+        if not source_input_image:
+            return {"status": "background_removal_pending", "background_removal_error": "source_image_missing"}
+        input_dir = self._manual_image_input_dir().resolve()
+        try:
+            safe_relative = self._safe_relative_path(source_input_image)
+        except ValueError:
+            return {"status": "background_removal_pending", "background_removal_error": "source_image_invalid"}
+        source_path = (input_dir / safe_relative).resolve()
+        if input_dir not in source_path.parents or not source_path.is_file():
+            return {"status": "background_removal_pending", "background_removal_error": "source_image_missing"}
+        services = self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        socket_path = str(webui.get("socket_path") or "") if isinstance(webui, dict) else ""
+        if not socket_path or not Path(socket_path).exists():
+            return {"status": "background_removal_pending", "background_removal_error": "comfyui_socket_unavailable"}
+        bg_removal_model = "birefnet.safetensors"
+        try:
+            template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID)["template"]
+            defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+            bg_removal_model = str(defaults.get("bg_removal_model") or bg_removal_model).strip() or bg_removal_model
+        except Exception:
+            pass
+        cleanup = self._free_manual_image_runtime_models(socket_path=socket_path)
+        if cleanup.get("status") == "failed":
+            return {"status": "background_removal_pending", "background_removal_error": "comfyui_free_failed", "background_removal_cleanup": cleanup}
+        workflow = self._avatar_head_face_background_removal_workflow(
+            input_image=source_input_image,
+            bg_removal_model=bg_removal_model,
+            output_prefix=str(record.get("output_prefix") or "").strip(),
+        )
+        try:
+            response = self._uds_json_request(
+                socket_path=socket_path,
+                method="POST",
+                path="/prompt",
+                body={"client_id": "hexe-node-avatar-head-lora-bg", "prompt": workflow},
+            )
+        except Exception as exc:
+            return {"status": "background_removal_pending", "background_removal_error": str(exc)}
+        return {
+            "status": "background_removal_submitted",
+            "background_removal_prompt_id": response.get("prompt_id"),
+            "background_removal_number": response.get("number"),
+            "background_removal_submitted_at": now,
+        }
+
+    def _refresh_avatar_head_lora_approved_dataset_outputs(
+        self,
+        *,
+        profile_dir: Path,
+        pose: dict,
+        now: str,
+        submit_capacity: int | None = None,
+    ) -> tuple[dict, bool]:
+        records = [item for item in list(pose.get("approved_dataset") or []) if isinstance(item, dict)]
+        if not records:
+            return pose, False
+        output_dir = self._manual_image_output_dir()
+        input_dir = self._manual_image_input_dir().resolve()
+        updated_records = []
+        changed = False
+        if submit_capacity is None:
+            submitted_in_refresh = sum(1 for item in records if str(item.get("status") or "").strip() == "background_removal_submitted")
+            submit_capacity = max(0, 2 - submitted_in_refresh)
+        else:
+            submit_capacity = max(0, int(submit_capacity))
+        for record in records:
+            status = str(record.get("status") or "").strip()
+            if status == "ready" and str(record.get("input_image") or "").strip():
+                updated_records.append(record)
+                continue
+            record = dict(record)
+            if not str(record.get("output_prefix") or "").strip():
+                pose_id = self._safe_filename_component(record.get("pose_id") or pose.get("pose_id") or "pose")
+                approved_id = self._safe_filename_component(record.get("approved_id") or record.get("source_preview_id") or "approved")
+                record["output_prefix"] = f"hexe/avatar_head_lora_dataset/{self._safe_filename_component(profile_dir.name)}/{pose_id}/{approved_id}"
+                changed = True
+            output_path = self._avatar_head_face_preview_output_for_prefix(
+                output_dir=output_dir,
+                prefix=record.get("output_prefix"),
+                min_modified_time=self._avatar_head_face_preview_submitted_timestamp(preview={"submitted_at": record.get("background_removal_submitted_at") or record.get("created_at")}),
+            )
+            if not output_path or not output_path.is_file():
+                if (
+                    submit_capacity > 0
+                    and status in {"background_removal_pending", "pending", ""}
+                    and not str(record.get("background_removal_prompt_id") or "").strip()
+                ):
+                    submitted = self._submit_avatar_head_lora_approved_background_removal(
+                        profile_dir=profile_dir,
+                        record=record,
+                        now=now,
+                    )
+                    record = {**record, **submitted}
+                    self._write_avatar_head_lora_approved_dataset_meta(profile_dir=profile_dir, record=record)
+                    submit_capacity -= 1
+                    changed = True
+                updated_records.append(record)
+                continue
+            filename = f"{self._safe_filename_component(record.get('approved_id') or output_path.stem)}.png"
+            target_subdir = str(record.get("target_subdir") or f"{AVATAR_HEAD_FACE_LORA_APPROVED_SUBDIR}/{pose.get('pose_id') or 'pose'}").strip().strip("/")
+            target_dir = profile_dir / "refs" / "head_face" / target_subdir
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target_path = (target_dir / filename).resolve()
+            if profile_dir not in target_path.parents:
+                raise ValueError("avatar_head_lora_dataset_path_invalid")
+            shutil.copyfile(output_path, target_path)
+            relative_name = f"{target_subdir}/{filename}"
+            input_image = (target_path.relative_to(input_dir)).as_posix()
+            url = f"/api/avatar-generation/profiles/{self._safe_filename_component(profile_dir.name)}/references/head_face/{relative_name}"
+            updated_record = {
+                **record,
+                "status": "ready",
+                "filename": filename,
+                "input_image": input_image,
+                "url": url,
+                "background_removed": True,
+                "background_removal_completed_at": now,
+                "source_output": output_path.relative_to(output_dir).as_posix() if output_dir in output_path.parents else str(output_path),
+            }
+            lora_meta = dict(updated_record.get("lora_meta") or {})
+            lora_meta.update(
+                {
+                    "prepared_input_image": input_image,
+                    "prepared_url": url,
+                    "background_removed": True,
+                    "background_removal_completed_at": now,
+                }
+            )
+            updated_record["lora_meta"] = lora_meta
+            self._write_avatar_head_lora_approved_dataset_meta(profile_dir=profile_dir, record=updated_record)
+            updated_records.append(updated_record)
+            changed = True
+        ready_count = sum(1 for item in updated_records if str(item.get("status") or "") == "ready")
+        return {
+            **pose,
+            "approved_dataset": updated_records,
+            "approved_dataset_ready_count": ready_count,
+            "approved_dataset_status": "ready" if ready_count >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE else "background_removal_pending",
+            "approved_dataset_updated_at": now if changed else pose.get("approved_dataset_updated_at"),
+        }, changed
+
+    def _write_avatar_head_lora_approved_dataset_meta(self, *, profile_dir: Path, record: dict) -> None:
+        target_subdir = str(record.get("target_subdir") or "").strip().strip("/")
+        approved_id = self._safe_filename_component(record.get("approved_id") or "approved")
+        if not target_subdir:
+            return
+        target_dir = profile_dir / "refs" / "head_face" / target_subdir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        meta_path = (target_dir / f"{approved_id}.lora.json").resolve()
+        if profile_dir not in meta_path.parents:
+            raise ValueError("avatar_head_lora_dataset_path_invalid")
+        meta = dict(record.get("lora_meta") or {})
+        meta.update(
+            {
+                "approved_id": record.get("approved_id"),
+                "status": record.get("status"),
+                "input_image": record.get("input_image"),
+                "url": record.get("url"),
+                "background_removed": bool(record.get("background_removed")),
+                "background_removal_prompt_id": record.get("background_removal_prompt_id"),
+            }
+        )
+        meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    def _avatar_head_lora_dataset_item_vision_review(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        pose_id: str,
+        pose_prompt: str,
+        item: dict,
+        now: str,
+    ) -> dict:
+        input_image = str(item.get("input_image") or "").strip()
+        if not input_image:
+            raise ValueError("avatar_head_lora_dataset_image_missing")
+        safe_relative = self._safe_relative_path(input_image)
+        input_dir = self._manual_image_input_dir().resolve()
+        image_path = (input_dir / safe_relative).resolve()
+        if input_dir not in image_path.parents or not image_path.is_file():
+            raise ValueError("avatar_head_lora_dataset_image_missing")
+        prompt = self._avatar_head_lora_dataset_vision_prompt(pose_id=pose_id, pose_prompt=pose_prompt)
+        image_bytes = image_path.read_bytes()
+        content = ""
+        model_id = ""
+        last_error: Exception | None = None
+        for attempt in range(AVATAR_HEAD_FACE_LORA_VISION_RETRY_ATTEMPTS):
+            try:
+                content, model_id = self._vision_describe_image_bytes(
+                    image_bytes=image_bytes,
+                    mime_type=self._image_mime_type(image_path.suffix),
+                    image_name=image_path.name,
+                    prompt=prompt,
+                    max_tokens=700,
+                    timeout_s=45,
+                )
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+                detail = str(exc).lower()
+                retryable = any(
+                    marker in detail
+                    for marker in (
+                        "no_status_line",
+                        "timed out",
+                        "timeout",
+                        "connection",
+                        "runtime_not_ready",
+                        "runtime_unavailable",
+                        "temporarily",
+                    )
+                )
+                if not retryable or attempt >= AVATAR_HEAD_FACE_LORA_VISION_RETRY_ATTEMPTS - 1:
+                    break
+                time.sleep(2.0 + (attempt * 2.0))
+        if last_error is not None:
+            raise last_error
+        parsed = self._parse_manual_image_prompt_helper_content(content)
+        pose_match = bool(parsed.get("pose_match"))
+        technical_fit = bool(parsed.get("technical_fit"))
+        lora_ready = bool(parsed.get("lora_ready"))
+        approved = bool(parsed.get("approved")) and pose_match and technical_fit and lora_ready
+        review = {
+            "schema_version": str(parsed.get("schema_version") or "avatar_head_lora_vision_v1"),
+            "pose_match": pose_match,
+            "technical_fit": technical_fit,
+            "lora_ready": lora_ready,
+            "approved": approved,
+            "confidence": parsed.get("confidence"),
+            "issues": parsed.get("issues") if isinstance(parsed.get("issues"), list) else [],
+            "prompt_tuning_suggestions": parsed.get("prompt_tuning_suggestions") if isinstance(parsed.get("prompt_tuning_suggestions"), list) else [],
+            "metadata": parsed.get("metadata") if isinstance(parsed.get("metadata"), dict) else {},
+            "raw_reply": content,
+            "model_id": model_id,
+            "reviewed_at": now,
+        }
+        return {
+            **item,
+            "vision_status": "approved" if approved else "rejected",
+            "vision_approved": approved,
+            "vision_review": review,
+            "vision_reviewed_at": now,
+        }
+
+    @staticmethod
+    def _avatar_head_lora_dataset_vision_prompt(*, pose_id: str, pose_prompt: str) -> str:
+        three_quarter_rule = ""
+        if pose_id in {"three_quarter_left", "three_quarter_right"}:
+            three_quarter_rule = (
+                "For three-quarter poses, reject any image that reads as a straight-on frontal portrait, "
+                "has both cheeks equally visible, has the nose/chin centered forward, or has direct camera eye contact. "
+                "Reject soft beauty angles that still look mostly frontal. "
+                "A valid image for this slot must read as near side-profile rather than a front beauty portrait: nose and chin visibly point toward one side of the image, "
+                "the far eye is mostly hidden behind the nose bridge, the far cheek is mostly hidden, one cheek is dominant, one ear is visible, "
+                "and the eyes look off camera in the same direction as the head turn. "
+            )
+        return (
+            "You are a strict quality reviewer for face LoRA dataset images. "
+            "Evaluate only technical dataset fitness and whether the image matches the requested pose. "
+            "Do not decide whether this looks like the same person; a human will approve visual identity separately. "
+            + three_quarter_rule
+            + "The image should be useful for later LoRA training: a clear adult face/head-and-shoulders avatar portrait, sharp facial features, no severe blur, no cropped-off face, no extra people, no duplicate faces, no text/watermarks, no broken anatomy, no heavy occlusion over key face features, and lighting/detail good enough for training. "
+            "Return strict JSON only, no markdown. Required keys: schema_version, pose_match, technical_fit, lora_ready, approved, confidence, issues, prompt_tuning_suggestions, metadata. "
+            "approved must be true only when pose_match, technical_fit, and lora_ready are all true. "
+            "metadata must include pose_id, observed_pose, framing, face_visibility, sharpness, lighting, occlusion, crop_quality, and training_note. "
+            + json.dumps(
+                {
+                    "schema_version": "avatar_head_lora_vision_v1",
+                    "requested_pose_id": str(pose_id or ""),
+                    "requested_pose_prompt": str(pose_prompt or ""),
+                },
+                sort_keys=True,
+            )
+        )
 
     def select_avatar_profile(self, *, profile_id: str) -> dict:
         profile_dir = self._avatar_profile_dir(profile_id=profile_id)
@@ -3738,12 +6879,15 @@ class NodeControlState:
         root = self._avatar_profile_root()
         safe_profile_id = self._safe_filename_component(profile_id)
         safe_role = self._avatar_profile_reference_role(role)
-        if safe_role == "head_face":
+        if safe_role in {"head_face", "upper_torso"}:
             safe_asset_path = self._safe_relative_path(str(asset_name or ""))
         else:
             safe_asset_path = Path(Path(str(asset_name or "")).name)
         path = (root / safe_profile_id / "refs" / safe_role / safe_asset_path).resolve()
-        if root not in path.parents or not path.exists() or not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".svg"}:
+        allowed_suffixes = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
+        if safe_role in {"head_face", "upper_torso"}:
+            allowed_suffixes.add(".safetensors")
+        if root not in path.parents or not path.exists() or not path.is_file() or path.suffix.lower() not in allowed_suffixes:
             raise ValueError("avatar_profile_reference_not_found")
         return FileResponse(path)
 
@@ -3771,8 +6915,15 @@ class NodeControlState:
         metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
         if not metadata:
             return {}
-        metadata = self._refresh_avatar_body_depth_profile_job(profile_dir=profile_dir, metadata=metadata)
-        metadata = self._refresh_avatar_head_face_preview_outputs(profile_dir=profile_dir, metadata=metadata)
+        refresh_acquired = self._avatar_profile_refresh_lock.acquire(blocking=False)
+        if refresh_acquired:
+            try:
+                metadata = self._refresh_avatar_body_depth_profile_job(profile_dir=profile_dir, metadata=metadata)
+                metadata = self._refresh_avatar_head_face_preview_outputs(profile_dir=profile_dir, metadata=metadata)
+                metadata = self._refresh_avatar_upper_torso_preview_outputs(profile_dir=profile_dir, metadata=metadata)
+                metadata = self._refresh_avatar_head_lora_training_job(profile_dir=profile_dir, metadata=metadata)
+            finally:
+                self._avatar_profile_refresh_lock.release()
         profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
         face_image = Path(str(metadata.get("face_image") or "")).name
         body_image = Path(str(metadata.get("body_image") or "")).name
@@ -3889,6 +7040,81 @@ class NodeControlState:
             normalized["general"] = fallback
         return normalized
 
+    @staticmethod
+    def _avatar_profile_normalized_head_prompt_locks(locked_prompt_parts: object) -> dict:
+        source = locked_prompt_parts if isinstance(locked_prompt_parts, dict) else {}
+        return {
+            key: True
+            for key in AVATAR_HEAD_FACE_PROMPT_PART_ORDER
+            if bool(source.get(key))
+        }
+
+    @staticmethod
+    def _avatar_profile_head_prompt_part_key(value: str) -> str:
+        return re.sub(r"(^_+|_+$)", "", re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower()))
+
+    @classmethod
+    def _avatar_profile_head_prompt_part_label(cls, part_id: str) -> str:
+        labels = {
+            "general": "General",
+            "hair": "Hair",
+            "eyes": "Eyes",
+            "eyebrows": "Eyebrows",
+            "nose": "Nose",
+            "cheeks": "Cheeks",
+            "mouth": "Mouth",
+            "jaw_chin": "Jaw / Chin",
+            "ears": "Ears",
+            "skin": "Skin",
+            "expression": "Expression",
+            "style_lighting": "Style / Lighting",
+        }
+        return labels.get(part_id, part_id)
+
+    @classmethod
+    def _avatar_profile_head_prompt_part_aliases(cls) -> dict:
+        aliases: dict[str, str] = {}
+        for part_id in AVATAR_HEAD_FACE_PROMPT_PART_ORDER:
+            label = cls._avatar_profile_head_prompt_part_label(part_id)
+            values = {
+                part_id,
+                label,
+                label.replace("/", " "),
+                label.replace("/", "_"),
+                label.replace("/", ""),
+            }
+            if part_id == "jaw_chin":
+                values.update({"jaw", "chin", "jaw chin", "jaw/chin"})
+            if part_id == "style_lighting":
+                values.update({"style", "lighting", "style lighting", "style/lighting"})
+            for value in values:
+                key = cls._avatar_profile_head_prompt_part_key(value)
+                if key:
+                    aliases[key] = part_id
+        return aliases
+
+    @classmethod
+    def _avatar_profile_parse_head_tagged_adjustments(cls, value: str) -> dict:
+        aliases = cls._avatar_profile_head_prompt_part_aliases()
+        updates: dict[str, str] = {}
+        active_part_id = ""
+        for raw_line in str(value or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            tag_match = re.match(r"^([^:]{2,40}):\s*(.*)$", line)
+            if tag_match:
+                part_id = aliases.get(cls._avatar_profile_head_prompt_part_key(tag_match.group(1))) or ""
+                if part_id:
+                    active_part_id = part_id
+                    updates[part_id] = str(tag_match.group(2) or "").strip()
+                    continue
+            if active_part_id:
+                updates[active_part_id] = ", ".join(
+                    item for item in (updates.get(active_part_id, "").strip(), line) if item
+                )
+        return {key: value.strip() for key, value in updates.items() if value.strip()}
+
     @classmethod
     def _avatar_profile_head_prompt_from_parts(cls, *, prompt_parts: object, profile: dict) -> str:
         normalized = cls._avatar_profile_normalized_head_prompt_parts(
@@ -3904,6 +7130,111 @@ class NodeControlState:
             profile=profile,
         )
 
+    @classmethod
+    def _avatar_profile_default_upper_torso_prompt_parts(cls, *, profile: dict) -> dict:
+        general_prompt = str(profile.get("general_prompt") or "").strip()
+        skin_color = str(profile.get("skin_color") or "").strip()
+        return {
+            "general": general_prompt or cls._avatar_profile_general_initial_prompt(profile=profile),
+            "neck_shoulders": "natural neck length, readable collarbones, balanced shoulder width",
+            "chest_torso_shape": "feminine upper torso shape, clear chest form, smooth ribcage and waist transition",
+            "arms_upper_arms": "upper arms visible, natural arm proportions, relaxed shoulders",
+            "clothing_outfit": "fitted simple bodysuit baseline, body shape readable, no loose clothing or bulky layers",
+            "skin_body_details": f"{skin_color} skin, smooth natural body skin texture" if skin_color else "smooth natural body skin texture",
+            "pose_framing": "upper torso reference, shoulders to waist visible, centered studio framing",
+            "style_lighting": "polished semi-realistic avatar render, clean studio lighting, neutral background",
+        }
+
+    @classmethod
+    def _avatar_profile_normalized_upper_torso_prompt_parts(cls, *, profile: dict, prompt_parts: object, fallback_prompt: str = "") -> dict:
+        defaults = cls._avatar_profile_default_upper_torso_prompt_parts(profile=profile)
+        source = prompt_parts if isinstance(prompt_parts, dict) else {}
+        has_source_parts = any(str(source.get(key) or "").strip() for key in AVATAR_UPPER_TORSO_PROMPT_PART_ORDER)
+        normalized = {
+            key: str(source.get(key) if has_source_parts and source.get(key) is not None else defaults.get(key) or "").strip()
+            for key in AVATAR_UPPER_TORSO_PROMPT_PART_ORDER
+        }
+        fallback = str(fallback_prompt or "").strip()
+        if fallback and not has_source_parts:
+            normalized["general"] = fallback
+        return normalized
+
+    @classmethod
+    def _avatar_profile_upper_torso_prompt_from_parts(cls, *, prompt_parts: object, profile: dict) -> str:
+        normalized = cls._avatar_profile_normalized_upper_torso_prompt_parts(
+            profile=profile,
+            prompt_parts=prompt_parts,
+        )
+        return ", ".join(normalized[key] for key in AVATAR_UPPER_TORSO_PROMPT_PART_ORDER if normalized.get(key))
+
+    @classmethod
+    def _avatar_profile_default_upper_torso_prompt(cls, *, profile: dict) -> str:
+        return cls._avatar_profile_upper_torso_prompt_from_parts(
+            prompt_parts=cls._avatar_profile_default_upper_torso_prompt_parts(profile=profile),
+            profile=profile,
+        )
+
+    @staticmethod
+    def _avatar_profile_head_context_preview(preview: dict) -> dict:
+        keys = {
+            "preview_id",
+            "status",
+            "seed",
+            "created_at",
+            "filename",
+            "background_removed",
+            "rgb_fallback",
+        }
+        return {key: preview.get(key) for key in keys if key in preview}
+
+    @staticmethod
+    def _avatar_profile_compact_context_text(value: object, *, max_chars: int = 260) -> str:
+        text = str(value or "").strip()
+        if len(text) <= max_chars:
+            return text
+        return text[: max_chars - 1].rstrip() + "…"
+
+    @classmethod
+    def _avatar_profile_head_live_context(
+        cls,
+        *,
+        workspace: dict,
+        current_prompt_parts: dict,
+        current_negative_prompt: str,
+        locked_prompt_parts: dict | None = None,
+    ) -> dict:
+        conversation = [item for item in list(workspace.get("conversation") or []) if isinstance(item, dict)]
+        recent_conversation = []
+        for item in conversation[-4:]:
+            recent = {
+                "role": item.get("role"),
+                "content": cls._avatar_profile_compact_context_text(item.get("content")),
+                "reply": cls._avatar_profile_compact_context_text(item.get("reply")),
+                "created_at": item.get("created_at"),
+            }
+            recent_conversation.append({key: value for key, value in recent.items() if value is not None and value != ""})
+        preview_history = [item for item in list(workspace.get("preview_history") or []) if isinstance(item, dict)]
+        selected_preview_id = str(workspace.get("selected_preview_id") or "").strip()
+        selected_preview = None
+        if selected_preview_id:
+            selected_preview = next(
+                (item for item in preview_history if str(item.get("preview_id") or "").strip() == selected_preview_id),
+                None,
+            )
+        if selected_preview is None:
+            selected_preview = next(
+                (item for item in reversed(preview_history) if not bool(item.get("placeholder"))),
+                None,
+            )
+        return {
+            "context_summary": cls._avatar_profile_compact_context_text(workspace.get("context_summary"), max_chars=400),
+            "locked_prompt_part_keys": [key for key in AVATAR_HEAD_FACE_PROMPT_PART_ORDER if bool((locked_prompt_parts or {}).get(key))],
+            "selected_preview_id": selected_preview_id,
+            "selected_preview": cls._avatar_profile_head_context_preview(selected_preview) if isinstance(selected_preview, dict) else {},
+            "recent_conversation": recent_conversation,
+            "recent_preview_count": len(preview_history),
+        }
+
     def _avatar_profile_head_prompt_from_local_llm(
         self,
         *,
@@ -3911,6 +7242,9 @@ class NodeControlState:
         current_prompt: str,
         current_prompt_parts: dict,
         current_negative_prompt: str,
+        locked_prompt_parts: dict,
+        target_prompt_part: str = "",
+        workspace: dict,
         user_message: str,
     ) -> tuple[str, dict, str, str, str]:
         services = self.service_status_payload().get("services", {})
@@ -3921,6 +7255,7 @@ class NodeControlState:
             raise ValueError("local_llm_socket_unavailable")
         if isinstance(local_llm, dict) and str(local_llm.get("state") or "").strip().lower() not in {"running", "healthy"}:
             raise ValueError("local_llm_unavailable")
+        normalized_target_prompt_part = target_prompt_part if target_prompt_part in AVATAR_HEAD_FACE_PROMPT_PART_ORDER else ""
         request_payload = {
             "profile": {
                 "name": profile.get("name") or profile.get("profile_id"),
@@ -3932,9 +7267,24 @@ class NodeControlState:
                 "nsfw": bool(profile.get("nsfw")),
             },
             "section": "head_face",
-            "current_prompt": current_prompt,
             "current_prompt_parts": current_prompt_parts,
             "current_negative_prompt": current_negative_prompt,
+            "target_prompt_part": normalized_target_prompt_part,
+            "workspace_context": self._avatar_profile_head_live_context(
+                workspace=workspace,
+                current_prompt_parts=current_prompt_parts,
+                current_negative_prompt=current_negative_prompt,
+                locked_prompt_parts=locked_prompt_parts,
+            ),
+            "locked_prompt_parts": {
+                key: current_prompt_parts.get(key, "")
+                for key in AVATAR_HEAD_FACE_PROMPT_PART_ORDER
+                if bool(locked_prompt_parts.get(key))
+            },
+            "user_request_context": (
+                "The user_request is feedback based on the user's observation of the image "
+                "created by the SDXL preview model."
+            ),
             "user_request": user_message,
             "required_json_schema": {
                 "prompt_parts": list(AVATAR_HEAD_FACE_PROMPT_PART_ORDER),
@@ -3960,9 +7310,14 @@ class NodeControlState:
                             "prompt_parts must be an object with these string keys: "
                             f"{', '.join(AVATAR_HEAD_FACE_PROMPT_PART_ORDER)}. "
                             "Update only the prompt_parts needed to satisfy the user request, then compile prompt from all prompt_parts. "
-                            "reply must be one short user-facing sentence. "
+                            "If target_prompt_part is set, update only that prompt_part and copy every other prompt_part unchanged unless it is required to keep JSON complete. "
+                            "If locked_prompt_parts contains a key, copy that exact value into prompt_parts and do not alter it. "
+                            "reply must be one short user-facing sentence that names the prompt parts changed and what changed, so the user can verify the edit. "
+                            "If locked prompt parts affected the request, say they were preserved unchanged. "
                             "Preserve stable profile facts unless the user explicitly changes them. "
                             "Focus on head, face, hair, expression, skin, eyes, eyebrows, nose, cheeks, mouth, jaw/chin, ears, makeup/accessories, portrait framing, lighting, and style. "
+                            "Each changed prompt_part should be a specific visual description, usually 8 to 25 words, not a short label like bright green eyes. "
+                            "When an unlocked current prompt_part is under-specified and relevant to the user request, expand it into concrete visible traits. "
                             "Avoid vague descriptors like beautiful, nice, good, detailed, or high quality unless paired with concrete visible traits. "
                             "Describe concrete shapes, colors, proportions, textures, symmetry/asymmetry, camera angle, gaze direction, and lighting cues. "
                             "Do not include any text outside the JSON object."
@@ -3971,7 +7326,7 @@ class NodeControlState:
                     {"role": "user", "content": "/no_think " + json.dumps(request_payload, sort_keys=True)},
                 ],
                 "temperature": 0.4,
-                "max_tokens": 900,
+                "max_tokens": 650,
                 "response_format": {"type": "json_object"},
                 "stream": False,
             },
@@ -3985,24 +7340,32 @@ class NodeControlState:
             message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
             content = str(message.get("content") or message.get("reasoning_content") or choices[0].get("text") or "").strip()
         parsed = self._parse_manual_image_prompt_helper_content(content)
-        parsed_prompt_parts = parsed.get("prompt_parts") if isinstance(parsed.get("prompt_parts"), dict) else None
-        if not isinstance(parsed_prompt_parts, dict):
-            raise ValueError("avatar_head_prompt_parts_required")
-        missing_prompt_parts = [key for key in AVATAR_HEAD_FACE_PROMPT_PART_ORDER if key not in parsed_prompt_parts]
-        if missing_prompt_parts:
-            raise ValueError("avatar_head_prompt_parts_incomplete")
-        prompt = str(parsed.get("prompt") or "").strip()
-        if "negative_prompt" not in parsed:
-            raise ValueError("avatar_head_prompt_strict_json_required")
-        negative_prompt = str(parsed.get("negative_prompt") or "").strip()
-        assistant_reply = str(parsed.get("reply") or "").strip()
-        if not prompt or not assistant_reply:
-            raise ValueError("avatar_head_prompt_strict_json_required")
+        parsed_prompt_parts = parsed.get("prompt_parts") if isinstance(parsed.get("prompt_parts"), dict) else {}
         refined_prompt_parts = self._avatar_profile_normalized_head_prompt_parts(
             profile=profile,
             prompt_parts={**current_prompt_parts, **parsed_prompt_parts},
             fallback_prompt=current_prompt,
         )
+        if normalized_target_prompt_part:
+            for key in AVATAR_HEAD_FACE_PROMPT_PART_ORDER:
+                if key != normalized_target_prompt_part:
+                    refined_prompt_parts[key] = current_prompt_parts.get(key, "")
+        for key in AVATAR_HEAD_FACE_PROMPT_PART_ORDER:
+            if bool(locked_prompt_parts.get(key)):
+                refined_prompt_parts[key] = current_prompt_parts.get(key, "")
+        prompt = str(parsed.get("prompt") or "").strip() or self._avatar_profile_head_prompt_from_parts(
+            prompt_parts=refined_prompt_parts,
+            profile=profile,
+        )
+        if locked_prompt_parts:
+            prompt = self._avatar_profile_head_prompt_from_parts(
+                prompt_parts=refined_prompt_parts,
+                profile=profile,
+            )
+        if not prompt:
+            raise ValueError("avatar_head_prompt_strict_json_required")
+        negative_prompt = str(parsed.get("negative_prompt") or current_negative_prompt or "").strip()
+        assistant_reply = str(parsed.get("reply") or "").strip() or "Updated the head and face prompt."
         return prompt, refined_prompt_parts, negative_prompt, assistant_reply, model_id
 
     def _selected_avatar_profile_path(self) -> Path:
@@ -4103,9 +7466,14 @@ class NodeControlState:
             "headfacepreview": "head_face",
             "face_preview": "head_face",
             "facepreview": "head_face",
+            "upper": "upper_torso",
+            "torso": "upper_torso",
+            "upperbody": "upper_torso",
+            "upper_body": "upper_torso",
+            "uppertorso": "upper_torso",
         }
         role = aliases.get(role, role)
-        if role not in {"body_depth", "body_depth_map", "face", "pose", "head_face"}:
+        if role not in {"body_depth", "body_depth_map", "face", "pose", "head_face", "upper_torso"}:
             raise ValueError("avatar_profile_reference_role_invalid")
         return role
 
@@ -4127,7 +7495,7 @@ class NodeControlState:
         return data
 
     def _avatar_profile_references(self, *, profile_dir: Path) -> dict:
-        references = {"body_depth": [], "body_depth_map": [], "face": [], "pose": [], "head_face": []}
+        references = {"body_depth": [], "body_depth_map": [], "face": [], "pose": [], "head_face": [], "upper_torso": []}
         refs_root = profile_dir / "refs"
         if not refs_root.exists() or not refs_root.is_dir():
             return references
@@ -4136,23 +7504,30 @@ class NodeControlState:
             if not role_dir.exists() or not role_dir.is_dir():
                 continue
             items = []
-            paths = role_dir.rglob("*") if role == "head_face" else role_dir.iterdir()
+            paths = role_dir.rglob("*") if role in {"head_face", "upper_torso"} else role_dir.iterdir()
             for path in paths:
                 if not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".svg"}:
                     continue
-                items.append(self._avatar_profile_reference_payload(path=path))
+                if role in {"head_face", "upper_torso"}:
+                    try:
+                        relative_parts = path.relative_to(role_dir).parts
+                    except ValueError:
+                        relative_parts = ()
+                    if relative_parts and relative_parts[0] == "lora_dataset":
+                        continue
+                items.append(self._avatar_profile_reference_payload(path=path, role_hint=role))
             items.sort(key=lambda item: str(item.get("created_at") or item.get("filename") or ""), reverse=True)
             references[role] = items
         return references
 
-    def _avatar_profile_reference_payload(self, *, path: Path) -> dict:
+    def _avatar_profile_reference_payload(self, *, path: Path, role_hint: str | None = None) -> dict:
         sidecar = path.with_suffix(path.suffix + ".json")
         try:
             metadata = json.loads(sidecar.read_text(encoding="utf-8"))
         except Exception:
             metadata = {}
         inferred_role = path.parent.parent.name if path.parent.name == "preview" else path.parent.name
-        role = self._avatar_profile_reference_role(metadata.get("role") or inferred_role)
+        role = self._avatar_profile_reference_role(role_hint or metadata.get("role") or inferred_role)
         fallback_profile_id = path.parent.parent.parent.parent.name if path.parent.name == "preview" else path.parent.parent.parent.name
         profile_id = self._safe_filename_component(metadata.get("profile_id") or fallback_profile_id)
         filename = Path(str(metadata.get("filename") or path.name)).name
@@ -4293,6 +7668,7 @@ class NodeControlState:
         self,
         *,
         profile_id: str,
+        section: str = "head_face",
         preview: dict,
         filename: str,
         relative_name: str,
@@ -4304,14 +7680,16 @@ class NodeControlState:
         rgb_fallback: bool = False,
     ) -> dict:
         seed = preview.get("seed")
+        safe_section = "upper_torso" if str(section or "").strip() == "upper_torso" else "head_face"
+        display_name = "Upper Torso Preview" if safe_section == "upper_torso" else "Head Face Preview"
         return {
             "profile_id": profile_id,
-            "role": "head_face",
-            "name": f"Head Face Preview {seed or 'pending'}",
+            "role": safe_section,
+            "name": f"{display_name} {seed or 'pending'}",
             "filename": filename,
             "relative_name": relative_name,
-            "input_image": f"avatar_profiles/{profile_id}/refs/head_face/{relative_name}",
-            "url": f"/api/avatar-generation/profiles/{profile_id}/references/head_face/{relative_name}",
+            "input_image": f"avatar_profiles/{profile_id}/refs/{safe_section}/{relative_name}",
+            "url": f"/api/avatar-generation/profiles/{profile_id}/references/{safe_section}/{relative_name}",
             "source": source,
             "source_output": source_output,
             "placeholder": bool(placeholder),
@@ -4342,18 +7720,754 @@ class NodeControlState:
 """
         path.write_text(svg, encoding="utf-8")
 
-    def _refresh_avatar_head_face_preview_outputs(self, *, profile_dir: Path, metadata: dict) -> dict:
-        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
-        preview_history = list(workspace.get("preview_history") or [])
-        if not preview_history:
+    @staticmethod
+    def _avatar_head_face_seed_batch_preview_is_usable(*, preview: dict) -> bool:
+        if bool(preview.get("placeholder")):
+            return False
+        if str(preview.get("status") or "").strip() not in {"completed", "completed_with_fallback"}:
+            return False
+        if not str(preview.get("seed") or "").strip():
+            return False
+        return bool(str(preview.get("filename") or "").strip() or str(preview.get("url") or "").strip())
+
+    @staticmethod
+    def _random_seed_excluding(excluded: set[int]) -> int:
+        for _ in range(256):
+            seed = secrets.randbelow(2**63)
+            if seed not in excluded:
+                return seed
+        seed = secrets.randbelow(2**63)
+        while seed in excluded:
+            seed = (seed + 1) % (2**63)
+        return seed
+
+    @staticmethod
+    def _avatar_head_lora_dataset_jittered_cfg(cfg: float) -> float:
+        jitter = secrets.randbelow(int(AVATAR_HEAD_FACE_LORA_DATASET_CFG_JITTER * 200) + 1) / 100.0
+        value = cfg - AVATAR_HEAD_FACE_LORA_DATASET_CFG_JITTER + jitter
+        return round(min(max(value, 0.1), 20.0), 2)
+
+    @staticmethod
+    def _avatar_head_lora_dataset_pose_base_prompt(*, prompt: str, pose_id: str) -> str:
+        if pose_id not in {"three_quarter_left", "three_quarter_right"}:
+            return prompt
+        cleaned = str(prompt or "")
+        direction = "left" if pose_id == "three_quarter_left" else "right"
+        gaze_target = f"off-camera gaze toward the {direction} edge of the image"
+        replacements = {
+            "front-facing composition": "pose-specific character composition",
+            "front facing composition": "pose-specific character composition",
+            "front-facing portrait": "pose-specific angled portrait",
+            "front facing portrait": "pose-specific angled portrait",
+            "front-facing": "pose-specific angled",
+            "front facing": "pose-specific angled",
+            "only adjust the face outline so it feels less pointy and more softly oval": "allow pose-specific head rotation and natural perspective changes",
+            "direct confident gaze": gaze_target,
+            "direct viewer engagement": gaze_target,
+            "eyes toward viewer": gaze_target,
+            "looking at the camera": gaze_target,
+            "balanced symmetrical placement above the eyes": "natural eyebrow placement following the head angle",
+            "balanced symmetrical shape": "natural shape following the head angle",
+            "balanced lower face proportions": "natural lower face proportions following the head angle",
+            "soft frontal face illumination": "soft angled face illumination",
+            "green rim light from both sides": "subtle rim light following the head angle",
+            "centered composition": "pose-specific angled composition",
+        }
+        for source, target in replacements.items():
+            cleaned = cleaned.replace(source, target)
+        return cleaned
+
+    @staticmethod
+    def _avatar_head_lora_dataset_pose_geometry_prompt(*, pose_id: str) -> str:
+        if pose_id not in {"three_quarter_left", "three_quarter_right"}:
+            return ""
+        direction = "left" if pose_id == "three_quarter_left" else "right"
+        return (
+            f"mandatory near side-profile head yaw: face turned 70 degrees toward the {direction} side of the image, "
+            f"profile silhouette with nose tip and chin pointing toward the {direction} edge, facial centerline strongly angled away from camera, "
+            "far eye mostly hidden behind the nose bridge, far cheek mostly hidden, one cheek dominant, "
+            "one visible ear on the near side, only one nostril clearly visible, off-camera gaze, no direct camera eye contact"
+        )
+
+    @staticmethod
+    def _avatar_head_lora_dataset_pose_negative_prompt(*, negative_prompt: str, pose_id: str) -> str:
+        if pose_id not in {"three_quarter_left", "three_quarter_right"}:
+            return negative_prompt
+        return ", ".join(
+            part
+            for part in [
+                str(negative_prompt or "").strip(),
+                "straight-on frontal face",
+                "front-facing portrait",
+                "symmetrical passport photo",
+                "looking directly at camera",
+                "direct eye contact",
+                "centered forward gaze",
+                "both eyes same size",
+                "both cheeks equally visible",
+                "nose centered straight ahead",
+                "chin centered straight ahead",
+                "two ears visible",
+                "perfectly symmetrical face",
+                "beauty front portrait",
+                "slight angle",
+                "soft three-quarter beauty angle",
+                "both eyes fully visible",
+                "both nostrils visible",
+                "full face visible",
+            ]
+            if part
+        )
+
+    def _avatar_head_lora_dataset_pose_control(self, *, pose_id: str) -> dict:
+        pose_reference_image = str(AVATAR_HEAD_FACE_LORA_POSE_REFERENCE_IMAGES.get(pose_id) or "").strip()
+        if not pose_reference_image:
+            return {}
+        try:
+            template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID)["template"]
+        except Exception:
+            return {}
+        defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+        return {
+            "template_id": AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID,
+            "pose_reference_image": pose_reference_image,
+            "pose_controlnet": str(defaults.get("pose_controlnet") or "controlnet-openpose-sdxl-1.0.safetensors"),
+            "pose_strength": float(defaults.get("pose_strength") if defaults.get("pose_strength") is not None else 0.85),
+            "pose_start": float(defaults.get("pose_start") if defaults.get("pose_start") is not None else 0),
+            "pose_end": float(defaults.get("pose_end") if defaults.get("pose_end") is not None else 0.8),
+        }
+
+    def _ensure_avatar_head_lora_comfyui_input_image(self, *, relative_image: str) -> str:
+        relative = str(relative_image or "").strip().strip("/")
+        if not relative:
+            return ""
+        safe_relative = self._safe_relative_path(relative)
+        source_roots = [
+            self._manual_image_input_dir().resolve(),
+            (Path.cwd() / "runtime" / "manual" / "comfyui-gpu" / "input").resolve(),
+            (Path.cwd() / "runtime" / "input" / "comfyui-gpu").resolve(),
+        ]
+        source_path = next(
+            (
+                (root / safe_relative).resolve()
+                for root in source_roots
+                if (root / safe_relative).resolve().is_file()
+            ),
+            None,
+        )
+        if source_path is None:
+            return relative
+        target_roots = [
+            self._manual_image_input_dir().resolve(),
+            Path(os.environ.get("COMFYUI_GPU_INPUT_DIR") or Path.cwd() / "runtime" / "input" / "comfyui-gpu").resolve(),
+        ]
+        for root in target_roots:
+            target_path = (root / safe_relative).resolve()
+            if root not in target_path.parents and target_path != root:
+                continue
+            if target_path == source_path:
+                continue
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                if not target_path.is_file() or target_path.stat().st_mtime < source_path.stat().st_mtime:
+                    shutil.copyfile(source_path, target_path)
+            except OSError:
+                continue
+        return relative
+
+    def _avatar_head_lora_dataset_identity_control(self, *, workspace: dict, lora_seed_set: dict) -> dict:
+        preview_id = str(lora_seed_set.get("anchor_preview_id") or "").strip()
+        preview_sources = []
+        seed_batch = workspace.get("seed_batch") if isinstance(workspace.get("seed_batch"), dict) else {}
+        jitter_batch = workspace.get("jitter_batch") if isinstance(workspace.get("jitter_batch"), dict) else {}
+        preview_sources.extend(item for item in list(seed_batch.get("previews") or []) if isinstance(item, dict))
+        center_preview = jitter_batch.get("center_preview") if isinstance(jitter_batch.get("center_preview"), dict) else {}
+        if center_preview:
+            preview_sources.append(center_preview)
+        preview_sources.extend(item for item in list(jitter_batch.get("previews") or []) if isinstance(item, dict))
+        preview_sources.extend(item for item in list(workspace.get("preview_history") or []) if isinstance(item, dict))
+        selected_preview = next(
+            (
+                item
+                for item in preview_sources
+                if preview_id and str(item.get("preview_id") or "").strip() == preview_id
+            ),
+            None,
+        )
+        if selected_preview is None and preview_sources:
+            selected_preview = next((item for item in preview_sources if str(item.get("input_image") or "").strip()), None)
+        face_reference_image = self._ensure_avatar_head_lora_comfyui_input_image(
+            relative_image=str((selected_preview or {}).get("input_image") or "").strip()
+        )
+        if not face_reference_image:
+            return {}
+        try:
+            template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID)["template"]
+        except Exception:
+            return {"face_reference_image": face_reference_image}
+        defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+        return {
+            "face_reference_image": face_reference_image,
+            "face_strength": float(defaults.get("face_strength") if defaults.get("face_strength") is not None else 0.55),
+            "pulid_model": str(defaults.get("pulid_model") or "ip-adapter_pulid_sdxl_fp16.safetensors"),
+            "pulid_provider": str(defaults.get("pulid_provider") or "CUDA"),
+            "pulid_projection": str(defaults.get("pulid_projection") or "ortho_v2"),
+            "pulid_fidelity": float(defaults.get("pulid_fidelity") if defaults.get("pulid_fidelity") is not None else 8),
+            "pulid_noise": float(defaults.get("pulid_noise") if defaults.get("pulid_noise") is not None else 0),
+            "pulid_start_at": float(defaults.get("pulid_start_at") if defaults.get("pulid_start_at") is not None else 0),
+            "pulid_end_at": float(defaults.get("pulid_end_at") if defaults.get("pulid_end_at") is not None else 0.85),
+        }
+
+    @staticmethod
+    def _avatar_head_face_seed_batch_local_preview(
+        *,
+        batch_id: str,
+        prompt: str,
+        prompt_parts: dict,
+        locked_prompt_parts: dict,
+        negative_prompt: str,
+        seed: int,
+        width: int,
+        height: int,
+        steps: int,
+        cfg: float,
+        denoise: float,
+        now: str,
+        slot_index: int,
+        replaces_preview_id: str | None = None,
+        batch_kind: str = "seed",
+        anchor_seed: int | None = None,
+        deviation: int | None = None,
+        template_id: str = AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID,
+        template_variables: dict | None = None,
+    ) -> dict:
+        preview_id = f"{batch_id}_{uuid.uuid4().hex[:10]}"
+        return {
+            "preview_id": preview_id,
+            "batch_id": batch_id,
+            "batch_kind": batch_kind,
+            "section": "head_face",
+            "status": "local_queued",
+            "template_id": template_id,
+            "template_variables": dict(template_variables or {}),
+            "seed": seed,
+            "seed_locked": True,
+            "kept": False,
+            "skip_background_removal": True,
+            "width": width,
+            "height": height,
+            "steps": steps,
+            "cfg": cfg,
+            "denoise": denoise,
+            "prompt": prompt,
+            "prompt_parts": prompt_parts,
+            "locked_prompt_parts": locked_prompt_parts,
+            "negative_prompt": negative_prompt,
+            "slot_index": slot_index,
+            "replaces_preview_id": replaces_preview_id,
+            "anchor_seed": anchor_seed,
+            "deviation": deviation,
+            "created_at": now,
+        }
+
+    @staticmethod
+    def _prompt_ids_from_comfyui_queue_item(value: object) -> list[str]:
+        found: list[str] = []
+        if isinstance(value, str):
+            if value.strip():
+                found.append(value.strip())
+            return found
+        if isinstance(value, dict):
+            for key in ("prompt_id", "id"):
+                item = str(value.get(key) or "").strip()
+                if item:
+                    found.append(item)
+            for item in value.values():
+                found.extend(NodeControlState._prompt_ids_from_comfyui_queue_item(item))
+            return found
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                found.extend(NodeControlState._prompt_ids_from_comfyui_queue_item(item))
+        return found
+
+    def _avatar_head_face_seed_batch_queue_snapshot(self) -> dict:
+        services = self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        socket_path = str(webui.get("socket_path") or "").strip() if isinstance(webui, dict) else ""
+        socket_available = bool(socket_path and Path(socket_path).is_socket())
+        session: dict = {}
+        if self._service_manager is not None and hasattr(self._service_manager, "comfyui_webui_generation_status"):
+            try:
+                generation_status = self._service_manager.comfyui_webui_generation_status()
+            except Exception:
+                generation_status = {}
+            if isinstance(generation_status, dict) and isinstance(generation_status.get("session"), dict):
+                session = generation_status["session"]
+        queue_payload: dict = {}
+        if socket_available and not session:
+            try:
+                queue_payload = self._uds_json_request(socket_path=socket_path, method="GET", path="/queue", timeout_s=3)
+            except Exception:
+                queue_payload = {}
+
+        running_ids: set[str] = set()
+        pending_ids: set[str] = set()
+        running_count = 0
+        pending_count = 0
+        if session:
+            running_prompt_id = str(session.get("running_prompt_id") or "").strip()
+            if running_prompt_id:
+                running_ids.add(running_prompt_id)
+            running_count = int(session.get("running_count") or (1 if running_prompt_id else 0) or 0)
+            for item in list(session.get("pending_prompt_ids") or []):
+                prompt_id = str(item or "").strip()
+                if prompt_id:
+                    pending_ids.add(prompt_id)
+            pending_count = int(session.get("pending_count") or len(pending_ids) or 0)
+        elif queue_payload:
+            running_items = list(queue_payload.get("queue_running") or [])
+            pending_items = list(queue_payload.get("queue_pending") or [])
+            running_count = len(running_items)
+            pending_count = len(pending_items)
+            for item in running_items:
+                running_ids.update(self._prompt_ids_from_comfyui_queue_item(item))
+            for item in pending_items:
+                pending_ids.update(self._prompt_ids_from_comfyui_queue_item(item))
+
+        return {
+            "socket_path": socket_path,
+            "socket_available": socket_available,
+            "running_prompt_ids": running_ids,
+            "pending_prompt_ids": pending_ids,
+            "active_prompt_ids": running_ids | pending_ids,
+            "running_count": running_count,
+            "pending_count": pending_count,
+            "capacity": max(AVATAR_HEAD_FACE_SEED_BATCH_SUBMISSION_LIMIT - running_count - pending_count, 0),
+        }
+
+    def _submit_avatar_head_face_seed_batch_preview(
+        self,
+        *,
+        preview: dict,
+        socket_path: str,
+        avatar_name: str,
+        now: str,
+    ) -> dict:
+        template_id = str(preview.get("template_id") or AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID).strip()
+        template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
+        width = int(preview.get("width") or (template.get("defaults") or {}).get("width") or 512)
+        height = int(preview.get("height") or (template.get("defaults") or {}).get("height") or 512)
+        steps = int(preview.get("steps") or (template.get("defaults") or {}).get("steps") or 4)
+        cfg = float(preview.get("cfg") if preview.get("cfg") is not None else (template.get("defaults") or {}).get("cfg") or 1.2)
+        denoise = float(
+            preview.get("denoise")
+            if preview.get("denoise") is not None
+            else (template.get("defaults") or {}).get("denoise") or 1.0
+        )
+        output_avatar_name = self._safe_filename_component(preview.get("output_avatar_name") or avatar_name)
+        template_variables = {
+            **(
+                preview.get("template_variables")
+                if isinstance(preview.get("template_variables"), dict)
+                else {}
+            ),
+            "avatar_name": output_avatar_name,
+        }
+        workflow, resolved_values = self._manual_image_workflow_and_values_from_template(
+            template=template,
+            payload=ManualImageGenerationRequest(
+                template_id=template_id,
+                mode="txt2img",
+                prompt=str(preview.get("prompt") or "").strip(),
+                negative_prompt=str(preview.get("negative_prompt") or "").strip(),
+                width=width,
+                height=height,
+                steps=steps,
+                cfg=cfg,
+                denoise=denoise,
+                batch_count=1,
+                seed=preview.get("seed"),
+                randomize_seed=False,
+                template_variables=template_variables,
+            ),
+            input_image="",
+        )
+        response = self._uds_json_request(
+            socket_path=socket_path,
+            method="POST",
+            path="/prompt",
+            body={"client_id": "hexe-node-avatar-head-seed-batch", "prompt": workflow},
+        )
+        prompt_id = str(response.get("prompt_id") or "").strip()
+        return {
+            **preview,
+            "status": "submitted",
+            "template_id": template_id,
+            "template_variables": template_variables,
+            "prompt_id": prompt_id or None,
+            "prompt_ids": [prompt_id] if prompt_id else [],
+            "number": response.get("number"),
+            "seed": resolved_values.get("seed"),
+            "submitted_at": now,
+            "dispatch_error": None,
+            "node_errors": response.get("node_errors") or {},
+        }
+
+    def _dispatch_avatar_head_face_seed_batch_previews(
+        self,
+        *,
+        previews: list[dict],
+        avatar_name: str,
+        output_dir: Path,
+        now: str,
+    ) -> tuple[list[dict], dict, bool]:
+        if not previews:
+            return previews, {"status": "empty"}, False
+        snapshot = self._avatar_head_face_seed_batch_queue_snapshot()
+        if not snapshot.get("socket_available"):
+            return previews, {"status": "waiting_for_comfyui", "capacity": 0}, False
+        active_prompt_ids = set(snapshot.get("active_prompt_ids") or set())
+        capacity = int(snapshot.get("capacity") or 0)
+        updated: list[dict] = []
+        changed = False
+        for preview in previews:
+            if not isinstance(preview, dict):
+                updated.append(preview)
+                continue
+            status = str(preview.get("status") or "").strip()
+            prompt_id = str(preview.get("prompt_id") or "").strip()
+            seed = str(preview.get("seed") or "").strip()
+            submitted_epoch = self._manual_image_parse_epoch(preview.get("submitted_at"))
+            submitted_age = (time.time() - submitted_epoch) if submitted_epoch is not None else 999999.0
+            lost_submitted_prompt = (
+                status in {"pending", "submitted", "queued", "running"}
+                and prompt_id
+                and prompt_id not in active_prompt_ids
+                and bool(preview.get("placeholder"))
+                and seed
+                and submitted_age >= 15.0
+            )
+            if lost_submitted_prompt:
+                output_path = self._avatar_head_face_preview_output_for_prefix(
+                    output_dir=output_dir,
+                    prefix=f"hexe/avatar_head_face_preview/{self._safe_filename_component(preview.get('output_avatar_name') or avatar_name)}_seed{seed}",
+                    min_modified_time=self._avatar_head_face_preview_submitted_timestamp(preview=preview),
+                )
+                if not output_path:
+                    preview = {
+                        **preview,
+                        "status": "local_queued",
+                        "prompt_id": None,
+                        "prompt_ids": [],
+                        "dispatch_recovered_at": now,
+                    }
+                    changed = True
+            updated.append(preview)
+
+        submitted = 0
+        final: list[dict] = []
+        for preview in updated:
+            if not isinstance(preview, dict):
+                final.append(preview)
+                continue
+            status = str(preview.get("status") or "").strip()
+            is_local_waiting = status == "local_queued" or (
+                status == "pending"
+                and bool(preview.get("batch_id"))
+                and not str(preview.get("prompt_id") or "").strip()
+            )
+            if capacity <= 0 or not is_local_waiting or str(preview.get("prompt_id") or "").strip():
+                final.append(preview)
+                continue
+            try:
+                submitted_preview = self._submit_avatar_head_face_seed_batch_preview(
+                    preview=preview,
+                    socket_path=str(snapshot.get("socket_path") or ""),
+                    avatar_name=avatar_name,
+                    now=now,
+                )
+            except Exception as exc:
+                final.append({**preview, "dispatch_error": str(exc), "dispatch_error_at": now})
+                changed = True
+                continue
+            final.append(submitted_preview)
+            capacity -= 1
+            submitted += 1
+            changed = True
+        dispatch = {
+            "status": "submitted" if submitted else "waiting",
+            "submitted_count": submitted,
+            "capacity_after": capacity,
+            "running_count": int(snapshot.get("running_count") or 0),
+            "pending_count": int(snapshot.get("pending_count") or 0),
+            "active_limit": AVATAR_HEAD_FACE_SEED_BATCH_SUBMISSION_LIMIT,
+            "updated_at": now,
+        }
+        return final, dispatch, changed
+
+    def _refresh_avatar_upper_torso_preview_outputs(self, *, profile_dir: Path, metadata: dict) -> dict:
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="upper_torso")
+        raw_preview_history = list(workspace.get("preview_history") or [])
+        lora_dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
+        lora_epoch_review = lora_dataset.get("epoch_review") if isinstance(lora_dataset.get("epoch_review"), dict) else {}
+        lora_epoch_review_previews = [
+            item
+            for item in list(lora_epoch_review.get("previews") or [])
+            if isinstance(item, dict)
+        ]
+        if not raw_preview_history and not lora_epoch_review_previews:
             return metadata
-        original_preview_history_count = len(preview_history)
-        if len(preview_history) > AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:
-            preview_history = preview_history[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:]
         profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
         avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
         output_dir = self._manual_image_output_dir()
-        preview_dir = profile_dir / "refs" / "head_face" / "preview"
+        now = datetime.now(timezone.utc).isoformat()
+        changed = len(raw_preview_history) > AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT
+        normal_preview_history = raw_preview_history[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:]
+        normal_preview_count = len(normal_preview_history)
+        lora_epoch_review_count = len(lora_epoch_review_previews)
+        preview_history = normal_preview_history + lora_epoch_review_previews
+        updated_history: list[dict] = []
+        for preview in preview_history:
+            if not isinstance(preview, dict):
+                updated_history.append(preview)
+                continue
+            existing_input = str(preview.get("input_image") or "").strip()
+            existing_filename = Path(str(preview.get("filename") or "")).name
+            existing_is_placeholder = bool(preview.get("placeholder"))
+            target_subdir = str(preview.get("target_subdir") or "preview").strip().strip("/") or "preview"
+            preview_dir = profile_dir / "refs" / "upper_torso" / target_subdir
+            if existing_input and existing_filename and (preview_dir / existing_filename).is_file() and not existing_is_placeholder:
+                relative_name = f"{target_subdir}/{existing_filename}"
+                expected_input = f"avatar_profiles/{profile_id}/refs/upper_torso/{relative_name}"
+                expected_url = f"/api/avatar-generation/profiles/{profile_id}/references/upper_torso/{relative_name}"
+                repaired_preview = {
+                    **preview,
+                    "status": "completed" if str(preview.get("status") or "").strip() not in {"completed", "completed_with_fallback"} else preview.get("status"),
+                    "input_image": expected_input,
+                    "url": expected_url,
+                }
+                if repaired_preview != preview:
+                    changed = True
+                updated_history.append(repaired_preview)
+                continue
+            seed = str(preview.get("seed") or "").strip()
+            preview_id = self._safe_filename_component(preview.get("preview_id") or f"upper_torso_{seed}")
+            preview_dir.mkdir(parents=True, exist_ok=True)
+            output_path = None
+            if seed:
+                output_avatar_name = self._safe_filename_component(preview.get("output_avatar_name") or avatar_name)
+                template_id = str(preview.get("template_id") or "").strip()
+                output_folder = (
+                    "avatar_head_face_preview"
+                    if template_id == AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID
+                    else "avatar_upper_torso_preview"
+                )
+                prefix = f"hexe/{output_folder}/{output_avatar_name}_seed{seed}"
+                output_path = self._avatar_head_face_preview_output_for_prefix(
+                    output_dir=output_dir,
+                    prefix=prefix,
+                    min_modified_time=self._avatar_head_face_preview_submitted_timestamp(preview=preview),
+                )
+            if not output_path:
+                if existing_is_placeholder and existing_filename and (preview_dir / existing_filename).is_file():
+                    updated_history.append(preview)
+                    continue
+                filename = existing_filename if existing_is_placeholder and existing_filename else f"{preview_id}_seed{seed or 'pending'}_placeholder.svg"
+                target_path = (preview_dir / filename).resolve()
+                if profile_dir not in target_path.parents:
+                    raise ValueError("avatar_upper_torso_preview_path_invalid")
+                if not target_path.exists():
+                    self._write_avatar_head_face_preview_placeholder(path=target_path, preview=preview, profile_name=metadata.get("name") or profile_dir.name)
+                relative_name = f"{target_subdir}/{filename}"
+                sidecar = self._avatar_head_face_preview_sidecar(
+                    profile_id=profile_id,
+                    section="upper_torso",
+                    preview=preview,
+                    filename=filename,
+                    relative_name=relative_name,
+                    now=now,
+                    source="avatar_upper_torso_preview_placeholder",
+                    placeholder=True,
+                )
+                target_path.with_suffix(target_path.suffix + ".json").write_text(
+                    json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                updated_history.append(
+                    {
+                        **preview,
+                        "status": "pending",
+                        "filename": filename,
+                        "input_image": sidecar["input_image"],
+                        "url": sidecar["url"],
+                        "placeholder": True,
+                        "imported_at": now,
+                    }
+                )
+                changed = True
+                continue
+            if existing_is_placeholder and existing_filename:
+                existing_path = (preview_dir / existing_filename).resolve()
+                if profile_dir in existing_path.parents and existing_path.exists() and existing_path.is_file():
+                    existing_path.unlink()
+                existing_sidecar = existing_path.with_suffix(existing_path.suffix + ".json")
+                if existing_sidecar.exists() and existing_sidecar.is_file():
+                    existing_sidecar.unlink()
+            filename = f"{preview_id}_seed{seed}.png"
+            target_path = (preview_dir / filename).resolve()
+            if profile_dir not in target_path.parents:
+                raise ValueError("avatar_upper_torso_preview_path_invalid")
+            shutil.copyfile(output_path, target_path)
+            relative_name = f"{target_subdir}/{filename}"
+            source_output = output_path.relative_to(output_dir).as_posix() if output_dir in output_path.parents else str(output_path)
+            sidecar = self._avatar_head_face_preview_sidecar(
+                profile_id=profile_id,
+                section="upper_torso",
+                preview=preview,
+                filename=filename,
+                relative_name=relative_name,
+                now=now,
+                source="avatar_upper_torso_preview_generation",
+                source_output=source_output,
+                placeholder=False,
+            )
+            target_path.with_suffix(target_path.suffix + ".json").write_text(
+                json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            updated_history.append(
+                {
+                    **preview,
+                    "status": "completed",
+                    "filename": filename,
+                    "input_image": sidecar["input_image"],
+                    "url": sidecar["url"],
+                    "placeholder": False,
+                    "background_removal_skipped": True,
+                    "imported_at": now,
+                    "source_output": sidecar["source_output"],
+                }
+            )
+            changed = True
+        lora_epoch_review_dispatch: dict = {}
+        if lora_epoch_review:
+            lora_epoch_start = normal_preview_count
+            lora_epoch_end = lora_epoch_start + lora_epoch_review_count
+            dispatched_previews, lora_epoch_review_dispatch, dispatch_changed = self._dispatch_avatar_head_face_seed_batch_previews(
+                previews=updated_history[lora_epoch_start:lora_epoch_end],
+                avatar_name=avatar_name,
+                output_dir=output_dir,
+                now=now,
+            )
+            if dispatch_changed:
+                updated_history = updated_history[:lora_epoch_start] + dispatched_previews + updated_history[lora_epoch_end:]
+                changed = True
+        if not changed:
+            return metadata
+        updated_workspace = {
+            **workspace,
+            "section": "upper_torso",
+            "preview_history": updated_history[:normal_preview_count][-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:],
+            "updated_at": now,
+        }
+        if lora_dataset:
+            lora_epoch_items = updated_history[normal_preview_count : normal_preview_count + lora_epoch_review_count]
+            completed_count = sum(
+                1
+                for item in lora_epoch_items
+                if str(item.get("status") or "").strip() in {"completed", "completed_with_fallback"}
+                and not bool(item.get("placeholder"))
+            )
+            pending_count = max(0, len(lora_epoch_items) - completed_count)
+            selected_preview_id = str(lora_epoch_review.get("selected_preview_id") or "").strip()
+            if selected_preview_id:
+                lora_epoch_items = [
+                    {
+                        **item,
+                        "selected": str(item.get("preview_id") or "").strip() == selected_preview_id,
+                    }
+                    for item in lora_epoch_items
+                ]
+            updated_workspace["lora_dataset"] = {
+                **lora_dataset,
+                "epoch_review": {
+                    **lora_epoch_review,
+                    "previews": lora_epoch_items,
+                    "status": "selected"
+                    if selected_preview_id
+                    else "queued"
+                    if pending_count
+                    else "ready_for_selection",
+                    "completed_count": completed_count,
+                    "pending_count": pending_count,
+                    "preview_count": len(lora_epoch_items),
+                    "dispatch": lora_epoch_review_dispatch or lora_epoch_review.get("dispatch") or {},
+                    "updated_at": now,
+                },
+                "updated_at": now,
+            }
+        updated_metadata = self._avatar_profile_metadata_with_workspace(
+            metadata=metadata,
+            section="upper_torso",
+            workspace=updated_workspace,
+        )
+        references = self._avatar_profile_references(profile_dir=profile_dir)
+        existing_counts = metadata.get("reference_counts") if isinstance(metadata.get("reference_counts"), dict) else {}
+        updated_metadata["reference_counts"] = {
+            **existing_counts,
+            "upper_torso": len(references.get("upper_torso", [])),
+        }
+        updated_metadata["updated_at"] = now
+        (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return updated_metadata
+
+    def _refresh_avatar_head_face_preview_outputs(self, *, profile_dir: Path, metadata: dict) -> dict:
+        workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
+        raw_preview_history = list(workspace.get("preview_history") or [])
+        seed_batch = workspace.get("seed_batch") if isinstance(workspace.get("seed_batch"), dict) else {}
+        seed_batch_previews = [item for item in list(seed_batch.get("previews") or []) if isinstance(item, dict)]
+        jitter_batch = workspace.get("jitter_batch") if isinstance(workspace.get("jitter_batch"), dict) else {}
+        jitter_batch_previews = [item for item in list(jitter_batch.get("previews") or []) if isinstance(item, dict)]
+        lora_dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
+        lora_dataset_poses = [pose for pose in list(lora_dataset.get("poses") or []) if isinstance(pose, dict)]
+        lora_epoch_review = lora_dataset.get("epoch_review") if isinstance(lora_dataset.get("epoch_review"), dict) else {}
+        lora_epoch_review_previews = [
+            item
+            for item in list(lora_epoch_review.get("previews") or [])
+            if isinstance(item, dict)
+        ]
+        lora_dataset_items = [
+            item
+            for pose in lora_dataset_poses
+            for item in list(pose.get("items") or [])
+            if isinstance(item, dict)
+        ]
+        lora_dataset_approved_items = [
+            item
+            for pose in lora_dataset_poses
+            for item in list(pose.get("approved_dataset") or [])
+            if isinstance(item, dict)
+        ]
+        if (
+            not raw_preview_history
+            and not seed_batch_previews
+            and not jitter_batch_previews
+            and not lora_dataset_items
+            and not lora_dataset_approved_items
+            and not lora_epoch_review_previews
+        ):
+            return metadata
+        original_preview_history_count = len(raw_preview_history)
+        preview_history = raw_preview_history[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:]
+        normal_preview_count = len(preview_history)
+        seed_batch_count = len(seed_batch_previews)
+        jitter_batch_count = len(jitter_batch_previews)
+        lora_dataset_count = len(lora_dataset_items)
+        lora_epoch_review_count = len(lora_epoch_review_previews)
+        preview_history = preview_history + seed_batch_previews + jitter_batch_previews + lora_dataset_items + lora_epoch_review_previews
+        profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
+        avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
+        output_dir = self._manual_image_output_dir()
         updated_history = []
         changed = original_preview_history_count > AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT
         now = datetime.now(timezone.utc).isoformat()
@@ -4364,10 +8478,33 @@ class NodeControlState:
             existing_input = str(preview.get("input_image") or "").strip()
             existing_filename = Path(str(preview.get("filename") or "")).name
             existing_is_placeholder = bool(preview.get("placeholder"))
+            skip_background_removal = bool(preview.get("skip_background_removal")) or bool(preview.get("batch_id"))
             existing_is_rgb_fallback = bool(preview.get("rgb_fallback")) or str(preview.get("source_output") or "").find("_rgb") >= 0
-            if existing_input and existing_filename and (preview_dir / existing_filename).is_file() and not existing_is_placeholder and not existing_is_rgb_fallback:
+            target_subdir = str(preview.get("target_subdir") or "preview").strip().strip("/") or "preview"
+            preview_dir = profile_dir / "refs" / "head_face" / target_subdir
+            if (
+                existing_input
+                and existing_filename
+                and (preview_dir / existing_filename).is_file()
+                and not existing_is_placeholder
+                and (not existing_is_rgb_fallback or skip_background_removal)
+            ):
+                relative_name = f"{target_subdir}/{existing_filename}"
+                expected_input = f"avatar_profiles/{profile_id}/refs/head_face/{relative_name}"
+                expected_url = f"/api/avatar-generation/profiles/{profile_id}/references/head_face/{relative_name}"
+                repaired_preview = {
+                    **preview,
+                    "input_image": expected_input,
+                    "url": expected_url,
+                }
                 if str(preview.get("status") or "").strip() not in {"completed", "completed_with_fallback"}:
-                    updated_history.append({**preview, "status": "completed"})
+                    repaired_preview["status"] = "completed"
+                if (
+                    repaired_preview.get("status") != preview.get("status")
+                    or str(preview.get("input_image") or "") != expected_input
+                    or str(preview.get("url") or "") != expected_url
+                ):
+                    updated_history.append(repaired_preview)
                     changed = True
                 else:
                     updated_history.append(preview)
@@ -4377,8 +8514,13 @@ class NodeControlState:
             preview_dir.mkdir(parents=True, exist_ok=True)
             output_path = None
             if seed:
-                prefix = f"hexe/avatar_head_face_preview/{avatar_name}_seed{seed}"
-                output_path = self._avatar_head_face_preview_output_for_prefix(output_dir=output_dir, prefix=prefix)
+                output_avatar_name = self._safe_filename_component(preview.get("output_avatar_name") or avatar_name)
+                prefix = f"hexe/avatar_head_face_preview/{output_avatar_name}_seed{seed}"
+                output_path = self._avatar_head_face_preview_output_for_prefix(
+                    output_dir=output_dir,
+                    prefix=prefix,
+                    min_modified_time=self._avatar_head_face_preview_submitted_timestamp(preview=preview),
+                )
             if not output_path:
                 if existing_is_placeholder and existing_filename and (preview_dir / existing_filename).is_file():
                     updated_history.append(preview)
@@ -4389,7 +8531,7 @@ class NodeControlState:
                     raise ValueError("avatar_head_face_preview_path_invalid")
                 if not target_path.exists():
                     self._write_avatar_head_face_preview_placeholder(path=target_path, preview=preview, profile_name=metadata.get("name") or profile_dir.name)
-                relative_name = f"preview/{filename}"
+                relative_name = f"{target_subdir}/{filename}"
                 sidecar = self._avatar_head_face_preview_sidecar(
                     profile_id=profile_id,
                     preview=preview,
@@ -4416,7 +8558,7 @@ class NodeControlState:
                 )
                 changed = True
                 continue
-            if self._avatar_head_face_preview_is_rgb_fallback_path(path=output_path):
+            if self._avatar_head_face_preview_is_rgb_fallback_path(path=output_path) and not skip_background_removal:
                 submitted_preview = self._submit_avatar_head_face_background_removal_if_needed(
                     profile_dir=profile_dir,
                     profile_id=profile_id,
@@ -4443,14 +8585,14 @@ class NodeControlState:
             if profile_dir not in target_path.parents:
                 raise ValueError("avatar_head_face_preview_path_invalid")
             shutil.copyfile(output_path, target_path)
-            relative_name = f"preview/{filename}"
+            relative_name = f"{target_subdir}/{filename}"
             source_output = output_path.relative_to(output_dir).as_posix() if output_dir in output_path.parents else str(output_path)
             rgb_fallback = self._avatar_head_face_preview_is_rgb_fallback_path(path=output_path)
             rgb_cleanup = None
-            if not rgb_fallback and seed:
+            if not rgb_fallback and seed and not skip_background_removal:
                 rgb_cleanup = self._cleanup_avatar_head_face_preview_rgb_outputs(
                     output_dir=output_dir,
-                    prefix=f"hexe/avatar_head_face_preview/{avatar_name}_seed{seed}",
+                    prefix=f"hexe/avatar_head_face_preview/{self._safe_filename_component(preview.get('output_avatar_name') or avatar_name)}_seed{seed}",
                     preview=preview,
                     profile_dir=profile_dir,
                 )
@@ -4463,8 +8605,8 @@ class NodeControlState:
                 source="avatar_head_face_preview_generation",
                 source_output=source_output,
                 placeholder=False,
-                background_removed=not rgb_fallback,
-                rgb_fallback=rgb_fallback,
+                background_removed=not rgb_fallback and not skip_background_removal,
+                rgb_fallback=rgb_fallback and not skip_background_removal,
             )
             target_path.with_suffix(target_path.suffix + ".json").write_text(
                 json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
@@ -4473,27 +8615,268 @@ class NodeControlState:
             updated_history.append(
                 {
                     **preview,
-                    "status": "completed_with_fallback" if rgb_fallback else "completed",
+                    "status": "completed_with_fallback" if rgb_fallback and not skip_background_removal else "completed",
                     "filename": filename,
                     "input_image": sidecar["input_image"],
                     "url": sidecar["url"],
                     "placeholder": False,
-                    "background_removed": not rgb_fallback,
-                    "rgb_fallback": rgb_fallback,
+                    "background_removed": not rgb_fallback and not skip_background_removal,
+                    "rgb_fallback": rgb_fallback and not skip_background_removal,
+                    "background_removal_skipped": skip_background_removal,
                     "imported_at": now,
                     "source_output": sidecar["source_output"],
                     "rgb_cleanup": rgb_cleanup,
                 }
             )
             changed = True
-        if not changed:
+        dispatch: dict = {}
+        if seed_batch:
+            dispatched_previews, dispatch, dispatch_changed = self._dispatch_avatar_head_face_seed_batch_previews(
+                previews=updated_history[normal_preview_count : normal_preview_count + seed_batch_count],
+                avatar_name=avatar_name,
+                output_dir=output_dir,
+                now=now,
+            )
+            if dispatch_changed:
+                updated_history = (
+                    updated_history[:normal_preview_count]
+                    + dispatched_previews
+                    + updated_history[normal_preview_count + seed_batch_count :]
+                )
+                changed = True
+        jitter_dispatch: dict = {}
+        if jitter_batch and int(dispatch.get("submitted_count") or 0) <= 0:
+            jitter_start = normal_preview_count + seed_batch_count
+            jitter_end = jitter_start + jitter_batch_count
+            dispatched_previews, jitter_dispatch, dispatch_changed = self._dispatch_avatar_head_face_seed_batch_previews(
+                previews=updated_history[jitter_start:jitter_end],
+                avatar_name=avatar_name,
+                output_dir=output_dir,
+                now=now,
+            )
+            if dispatch_changed:
+                updated_history = updated_history[:jitter_start] + dispatched_previews + updated_history[jitter_end:]
+                changed = True
+        elif jitter_batch:
+            jitter_dispatch = {"status": "waiting_for_seed_batch_capacity", "submitted_count": 0}
+        lora_dataset_dispatch: dict = {}
+        if lora_dataset and int(dispatch.get("submitted_count") or 0) <= 0 and int(jitter_dispatch.get("submitted_count") or 0) <= 0:
+            lora_start = normal_preview_count + seed_batch_count + jitter_batch_count
+            lora_end = lora_start + lora_dataset_count
+            dispatched_previews, lora_dataset_dispatch, dispatch_changed = self._dispatch_avatar_head_face_seed_batch_previews(
+                previews=updated_history[lora_start:lora_end],
+                avatar_name=avatar_name,
+                output_dir=output_dir,
+                now=now,
+            )
+            if dispatch_changed:
+                updated_history = updated_history[:lora_start] + dispatched_previews + updated_history[lora_end:]
+                changed = True
+        elif lora_dataset:
+            lora_dataset_dispatch = {"status": "waiting_for_seed_map_capacity", "submitted_count": 0}
+        lora_epoch_review_dispatch: dict = {}
+        if (
+            lora_epoch_review
+            and int(dispatch.get("submitted_count") or 0) <= 0
+            and int(jitter_dispatch.get("submitted_count") or 0) <= 0
+            and int(lora_dataset_dispatch.get("submitted_count") or 0) <= 0
+        ):
+            lora_epoch_start = normal_preview_count + seed_batch_count + jitter_batch_count + lora_dataset_count
+            lora_epoch_end = lora_epoch_start + lora_epoch_review_count
+            dispatched_previews, lora_epoch_review_dispatch, dispatch_changed = self._dispatch_avatar_head_face_seed_batch_previews(
+                previews=updated_history[lora_epoch_start:lora_epoch_end],
+                avatar_name=avatar_name,
+                output_dir=output_dir,
+                now=now,
+            )
+            if dispatch_changed:
+                updated_history = updated_history[:lora_epoch_start] + dispatched_previews + updated_history[lora_epoch_end:]
+                changed = True
+        elif lora_epoch_review:
+            lora_epoch_review_dispatch = {"status": "waiting_for_lora_dataset_capacity", "submitted_count": 0}
+        if not changed and not lora_dataset:
             return metadata
         updated_workspace = {
             **workspace,
             "section": "head_face",
-            "preview_history": updated_history[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:],
+            "preview_history": updated_history[:normal_preview_count][-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:],
             "updated_at": now,
         }
+        if seed_batch:
+            batch_previews = updated_history[normal_preview_count : normal_preview_count + seed_batch_count]
+            selected_preview_id = str(seed_batch.get("selected_preview_id") or "").strip()
+            selected_preview = next(
+                (
+                    preview
+                    for preview in batch_previews
+                    if str(preview.get("preview_id") or "").strip() == selected_preview_id
+                ),
+                None,
+            )
+            if selected_preview is None:
+                selected_preview_id = ""
+            batch_previews = [
+                {
+                    **preview,
+                    "selected": bool(selected_preview_id)
+                    and str(preview.get("preview_id") or "").strip() == selected_preview_id,
+                }
+                for preview in batch_previews
+            ]
+            pending_count = sum(
+                1
+                for preview in batch_previews
+                if str(preview.get("status") or "").strip() not in {"completed", "completed_with_fallback"}
+            )
+            updated_workspace["seed_batch"] = {
+                **seed_batch,
+                "previews": batch_previews,
+                "status": "queued" if pending_count else "completed",
+                "generated_count": len(batch_previews),
+                "remaining_count": pending_count,
+                "kept_count": sum(1 for preview in batch_previews if bool(preview.get("kept"))),
+                "selected_preview_id": selected_preview_id,
+                "selected_seed": selected_preview.get("seed") if isinstance(selected_preview, dict) else None,
+                "dispatch": dispatch or seed_batch.get("dispatch") or {},
+                "updated_at": now,
+            }
+        if jitter_batch:
+            jitter_previews = updated_history[normal_preview_count + seed_batch_count : normal_preview_count + seed_batch_count + jitter_batch_count]
+            approved_previews = [preview for preview in jitter_previews if bool(preview.get("approved"))]
+            approved_seeds = [
+                self._coerce_manual_image_seed(preview.get("seed"))
+                for preview in approved_previews
+            ]
+            approved_seeds = [seed for seed in approved_seeds if seed is not None]
+            pending_count = sum(
+                1
+                for preview in jitter_previews
+                if str(preview.get("status") or "").strip() not in {"completed", "completed_with_fallback"}
+            )
+            updated_workspace["jitter_batch"] = {
+                **jitter_batch,
+                "previews": jitter_previews,
+                "status": "queued" if pending_count else "completed",
+                "generated_count": len(jitter_previews),
+                "remaining_count": pending_count,
+                "approved_preview_ids": [
+                    str(preview.get("preview_id") or "").strip()
+                    for preview in approved_previews
+                    if str(preview.get("preview_id") or "").strip()
+                ],
+                "approved_seed_count": len(set(approved_seeds)),
+                "required_seed_count": int(jitter_batch.get("required_seed_count") or 12),
+                "ready_for_lora": len(set(approved_seeds)) >= int(jitter_batch.get("required_seed_count") or 12),
+                "dispatch": jitter_dispatch or jitter_batch.get("dispatch") or {},
+                "updated_at": now,
+            }
+        if lora_dataset:
+            lora_items = updated_history[normal_preview_count + seed_batch_count + jitter_batch_count :]
+            lora_epoch_review_start = normal_preview_count + seed_batch_count + jitter_batch_count + lora_dataset_count
+            lora_items = updated_history[
+                normal_preview_count + seed_batch_count + jitter_batch_count : lora_epoch_review_start
+            ]
+            items_by_id = {
+                str(item.get("preview_id") or "").strip(): item
+                for item in lora_items
+                if isinstance(item, dict) and str(item.get("preview_id") or "").strip()
+            }
+            lora_bg_submitted_count = sum(
+                1
+                for pose in lora_dataset_poses
+                for record in list(pose.get("approved_dataset") or [])
+                if isinstance(record, dict)
+                and str(record.get("status") or "").strip() == "background_removal_submitted"
+            )
+            lora_bg_submit_capacity = max(0, 2 - lora_bg_submitted_count)
+            updated_poses = []
+            for pose in lora_dataset_poses:
+                pose_items = [
+                    items_by_id.get(str(item.get("preview_id") or "").strip(), item)
+                    for item in list(pose.get("items") or [])
+                    if isinstance(item, dict)
+                ]
+                pose = {**pose, "items": pose_items}
+                before_submitted_count = sum(
+                    1
+                    for record in list(pose.get("approved_dataset") or [])
+                    if isinstance(record, dict)
+                    and str(record.get("status") or "").strip() == "background_removal_submitted"
+                )
+                pose, approved_dataset_changed = self._refresh_avatar_head_lora_approved_dataset_outputs(
+                    profile_dir=profile_dir,
+                    pose=pose,
+                    now=now,
+                    submit_capacity=lora_bg_submit_capacity,
+                )
+                if approved_dataset_changed:
+                    changed = True
+                after_submitted_count = sum(
+                    1
+                    for record in list(pose.get("approved_dataset") or [])
+                    if isinstance(record, dict)
+                    and str(record.get("status") or "").strip() == "background_removal_submitted"
+                )
+                lora_bg_submit_capacity = max(0, lora_bg_submit_capacity - max(0, after_submitted_count - before_submitted_count))
+                pose, vision_changed = self._maybe_review_avatar_head_lora_dataset_pose_with_vision(
+                    profile_dir=profile_dir,
+                    profile_id=profile_id,
+                    pose=pose,
+                    now=now,
+                )
+                if vision_changed:
+                    changed = True
+                pose_items = [item for item in list(pose.get("items") or []) if isinstance(item, dict)]
+                approved_count = sum(1 for item in pose_items if bool(item.get("approved")))
+                pose_phase = self._avatar_head_lora_pose_phase(profile_dir=profile_dir, pose={**pose, "items": pose_items})
+                updated_poses.append(
+                    {
+                        **pose,
+                        "items": pose_items,
+                        "approved_count": approved_count,
+                        **pose_phase,
+                    }
+                )
+            updated_workspace["lora_dataset"] = {
+                **lora_dataset,
+                "poses": updated_poses,
+                "dispatch": lora_dataset_dispatch or lora_dataset.get("dispatch") or {},
+                "updated_at": now,
+            }
+            if lora_epoch_review:
+                lora_epoch_items = updated_history[lora_epoch_review_start : lora_epoch_review_start + lora_epoch_review_count]
+                completed_count = sum(
+                    1
+                    for item in lora_epoch_items
+                    if str(item.get("status") or "").strip() in {"completed", "completed_with_fallback"}
+                    and not bool(item.get("placeholder"))
+                )
+                pending_count = max(0, len(lora_epoch_items) - completed_count)
+                selected_preview_id = str(lora_epoch_review.get("selected_preview_id") or "").strip()
+                if selected_preview_id:
+                    lora_epoch_items = [
+                        {
+                            **item,
+                            "selected": str(item.get("preview_id") or "").strip() == selected_preview_id,
+                        }
+                        for item in lora_epoch_items
+                    ]
+                updated_workspace["lora_dataset"]["epoch_review"] = {
+                    **lora_epoch_review,
+                    "previews": lora_epoch_items,
+                    "status": "selected"
+                    if selected_preview_id
+                    else "queued"
+                    if pending_count
+                    else "ready_for_selection",
+                    "completed_count": completed_count,
+                    "pending_count": pending_count,
+                    "preview_count": len(lora_epoch_items),
+                    "dispatch": lora_epoch_review_dispatch or lora_epoch_review.get("dispatch") or {},
+                    "updated_at": now,
+                }
+        if not changed:
+            return metadata
         updated_metadata = self._avatar_profile_metadata_with_workspace(
             metadata=metadata,
             section="head_face",
@@ -4658,7 +9041,22 @@ class NodeControlState:
         }
 
     @staticmethod
-    def _avatar_head_face_preview_output_for_prefix(*, output_dir: Path, prefix) -> Path | None:
+    def _avatar_head_face_preview_submitted_timestamp(*, preview: dict) -> float | None:
+        for key in ("background_removal_submitted_at", "submitted_at", "created_at"):
+            value = str(preview.get(key) or "").strip()
+            if not value:
+                continue
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.timestamp()
+        return None
+
+    @staticmethod
+    def _avatar_head_face_preview_output_for_prefix(*, output_dir: Path, prefix, min_modified_time: float | None = None) -> Path | None:
         relative = str(prefix or "").strip().strip("/")
         if not relative:
             return None
@@ -4669,6 +9067,8 @@ class NodeControlState:
         rgb_fallback = None
         for candidate in candidates:
             if not candidate.is_file():
+                continue
+            if min_modified_time is not None and candidate.stat().st_mtime < min_modified_time - 1.0:
                 continue
             if NodeControlState._avatar_head_face_preview_is_rgb_fallback_path(path=candidate):
                 if rgb_fallback is None:
@@ -5687,6 +10087,8 @@ class NodeControlState:
             template_id = str(metadata.get("template_id") or "").strip()
         if not template_id:
             return False
+        if template_id == AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID:
+            return False
         try:
             template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
             metadata = template.get("metadata") if isinstance(template.get("metadata"), dict) else {}
@@ -5982,8 +10384,17 @@ class NodeControlState:
         services = self.service_status_payload().get("services", {})
         webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
         manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
+        runtime = str(webui.get("runtime") or "").strip().lower() if isinstance(webui, dict) else ""
+        webui_state = str(webui.get("state") or "").strip().lower() if isinstance(webui, dict) else ""
         output_dir = str(manual_paths.get("output_dir") or "runtime/manual/comfyui-gpu/output") if isinstance(manual_paths, dict) else "runtime/manual/comfyui-gpu/output"
-        return Path(output_dir).resolve()
+        manual_output_dir = Path(output_dir).resolve()
+        if manual_output_dir.exists():
+            return manual_output_dir
+        if runtime in {"gpu", "cpu"} and webui_state != "running":
+            runtime_output_dir = (Path.cwd() / "runtime" / "output" / f"comfyui-{runtime}").resolve()
+            if runtime_output_dir.exists():
+                return runtime_output_dir
+        return manual_output_dir
 
     def _manual_image_input_dir(self) -> Path:
         services = self.service_status_payload().get("services", {})
@@ -6137,7 +10548,11 @@ class NodeControlState:
         head, _, response_body = raw.partition(b"\r\n\r\n")
         status_line = head.decode("utf-8", errors="replace").splitlines()[0] if head else ""
         if " 2" not in status_line:
-            raise ValueError(error_label)
+            body_text = response_body.decode("utf-8", errors="replace").strip()
+            detail = status_line.strip() or "no_status_line"
+            if body_text:
+                detail = f"{detail}: {body_text[:500]}"
+            raise ValueError(f"{error_label}: {detail}")
         parsed = json.loads(response_body.decode("utf-8")) if response_body else {}
         return parsed if isinstance(parsed, dict) else {}
 
@@ -10098,14 +14513,86 @@ class AvatarProfileExtractionUpdateRequest(BaseModel):
 class AvatarProfileHeadPromptRefineRequest(BaseModel):
     current_prompt: str | None = None
     prompt_parts: dict | None = None
+    locked_prompt_parts: dict | None = None
+    target_prompt_part: str | None = None
     negative_prompt: str | None = None
     user_message: str
+
+
+class AvatarProfileHeadPromptUpdateRequest(BaseModel):
+    prompt: str | None = None
+    prompt_parts: dict | None = None
+    locked_prompt_parts: dict | None = None
+    negative_prompt: str | None = None
+    preview_seed: int | str | None = None
+    preview_seed_locked: bool | None = None
 
 
 class AvatarProfileHeadPreviewRequest(BaseModel):
     prompt: str | None = None
     prompt_parts: dict | None = None
+    locked_prompt_parts: dict | None = None
     negative_prompt: str | None = None
+    seed: int | str | None = None
+    lock_seed: bool | None = False
+
+
+class AvatarProfileHeadSeedBatchRequest(BaseModel):
+    prompt: str | None = None
+    prompt_parts: dict | None = None
+    locked_prompt_parts: dict | None = None
+    negative_prompt: str | None = None
+    keep_preview_ids: list[str] | None = None
+    preserve_existing: bool | None = False
+    selected_preview_id: str | None = None
+    manual_seed_preview_id: str | None = None
+    manual_seed: int | str | None = None
+    batch_size: int | None = 20
+
+
+class AvatarProfileHeadJitterBatchRequest(BaseModel):
+    prompt: str | None = None
+    prompt_parts: dict | None = None
+    locked_prompt_parts: dict | None = None
+    negative_prompt: str | None = None
+    anchor_preview_id: str | None = None
+    anchor_seed: int | str | None = None
+    approved_preview_ids: list[str] | None = None
+    rejected_preview_ids: list[str] | None = None
+    save_lora_seeds: bool | None = False
+    preserve_existing: bool | None = False
+    batch_size: int | None = 20
+
+
+class AvatarProfileHeadLoraDatasetRequest(BaseModel):
+    action: str | None = None
+    item_id: str | None = None
+    pose_id: str | None = None
+    prompt: str | None = None
+    prompt_parts: dict | None = None
+    locked_prompt_parts: dict | None = None
+    negative_prompt: str | None = None
+
+
+class AvatarProfileHeadLoraDatasetUploadItem(BaseModel):
+    filename: str | None = None
+    name: str | None = None
+    data_base64: str | None = None
+
+
+class AvatarProfileHeadLoraDatasetUploadRequest(BaseModel):
+    source_dir: str | None = None
+    images: list[AvatarProfileHeadLoraDatasetUploadItem] | None = None
+    reference_filename: str | None = None
+    replace: bool | None = True
+
+
+class AvatarProfileHeadLoraUploadRequest(BaseModel):
+    filename: str | None = None
+    data_base64: str | None = None
+    source_path: str | None = None
+    source_label: str | None = None
+    activate: bool | None = True
 
 
 class AvatarProfileReferenceUploadRequest(BaseModel):
@@ -11060,10 +15547,80 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.put("/api/avatar-generation/profiles/{profile_id}/head-face")
+    def put_avatar_generation_profile_head_prompt(profile_id: str, payload: AvatarProfileHeadPromptUpdateRequest):
+        try:
+            return state.update_avatar_profile_head_prompt(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post("/api/avatar-generation/profiles/{profile_id}/head-face/previews")
     async def post_avatar_generation_profile_head_preview(profile_id: str, payload: AvatarProfileHeadPreviewRequest):
         try:
             return await state.create_avatar_profile_head_preview(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/upper-torso/previews")
+    async def post_avatar_generation_profile_upper_torso_preview(profile_id: str, payload: AvatarProfileHeadPreviewRequest):
+        try:
+            return await state.create_avatar_profile_upper_torso_preview(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/head-face/seed-batch")
+    async def post_avatar_generation_profile_head_seed_batch(profile_id: str, payload: AvatarProfileHeadSeedBatchRequest):
+        try:
+            return await state.create_avatar_profile_head_seed_batch(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/head-face/jitter-batch")
+    async def post_avatar_generation_profile_head_jitter_batch(profile_id: str, payload: AvatarProfileHeadJitterBatchRequest):
+        try:
+            return await state.create_avatar_profile_head_jitter_batch(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/head-face/lora-dataset")
+    async def post_avatar_generation_profile_head_lora_dataset(profile_id: str, payload: AvatarProfileHeadLoraDatasetRequest):
+        try:
+            return await state.update_avatar_profile_head_lora_dataset(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/head-face/lora-dataset/upload")
+    def post_avatar_generation_profile_head_lora_dataset_upload(profile_id: str, payload: AvatarProfileHeadLoraDatasetUploadRequest):
+        try:
+            return state.upload_avatar_profile_head_lora_dataset(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/head-face/lora/upload")
+    def post_avatar_generation_profile_head_lora_upload(profile_id: str, payload: AvatarProfileHeadLoraUploadRequest):
+        try:
+            return state.upload_avatar_profile_head_lora(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/upper-torso/lora-dataset/upload")
+    def post_avatar_generation_profile_upper_torso_lora_dataset_upload(profile_id: str, payload: AvatarProfileHeadLoraDatasetUploadRequest):
+        try:
+            return state.upload_avatar_profile_head_lora_dataset(profile_id=profile_id, payload=payload, section="upper_torso")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/upper-torso/lora-dataset")
+    async def post_avatar_generation_profile_upper_torso_lora_dataset(profile_id: str, payload: AvatarProfileHeadLoraDatasetRequest):
+        try:
+            return await state.update_avatar_profile_upper_torso_lora_dataset(profile_id=profile_id, payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/avatar-generation/profiles/{profile_id}/upper-torso/lora/upload")
+    def post_avatar_generation_profile_upper_torso_lora_upload(profile_id: str, payload: AvatarProfileHeadLoraUploadRequest):
+        try:
+            return state.upload_avatar_profile_head_lora(profile_id=profile_id, payload=payload, section="upper_torso")
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

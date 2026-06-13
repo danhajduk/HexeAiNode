@@ -15,7 +15,7 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
 
         self.assertTrue(payload["configured"])
         self.assertEqual(payload["schema_version"], "1.0")
-        self.assertEqual(len(payload["templates"]), 5)
+        self.assertEqual(len(payload["templates"]), 6)
         templates_by_id = {template["template_id"]: template for template in payload["templates"]}
         head_face_template = templates_by_id["template.avatar_head_face_preview.realvisxl.v1"]
         self.assertEqual(head_face_template["template_name"], "Avatar Head Face Preview")

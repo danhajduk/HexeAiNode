@@ -564,3 +564,5 @@ Task 989: Use avatar reference images in avatar generation templates when suppor
 Task 990: Add local vision description helper for uploaded avatar and scene images - Completed on 06/09/2026 11:06
 Task 991: Add scene/place prompt-reference workflow support - Completed on 06/09/2026 11:10
 Task 992: Implement local text-to-pose helper for manual avatar generation - Completed on 06/09/2026 17:06
+Task 993: Face LoRA training upload path for avatar - Completed on 06/12/2026 21:48
+Task 994: Generalize avatar LoRA workflow for Upper Torso - Completed on 06/12/2026 22:27

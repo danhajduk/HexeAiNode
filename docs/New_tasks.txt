@@ -47,3 +47,15 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
+
+[TODO] Task 995: Add local residency scheduler state contract
+[TODO] Task 996: Track local model resource usage statistics
+[TODO] Task 997: Add local model priority and compatibility policy
+[TODO] Task 998: Implement local scheduler transition executor
+[TODO] Task 999: Surface local scheduler status and controls in the node UI
+[TODO] Task 1000: Add Prompt V3 queue importance and wait budget fields
+[TODO] Task 1001: Redesign queue admission around importance and wait deadlines
+[TODO] Task 1002: Add local-unavailable cloud spillover routing
+[TODO] Task 1003: Add queue deadline monitoring and escalation
+[TODO] Task 1004: Surface queue priority wait and spillover decisions in UI and APIs
+[TODO] Task 1005: Standardize ecosystem names for image and training runtimes

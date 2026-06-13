@@ -17,8 +17,12 @@ from ai_node.persistence.image_generation_template_store import ImageGenerationT
 from ai_node.runtime.node_control_api import (
     AvatarBodyDepthProfileGenerateRequest,
     AvatarFaceProfileExtractRequest,
+    AvatarProfileHeadJitterBatchRequest,
+    AvatarProfileHeadLoraDatasetRequest,
     AvatarProfileHeadPreviewRequest,
     AvatarProfileHeadPromptRefineRequest,
+    AvatarProfileHeadPromptUpdateRequest,
+    AvatarProfileHeadSeedBatchRequest,
     AvatarPrimaryFaceRequest,
     AvatarProfileExtractionUpdateRequest,
     AvatarProfileReferenceUploadRequest,
@@ -35,7 +39,7 @@ from ai_node.runtime.node_control_api import (
 )
 from ai_node.runtime.execution_queue import ExecutionQueueService
 from ai_node.runtime.operational_mqtt_recovery_store import OperationalMqttRecoveryStore
-from ai_node.runtime.service_manager import UserSystemdServiceManager
+from ai_node.runtime.service_manager import NullServiceManager, UserSystemdServiceManager
 
 
 class NodeControlApiTests(unittest.TestCase):
@@ -2947,6 +2951,59 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fallback["kind"], "background_removal_rgb_fallback")
         self.assertEqual(fallback["latest_output"]["filename"], "Jane_seed123_rgb_00001_.png")
 
+    def test_manual_image_generation_does_not_mark_head_face_preview_rgb_first_phase_as_fallback(self):
+        class _ManualImageServiceManager:
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "running"},
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"output_dir": "runtime/manual/comfyui-gpu/output"},
+                    },
+                }
+
+            def comfyui_webui_generation_status(self):
+                return {
+                    "runtime": "gpu",
+                    "session": {"queue_active": False, "running_count": 0, "pending_count": 0},
+                    "progress": {"available": False},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ManualImageServiceManager(),
+            )
+            state._write_manual_image_latest_job(
+                {
+                    "status": "running",
+                    "template_id": "template.avatar_head_face_preview.realvisxl.v1",
+                    "prompt_id": "prompt-head-face-rgb",
+                    "submitted_at": "2026-06-09T12:00:00+00:00",
+                    "output_count_before": 0,
+                }
+            )
+            with patch.object(
+                state,
+                "_manual_image_outputs",
+                return_value=[
+                    {
+                        "relative_path": "hexe/avatar_head_face_preview/Jane_seed123_rgb_00001_.png",
+                        "filename": "Jane_seed123_rgb_00001_.png",
+                        "modified_at": "2026-06-09T12:00:05+00:00",
+                    }
+                ],
+            ):
+                payload = state.manual_image_generation_status()
+
+        latest_job = payload["latest_job"]
+        self.assertEqual(latest_job["status"], "completed")
+        self.assertIsNone(latest_job["background_removal_fallback"])
+        self.assertEqual(latest_job["progress_detail"]["label"], "Completed")
+
     def test_manual_image_generation_deletes_rgb_fallback_when_transparent_output_exists(self):
         class _ManualImageServiceManager:
             def __init__(self, output_dir: str):
@@ -3820,6 +3877,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("adult character avatar", profile["general_prompt"])
         self.assertIn("head_face", profile["prompt_workspaces"])
         head_workspace = profile["prompt_workspaces"]["head_face"]
+        self.assertEqual(head_workspace["context_summary"], "")
+        self.assertEqual(head_workspace["selected_preview_id"], "")
+        self.assertEqual(head_workspace["locked_prompt_parts"], {})
         self.assertIn("head and shoulders portrait", head_workspace["prompt"])
         self.assertEqual(head_workspace["prompt_parts"]["general"], profile["general_prompt"])
         self.assertIn("black hair", head_workspace["prompt_parts"]["hair"])
@@ -3867,6 +3927,35 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     visual_style="stylized-realistic",
                 )
             )
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            existing_metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+            existing_workspace = existing_metadata["prompt_workspaces"]["head_face"]
+            existing_workspace["context_summary"] = "Keep Jane's face adult, calm, and front-facing."
+            existing_workspace["selected_preview_id"] = "head_face_selected"
+            existing_workspace["locked_prompt_parts"] = {"mouth": True}
+            existing_workspace["conversation"] = [
+                {"role": "user", "content": "make the portrait calmer", "created_at": "2026-06-10T10:00:00Z"},
+                {
+                    "role": "assistant",
+                    "content": "Softened the expression.",
+                    "reply": "Softened the expression.",
+                    "prompt_parts": {"expression": "calm soft smile"},
+                    "negative_prompt": "angry expression",
+                    "created_at": "2026-06-10T10:00:01Z",
+                },
+            ]
+            existing_workspace["preview_history"] = [
+                {
+                    "preview_id": "head_face_selected",
+                    "status": "completed",
+                    "seed": 123,
+                    "prompt_parts": {"general": "selected head portrait", "hair": "short black bob"},
+                    "negative_prompt": "blurry",
+                    "filename": "selected.png",
+                    "created_at": "2026-06-10T10:01:00Z",
+                }
+            ]
+            profile_path.write_text(json.dumps(existing_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             llm_response = {
                 "choices": [
                     {
@@ -3881,7 +3970,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                                         "eyebrows": "natural eyebrows",
                                         "nose": "defined nose",
                                         "cheeks": "soft cheeks",
-                                        "mouth": "soft smile",
+                                        "mouth": "wide open grin",
                                         "jaw_chin": "clear jaw and chin shape",
                                         "ears": "natural ears",
                                         "skin": "light skin, natural skin texture",
@@ -3902,36 +3991,1491 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     profile_id="Jane_Avatar",
                     payload=AvatarProfileHeadPromptRefineRequest(
                         current_prompt="head portrait",
-                        prompt_parts={"general": "head portrait", "hair": "black hair", "nose": "defined nose", "cheeks": "soft cheeks"},
+                        prompt_parts={
+                            "general": "head portrait",
+                            "hair": "black hair",
+                            "nose": "defined nose",
+                            "cheeks": "soft cheeks",
+                            "mouth": "closed natural lips with a slight soft smile",
+                        },
+                        locked_prompt_parts={"mouth": True},
                         negative_prompt="blurry",
                         user_message="Add the blue headset and a softer smile.",
                     ),
                 )
 
-            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
             metadata = json.loads(profile_path.read_text(encoding="utf-8"))
 
         self.assertEqual(result["status"], "head_prompt_refined")
-        self.assertEqual(result["prompt"], "stylized realistic head portrait, black wavy hair, soft smile, blue headset")
+        self.assertIn("black wavy hair", result["prompt"])
+        self.assertIn("closed natural lips with a slight soft smile", result["prompt"])
+        self.assertIn("blue headset", result["prompt"])
+        self.assertNotIn("wide open grin", result["prompt"])
         self.assertEqual(result["negative_prompt"], "blurry, distorted face")
         self.assertEqual(result["assistant_reply"], "I softened the smile and added the blue headset.")
         self.assertEqual(result["prompt_parts"]["hair"], "black wavy hair")
         workspace = metadata["prompt_workspaces"]["head_face"]
         self.assertEqual(workspace["prompt"], result["prompt"])
         self.assertEqual(workspace["prompt_parts"]["hair"], "black wavy hair")
+        self.assertEqual(workspace["prompt_parts"]["mouth"], "closed natural lips with a slight soft smile")
         self.assertEqual(workspace["prompt_parts"]["nose"], "defined nose")
         self.assertEqual(workspace["prompt_parts"]["cheeks"], "soft cheeks")
+        self.assertEqual(workspace["locked_prompt_parts"], {"mouth": True})
         self.assertEqual(workspace["assistant_reply"], result["assistant_reply"])
         self.assertEqual(workspace["negative_prompt"], result["negative_prompt"])
+        self.assertEqual(workspace["context_summary"], "Keep Jane's face adult, calm, and front-facing.")
+        self.assertEqual(workspace["selected_preview_id"], "head_face_selected")
         self.assertEqual(workspace["local_llm_model_id"], "local-model")
-        self.assertEqual(len(workspace["conversation"]), 2)
+        self.assertEqual(len(workspace["conversation"]), 4)
         request_body = request.call_args.kwargs["body"]
         self.assertEqual(request_body["response_format"], {"type": "json_object"})
         self.assertIn("LoRA training", request_body["messages"][0]["content"])
         self.assertIn("specific, repeatable, and identity-stable", request_body["messages"][0]["content"])
-        self.assertIn("current_prompt_parts", request_body["messages"][1]["content"])
-        self.assertIn("prompt_parts", request_body["messages"][1]["content"])
-        self.assertIn("blue headset", request_body["messages"][1]["content"])
+        self.assertIn("names the prompt parts changed", request_body["messages"][0]["content"])
+        request_payload = json.loads(request_body["messages"][1]["content"].removeprefix("/no_think "))
+        self.assertIn("current_prompt_parts", request_payload)
+        self.assertIn("workspace_context", request_payload)
+        self.assertEqual(request_payload["locked_prompt_parts"], {"mouth": "closed natural lips with a slight soft smile"})
+        self.assertIn("SDXL preview model", request_payload["user_request_context"])
+        self.assertIn("8 to 25 words", request_body["messages"][0]["content"])
+        self.assertEqual(request_payload["workspace_context"]["context_summary"], "Keep Jane's face adult, calm, and front-facing.")
+        self.assertEqual(request_payload["workspace_context"]["locked_prompt_part_keys"], ["mouth"])
+        self.assertEqual(request_payload["workspace_context"]["selected_preview"]["preview_id"], "head_face_selected")
+        self.assertEqual(request_payload["workspace_context"]["recent_conversation"][0]["content"], "make the portrait calmer")
+        self.assertIn("prompt_parts", request_payload["required_json_schema"])
+        self.assertIn("blue headset", request_payload["user_request"])
+
+    def test_avatar_generation_refines_head_prompt_when_local_llm_omits_prompt_parts(self):
+        class _AvatarPromptServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "local_llm": {
+                        "state": "running",
+                        "socket_path": "/tmp/local.sock",
+                        "model_id": "local-model",
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarPromptServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            llm_response = {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "prompt": "head portrait with softer smile",
+                                    "negative_prompt": "blurry, distorted face",
+                                    "reply": "I softened the smile.",
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+
+            with patch.object(state, "_uds_json_request", return_value=llm_response):
+                result = state.refine_avatar_profile_head_prompt(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadPromptRefineRequest(
+                        current_prompt="head portrait",
+                        prompt_parts={"general": "head portrait", "hair": "black hair"},
+                        negative_prompt="blurry",
+                        user_message="Make the smile softer.",
+                    ),
+                )
+
+        self.assertEqual(result["status"], "head_prompt_refined")
+        self.assertEqual(result["prompt"], "head portrait with softer smile")
+        self.assertEqual(result["prompt_parts"]["general"], "head portrait")
+        self.assertEqual(result["prompt_parts"]["hair"], "black hair")
+        self.assertEqual(result["negative_prompt"], "blurry, distorted face")
+
+    def test_avatar_generation_refines_head_prompt_when_local_llm_omits_reply_and_negative(self):
+        class _AvatarPromptServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "local_llm": {
+                        "state": "running",
+                        "socket_path": "/tmp/local.sock",
+                        "model_id": "local-model",
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarPromptServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            llm_response = {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "prompt_parts": {
+                                        "general": "front-facing head portrait",
+                                        "hair": "black hair with soft side part",
+                                    }
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+
+            with patch.object(state, "_uds_json_request", return_value=llm_response):
+                result = state.refine_avatar_profile_head_prompt(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadPromptRefineRequest(
+                        current_prompt="head portrait",
+                        prompt_parts={"general": "head portrait", "hair": "black hair"},
+                        negative_prompt="blurry",
+                        user_message="Make her face the camera.",
+                    ),
+                )
+
+        self.assertEqual(result["status"], "head_prompt_refined")
+        self.assertIn("front-facing head portrait", result["prompt"])
+        self.assertEqual(result["prompt_parts"]["hair"], "black hair with soft side part")
+        self.assertEqual(result["negative_prompt"], "blurry")
+        self.assertEqual(result["assistant_reply"], "Updated the head and face prompt.")
+
+    def test_avatar_generation_refines_only_target_head_prompt_part(self):
+        class _AvatarPromptServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "local_llm": {
+                        "state": "running",
+                        "socket_path": "/tmp/local.sock",
+                        "model_id": "local-model",
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarPromptServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            llm_response = {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "prompt_parts": {
+                                        "general": "changed general should be ignored",
+                                        "eyes": "vivid emerald almond eyes with teal catchlights and a direct confident gaze",
+                                        "mouth": "changed mouth should be ignored",
+                                    },
+                                    "negative_prompt": "blurry",
+                                    "reply": "Updated eyes with emerald irises and teal catchlights.",
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+
+            with patch.object(state, "_uds_json_request", return_value=llm_response) as request:
+                result = state.refine_avatar_profile_head_prompt(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadPromptRefineRequest(
+                        current_prompt="head portrait",
+                        prompt_parts={
+                            "general": "head portrait",
+                            "eyes": "green eyes",
+                            "mouth": "soft closed smile",
+                        },
+                        target_prompt_part="eyes",
+                        negative_prompt="blurry",
+                        user_message="Make the eyes more specific.",
+                    ),
+                )
+
+        request_body = request.call_args.kwargs["body"]
+        request_payload = json.loads(request_body["messages"][1]["content"].removeprefix("/no_think "))
+        self.assertEqual(request_payload["target_prompt_part"], "eyes")
+        self.assertIn("target_prompt_part is set", request_body["messages"][0]["content"])
+        self.assertEqual(result["prompt_parts"]["general"], "head portrait")
+        self.assertEqual(result["prompt_parts"]["eyes"], "vivid emerald almond eyes with teal catchlights and a direct confident gaze")
+        self.assertEqual(result["prompt_parts"]["mouth"], "soft closed smile")
+        self.assertIn("vivid emerald almond eyes", result["prompt"])
+        self.assertNotIn("changed mouth should be ignored", result["prompt"])
+
+    def test_avatar_generation_refine_applies_tagged_head_prompt_without_local_llm(self):
+        class _AvatarPromptServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    },
+                    "local_llm": {
+                        "state": "stopped",
+                        "socket_path": "",
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarPromptServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+
+            with patch.object(state, "_uds_json_request", side_effect=AssertionError("local_llm_should_not_be_called")):
+                result = state.refine_avatar_profile_head_prompt(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadPromptRefineRequest(
+                        current_prompt="head portrait",
+                        prompt_parts={
+                            "general": "head portrait",
+                            "eyes": "green eyes",
+                            "nose": "defined nose",
+                            "mouth": "natural lips",
+                        },
+                        locked_prompt_parts={"mouth": True},
+                        negative_prompt="blurry",
+                        user_message=(
+                            "Eyes: vivid emerald-green almond-shaped eyes with teal catchlights\n"
+                            "Nose: slim straight nose with softly rounded bridge\n"
+                            "Mouth: full glossy natural lips"
+                        ),
+                    ),
+                )
+
+        self.assertEqual(result["status"], "head_prompt_refined")
+        self.assertEqual(result["prompt_parts"]["eyes"], "vivid emerald-green almond-shaped eyes with teal catchlights")
+        self.assertEqual(result["prompt_parts"]["nose"], "slim straight nose with softly rounded bridge")
+        self.assertEqual(result["prompt_parts"]["mouth"], "natural lips")
+        self.assertEqual(result["assistant_reply"], "Applied tagged edits to Eyes, Nose. Preserved locked Mouth.")
+        self.assertIn("vivid emerald-green almond-shaped eyes", result["prompt"])
+
+    def test_avatar_generation_saves_head_prompt_locks_without_generation(self):
+        class _AvatarPromptServiceManager:
+            def __init__(self, input_dir: str):
+                self.input_dir = input_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarPromptServiceManager(str(input_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            result = state.update_avatar_profile_head_prompt(
+                profile_id="Jane_Avatar",
+                payload=AvatarProfileHeadPromptUpdateRequest(
+                    prompt_parts={
+                        "general": "front-facing avatar head portrait",
+                        "mouth": "soft closed lips copied from preview",
+                    },
+                    locked_prompt_parts={"mouth": True},
+                    negative_prompt="blurry",
+                    preview_seed=44112233,
+                    preview_seed_locked=True,
+                ),
+            )
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+
+        workspace = metadata["prompt_workspaces"]["head_face"]
+        self.assertEqual(result["status"], "head_prompt_saved")
+        self.assertEqual(result["locked_prompt_parts"], {"mouth": True})
+        self.assertEqual(result["prompt_parts"]["mouth"], "soft closed lips copied from preview")
+        self.assertEqual(workspace["locked_prompt_parts"], {"mouth": True})
+        self.assertEqual(workspace["prompt_parts"]["mouth"], "soft closed lips copied from preview")
+        self.assertEqual(workspace["negative_prompt"], "blurry")
+        self.assertEqual(workspace["preview_seed"], 44112233)
+        self.assertTrue(workspace["preview_seed_locked"])
+        self.assertEqual(result["preview_seed"], 44112233)
+        self.assertTrue(result["preview_seed_locked"])
+        self.assertIn("soft closed lips copied from preview", workspace["prompt"])
+
+    def test_avatar_generation_records_locked_head_preview_seed(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+
+            async def _submit_manual_image_generation(*, payload):
+                self.assertEqual(payload.seed, 88112233)
+                self.assertFalse(payload.randomize_seed)
+                return {
+                    "status": "submitted",
+                    "prompt_id": "prompt-locked-seed",
+                    "prompt_ids": ["prompt-locked-seed"],
+                    "submissions": [{"seed": 88112233}],
+                }
+
+            state.submit_manual_image_generation = _submit_manual_image_generation
+            result = asyncio.run(
+                state.create_avatar_profile_head_preview(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadPreviewRequest(
+                        prompt="head portrait",
+                        seed="88112233",
+                        lock_seed=True,
+                    ),
+                )
+            )
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+
+        workspace = metadata["prompt_workspaces"]["head_face"]
+        self.assertEqual(result["preview"]["seed"], 88112233)
+        self.assertTrue(result["preview"]["seed_locked"])
+        self.assertEqual(workspace["preview_seed"], 88112233)
+        self.assertTrue(workspace["preview_seed_locked"])
+
+    def test_avatar_generation_waits_for_new_head_preview_output_with_locked_seed(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            old_output = output_dir / "hexe" / "avatar_head_face_preview" / "Jane_Avatar_seed88112233_00001_.png"
+            old_output.parent.mkdir(parents=True, exist_ok=True)
+            old_output.write_bytes(b"old-preview-image")
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+            metadata["prompt_workspaces"]["head_face"]["preview_history"] = [
+                {
+                    "preview_id": "head_face_locked_seed_wait",
+                    "section": "head_face",
+                    "status": "submitted",
+                    "seed": 88112233,
+                    "seed_locked": True,
+                    "prompt": "new head prompt",
+                    "prompt_parts": {"general": "new head prompt"},
+                    "submitted_at": "2999-01-01T00:00:00+00:00",
+                    "created_at": "2999-01-01T00:00:00+00:00",
+                }
+            ]
+            profile_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            refreshed = state.avatar_generation_status()["profiles"][0]
+            preview = refreshed["prompt_workspaces"]["head_face"]["preview_history"][-1]
+            preview_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / preview["filename"]
+            old_output_bytes = old_output.read_bytes()
+
+        self.assertEqual(preview["status"], "pending")
+        self.assertTrue(preview["placeholder"])
+        self.assertEqual(preview_path.suffix, ".svg")
+        self.assertIn("placeholder", preview["filename"])
+        self.assertEqual(old_output_bytes, b"old-preview-image")
+
+    def test_avatar_generation_head_seed_batch_keeps_and_regenerates_rejected_slots(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            first = asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=4),
+                )
+            )
+            kept_id = first["batch"]["previews"][1]["preview_id"]
+            kept_seed = first["batch"]["previews"][1]["seed"]
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+            previews = metadata["prompt_workspaces"]["head_face"]["seed_batch"]["previews"]
+            for preview in previews:
+                preview["status"] = "completed"
+                preview["placeholder"] = False
+                preview["filename"] = f"{preview['preview_id']}_seed{preview['seed']}.png"
+                preview["input_image"] = f"avatar_profiles/Jane_Avatar/refs/head_face/preview/{preview['filename']}"
+                preview["url"] = f"/api/avatar-generation/profiles/Jane_Avatar/references/head_face/preview/{preview['filename']}"
+                preview_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / preview["filename"]
+                preview_path.parent.mkdir(parents=True, exist_ok=True)
+                preview_path.write_bytes(b"preview")
+            profile_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            second = asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(
+                        prompt="head portrait",
+                        batch_size=4,
+                        keep_preview_ids=[kept_id],
+                    ),
+                )
+            )
+
+        self.assertEqual(len(first["batch"]["previews"]), 4)
+        self.assertEqual(first["batch"]["remaining_count"], 4)
+        self.assertTrue(all(preview["seed"] for preview in first["batch"]["previews"]))
+        self.assertEqual(len(second["batch"]["previews"]), 4)
+        self.assertEqual(second["batch"]["remaining_count"], 3)
+        self.assertEqual(second["batch"]["previews"][0]["preview_id"], kept_id)
+        self.assertTrue(second["batch"]["previews"][0]["kept"])
+        self.assertEqual(second["batch"]["previews"][0]["seed"], kept_seed)
+        self.assertEqual(
+            [preview["status"] for preview in second["batch"]["previews"][1:]],
+            ["pending", "pending", "pending"],
+        )
+
+    def test_avatar_generation_head_seed_batch_replaces_one_candidate_with_manual_seed(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            first = asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=4),
+                )
+            )
+            target_id = first["batch"]["previews"][2]["preview_id"]
+            kept_id = first["batch"]["previews"][0]["preview_id"]
+            replaced = asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(
+                        prompt="head portrait",
+                        batch_size=4,
+                        keep_preview_ids=[kept_id],
+                        preserve_existing=True,
+                        manual_seed_preview_id=target_id,
+                        manual_seed="424242",
+                    ),
+                )
+            )
+
+        previews = replaced["batch"]["previews"]
+        manual_preview = next(preview for preview in previews if preview.get("replaces_preview_id") == target_id)
+        self.assertEqual(len(previews), 4)
+        self.assertEqual(manual_preview["seed"], 424242)
+        self.assertEqual(manual_preview["status"], "pending")
+        self.assertEqual(previews[0]["preview_id"], kept_id)
+        self.assertTrue(previews[0]["kept"])
+
+    def test_avatar_generation_head_seed_batch_selects_jitter_anchor(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            first = asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=4),
+                )
+            )
+            selected = first["batch"]["previews"][2]
+            result = asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(
+                        prompt="head portrait",
+                        batch_size=4,
+                        preserve_existing=True,
+                        selected_preview_id=selected["preview_id"],
+                    ),
+                )
+            )
+
+        batch = result["batch"]
+        selected_preview = next(preview for preview in batch["previews"] if preview["preview_id"] == selected["preview_id"])
+        self.assertEqual(batch["selected_preview_id"], selected["preview_id"])
+        self.assertEqual(batch["selected_seed"], selected["seed"])
+        self.assertTrue(selected_preview["selected"])
+
+    def test_avatar_generation_head_seed_batch_dispatches_two_at_a_time(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str, socket_path: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+                self.socket_path = socket_path
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "socket_path": self.socket_path,
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    }
+                }
+
+            def comfyui_webui_generation_status(self):
+                return {"session": {"running_count": 0, "pending_count": 0, "pending_prompt_ids": []}}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            socket_path = Path(tmp) / "comfyui.sock"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir), str(socket_path)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            submitted_ids = []
+
+            def _submit_preview(*, preview, socket_path, avatar_name, now):
+                prompt_id = f"prompt-{len(submitted_ids) + 1}"
+                submitted_ids.append(preview["preview_id"])
+                return {
+                    **preview,
+                    "status": "submitted",
+                    "prompt_id": prompt_id,
+                    "prompt_ids": [prompt_id],
+                    "submitted_at": now,
+                }
+
+            with patch.object(Path, "is_socket", return_value=True), patch.object(
+                state,
+                "_submit_avatar_head_face_seed_batch_preview",
+                side_effect=_submit_preview,
+            ):
+                first = asyncio.run(
+                    state.create_avatar_profile_head_seed_batch(
+                        profile_id="Jane_Avatar",
+                        payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=4),
+                    )
+                )
+                first_previews = first["batch"]["previews"]
+                for preview in first_previews[:2]:
+                    output = output_dir / "hexe" / "avatar_head_face_preview" / f"Jane_Avatar_seed{preview['seed']}_rgb_00001_.png"
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    output.write_bytes(b"batch-preview")
+                refreshed = state.avatar_generation_status()["profiles"][0]
+
+        refreshed_previews = refreshed["prompt_workspaces"]["head_face"]["seed_batch"]["previews"]
+        self.assertEqual([preview["status"] for preview in first_previews], ["submitted", "submitted", "pending", "pending"])
+        self.assertEqual(len(submitted_ids), 4)
+        self.assertEqual([preview["status"] for preview in refreshed_previews], ["completed", "completed", "submitted", "submitted"])
+
+    def test_avatar_generation_head_jitter_batch_saves_lora_seed_set(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            seed_batch = asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=20),
+                )
+            )["batch"]
+            anchor = seed_batch["previews"][1]
+            asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(
+                        prompt="head portrait",
+                        batch_size=20,
+                        preserve_existing=True,
+                        selected_preview_id=anchor["preview_id"],
+                    ),
+                )
+            )
+            first = asyncio.run(
+                state.create_avatar_profile_head_jitter_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadJitterBatchRequest(prompt="head portrait", batch_size=20),
+                )
+            )["batch"]
+            approved_ids = [preview["preview_id"] for preview in first["previews"][:12]]
+            updated = asyncio.run(
+                state.create_avatar_profile_head_jitter_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadJitterBatchRequest(
+                        prompt="head portrait",
+                        batch_size=20,
+                        preserve_existing=True,
+                        approved_preview_ids=approved_ids,
+                    ),
+                )
+            )["batch"]
+            rejected_seed = updated["previews"][-1]["seed"]
+            regenerated = asyncio.run(
+                state.create_avatar_profile_head_jitter_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadJitterBatchRequest(
+                        prompt="head portrait",
+                        batch_size=20,
+                        preserve_existing=True,
+                        approved_preview_ids=approved_ids,
+                        rejected_preview_ids=[updated["previews"][-1]["preview_id"]],
+                    ),
+                )
+            )["batch"]
+            saved = asyncio.run(
+                state.create_avatar_profile_head_jitter_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadJitterBatchRequest(
+                        prompt="head portrait",
+                        batch_size=20,
+                        preserve_existing=True,
+                        approved_preview_ids=approved_ids,
+                        save_lora_seeds=True,
+                    ),
+                )
+            )
+
+        self.assertEqual(first["anchor_seed"], anchor["seed"])
+        self.assertEqual(len(first["previews"]), 20)
+        self.assertEqual(first["previews"][0]["seed"], anchor["seed"])
+        self.assertTrue(first["previews"][0]["approved"])
+        self.assertEqual(updated["approved_seed_count"], 12)
+        self.assertTrue(updated["ready_for_lora"])
+        self.assertNotEqual(regenerated["previews"][-1]["seed"], rejected_seed)
+        lora_seed_set = saved["workspace"]["lora_seed_set"]
+        self.assertEqual(lora_seed_set["status"], "ready")
+        self.assertEqual(lora_seed_set["seed_count"], 12)
+        self.assertEqual(lora_seed_set["seeds"], [preview["seed"] for preview in updated["previews"][:12]])
+
+    def test_avatar_generation_head_lora_dataset_generates_pose_items(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            seed_batch = asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=20),
+                )
+            )["batch"]
+            anchor = seed_batch["previews"][0]
+            asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(
+                        prompt="head portrait",
+                        batch_size=20,
+                        preserve_existing=True,
+                        selected_preview_id=anchor["preview_id"],
+                    ),
+                )
+            )
+            seed_map = asyncio.run(
+                state.create_avatar_profile_head_jitter_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadJitterBatchRequest(prompt="head portrait", batch_size=20),
+                )
+            )["batch"]
+            approved_ids = [preview["preview_id"] for preview in seed_map["previews"][:12]]
+            approved_seed_values = {preview["seed"] for preview in seed_map["previews"][:12]}
+            asyncio.run(
+                state.create_avatar_profile_head_jitter_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadJitterBatchRequest(
+                        prompt="head portrait",
+                        batch_size=20,
+                        preserve_existing=True,
+                        approved_preview_ids=approved_ids,
+                        save_lora_seeds=True,
+                    ),
+                )
+            )
+            dataset = asyncio.run(
+                state.update_avatar_profile_head_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(action="ensure", prompt="head portrait"),
+                )
+            )["dataset"]
+            left_dataset = asyncio.run(
+                state.update_avatar_profile_head_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(
+                        action="generate",
+                        pose_id="three_quarter_left",
+                        prompt="head portrait",
+                    ),
+                )
+            )["dataset"]
+            first_pose = dataset["poses"][0]
+            first_item = first_pose["items"][0]
+            left_pose = next(pose for pose in dataset["poses"] if pose["pose_id"] == "three_quarter_left")
+            generated_left_pose = next(pose for pose in left_dataset["poses"] if pose["pose_id"] == "three_quarter_left")
+            generated_left_item = generated_left_pose["items"][0]
+            first_pose_seeds = [item["seed"] for item in first_pose["items"]]
+            first_pose_cfgs = [item["cfg"] for item in first_pose["items"]]
+            state.avatar_generation_status()
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+            stored_item = metadata["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]["items"][0]
+            target_subdir = stored_item["target_subdir"]
+            filename = stored_item["filename"]
+            target_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / target_subdir / filename
+            target_path.write_bytes(b"lora-dataset-preview")
+            stored_item["status"] = "completed"
+            stored_item["placeholder"] = False
+            stored_item["source_output"] = f"hexe/avatar_head_face_preview/Jane_Avatar_lora_front_neutral_test_seed{stored_item['seed']}_rgb_00001_.png"
+            stored_item["input_image"] = f"avatar_profiles/Jane_Avatar/refs/head_face/preview/{filename}"
+            stored_item["url"] = f"/api/avatar-generation/profiles/Jane_Avatar/references/head_face/preview/{filename}"
+            profile_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            repaired_profile = state.avatar_generation_status()["profiles"][0]
+            repaired_item = repaired_profile["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]["items"][0]
+            for item in first_pose["items"][:6]:
+                dataset = asyncio.run(
+                    state.update_avatar_profile_head_lora_dataset(
+                        profile_id="Jane_Avatar",
+                        payload=AvatarProfileHeadLoraDatasetRequest(action="approve", item_id=item["preview_id"], prompt="head portrait"),
+                    )
+                )["dataset"]
+            advanced = asyncio.run(
+                state.update_avatar_profile_head_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(
+                        action="next",
+                        pose_id="front_neutral",
+                        prompt="head portrait",
+                    ),
+                )
+            )["dataset"]
+            status_after_next = state.avatar_generation_status()
+            approved_dataset = advanced["poses"][0]["approved_dataset"]
+            approved_meta_files = list(
+                (input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "lora_dataset" / "approved" / "front_neutral").glob("*.lora.json")
+            )
+
+        self.assertEqual(len(first_pose["items"]), 9)
+        self.assertEqual(first_item["batch_kind"], "lora_dataset")
+        self.assertEqual(first_item["target_subdir"], "lora_dataset/front_neutral")
+        self.assertEqual(first_item["width"], 512)
+        self.assertEqual(first_item["height"], 512)
+        self.assertEqual(len(first_pose_seeds), len(set(first_pose_seeds)))
+        self.assertFalse(set(first_pose_seeds) & approved_seed_values)
+        self.assertTrue(all(1.0 <= cfg <= 1.4 for cfg in first_pose_cfgs))
+        self.assertTrue(first_item["identity_source_seed"] in approved_seed_values)
+        self.assertIn("70 degrees", left_pose["pose_prompt"])
+        self.assertIn("near side-profile", left_pose["pose_prompt"])
+        self.assertIn("one cheek dominant", left_pose["pose_prompt"])
+        self.assertIn("far eye mostly hidden behind the nose bridge", left_pose["pose_prompt"])
+        self.assertIn("off camera", left_pose["pose_prompt"])
+        self.assertIn("no direct eye contact", left_pose["pose_prompt"])
+        self.assertIn("not a straight-on frontal face", left_pose["pose_prompt"])
+        self.assertEqual(generated_left_item["template_id"], "template.avatar_head_lora_pose_control.realvisxl.v1")
+        self.assertEqual(
+            generated_left_item["template_variables"]["pose_reference_image"],
+            "references/pose/300w_lp/three_quarter_left/three_quarter_left_001_idx00007_control.png",
+        )
+        self.assertEqual(
+            generated_left_item["pose_control"]["pose_reference_image"],
+            "references/pose/300w_lp/three_quarter_left/three_quarter_left_001_idx00007_control.png",
+        )
+        self.assertIn("lora_front_neutral", first_item["output_avatar_name"])
+        self.assertEqual(repaired_item["input_image"], f"avatar_profiles/Jane_Avatar/refs/head_face/lora_dataset/front_neutral/{filename}")
+        self.assertEqual(repaired_item["url"], f"/api/avatar-generation/profiles/Jane_Avatar/references/head_face/lora_dataset/front_neutral/{filename}")
+        self.assertEqual(dataset["poses"][0]["approved_count"], 6)
+        self.assertEqual(len(approved_dataset), 6)
+        self.assertEqual(approved_dataset[0]["status"], "background_removal_pending")
+        self.assertEqual(len(approved_meta_files), 6)
+        self.assertEqual(advanced["active_pose_index"], 1)
+        self.assertTrue(status_after_next["profiles"][0]["reference_counts"]["head_face"] >= 0)
+        self.assertFalse(
+            any(
+                "lora_dataset/approved" in str(reference.get("url") or "")
+                for reference in status_after_next["profiles"][0]["references"]["head_face"]
+            )
+        )
+
+    def test_avatar_generation_head_lora_three_quarter_prompt_removes_front_facing_conflict(self):
+        prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(
+            prompt=(
+                "keep the same identity and front-facing composition, front-facing portrait lighting, "
+                "only adjust the face outline so it feels less pointy and more softly oval, direct confident gaze, "
+                "direct viewer engagement, balanced symmetrical placement above the eyes, balanced symmetrical shape, "
+                "soft frontal face illumination, green rim light from both sides, centered composition"
+            ),
+            pose_id="three_quarter_left",
+        )
+        negative_prompt = NodeControlState._avatar_head_lora_dataset_pose_negative_prompt(
+            negative_prompt="low quality",
+            pose_id="three_quarter_left",
+        )
+        geometry_prompt = NodeControlState._avatar_head_lora_dataset_pose_geometry_prompt(
+            pose_id="three_quarter_left",
+        )
+        vision_prompt = NodeControlState._avatar_head_lora_dataset_vision_prompt(
+            pose_id="three_quarter_left",
+            pose_prompt="true three-quarter left portrait",
+        )
+
+        self.assertNotIn("front-facing", prompt)
+        self.assertNotIn("direct confident gaze", prompt)
+        self.assertNotIn("direct viewer engagement", prompt)
+        self.assertNotIn("only adjust the face outline", prompt)
+        self.assertNotIn("balanced symmetrical", prompt)
+        self.assertNotIn("soft frontal face illumination", prompt)
+        self.assertNotIn("green rim light from both sides", prompt)
+        self.assertNotIn("centered composition", prompt)
+        self.assertIn("pose-specific character composition", prompt)
+        self.assertIn("pose-specific angled portrait", prompt)
+        self.assertIn("allow pose-specific head rotation and natural perspective changes", prompt)
+        self.assertIn("natural eyebrow placement following the head angle", prompt)
+        self.assertIn("natural shape following the head angle", prompt)
+        self.assertIn("soft angled face illumination", prompt)
+        self.assertIn("off-camera gaze toward the left edge of the image", prompt)
+        self.assertIn("looking directly at camera", negative_prompt)
+        self.assertIn("direct eye contact", negative_prompt)
+        self.assertIn("both eyes same size", negative_prompt)
+        self.assertIn("both cheeks equally visible", negative_prompt)
+        self.assertIn("face turned 70 degrees", geometry_prompt)
+        self.assertIn("far eye mostly hidden behind the nose bridge", geometry_prompt)
+        self.assertIn("nose tip and chin pointing toward the left edge", geometry_prompt)
+        self.assertIn("reject any image that reads as a straight-on frontal portrait", vision_prompt)
+        self.assertIn("Reject soft beauty angles", vision_prompt)
+        self.assertIn("near side-profile", vision_prompt)
+
+    def test_avatar_generation_head_lora_dataset_runs_vision_review_after_batch_completed(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+                self.calls = []
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    },
+                    "vision_llm": {
+                        "state": "running",
+                        "socket_path": "/tmp/vision.sock",
+                        "default_model_id": "vision-test",
+                    },
+                }
+
+            def stop(self, *, target: str):
+                self.calls.append(("stop", target))
+                return {"target": target, "result": "stopped"}
+
+            def start(self, *, target: str):
+                self.calls.append(("start", target))
+                return {"target": target, "result": "started"}
+
+            def ensure_vision_runtime_resident(self, **kwargs):
+                self.calls.append(("ensure_vision", kwargs))
+                return {"started": True}
+
+            def unload_vision_model(self):
+                self.calls.append(("unload_vision", "vision_llm"))
+                return {"target": "vision_llm", "result": "model_unloaded"}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            service_manager = _AvatarProfileServiceManager(str(input_dir), str(output_dir))
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=service_manager,
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            seed_batch = asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=20),
+                )
+            )["batch"]
+            anchor = seed_batch["previews"][0]
+            asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(
+                        prompt="head portrait",
+                        batch_size=20,
+                        preserve_existing=True,
+                        selected_preview_id=anchor["preview_id"],
+                    ),
+                )
+            )
+            seed_map = asyncio.run(
+                state.create_avatar_profile_head_jitter_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadJitterBatchRequest(prompt="head portrait", batch_size=20),
+                )
+            )["batch"]
+            approved_ids = [preview["preview_id"] for preview in seed_map["previews"][:12]]
+            asyncio.run(
+                state.create_avatar_profile_head_jitter_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadJitterBatchRequest(
+                        prompt="head portrait",
+                        batch_size=20,
+                        preserve_existing=True,
+                        approved_preview_ids=approved_ids,
+                        save_lora_seeds=True,
+                    ),
+                )
+            )
+            asyncio.run(
+                state.update_avatar_profile_head_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(action="ensure", prompt="head portrait"),
+                )
+            )
+            state.avatar_generation_status()
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+            items = metadata["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]["items"]
+            for item in items:
+                path = input_dir / item["input_image"]
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"dataset-image")
+                item["status"] = "completed"
+                item["placeholder"] = False
+            profile_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            vision_reply = json.dumps(
+                {
+                    "schema_version": "avatar_head_lora_vision_v1",
+                    "pose_match": True,
+                    "technical_fit": True,
+                    "lora_ready": True,
+                    "approved": True,
+                    "confidence": 0.91,
+                    "issues": [],
+                    "prompt_tuning_suggestions": [],
+                    "metadata": {"pose_id": "front_neutral", "training_note": "usable"},
+                }
+            )
+            with patch.object(state, "_vision_describe_image_bytes", return_value=(vision_reply, "vision-test")) as vision:
+                reviewed_profile = state.avatar_generation_status()["profiles"][0]
+
+        reviewed_items = reviewed_profile["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]["items"]
+        self.assertEqual(vision.call_count, 9)
+        self.assertTrue(all(item["vision_approved"] for item in reviewed_items))
+        self.assertTrue(all(item["vision_status"] == "approved" for item in reviewed_items))
+        self.assertIn(("stop", "comfyui_webui"), service_manager.calls)
+        self.assertTrue(any(call[0] == "ensure_vision" for call in service_manager.calls))
+        self.assertIn(("unload_vision", "vision_llm"), service_manager.calls)
+        self.assertIn(("start", "comfyui_webui"), service_manager.calls)
+
+    def test_avatar_generation_head_lora_dataset_retries_transient_vision_failure(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    },
+                    "vision_llm": {
+                        "state": "running",
+                        "socket_path": "/tmp/vision.sock",
+                        "default_model_id": "vision-test",
+                    },
+                }
+
+            def stop(self, *, target: str):
+                return {"target": target, "result": "stopped"}
+
+            def start(self, *, target: str):
+                return {"target": target, "result": "started"}
+
+            def ensure_vision_runtime_resident(self, **kwargs):
+                return {"started": True}
+
+            def unload_vision_model(self):
+                return {"target": "vision_llm", "result": "model_unloaded"}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            seed_batch = asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=20),
+                )
+            )["batch"]
+            anchor = seed_batch["previews"][0]
+            asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(
+                        prompt="head portrait",
+                        batch_size=20,
+                        preserve_existing=True,
+                        selected_preview_id=anchor["preview_id"],
+                    ),
+                )
+            )
+            seed_map = asyncio.run(
+                state.create_avatar_profile_head_jitter_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadJitterBatchRequest(prompt="head portrait", batch_size=20),
+                )
+            )["batch"]
+            approved_ids = [preview["preview_id"] for preview in seed_map["previews"][:12]]
+            asyncio.run(
+                state.create_avatar_profile_head_jitter_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadJitterBatchRequest(
+                        prompt="head portrait",
+                        batch_size=20,
+                        preserve_existing=True,
+                        approved_preview_ids=approved_ids,
+                        save_lora_seeds=True,
+                    ),
+                )
+            )
+            asyncio.run(
+                state.update_avatar_profile_head_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(action="ensure", prompt="head portrait"),
+                )
+            )
+            state.avatar_generation_status()
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+            items = metadata["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]["items"]
+            for item in items:
+                path = input_dir / item["input_image"]
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"dataset-image")
+                item["status"] = "completed"
+                item["placeholder"] = False
+            profile_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            vision_reply = json.dumps(
+                {
+                    "schema_version": "avatar_head_lora_vision_v1",
+                    "pose_match": True,
+                    "technical_fit": True,
+                    "lora_ready": True,
+                    "approved": True,
+                    "confidence": 0.91,
+                    "issues": [],
+                    "prompt_tuning_suggestions": [],
+                    "metadata": {"pose_id": "front_neutral", "training_note": "usable"},
+                }
+            )
+            side_effects = [ValueError("vision_describe_failed: no_status_line")] + [(vision_reply, "vision-test")] * 9
+            with patch.object(state, "_vision_describe_image_bytes", side_effect=side_effects) as vision, patch(
+                "ai_node.runtime.node_control_api.time.sleep"
+            ):
+                reviewed_profile = state.avatar_generation_status()["profiles"][0]
+
+        reviewed_items = reviewed_profile["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]["items"]
+        self.assertEqual(vision.call_count, 10)
+        self.assertTrue(all(item["vision_status"] == "approved" for item in reviewed_items))
+
+    def test_avatar_generation_head_lora_dataset_retry_vision_resets_failed_items(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    },
+                    "vision_llm": {"state": "stopped"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            seed_batch = asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=20),
+                )
+            )["batch"]
+            anchor = seed_batch["previews"][0]
+            asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(
+                        prompt="head portrait",
+                        batch_size=20,
+                        preserve_existing=True,
+                        selected_preview_id=anchor["preview_id"],
+                    ),
+                )
+            )
+            seed_map = asyncio.run(
+                state.create_avatar_profile_head_jitter_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadJitterBatchRequest(prompt="head portrait", batch_size=20),
+                )
+            )["batch"]
+            approved_ids = [preview["preview_id"] for preview in seed_map["previews"][:12]]
+            asyncio.run(
+                state.create_avatar_profile_head_jitter_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadJitterBatchRequest(
+                        prompt="head portrait",
+                        batch_size=20,
+                        preserve_existing=True,
+                        approved_preview_ids=approved_ids,
+                        save_lora_seeds=True,
+                    ),
+                )
+            )
+            asyncio.run(
+                state.update_avatar_profile_head_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(action="ensure", prompt="head portrait"),
+                )
+            )
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+            pose = metadata["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]
+            for item in pose["items"]:
+                item["vision_status"] = "failed"
+                item["vision_error"] = "vision_describe_failed: no_status_line"
+                item["vision_review"] = {"raw_reply": ""}
+                item["vision_approved"] = False
+            pose["vision_status"] = "reviewed"
+            pose["vision_reviewed_count"] = 9
+            profile_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            result = asyncio.run(
+                state.update_avatar_profile_head_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(action="retry_vision", prompt="head portrait"),
+                )
+            )
+
+        items = result["dataset"]["poses"][0]["items"]
+        self.assertTrue(all(item["vision_status"] == "pending" for item in items))
+        self.assertTrue(all("vision_error" not in item for item in items))
+        self.assertTrue(all("vision_review" not in item for item in items))
+        self.assertEqual(result["dataset"]["poses"][0]["vision_status"], "pending")
+
+    def test_avatar_generation_head_lora_approved_dataset_submits_background_removal(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str, socket_path: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+                self.socket_path = socket_path
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "socket_path": self.socket_path,
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            socket_path = Path(tmp) / "comfyui.sock"
+            socket_path.touch()
+            source_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "lora_dataset" / "front_neutral" / "source.png"
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_bytes(b"source-image")
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir), str(socket_path)),
+            )
+            profile_dir = input_dir / "avatar_profiles" / "Jane_Avatar"
+            profile_dir.mkdir(parents=True, exist_ok=True)
+            record = {
+                "approved_id": "front_neutral_01_source",
+                "source_input_image": "avatar_profiles/Jane_Avatar/refs/head_face/lora_dataset/front_neutral/source.png",
+                "output_prefix": "hexe/avatar_head_lora_dataset/Jane_Avatar/front_neutral/front_neutral_01_source",
+            }
+
+            def _uds_json_request(*, path: str, method: str, **kwargs):
+                if method == "GET" and path == "/queue":
+                    return {"queue_running": [], "queue_pending": []}
+                if method == "POST" and path == "/free":
+                    return {"ok": True}
+                if method == "POST" and path == "/prompt":
+                    return {"prompt_id": "prompt-bg", "number": 7}
+                return {}
+
+            with patch.object(state, "_uds_json_request", side_effect=_uds_json_request) as request:
+                submitted = state._submit_avatar_head_lora_approved_background_removal(
+                    profile_dir=profile_dir,
+                    record=record,
+                    now="2026-06-10T00:00:00+00:00",
+                )
+
+        self.assertEqual(submitted["status"], "background_removal_submitted")
+        self.assertEqual(submitted["background_removal_prompt_id"], "prompt-bg")
+        self.assertEqual(request.call_count, 3)
+
+    def test_avatar_generation_head_seed_batch_imports_rgb_without_background_removal(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str, socket_path: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+                self.socket_path = socket_path
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "gpu",
+                        "socket_path": self.socket_path,
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            socket_path = Path(tmp) / "comfyui.sock"
+            socket_path.touch()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir), str(socket_path)),
+            )
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+
+            asyncio.run(
+                state.create_avatar_profile_head_seed_batch(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=1),
+                )
+            )
+            placeholder_profile = state.avatar_generation_status()["profiles"][0]
+            placeholder_preview = placeholder_profile["prompt_workspaces"]["head_face"]["seed_batch"]["previews"][-1]
+            placeholder_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / placeholder_preview["filename"]
+            seed = placeholder_preview["seed"]
+            rgb_preview_output = output_dir / "hexe" / "avatar_head_face_preview" / f"Jane_Avatar_seed{seed}_rgb_00001_.png"
+            rgb_preview_output.parent.mkdir(parents=True, exist_ok=True)
+            rgb_preview_output.write_bytes(b"batch-rgb-preview-image")
+
+            with patch.object(state, "_uds_json_request") as request:
+                refreshed = state.avatar_generation_status()["profiles"][0]
+            imported_preview = refreshed["prompt_workspaces"]["head_face"]["seed_batch"]["previews"][-1]
+            imported_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / imported_preview["filename"]
+            imported_bytes = imported_path.read_bytes()
+            placeholder_still_exists = placeholder_path.exists()
+
+        self.assertEqual(imported_preview["status"], "completed")
+        self.assertFalse(imported_preview["background_removed"])
+        self.assertFalse(imported_preview["rgb_fallback"])
+        self.assertTrue(imported_preview["background_removal_skipped"])
+        self.assertTrue(imported_preview["skip_background_removal"])
+        self.assertEqual(imported_preview["source_output"], f"hexe/avatar_head_face_preview/Jane_Avatar_seed{seed}_rgb_00001_.png")
+        self.assertEqual(imported_bytes, b"batch-rgb-preview-image")
+        self.assertFalse(placeholder_still_exists)
+        request.assert_not_called()
 
     def test_avatar_generation_records_head_preview_history(self):
         class _AvatarProfileServiceManager:
@@ -3985,6 +5529,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                         profile_id="Jane_Avatar",
                         payload=AvatarProfileHeadPreviewRequest(
                             prompt=f"head portrait {index}",
+                            prompt_parts={
+                                "general": f"head portrait {index}",
+                                "hair": f"hair shape {index}",
+                            },
+                            locked_prompt_parts={"hair": index == 11},
                             negative_prompt="blurry",
                         ),
                     )
@@ -3997,21 +5546,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             placeholder_preview = placeholder_history[-1]
             placeholder_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / placeholder_preview["filename"]
             placeholder_bytes = placeholder_path.read_text(encoding="utf-8")
-            preview_output = output_dir / "hexe" / "avatar_head_face_preview" / "Jane_Avatar_seed1211_00001_.png"
             rgb_preview_output = output_dir / "hexe" / "avatar_head_face_preview" / "Jane_Avatar_seed1211_rgb_00001_.png"
-            preview_output.parent.mkdir(parents=True, exist_ok=True)
+            rgb_preview_output.parent.mkdir(parents=True, exist_ok=True)
             rgb_preview_output.write_bytes(b"rgb-preview-image")
             rgb_preview_output.with_suffix(".txt").write_text("rgb caption\n", encoding="utf-8")
             rgb_preview_output.with_suffix(".json").write_text("{}\n", encoding="utf-8")
-            preview_output.write_bytes(b"preview-image")
-            bg_source = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / "head_face_1211_seed1211_rgb_source.png"
-            bg_source.write_bytes(b"rgb-source-image")
-            bg_source.with_suffix(".json").write_text("{}\n", encoding="utf-8")
-            pending_metadata = json.loads(profile_path.read_text(encoding="utf-8"))
-            pending_metadata["prompt_workspaces"]["head_face"]["preview_history"][-1]["background_removal_source_image"] = (
-                "avatar_profiles/Jane_Avatar/refs/head_face/preview/head_face_1211_seed1211_rgb_source.png"
-            )
-            profile_path.write_text(json.dumps(pending_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             refreshed = state.avatar_generation_status()["profiles"][0]
             refreshed_history = refreshed["prompt_workspaces"]["head_face"]["preview_history"]
             imported_preview = refreshed_history[-1]
@@ -4022,8 +5561,6 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             rgb_output_still_exists = rgb_preview_output.exists()
             rgb_output_caption_still_exists = rgb_preview_output.with_suffix(".txt").exists()
             rgb_output_sidecar_still_exists = rgb_preview_output.with_suffix(".json").exists()
-            bg_source_still_exists = bg_source.exists()
-            bg_source_sidecar_still_exists = bg_source.with_suffix(".json").exists()
 
         preview_history = metadata["prompt_workspaces"]["head_face"]["preview_history"]
         self.assertEqual(result["status"], "preview_submitted")
@@ -4036,6 +5573,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(preview_history[0]["prompt"], "head portrait 3")
         self.assertEqual(preview_history[0]["seed"], 1203)
         self.assertEqual(preview_history[-1]["prompt"], "head portrait 11")
+        self.assertEqual(preview_history[-1]["prompt_parts"]["general"], "head portrait 11")
+        self.assertEqual(preview_history[-1]["prompt_parts"]["hair"], "hair shape 11")
+        self.assertEqual(preview_history[-1]["locked_prompt_parts"], {"hair": True})
+        self.assertEqual(metadata["prompt_workspaces"]["head_face"]["locked_prompt_parts"], {"hair": True})
         self.assertEqual(preview_history[-1]["prompt_id"], "prompt-face-preview-11")
         self.assertEqual(preview_history[-1]["seed"], 1211)
         self.assertTrue(placeholder_preview["placeholder"])
@@ -4048,23 +5589,16 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(imported_preview["placeholder"])
         self.assertEqual(imported_preview["status"], "completed")
         self.assertEqual(Path(imported_preview["filename"]).suffix, ".png")
-        self.assertEqual(imported_bytes, b"preview-image")
+        self.assertEqual(imported_bytes, b"rgb-preview-image")
         self.assertEqual(imported_reference["url"], imported_preview["url"])
-        self.assertFalse(rgb_output_still_exists)
-        self.assertFalse(rgb_output_caption_still_exists)
-        self.assertFalse(rgb_output_sidecar_still_exists)
-        self.assertFalse(bg_source_still_exists)
-        self.assertFalse(bg_source_sidecar_still_exists)
-        self.assertEqual(
-            imported_preview["rgb_cleanup"]["deleted"],
-            [
-                "hexe/avatar_head_face_preview/Jane_Avatar_seed1211_rgb_00001_.png",
-                "avatar_profiles/Jane_Avatar/refs/head_face/preview/head_face_1211_seed1211_rgb_source.png",
-            ],
-        )
-        self.assertEqual(imported_preview["rgb_cleanup"]["errors"], [])
+        self.assertTrue(rgb_output_still_exists)
+        self.assertTrue(rgb_output_caption_still_exists)
+        self.assertTrue(rgb_output_sidecar_still_exists)
+        self.assertFalse(imported_preview["background_removed"])
+        self.assertFalse(imported_preview["rgb_fallback"])
+        self.assertTrue(imported_preview["background_removal_skipped"])
 
-    def test_avatar_generation_imports_head_preview_rgb_fallback_when_alpha_output_missing(self):
+    def test_avatar_generation_imports_head_preview_rgb_without_background_removal(self):
         class _AvatarProfileServiceManager:
             def __init__(self, input_dir: str, output_dir: str, socket_path: str):
                 self.input_dir = input_dir
@@ -4121,35 +5655,23 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             rgb_preview_output.parent.mkdir(parents=True, exist_ok=True)
             rgb_preview_output.write_bytes(b"rgb-preview-image")
 
-            def _uds_json_request(*, socket_path, method, path, body=None, **kwargs):
-                if path == "/queue":
-                    return {"queue_running": [], "queue_pending": []}
-                if path == "/free":
-                    return {}
-                if path == "/prompt":
-                    self.assertEqual(body["client_id"], "hexe-node-avatar-head-face-bg")
-                    workflow = body["prompt"]
-                    self.assertTrue(workflow["1"]["inputs"]["image"].startswith("avatar_profiles/Jane_Avatar/refs/head_face/preview/head_face_"))
-                    self.assertTrue(workflow["1"]["inputs"]["image"].endswith("_seed1211_rgb_source.png"))
-                    self.assertEqual(workflow["6"]["inputs"]["filename_prefix"], "hexe/avatar_head_face_preview/Jane_Avatar_seed1211")
-                    return {"prompt_id": "prompt-bg-removal", "number": 44}
-                return {}
-
-            with patch.object(state, "_uds_json_request", side_effect=_uds_json_request) as request:
+            with patch.object(state, "_uds_json_request") as request:
                 refreshed = state.avatar_generation_status()["profiles"][0]
             imported_preview = refreshed["prompt_workspaces"]["head_face"]["preview_history"][-1]
-            bg_source_path = input_dir / imported_preview["background_removal_source_image"]
-            bg_source_bytes = bg_source_path.read_bytes()
+            imported_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / imported_preview["filename"]
+            imported_bytes = imported_path.read_bytes()
             placeholder_still_exists = placeholder_path.exists()
 
-        self.assertEqual(imported_preview["status"], "background_removal_submitted")
-        self.assertTrue(imported_preview["placeholder"])
-        self.assertEqual(imported_preview["background_removal_prompt_id"], "prompt-bg-removal")
-        self.assertEqual(bg_source_bytes, b"rgb-preview-image")
-        self.assertTrue(placeholder_still_exists)
-        self.assertEqual([call.kwargs["path"] for call in request.call_args_list], ["/queue", "/free", "/prompt"])
+        self.assertEqual(imported_preview["status"], "completed")
+        self.assertFalse(imported_preview["placeholder"])
+        self.assertFalse(imported_preview["background_removed"])
+        self.assertFalse(imported_preview["rgb_fallback"])
+        self.assertTrue(imported_preview["background_removal_skipped"])
+        self.assertEqual(imported_bytes, b"rgb-preview-image")
+        self.assertFalse(placeholder_still_exists)
+        request.assert_not_called()
 
-    def test_avatar_generation_imports_head_preview_rgb_fallback_when_comfyui_socket_missing(self):
+    def test_avatar_generation_imports_head_preview_rgb_when_comfyui_socket_missing(self):
         class _AvatarProfileServiceManager:
             def __init__(self, input_dir: str, output_dir: str):
                 self.input_dir = input_dir
@@ -4203,10 +5725,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             imported_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / imported_preview["filename"]
             imported_bytes = imported_path.read_bytes()
 
-        self.assertEqual(imported_preview["status"], "completed_with_fallback")
+        self.assertEqual(imported_preview["status"], "completed")
         self.assertFalse(imported_preview["placeholder"])
         self.assertFalse(imported_preview["background_removed"])
-        self.assertTrue(imported_preview["rgb_fallback"])
+        self.assertFalse(imported_preview["rgb_fallback"])
+        self.assertTrue(imported_preview["background_removal_skipped"])
         self.assertEqual(imported_bytes, b"rgb-preview-image")
         request.assert_not_called()
 

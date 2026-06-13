@@ -1,0 +1,52 @@
+{
+  "schema_version": "hexe_lora_training_template_v1",
+  "template_id": "template.avatar_head_lora_train.kohya_sdxl.v1",
+  "template_name": "Avatar Head LoRA Train - Kohya SDXL",
+  "description": "Conservative SDXL face/avatar LoRA training preset for a 12GB RTX 3060 using kohya-ss/sd-scripts.",
+  "runner": "kohya_ss_sd_scripts",
+  "model": {
+    "pretrained_model_name_or_path": "runtime/models/comfyui-gpu/checkpoints/RealVisXL_V5.0_fp16.safetensors",
+    "v2": false,
+    "v_parameterization": false,
+    "sdxl": true
+  },
+  "dataset": {
+    "resolution": 512,
+    "caption_extension": ".txt",
+    "keep_tokens": 1,
+    "shuffle_caption": true,
+    "repeats": 8
+  },
+  "training": {
+    "output_name_suffix": "head_face_lora",
+    "network_module": "networks.lora",
+    "network_dim": 32,
+    "network_alpha": 16,
+    "train_batch_size": 1,
+    "max_train_epochs": 10,
+    "learning_rate": 0.0001,
+    "unet_lr": 0.0001,
+    "text_encoder_lr": 0.0,
+    "lr_scheduler": "cosine",
+    "lr_warmup_steps": 100,
+    "optimizer_type": "AdamW8bit",
+    "mixed_precision": "fp16",
+    "save_precision": "fp16",
+    "cache_latents": true,
+    "cache_latents_to_disk": true,
+    "gradient_checkpointing": true,
+    "persistent_data_loader_workers": false,
+    "max_data_loader_n_workers": 1,
+    "save_every_n_epochs": 1,
+    "seed": 1781128029
+  },
+  "hardware": {
+    "minimum_vram_gb": 12,
+    "recommended_free_vram_gb": 10,
+    "notes": [
+      "Stop local LLM and vision runtimes before training.",
+      "Close ComfyUI generation workloads before training.",
+      "If AdamW8bit is unavailable, switch optimizer_type to AdamW and expect higher VRAM use."
+    ]
+  }
+}

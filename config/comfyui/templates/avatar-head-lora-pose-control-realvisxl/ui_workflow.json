@@ -1,0 +1,919 @@
+{
+  "last_node_id": 23,
+  "last_link_id": 21,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "CheckpointLoaderSimple",
+      "pos": [
+        40,
+        80
+      ],
+      "size": [
+        300,
+        98
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            2
+          ],
+          "slot_index": 1
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            20
+          ],
+          "slot_index": 2
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CheckpointLoaderSimple"
+      },
+      "title": "RealVisXL Checkpoint",
+      "widgets_values": [
+        "RealVisXL_V5.0_fp16.safetensors"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "LoraLoader",
+      "pos": [
+        400,
+        80
+      ],
+      "size": [
+        315,
+        126
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            5
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            3,
+            4
+          ],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoraLoader"
+      },
+      "title": "SDXL Lightning 4 Step LoRA",
+      "widgets_values": [
+        "sdxl_lightning_4step_lora.safetensors",
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "id": 3,
+      "type": "EmptyLatentImage",
+      "pos": [
+        40,
+        710
+      ],
+      "size": [
+        300,
+        106
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            18
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "title": "512x512 Latent",
+      "widgets_values": [
+        512,
+        512,
+        1
+      ]
+    },
+    {
+      "id": 4,
+      "type": "CLIPTextEncode",
+      "pos": [
+        780,
+        40
+      ],
+      "size": [
+        520,
+        230
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            13
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "title": "Positive Prompt - edit pose here",
+      "widgets_values": [
+        "near side-profile head-and-shoulders portrait, head yaw rotated 70 degrees to the left side of the image, nose and chin clearly point left in profile silhouette, one cheek dominant, far cheek mostly hidden, far eye mostly hidden behind the nose bridge, eyes looking off camera toward the left edge, no direct eye contact, adult female semi-real avatar head-and-shoulders portrait, flexible pose and natural perspective, long dark brown wavy hair, deep side part, thick glossy strands sweeping over the left side of the face, soft loose waves falling over the shoulders, subtle green rim light along the outer hair edges, the hair is long and falls naturally past her shoulders, vivid emerald-green almond-shaped eyes, slightly upturned outer corners, expressive gaze, glossy luminous irises with crisp teal catchlights, dark defined upper lash line, long curled lashes, dark brown softly arched eyebrows, clean tapered shape, medium thickness, defined brow tail, natural eyebrow placement, slim straight nose with a softly rounded bridge, narrow refined nostrils, small natural nose tip, subtle highlight along the center ridge, natural shape, add a little more natural fullness to the lower cheeks, softly rounded cheek volume, keep gentle cheekbone definition, avoid hollow or overly sculpted cheeks, full glossy natural lips, softly defined cupid's bow, warm peach-pink lip color, relaxed closed-mouth slight confident smile, smooth reflective highlights on the lower lip, soften the lower face into a fuller gentle oval shape, reduce the sharp V-shaped chin, make the chin slightly wider and less pointed, add softer rounded jaw corners, keep feminine proportions, keep smooth cheek-to-jaw transition, avoid narrow triangular lower face, mostly hidden ears, right ear partially covered by a blue headset earpiece, no prominent bare ear detail visible, smooth light warm skin tone, polished semi-real texture, soft studio highlights on forehead nose cheeks and collarbone, clean even complexion with subtle natural blush, calm confident friendly expression, calm expressive presence, slight playful smile, relaxed facial muscles, composed avatar portrait presence, polished semi-real game-avatar portrait, black or transparent background, dramatic studio lighting, subtle green rim light, soft face illumination, high contrast clean character render, 512x512 face LoRA dataset image, single portrait, one face only"
+      ]
+    },
+    {
+      "id": 5,
+      "type": "CLIPTextEncode",
+      "pos": [
+        780,
+        300
+      ],
+      "size": [
+        520,
+        170
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            14
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "title": "Negative Prompt",
+      "widgets_values": [
+        "low quality, blurry, distorted face, asymmetrical eyes, extra limbs, full body, cropped head, text, watermark, child, teen, underage, more than one person, clothing, profile picture, shoulder strips, straight-on frontal face, front-facing portrait, looking directly at camera, direct eye contact, centered forward gaze, beauty front portrait, hands, fingers, hand near face, arms, full body, split screen, two faces, duplicate portrait, collage, extra face, second head"
+      ]
+    },
+    {
+      "id": 9,
+      "type": "LoadImage",
+      "pos": [
+        40,
+        250
+      ],
+      "size": [
+        315,
+        314
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            9
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "title": "PuLID Face Identity Reference",
+      "widgets_values": [
+        "avatar_profiles/Hexe/refs/head_face/preview/head_face_seed_batch_1781130460_769c264cad_seed7780487051572013000.png",
+        "image"
+      ]
+    },
+    {
+      "id": 13,
+      "type": "PulidModelLoader",
+      "pos": [
+        400,
+        250
+      ],
+      "size": [
+        315,
+        58
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "PULID",
+          "type": "PULID",
+          "links": [
+            6
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PulidModelLoader"
+      },
+      "title": "Load PuLID Model",
+      "widgets_values": [
+        "ip-adapter_pulid_sdxl_fp16.safetensors"
+      ]
+    },
+    {
+      "id": 14,
+      "type": "PulidEvaClipLoader",
+      "pos": [
+        400,
+        330
+      ],
+      "size": [
+        315,
+        40
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "EVA_CLIP",
+          "type": "EVA_CLIP",
+          "links": [
+            7
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PulidEvaClipLoader"
+      },
+      "title": "Load PuLID EVA CLIP",
+      "widgets_values": []
+    },
+    {
+      "id": 15,
+      "type": "PulidInsightFaceLoader",
+      "pos": [
+        400,
+        390
+      ],
+      "size": [
+        315,
+        58
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "FACE_ANALYSIS",
+          "type": "FACE_ANALYSIS",
+          "links": [
+            8
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PulidInsightFaceLoader"
+      },
+      "title": "Load InsightFace",
+      "widgets_values": [
+        "CUDA"
+      ]
+    },
+    {
+      "id": 16,
+      "type": "ApplyPulidAdvanced",
+      "pos": [
+        780,
+        510
+      ],
+      "size": [
+        390,
+        210
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 5
+        },
+        {
+          "name": "pulid",
+          "type": "PULID",
+          "link": 6
+        },
+        {
+          "name": "eva_clip",
+          "type": "EVA_CLIP",
+          "link": 7
+        },
+        {
+          "name": "face_analysis",
+          "type": "FACE_ANALYSIS",
+          "link": 8
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            15
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ApplyPulidAdvanced"
+      },
+      "title": "Apply Face Identity - tune strength",
+      "widgets_values": [
+        0.55,
+        "ortho_v2",
+        8,
+        0,
+        0,
+        0.85
+      ]
+    },
+    {
+      "id": 20,
+      "type": "LoadImage",
+      "pos": [
+        40,
+        585
+      ],
+      "size": [
+        315,
+        314
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            10
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "title": "Face Pose / Landmark Control Image",
+      "widgets_values": [
+        "references/pose/300w_lp/three_quarter_left/three_quarter_left_001_idx00007_control.png",
+        "image"
+      ]
+    },
+    {
+      "id": 21,
+      "type": "ResizeAndPadImage",
+      "pos": [
+        400,
+        585
+      ],
+      "size": [
+        315,
+        110
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            12
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ResizeAndPadImage"
+      },
+      "title": "Fit Pose Control to 512",
+      "widgets_values": [
+        512,
+        512,
+        "black",
+        "nearest-exact"
+      ]
+    },
+    {
+      "id": 22,
+      "type": "ControlNetLoader",
+      "pos": [
+        400,
+        730
+      ],
+      "size": [
+        315,
+        58
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CONTROL_NET",
+          "type": "CONTROL_NET",
+          "links": [
+            11
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ControlNetLoader"
+      },
+      "title": "Load SDXL OpenPose ControlNet",
+      "widgets_values": [
+        "controlnet-openpose-sdxl-1.0.safetensors"
+      ]
+    },
+    {
+      "id": 23,
+      "type": "ControlNetApplyAdvanced",
+      "pos": [
+        1335,
+        170
+      ],
+      "size": [
+        390,
+        186
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 13
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 14
+        },
+        {
+          "name": "control_net",
+          "type": "CONTROL_NET",
+          "link": 11
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 12
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            16
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            17
+          ],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ControlNetApplyAdvanced"
+      },
+      "title": "Apply Pose Control - tune strength/end",
+      "widgets_values": [
+        0.42,
+        0,
+        0.55
+      ]
+    },
+    {
+      "id": 6,
+      "type": "KSampler",
+      "pos": [
+        1335,
+        450
+      ],
+      "size": [
+        360,
+        262
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 15
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 16
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 17
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 18
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            19
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSampler"
+      },
+      "title": "Sampler",
+      "widgets_values": [
+        7780487051572013000,
+        "fixed",
+        4,
+        1.2,
+        "euler",
+        "sgm_uniform",
+        1.0
+      ]
+    },
+    {
+      "id": 7,
+      "type": "VAEDecode",
+      "pos": [
+        1735,
+        450
+      ],
+      "size": [
+        260,
+        86
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 19
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 20
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            21
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      },
+      "title": "Decode",
+      "widgets_values": []
+    },
+    {
+      "id": 8,
+      "type": "SaveImage",
+      "pos": [
+        1735,
+        565
+      ],
+      "size": [
+        360,
+        90
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 21
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveImage"
+      },
+      "title": "Save RGB Preview",
+      "widgets_values": [
+        "hexe/avatar_head_face_preview/Hexe_facepose_tune_seed"
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "MODEL"
+    ],
+    [
+      2,
+      1,
+      1,
+      2,
+      1,
+      "CLIP"
+    ],
+    [
+      3,
+      2,
+      1,
+      4,
+      0,
+      "CLIP"
+    ],
+    [
+      4,
+      2,
+      1,
+      5,
+      0,
+      "CLIP"
+    ],
+    [
+      5,
+      2,
+      0,
+      16,
+      0,
+      "MODEL"
+    ],
+    [
+      6,
+      13,
+      0,
+      16,
+      1,
+      "PULID"
+    ],
+    [
+      7,
+      14,
+      0,
+      16,
+      2,
+      "EVA_CLIP"
+    ],
+    [
+      8,
+      15,
+      0,
+      16,
+      3,
+      "FACE_ANALYSIS"
+    ],
+    [
+      9,
+      9,
+      0,
+      16,
+      4,
+      "IMAGE"
+    ],
+    [
+      10,
+      20,
+      0,
+      21,
+      0,
+      "IMAGE"
+    ],
+    [
+      11,
+      22,
+      0,
+      23,
+      2,
+      "CONTROL_NET"
+    ],
+    [
+      12,
+      21,
+      0,
+      23,
+      3,
+      "IMAGE"
+    ],
+    [
+      13,
+      4,
+      0,
+      23,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      14,
+      5,
+      0,
+      23,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      15,
+      16,
+      0,
+      6,
+      0,
+      "MODEL"
+    ],
+    [
+      16,
+      23,
+      0,
+      6,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      17,
+      23,
+      1,
+      6,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      18,
+      3,
+      0,
+      6,
+      3,
+      "LATENT"
+    ],
+    [
+      19,
+      6,
+      0,
+      7,
+      0,
+      "LATENT"
+    ],
+    [
+      20,
+      1,
+      2,
+      7,
+      1,
+      "VAE"
+    ],
+    [
+      21,
+      7,
+      0,
+      8,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.75,
+      "offset": [
+        80,
+        60
+      ]
+    },
+    "template_id": "template.avatar_head_lora_pose_control.realvisxl.v1",
+    "notes": "Workbench for tuning Hexe head/face LoRA pose control. Start by adjusting pose image, pose strength/end, PuLID strength/end, prompt pose wording, seed, and CFG. Export API workflow from ComfyUI after a good result."
+  },
+  "version": 0.4
+}

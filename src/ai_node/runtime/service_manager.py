@@ -48,6 +48,9 @@ class UserSystemdServiceManager:
         self._local_llm_container_name = str(
             os.environ.get("LLAMACPP_CONTAINER_NAME") or "hexe-ai-node-llamacpp"
         ).strip()
+        self._sd_scripts_training_marker = str(
+            os.environ.get("HEXE_SD_SCRIPTS_TRAINING_MARKER") or ".run/sd-scripts-training.active"
+        ).strip()
         self._local_llm_models_config = str(
             os.environ.get("HEXE_LOCAL_LLM_MODELS_CONFIG") or "config/local-llm-models.json"
         ).strip()
@@ -68,6 +71,9 @@ class UserSystemdServiceManager:
             0,
         )
         self._local_llm_always_on_enabled = _env_bool("HEXE_LOCAL_LLM_ALWAYS_ON_ENABLED", default=True)
+        self._local_llm_gpu_exclusive_blocker_enabled = _env_bool("HEXE_LOCAL_LLM_GPU_EXCLUSIVE_BLOCKER_ENABLED", default=True)
+        self._local_llm_gpu_exclusive_stop_for_comfyui = _env_bool("HEXE_LOCAL_LLM_STOP_FOR_COMFYUI", default=False)
+        self._local_llm_gpu_exclusive_stop_for_gpu_workloads = _env_bool("HEXE_LOCAL_LLM_STOP_FOR_GPU_WORKLOADS", default=True)
         self._vision_llm_control_script = str(
             os.environ.get("HEXE_VISION_LLM_CONTROL_SCRIPT") or "scripts/llamacpp-vision-control.sh"
         ).strip()
@@ -143,6 +149,12 @@ class UserSystemdServiceManager:
             or VISION_LLM_BUILTIN_DEFAULT_MODEL_ID
         )
         self._vision_llm_always_on_enabled = _env_bool("HEXE_VISION_LLM_ALWAYS_ON_ENABLED", default=True)
+        self._vision_llm_gpu_exclusive_blocker_enabled = _env_bool("HEXE_VISION_LLM_GPU_EXCLUSIVE_BLOCKER_ENABLED", default=True)
+        self._vision_llm_gpu_exclusive_stop_for_comfyui = _env_bool("HEXE_VISION_LLM_STOP_FOR_COMFYUI", default=True)
+        self._vision_llm_gpu_exclusive_stop_for_gpu_workloads = _env_bool(
+            "HEXE_VISION_LLM_STOP_FOR_GPU_WORKLOADS",
+            default=_env_bool("HEXE_VISION_LLM_STOP_FOR_SD_SCRIPTS", default=True),
+        )
         self._vision_llm_residency_in_progress = False
         self._local_llm_last_non_default_model_id: str | None = None
         self._local_llm_last_non_default_used_at: float | None = None
@@ -213,9 +225,25 @@ class UserSystemdServiceManager:
             self._start_unit(self._frontend_unit)
             return {"target": "node", "result": "started"}
         if value == "local_llm":
+            gpu_exclusive = self.gpu_exclusive_workload_status()
+            if gpu_exclusive.get("active") and gpu_exclusive.get("local_llm_blocked"):
+                return {
+                    "target": "local_llm",
+                    "result": "blocked",
+                    "reason": "gpu_exclusive_workload_active",
+                    "gpu_exclusive": gpu_exclusive,
+                }
             self._run_local_llm_control("start")
             return {"target": "local_llm", "result": "started"}
         if value == "vision_llm":
+            gpu_exclusive = self.gpu_exclusive_workload_status()
+            if gpu_exclusive.get("active") and gpu_exclusive.get("vision_llm_blocked"):
+                return {
+                    "target": "vision_llm",
+                    "result": "blocked",
+                    "reason": "gpu_exclusive_workload_active",
+                    "gpu_exclusive": gpu_exclusive,
+                }
             self._run_vision_llm_control("start")
             return {"target": "vision_llm", "result": "started"}
         if value == "comfyui_webui":
@@ -270,6 +298,9 @@ class UserSystemdServiceManager:
         normalized = str(model_id or "").strip()
         if not normalized:
             raise ValueError("local llm model is required")
+        gpu_exclusive = self.gpu_exclusive_workload_status()
+        if gpu_exclusive.get("active") and gpu_exclusive.get("local_llm_blocked"):
+            raise RuntimeError("local_llm_blocked_by_gpu_exclusive_workload")
         model = self._local_llm_model_map().get(normalized)
         if model is None:
             raise ValueError("local llm model is not configured")
@@ -454,6 +485,8 @@ class UserSystemdServiceManager:
         local_in_flight: int = 0,
     ) -> dict:
         active_models = list(active_model_ids) if isinstance(active_model_ids, list) else self._active_local_llm_model_ids()
+        gpu_exclusive = self.gpu_exclusive_workload_status()
+        gpu_exclusive_blocked = bool(gpu_exclusive.get("active") and gpu_exclusive.get("local_llm_blocked"))
         runtime_ready = bool(
             self._local_llm_socket
             and self._local_llm_health_socket
@@ -466,6 +499,7 @@ class UserSystemdServiceManager:
             self._local_llm_always_on_enabled
             and not self._local_llm_always_on_in_progress
             and max(int(local_in_flight), 0) == 0
+            and not gpu_exclusive_blocked
             and (not runtime_ready or not any_model_loaded)
         )
         reason = None
@@ -475,6 +509,8 @@ class UserSystemdServiceManager:
             reason = "always_on_start_in_progress"
         elif max(int(local_in_flight), 0) > 0:
             reason = "local_work_in_flight"
+        elif gpu_exclusive_blocked:
+            reason = "blocked_by_gpu_exclusive_workload"
         elif runtime_ready and default_loaded:
             reason = "default_model_ready"
         elif runtime_ready and any_model_loaded:
@@ -492,6 +528,8 @@ class UserSystemdServiceManager:
             "start_due": action_due,
             "start_in_progress": self._local_llm_always_on_in_progress,
             "local_in_flight": max(int(local_in_flight), 0),
+            "gpu_exclusive_blocked": gpu_exclusive_blocked,
+            "gpu_exclusive_reasons": list(gpu_exclusive.get("reasons") or []),
             "reason": reason,
         }
 
@@ -500,6 +538,8 @@ class UserSystemdServiceManager:
         if not status.get("enabled"):
             return {"started": False, **status}
         if max(int(local_in_flight), 0) > 0:
+            return {"started": False, **status}
+        if status.get("gpu_exclusive_blocked"):
             return {"started": False, **status}
         if status.get("runtime_ready") and status.get("active_model_ids"):
             return {"started": False, **status}
@@ -526,9 +566,12 @@ class UserSystemdServiceManager:
         local_in_flight: int = 0,
         gpu_comfyui_critical_in_flight: bool = False,
     ) -> dict:
-        comfyui_gpu_model_loaded = self._comfyui_gpu_model_loaded()
+        gpu_exclusive = self.gpu_exclusive_workload_status()
+        comfyui_gpu_model_loaded = bool(gpu_exclusive.get("comfyui_gpu_model_loaded"))
         comfyui_critical = bool(gpu_comfyui_critical_in_flight)
-        manual_comfyui_webui_active = self._manual_comfyui_webui_active()
+        manual_comfyui_webui_active = bool(gpu_exclusive.get("manual_comfyui_webui_active"))
+        sd_scripts_training_active = bool(gpu_exclusive.get("sd_scripts_training_active"))
+        gpu_exclusive_blocked = bool(gpu_exclusive.get("vision_llm_blocked") or comfyui_critical)
         active_models = (
             list(active_model_ids)
             if isinstance(active_model_ids, list)
@@ -552,8 +595,7 @@ class UserSystemdServiceManager:
             self._vision_llm_always_on_enabled
             and not self._vision_llm_residency_in_progress
             and max(int(local_in_flight), 0) == 0
-            and not comfyui_critical
-            and not manual_comfyui_webui_active
+            and not gpu_exclusive_blocked
             and not model_loaded
         )
         reason = None
@@ -565,8 +607,12 @@ class UserSystemdServiceManager:
             reason = "local_work_in_flight"
         elif comfyui_critical and not model_loaded:
             reason = "gpu_comfyui_critical_work_pending"
+        elif sd_scripts_training_active and not model_loaded:
+            reason = "blocked_by_sd_scripts_training"
         elif manual_comfyui_webui_active and not model_loaded:
             reason = "blocked_by_manual_comfyui_webui"
+        elif comfyui_gpu_model_loaded and not model_loaded:
+            reason = "blocked_by_comfyui_gpu_model"
         elif model_loaded:
             reason = "vision_model_ready"
         elif container_running and not runtime_ready:
@@ -589,6 +635,9 @@ class UserSystemdServiceManager:
             "comfyui_gpu_model_loaded": comfyui_gpu_model_loaded,
             "gpu_comfyui_critical_in_flight": comfyui_critical,
             "manual_comfyui_webui_active": manual_comfyui_webui_active,
+            "sd_scripts_training_active": sd_scripts_training_active,
+            "gpu_exclusive_blocked": gpu_exclusive_blocked,
+            "gpu_exclusive_reasons": list(gpu_exclusive.get("reasons") or []),
             "unload_model_supported": False,
             "unload_model_mode": "container_stop_fallback",
             "reason": reason,
@@ -608,9 +657,7 @@ class UserSystemdServiceManager:
             return {"started": False, **status}
         if max(int(local_in_flight), 0) > 0:
             return {"started": False, **status}
-        if status.get("gpu_comfyui_critical_in_flight"):
-            return {"started": False, **status}
-        if status.get("manual_comfyui_webui_active"):
+        if status.get("gpu_exclusive_blocked"):
             return {"started": False, **status}
         if status.get("model_loaded"):
             return {"started": False, **status}
@@ -641,11 +688,12 @@ class UserSystemdServiceManager:
         }
 
     def start_comfyui_webui(self) -> dict:
+        vision_unload = self.unload_vision_model()
         current = self._comfyui_webui_status()
         if current.get("state") == "running":
             manual_mounts_active = self._comfyui_manual_mounts_active(runtime=self._comfyui_webui_runtime)
             if manual_mounts_active is not False:
-                return {"target": "comfyui_webui", "result": "already_running", **current}
+                return {"target": "comfyui_webui", "result": "already_running", "vision_unload": vision_unload, **current}
             self._logger.info(
                 "restarting ComfyUI Web UI because active container is not mounted to manual %s paths",
                 self._comfyui_webui_runtime,
@@ -695,7 +743,7 @@ class UserSystemdServiceManager:
                         reason="manual_webui_bridge_running",
                         last_active_epoch=time.time(),
                     )
-                    return {"target": "comfyui_webui", "result": "started", **status}
+                    return {"target": "comfyui_webui", "result": "started", "vision_unload": vision_unload, **status}
             raise ValueError("ComfyUI web UI bridge did not become ready")
         except Exception:
             self._write_comfyui_webui_session(state="failed", reason="manual_webui_start_failed")
@@ -1369,6 +1417,98 @@ class UserSystemdServiceManager:
                 return True
         return False
 
+    @staticmethod
+    def _process_pattern_active(pattern: str) -> bool:
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", pattern],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except Exception:
+            return False
+        return bool(str(result.stdout or "").strip())
+
+    def _sd_scripts_training_active(self) -> bool:
+        marker_active = False
+        marker_path = Path(self._sd_scripts_training_marker or ".run/sd-scripts-training.active")
+        if not marker_path.is_absolute():
+            marker_path = (Path.cwd() / marker_path).resolve()
+        try:
+            if marker_path.is_file():
+                age_seconds = max(time.time() - marker_path.stat().st_mtime, 0.0)
+                marker_active = age_seconds < 24 * 60 * 60
+        except Exception:
+            marker_active = False
+        process_active = self._process_pattern_active(r"runtime/lora-training/sd-scripts.*sdxl_train_network\.py|sdxl_train_network\.py.*config_file")
+        return bool(marker_active or process_active)
+
+    def gpu_exclusive_workload_status(self) -> dict:
+        enabled = bool(self._vision_llm_gpu_exclusive_blocker_enabled or self._local_llm_gpu_exclusive_blocker_enabled)
+        if not enabled:
+            return {
+                "active": False,
+                "enabled": False,
+                "reasons": [],
+                "comfyui_gpu_model_loaded": False,
+                "manual_comfyui_webui_active": False,
+                "sd_scripts_training_active": False,
+                "vision_llm_blocked": False,
+                "local_llm_blocked": False,
+            }
+        comfyui_gpu_model_loaded = self._comfyui_gpu_model_loaded()
+        manual_comfyui_webui_active = self._manual_comfyui_webui_active()
+        sd_scripts_training_active = self._sd_scripts_training_active()
+        vision_comfyui_active = bool(
+            self._vision_llm_gpu_exclusive_blocker_enabled
+            and self._vision_llm_gpu_exclusive_stop_for_comfyui
+            and (comfyui_gpu_model_loaded or manual_comfyui_webui_active)
+        )
+        vision_sd_scripts_active = bool(
+            self._vision_llm_gpu_exclusive_blocker_enabled
+            and self._vision_llm_gpu_exclusive_stop_for_gpu_workloads
+            and sd_scripts_training_active
+        )
+        local_comfyui_active = bool(
+            self._local_llm_gpu_exclusive_blocker_enabled
+            and self._local_llm_gpu_exclusive_stop_for_comfyui
+            and (comfyui_gpu_model_loaded or manual_comfyui_webui_active)
+        )
+        local_sd_scripts_active = bool(
+            self._local_llm_gpu_exclusive_blocker_enabled
+            and self._local_llm_gpu_exclusive_stop_for_gpu_workloads
+            and sd_scripts_training_active
+        )
+        comfyui_active = bool(vision_comfyui_active or local_comfyui_active)
+        sd_scripts_active = bool(vision_sd_scripts_active or local_sd_scripts_active)
+        active = bool(comfyui_active or sd_scripts_active)
+        reasons = []
+        if comfyui_active and comfyui_gpu_model_loaded:
+            reasons.append("comfyui_gpu_model_loaded")
+        if comfyui_active and manual_comfyui_webui_active:
+            reasons.append("manual_comfyui_webui_active")
+        if sd_scripts_active and sd_scripts_training_active:
+            reasons.append("sd_scripts_training_active")
+        vision_blocked = bool(vision_comfyui_active or vision_sd_scripts_active)
+        local_blocked = bool(local_comfyui_active or local_sd_scripts_active)
+        return {
+            "active": active,
+            "enabled": True,
+            "reasons": reasons,
+            "comfyui_gpu_model_loaded": comfyui_gpu_model_loaded,
+            "manual_comfyui_webui_active": manual_comfyui_webui_active,
+            "sd_scripts_training_active": sd_scripts_training_active,
+            "vision_llm_blocked": vision_blocked,
+            "local_llm_blocked": local_blocked,
+            "stop_for_comfyui": self._vision_llm_gpu_exclusive_stop_for_comfyui,
+            "stop_for_gpu_workloads": self._vision_llm_gpu_exclusive_stop_for_gpu_workloads,
+            "vision_stop_for_comfyui": self._vision_llm_gpu_exclusive_stop_for_comfyui,
+            "vision_stop_for_gpu_workloads": self._vision_llm_gpu_exclusive_stop_for_gpu_workloads,
+            "local_stop_for_comfyui": self._local_llm_gpu_exclusive_stop_for_comfyui,
+            "local_stop_for_gpu_workloads": self._local_llm_gpu_exclusive_stop_for_gpu_workloads,
+        }
+
     def _query_container_pid(self, container_name: str) -> int:
         if not container_name:
             return 0
@@ -1806,6 +1946,15 @@ class NullServiceManager:
 
     def ensure_local_llm_always_on(self, *, local_in_flight: int = 0) -> dict:
         return {"started": False, **self.local_llm_always_on_status(local_in_flight=local_in_flight)}
+
+    def gpu_exclusive_workload_status(self) -> dict:
+        return {
+            "active": False,
+            "reasons": [],
+            "comfyui_gpu_model_loaded": False,
+            "manual_comfyui_webui_active": False,
+            "sd_scripts_training_active": False,
+        }
 
     def vision_runtime_status(
         self,

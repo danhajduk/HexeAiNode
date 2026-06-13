@@ -208,8 +208,45 @@ export default function App() {
 
   async function loadStatus() {
     const lastUpdatedAt = new Date().toISOString();
+    let nodePayload = null;
+    try {
+      nodePayload = await apiGet("/api/node/status");
+    } catch (exc) {
+      setBackendStatus("offline");
+      setPendingApprovalUrl("");
+      setNodeId("");
+      setProviderBudgetSummaries([]);
+      const message = String(exc?.message || exc || "backend offline");
+      setError(message);
+      setUiState(
+        buildDashboardUiState({
+          nodeStatus: null,
+          governanceStatus: null,
+          providerConfig: null,
+          apiReachable: false,
+          lastUpdatedAt,
+          partialFailures: ["node_status_unavailable"],
+        })
+      );
+      return;
+    }
+
+    setBackendStatus(nodePayload.status || "unknown");
+    setPendingApprovalUrl(nodePayload.pending_approval_url || "");
+    setNodeId(nodePayload.node_id || "");
+    setError("");
+    setUiState(
+      buildDashboardUiState({
+        nodeStatus: nodePayload,
+        governanceStatus: null,
+        providerConfig: null,
+        apiReachable: true,
+        lastUpdatedAt,
+        partialFailures: [],
+      })
+    );
+
     const [
-      nodeResult,
       governanceResult,
       providerResult,
       providerCredentialsResult,
@@ -231,7 +268,6 @@ export default function App() {
       avatarGenerationStatusResult,
       capabilityDiagnosticsResult,
     ] = await Promise.allSettled([
-      apiGet("/api/node/status"),
       apiGet("/api/governance/status"),
       apiGet("/api/providers/config"),
       apiGet("/api/providers/openai/credentials"),
@@ -253,28 +289,7 @@ export default function App() {
       apiGet("/api/avatar-generation"),
       apiAdminGet("/api/capabilities/diagnostics"),
     ]);
-
-    if (nodeResult.status !== "fulfilled") {
-      setBackendStatus("offline");
-      setPendingApprovalUrl("");
-      setNodeId("");
-      setProviderBudgetSummaries([]);
-      const message = String(nodeResult.reason?.message || nodeResult.reason || "backend offline");
-      setError(message);
-      setUiState(
-        buildDashboardUiState({
-          nodeStatus: null,
-          governanceStatus: null,
-          providerConfig: null,
-          apiReachable: false,
-          lastUpdatedAt,
-          partialFailures: ["node_status_unavailable"],
-        })
-      );
-      return;
-    }
-
-    const payload = nodeResult.value || {};
+    const payload = nodePayload || {};
     const governancePayload = governanceResult.status === "fulfilled" ? governanceResult.value : null;
     const providerPayload = providerResult.status === "fulfilled" ? providerResult.value : null;
     const providerCredentialsPayload = providerCredentialsResult.status === "fulfilled" ? providerCredentialsResult.value : null;
@@ -1307,6 +1322,28 @@ export default function App() {
     }
   }
 
+  async function onSaveAvatarHeadPrompt(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPut(`/api/avatar-generation/profiles/${encodedProfileId}/head-face`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
   async function onCreateAvatarHeadPreview(profileId, payload) {
     const normalized = String(profileId || "").trim();
     if (!normalized || avatarGenerationBusy) {
@@ -1317,6 +1354,204 @@ export default function App() {
     try {
       const encodedProfileId = encodeURIComponent(normalized);
       const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/head-face/previews`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onCreateAvatarUpperTorsoPreview(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/upper-torso/previews`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onCreateAvatarHeadSeedBatch(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/head-face/seed-batch`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onCreateAvatarHeadJitterBatch(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/head-face/jitter-batch`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onUpdateAvatarHeadLoraDataset(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/head-face/lora-dataset`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onUploadAvatarHeadLoraDataset(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/head-face/lora-dataset/upload`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onUploadAvatarHeadLora(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/head-face/lora/upload`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onUploadAvatarUpperTorsoLoraDataset(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/upper-torso/lora-dataset/upload`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onUpdateAvatarUpperTorsoLoraDataset(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/upper-torso/lora-dataset`, payload);
+      setAvatarGenerationResult(result);
+      await loadStatus();
+      return result;
+    } catch (err) {
+      const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
+      setError(message);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onUploadAvatarUpperTorsoLora(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) {
+      return null;
+    }
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const encodedProfileId = encodeURIComponent(normalized);
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/upper-torso/lora/upload`, payload);
       setAvatarGenerationResult(result);
       await loadStatus();
       return result;
@@ -2289,7 +2524,17 @@ export default function App() {
       onExtractFaceProfile: onExtractAvatarFaceProfile,
       onGenerateBodyDepthProfile: onGenerateAvatarBodyDepthProfile,
       onRefineHeadPrompt: onRefineAvatarHeadPrompt,
+      onSaveHeadPrompt: onSaveAvatarHeadPrompt,
       onCreateHeadPreview: onCreateAvatarHeadPreview,
+      onCreateUpperTorsoPreview: onCreateAvatarUpperTorsoPreview,
+      onCreateHeadSeedBatch: onCreateAvatarHeadSeedBatch,
+      onCreateHeadJitterBatch: onCreateAvatarHeadJitterBatch,
+      onUpdateHeadLoraDataset: onUpdateAvatarHeadLoraDataset,
+      onUploadHeadLoraDataset: onUploadAvatarHeadLoraDataset,
+      onUploadHeadLora: onUploadAvatarHeadLora,
+      onUploadUpperTorsoLoraDataset: onUploadAvatarUpperTorsoLoraDataset,
+      onUpdateUpperTorsoLoraDataset: onUpdateAvatarUpperTorsoLoraDataset,
+      onUploadUpperTorsoLora: onUploadAvatarUpperTorsoLora,
       onSelectDetailTab: (profileId, detailTab) => {
         window.location.hash = buildAvatarGenerationProfileRoute(profileId, detailTab);
       },

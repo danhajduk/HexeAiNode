@@ -780,3 +780,54 @@ Chosen fix: Added a configurable per-client pending async job cap keyed by `requ
 What changed: Added queue fairness enforcement and diagnostics, NodeControl env wiring, async rejection response behavior, queue/state tests, and Client AI/configuration docs.
 Verification: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_execution_queue.py tests/test_node_control_api.py tests/test_node_control_fastapi.py -q`, `PYTHONPATH=src .venv/bin/python -m py_compile src/ai_node/runtime/execution_queue.py src/ai_node/runtime/node_control_api.py`, and `git diff --check` passed.
 ###########
+###########
+Task #993
+Step objective: Add uploaded Face LoRA dataset as the only training data source.
+Issue cause: The previous Face LoRA flow could generate dataset images inside the node, but the desired flow now requires externally uploaded datasets only.
+Chosen fix: Add uploaded dataset and external LoRA import support, make training manifest generation read the uploaded dataset manifest, and block old generated-dataset actions with a stable error.
+What changed: Added Face LoRA dataset upload/import request models and endpoints, external LoRA upload endpoint, upload manifest validation, upload-only training manifest creation, and UI controls for node-local dataset folders and external .safetensors files.
+Verification: python3 -m py_compile src/ai_node/runtime/node_control_api.py scripts/prepare-avatar-head-lora-kohya.py passed; npm --prefix frontend run build passed; in-process smoke test blocked because local shell lacks paho dependency.
+###########
+Task #993
+Step objective: Verify live upload-only Face LoRA training manifest path.
+Chosen fix: Restarted backend/frontend and used the live API with a temporary profile and six valid PNG files.
+What changed: No additional code changes; verified runtime behavior and removed the temporary profile.
+Verification: Live API smoke returned upload_status=ready, uploaded_images=6, training_status=ready_to_train, training_source=uploaded, deleted=true.
+###########
+Task #994
+Step objective: Add upper torso uploaded dataset and external LoRA upload path.
+Issue cause: Upper Torso existed as a UI tab only; there was no section-specific dataset or LoRA upload state.
+Chosen fix: Parameterized the avatar LoRA upload helpers by reference section and wired upper_torso routes/UI through the same upload manifest logic.
+What changed: Added upper_torso reference role support, upper torso dataset upload route, upper torso external LoRA upload route, Upper Torso UI upload panel, bodysuit baseline text, and upper torso uploaded dataset status display.
+Verification: python3 -m py_compile src/ai_node/runtime/node_control_api.py passed; npm --prefix frontend run build passed; live API smoke returned upload_status=ready, uploaded_images=6, workspace_section=upper_torso, stored_section=upper_torso, deleted=true.
+###########
+Task #994
+Step objective: Prepare upper torso LoRA training manifest from uploaded dataset.
+Chosen fix: Made LoRA training manifest preparation and training job launch section-aware, updated the sd-scripts preparation script to honor manifest section, and added upper_torso prepare/train action routing.
+What changed: Upper torso can now prepare a training manifest under refs/upper_torso/lora_dataset_uploaded/training_manifest.json and the UI has a Train Upper Torso LoRA button gated on uploaded dataset validation.
+Verification: python3 -m py_compile src/ai_node/runtime/node_control_api.py scripts/prepare-avatar-head-lora-kohya.py passed; npm --prefix frontend run build passed; live API smoke returned upper_torso_lora_training_manifest_ready with training_source=uploaded and deleted the temporary profile.
+###########
+Task #994
+Step objective: Add upper torso prompt preview workflow.
+Chosen fix: Reused the existing quick RealVisXL preview template while storing preview history under the upper_torso workspace, so the profile data shape is section-correct and can later swap to a dedicated template.
+What changed: Added upper-torso preview backend route, app handler, Upper Torso prompt/negative prompt fields, latest preview display, and preview submission action.
+Verification: python3 -m py_compile src/ai_node/runtime/node_control_api.py passed; npm --prefix frontend run build passed; restart-stack passed; live API smoke returned upper_torso_preview_submitted with workspace_section=upper_torso, preview_section=upper_torso, history_count=1; temporary profile deleted; ComfyUI stopped and text/vision LLMs restored.
+###########
+Task #994
+Step objective: Add dedicated upper torso preview template and profile-folder preview storage.
+Issue cause: Upper torso previews were initially submitted through the head/face template and stayed in manual output storage.
+Chosen fix: Added a dedicated RealVisXL upper torso preview template, switched the upper torso preview API to that template, made the frontend output resolver section-aware, and added an upper_torso refresh path that imports previews into refs/upper_torso/preview.
+What changed: Added template.avatar_upper_torso_preview.realvisxl.v1, avatar-upper-torso-preview-realvisxl/api_workflow.json, upper torso preview sidecar support, and profile reference counts for upper torso previews.
+Verification: python3 -m py_compile src/ai_node/runtime/node_control_api.py scripts/prepare-avatar-head-lora-kohya.py passed; npm --prefix frontend run build passed; restart-stack passed; live API smoke copied a preview to avatar_profiles/<id>/refs/upper_torso/preview and deleted the temporary profile; ComfyUI stopped and text/vision LLMs restored.
+###########
+Task #994
+Step objective: Add upper torso LoRA training refresh and epoch review controls.
+Chosen fix: Generalized LoRA training refresh to both head_face and upper_torso, made epoch-review model staging section-aware, added upper_torso generate/select epoch review actions, and mirrored epoch review controls in the Upper Torso tab.
+What changed: Upper torso training outputs copy back under refs/upper_torso/lora_training; generated epoch review previews use section=upper_torso; UI can queue epoch review and select a review sample.
+Verification: python3 -m py_compile src/ai_node/runtime/node_control_api.py scripts/prepare-avatar-head-lora-kohya.py passed; npm --prefix frontend run build passed; live API smoke confirmed training without uploaded dataset returns avatar_upper_torso_lora_uploaded_dataset_required, external .safetensors upload activates in upper_torso workspace, and fake completed output creates upper_torso epoch review with one epoch and three previews; temporary profile deleted; ComfyUI stopped and text/vision LLMs restored.
+###########
+Task #994
+Step objective: Add structured upper torso prompt parts.
+Chosen fix: Added upper torso prompt part order/defaults in the backend, seeded new profiles with an upper_torso workspace, preserved prompt_parts for preview/training/review actions, and changed the Upper Torso tab from a single editable prompt box to split part fields plus a composed prompt preview.
+What changed: Prompt parts are General, Neck / Shoulders, Chest / Torso Shape, Arms / Upper Arms, Clothing / Outfit, Skin / Body Details, Pose / Framing, and Style / Lighting; the clothing default enforces a fitted bodysuit baseline.
+Verification: python3 -m py_compile src/ai_node/runtime/node_control_api.py scripts/prepare-avatar-head-lora-kohya.py passed; npm --prefix frontend run build passed; restart-stack passed; live API smoke confirmed new profile upper_torso prompt_parts exist and clothing_outfit contains bodysuit; temporary profile deleted; prod mode confirmed with text and vision LLMs running and ComfyUI unloaded.

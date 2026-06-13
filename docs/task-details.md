@@ -1233,3 +1233,619 @@ Implementation notes:
 - Preserve the current GPU residency behavior: ComfyUI manual mode and vision remain mutually exclusive, and the text helper must not trigger vision startup.
 - Add tests for pose parsing, local/privacy routing, reference-file creation, UI payload shape, and integration with the active depth template.
 - Update local runtime/manual image generation docs with the helper behavior and limitations.
+
+## Task 993
+Original task details:
+- LoRA dataset is uploaded externally.
+- The node should still be able to create an initial face preview from avatar profile data.
+- The uploaded dataset should become the source for Face LoRA training.
+- Uploaded LoRA datasets are the only supported LoRA dataset source.
+- Creating LoRA training datasets with the node is no longer supported.
+- Add an option to upload an already-created Face LoRA from elsewhere.
+
+Implementation notes:
+- Add uploaded LoRA dataset state to the avatar profile:
+  - uploaded dataset present flag
+  - dataset folder path
+  - uploaded image count
+  - validation status and validation messages
+  - selected reference / identity image
+- Add a Face tab UI entry point:
+  - `Upload LoRA Dataset`
+  - `Upload Existing LoRA`
+  - uploaded image list / grid
+  - reference identity image selection
+  - dataset readiness status
+  - keep initial face preview generation available even before a LoRA exists
+- Add existing Face LoRA upload support:
+  - accept `.safetensors` LoRA files created outside the node
+  - store uploaded LoRA files under `avatar_profiles/<id>/refs/head_face/lora_external/`
+  - create or update a LoRA manifest with filename, size, upload time, source label, and selected active LoRA
+  - allow selecting the uploaded LoRA as the active Face LoRA for preview/review workflows
+  - do not require an uploaded training dataset when the operator only wants to use an existing LoRA
+- Remove or disable any Face LoRA dataset-generation flow that creates training dataset images inside the node.
+- Keep node-generated Face previews as preview/tuning artifacts only; they must not be treated as LoRA dataset images.
+- Add backend support for uploaded dataset ingestion:
+  - accept uploaded images or copy from a local folder
+  - store files under `avatar_profiles/<id>/refs/head_face/lora_dataset_uploaded/`
+  - normalize filenames
+  - reject non-image files
+  - create a dataset manifest JSON
+- Add uploaded dataset validation:
+  - verify minimum image count
+  - verify images are readable
+  - detect corrupt or missing files
+  - warn when pose / angle variety appears too low
+  - keep validation warnings separate from hard blockers
+- Wire Face LoRA training to uploaded datasets:
+  - enable `Train LoRA` when uploaded dataset validation passes
+  - reject LoRA training attempts when no valid uploaded dataset manifest exists
+  - copy uploaded dataset into a job-specific training folder under `runtime/lora-training/jobs/<job_id>/`
+  - keep the job folder temporary
+  - copy completed LoRA outputs back to the avatar profile
+  - delete temporary job data after successful output copy-back
+- Add recovery / resume behavior:
+  - uploaded dataset manifest survives backend restart
+  - training status survives backend restart
+  - UI resumes from the manifest and latest training state
+
+Validation:
+- Upload or copy a Face LoRA dataset.
+- Validate dataset.
+- Start training.
+- Confirm training is blocked when no valid uploaded dataset exists.
+- Confirm node-generated Face previews do not appear in the LoRA training dataset.
+- Upload an externally-created Face LoRA and confirm it can be selected as the active LoRA.
+- Confirm job-specific folder is created.
+- Confirm LoRA outputs are copied back to the profile.
+- Confirm temporary job folder cleanup.
+- Run Python compile checks for changed backend/scripts.
+- Run frontend build.
+- Run targeted tests if available.
+
+## Task 994
+Original task details:
+- Copy the same avatar LoRA dataset/training logic to the upper torso.
+- Uploaded LoRA datasets are the only supported source for upper torso LoRA training.
+- Creating upper torso LoRA training datasets with the node is no longer supported.
+- Add an option to upload an already-created upper torso LoRA from elsewhere.
+
+Implementation notes:
+- Add an `upper_torso` avatar workspace section:
+  - prompt parts
+  - preview history
+  - latest preview
+  - uploaded LoRA dataset state
+  - LoRA training state
+- Add Upper Torso tab UI:
+  - match the Face tab structure where possible
+  - prompt editor
+  - latest preview
+  - preview history
+  - uploaded dataset controls
+  - uploaded existing LoRA controls
+  - LoRA training controls once dataset is valid
+- Add existing upper torso LoRA upload support:
+  - accept `.safetensors` LoRA files created outside the node
+  - store uploaded LoRA files under `avatar_profiles/<id>/refs/upper_torso/lora_external/`
+  - create or update a LoRA manifest with filename, size, upload time, source label, and selected active LoRA
+  - allow selecting the uploaded LoRA as the active upper torso LoRA for preview/review workflows
+  - do not require an uploaded training dataset when the operator only wants to use an existing LoRA
+- Do not add a node-generated upper torso LoRA dataset creation flow.
+- Keep upper torso previews as preview/tuning artifacts only; they must not be treated as LoRA dataset images.
+- Define upper torso prompt parts:
+  - General
+  - Neck / shoulders
+  - Chest / torso shape
+  - Arms / upper arms
+  - Clothing / outfit
+  - Skin / body details
+  - Pose / framing
+  - Style / lighting
+  - Negative prompt
+- Use a fitted bodysuit as the baseline upper torso clothing.
+  - The bodysuit must keep the body shape readable.
+  - Avoid loose clothing, heavy folds, bulky jackets, armor, or garments that hide torso proportions.
+  - Treat normal clothing as a later inpainting step so it can be added or removed without losing the trained body shape.
+- Add upper torso preview generation:
+  - add a ComfyUI template for quick upper torso previews
+  - store previews under `avatar_profiles/<id>/refs/upper_torso/preview/`
+  - keep preview history capped consistently with the Face workflow
+- Add upper torso dataset storage:
+  - uploaded dataset under `avatar_profiles/<id>/refs/upper_torso/lora_dataset_uploaded/`
+  - LoRA training outputs under `avatar_profiles/<id>/refs/upper_torso/lora_training/`
+- Add upper torso backend actions:
+  - generate preview
+  - refine prompt
+  - upload / copy dataset
+  - validate dataset
+  - train LoRA
+  - review epochs
+- Block upper torso LoRA training unless a valid uploaded dataset manifest exists.
+- Generalize shared avatar LoRA code:
+  - avoid hardcoding `head_face` where section-specific behavior can be configured
+  - introduce section configuration for `head_face` and `upper_torso`
+  - reuse dataset upload, validation, training-job, copy-back, and epoch-review logic
+
+Validation:
+- Create an upper torso prompt.
+- Generate an upper torso preview.
+- Upload or copy an upper torso dataset.
+- Validate dataset.
+- Start training.
+- Confirm training is blocked when no valid uploaded dataset exists.
+- Confirm node-generated upper torso previews do not appear in the LoRA training dataset.
+- Upload an externally-created upper torso LoRA and confirm it can be selected as the active LoRA.
+- Confirm outputs are copied back to profile.
+- Run Python compile checks for changed backend/scripts.
+- Run frontend build.
+- Run targeted tests if available.
+
+## Task 995
+Original task details:
+- Design a local node scheduler to govern which local model/runtime components are active.
+- Components include:
+  - text LLM
+  - vision LLM
+  - Visual Runtime, backed by the internal ComfyUI adapter
+  - Training Runtime, backed by the internal sd-scripts adapter
+  - future local model runtimes
+- Replace ad hoc active/blocker files with scheduler-owned JSON state files.
+- Suggested location:
+  - `.run/local-scheduler/text_llm.state.json`
+  - `.run/local-scheduler/vision_llm.state.json`
+  - `.run/local-scheduler/visual_runtime.state.json`
+  - `.run/local-scheduler/training_runtime.state.json`
+  - `.run/local-scheduler/scheduler.lock`
+  - `.run/local-scheduler/events.log`
+- State files should include:
+  - service/component name
+  - desired state
+  - observed state
+  - phase
+  - request metadata
+  - blockers
+  - idle/in-flight/queue status
+  - resource usage snapshot
+  - updated timestamp
+- Desired/observed states should support:
+  - requested
+  - starting
+  - running
+  - idle
+  - pausing
+  - paused
+  - unloading
+  - unloaded
+  - stopped
+  - failed
+  - blocked
+- The files should be a scheduler contract, not independent service controllers.
+- The scheduler should own observed_state; UI/API/scripts may request desired_state.
+
+Implementation notes:
+- Add a small scheduler state model and persistence helper.
+- Keep the state files under `.run/local-scheduler/`.
+- Use atomic writes and a lock file or process lock to avoid torn state.
+- Integrate with current service status payload without changing service control behavior yet.
+- Do not remove existing service-manager behavior in this task.
+
+Validation:
+- State files can be created and read for all governed components.
+- Bad/corrupt state files recover safely.
+- Scheduler status can be built from current service state.
+- Python compile checks pass.
+- Targeted tests cover state serialization and recovery.
+
+## Task 996
+Original task details:
+- Add usage/utilization statistics so the node can remember max/average resource usage per local model/runtime.
+- The scheduler should remember enough history to decide what can run together and what must be unloaded.
+- Track stats for:
+  - VRAM usage
+  - GPU utilization
+  - GPU memory controller utilization if available
+  - CPU utilization
+  - RAM usage
+  - active/in-flight work
+  - queue depth
+  - idle duration
+  - prompt/job execution duration from runtime start to reply/result
+  - load/start duration
+  - unload duration
+  - failure count / last failure
+- Stats should include:
+  - current
+  - rolling average
+  - rolling max
+  - last N samples or compact buckets
+  - last updated timestamp
+
+Implementation notes:
+- Add a local scheduler metrics collector that samples existing service status and GPU process data.
+- Persist compact statistics under `.run/local-scheduler/stats.json` or per-component state files.
+- Avoid unbounded history growth.
+- Prefer rolling windows / exponential moving average.
+- Record prompt/job timing as separate phases:
+  - `queued_duration_ms`: request accepted until runtime work starts
+  - `execution_duration_ms`: runtime work starts until reply/result is ready
+  - `total_duration_ms`: request accepted until reply/result is ready
+- Use `execution_duration_ms` as the main Residency V2 planning metric so queue backlog does not distort runtime cost estimates.
+- Track execution duration per component and task family where possible, for example text prompt, vision prompt, ComfyUI preview, ComfyUI LoRA review image, and sd-scripts training.
+- Keep data useful for scheduling decisions, not just display.
+
+Validation:
+- Stats update while text LLM, vision LLM, ComfyUI, and sd-scripts are running or unloaded.
+- User-facing labels should refer to Visual Runtime and Training Runtime; ComfyUI and sd-scripts remain adapter/debug labels.
+- Stats survive backend restart.
+- A max VRAM value and average VRAM value are retained per component.
+- Average/max execution duration is retained separately from queue duration.
+- A completed prompt/job records queued, execution, and total duration when timestamps are available.
+- Tests cover rolling average/max updates and bounded history.
+
+## Task 997
+Original task details:
+- Add a local model priority and compatibility policy.
+- Priority order must be:
+  1. Text LLM
+  2. Vision LLM
+  3. Visual Runtime
+  4. Training Runtime
+- The scheduler should decide what needs to be unloaded/offloaded before starting a requested component.
+- It should check that components are idle before unloading them.
+- It should use current and remembered resource statistics to decide whether components can coexist.
+
+Implementation notes:
+- Define component classes:
+  - text_llm
+  - vision_llm
+  - visual_runtime
+  - training_runtime
+- Define compatibility rules:
+  - text LLM has highest priority and should remain resident when possible.
+  - vision LLM should unload for GPU-heavy image/training work when required.
+  - Visual Runtime and Training Runtime are long-running background workloads by default.
+  - Background Visual Runtime / Training Runtime work should wait rather than preempt foreground text/vision work unless explicitly submitted as high/critical importance.
+  - Visual Runtime and Training Runtime should not run together unless policy explicitly allows it.
+  - Visual Runtime should be eligible for automatic unload after 15 minutes of true idle time.
+  - True idle means no active Visual Runtime job, no queued Visual Runtime job expected to start soon, and no manual/Web UI session holding the runtime.
+  - Training Runtime may require unloading vision and Visual Runtime.
+  - text LLM may remain running with Training Runtime only if remembered/current VRAM budget allows it.
+- Define decision outputs:
+  - allowed
+  - blocked
+  - needs_unload
+  - needs_pause
+  - waiting_for_idle
+  - insufficient_resources
+- Include clear reasons and affected components.
+
+Validation:
+- Given synthetic component states and stats, the policy returns expected decisions.
+- Text LLM wins priority conflicts.
+- Vision unload is selected before Visual Runtime / Training Runtime when GPU-heavy work needs space.
+- Default background Visual Runtime / Training Runtime jobs queue instead of preempting foreground text/vision work.
+- Visual Runtime idle for more than 15 minutes is selected for automatic unload.
+- Busy components produce waiting_for_idle instead of forced unload.
+- Tests cover priority and compatibility decisions.
+
+## Task 998
+Original task details:
+- Implement the scheduler transition executor.
+- If a component is requested, the scheduler should:
+  - check current state
+  - check resource requirements
+  - check incompatible active components
+  - verify those components are idle
+  - unload/pause lower priority components when required
+  - start/load the requested component
+  - update state files and events log
+- The executor should govern:
+  - text LLM
+  - vision LLM
+  - Visual Runtime
+  - Training Runtime
+
+Implementation notes:
+- Add a scheduler request API in backend service-manager/node-control layer.
+- Requests should be serialized through a scheduler lock.
+- Transition events should be appended to `.run/local-scheduler/events.log`.
+- The executor should call existing service manager start/stop/unload methods instead of duplicating shell logic.
+- Add timeout and failure states.
+- Add a periodic idle-unload check for Visual Runtime:
+  - unload after 15 minutes of true idle time
+  - do not unload while work is active, queued for near-term execution, or a manual/Web UI session is active
+  - write a transition event explaining `visual_runtime_idle_timeout`
+- Make transitions restart-safe:
+  - if backend restarts mid-transition, observed state is rebuilt from real service status.
+- Do not force stop busy components unless an explicit future policy allows it.
+
+Validation:
+- Requesting Visual Runtime unloads or blocks vision according to policy.
+- Requesting vision while Visual Runtime is active returns blocked/waiting unless Visual Runtime is idle and unloadable.
+- Requesting Training Runtime unloads vision/Visual Runtime when idle and leaves text LLM running only if budget allows.
+- Visual Runtime automatically unloads after the configured idle timeout and records the reason.
+- State files and events log show each transition.
+- Python compile checks pass.
+- Targeted tests cover transition planning and execution with mocked service manager.
+
+## Task 999
+Original task details:
+- Surface local scheduler status and controls in the node UI.
+- The local residency scheduler must be shown in the Runtime UI at `/#/dashboard/runtime` (`http://hexe-ai.local:8081/#/dashboard/runtime`).
+- The UI should show:
+  - each governed component
+  - desired state
+  - observed state
+  - phase
+  - current VRAM/CPU/GPU/RAM
+  - remembered average/max usage
+  - blockers
+  - idle/in-flight/queue status
+  - last transition/error
+- The Runtime UI should also reflect available task families/capabilities and whether each task can run:
+  - local only
+  - cloud only
+  - local + cloud
+  - unavailable
+- Add controls to request/release components where appropriate.
+- The UI should make it clear why a component is blocked or what must unload first.
+
+Implementation notes:
+- Add backend endpoints:
+  - `GET /api/local-scheduler/status`
+  - `POST /api/local-scheduler/request`
+  - `POST /api/local-scheduler/release`
+- Add a Local Residency / Local Scheduler panel to the existing Runtime dashboard.
+- Add a task availability matrix or compact table on the Runtime dashboard.
+- The task availability display should derive from provider capability resolution and local scheduler/provider state, not hardcoded UI labels.
+- For each task family, show provider mode and current availability reason:
+  - `local`
+  - `cloud`
+  - `local+cloud`
+  - `unavailable`
+- Include enough detail to show when local is blocked but cloud is available, or when cloud is blocked by privacy/budget/policy.
+- Keep the first implementation on `/#/dashboard/runtime`; do not create a separate top-level scheduler page.
+- Keep controls conservative:
+  - request running
+  - request unload/release
+  - refresh
+- Do not expose unsafe force-kill actions in the first UI pass.
+
+Validation:
+- Runtime page `/#/dashboard/runtime` shows the local residency scheduler panel.
+- Runtime page shows task availability by provider mode: local, cloud, local+cloud, or unavailable.
+- Task availability reflects current local/cloud/provider capability state.
+- UI shows when a task is cloud-capable but local is currently unavailable.
+- UI shows text LLM, vision LLM, Visual Runtime, and Training Runtime even when unloaded.
+- UI may show implementation details such as ComfyUI or sd-scripts in a debug/provider detail field, but not as the main component label.
+- UI shows current and remembered max/average usage.
+- Requesting a component updates desired state and returns scheduler decision details.
+- Blockers/reasons are visible.
+- Frontend build passes.
+- Targeted backend/API tests pass where available.
+
+## Task 1000
+Original task details:
+- Redesign the queue model starting from Prompt V3.
+- Prompt V3 needs an option to say whether work is important.
+- Prompt V3 needs an option to say how long the work can wait in queue.
+- This metadata should be carried through queue admission, routing, execution, status, and result metadata.
+
+Implementation notes:
+- Extend Prompt V3 request/schema support with queue intent fields.
+- Suggested shape:
+  - `queue.importance`: `low`, `normal`, `high`, `critical`
+  - `queue.max_wait_seconds`
+  - `queue.deadline_at`
+  - `queue.allow_cloud_spillover`
+  - `queue.local_preferred`
+  - `queue.reason`
+- Define defaults:
+  - importance defaults to `normal`
+  - max wait defaults by task/provider class
+  - Visual Runtime image generation and Training Runtime jobs default to background queue class with a long wait budget
+  - background defaults should be visible in metadata so the user can tell that the job is allowed to wait
+  - cloud spillover follows privacy/routing constraints and provider allowlists
+- Define queue classes or equivalent metadata:
+  - `interactive` for direct user-facing text/vision requests
+  - `background` for default Visual Runtime and Training Runtime work
+  - `scheduled` for future delayed or recurring work
+- Allow the user/API to override Visual Runtime / Training Runtime importance when the job is truly urgent, but keep background as the default.
+- Validate invalid combinations:
+  - negative wait values
+  - `deadline_at` in the past
+  - cloud spillover requested when privacy policy forbids cloud
+  - critical work with no local/cloud provider available
+- Include queue intent in execution metadata and diagnostics.
+
+Validation:
+- Prompt V3 schema accepts valid queue intent.
+- Invalid queue intent is rejected with clear errors.
+- Existing prompts without queue intent preserve previous defaults.
+- Visual Runtime and Training Runtime requests without queue intent are marked as background with long wait defaults.
+- Queue intent appears in route preview and execution result metadata.
+- Python compile and schema validation pass.
+
+## Task 1001
+Original task details:
+- Redesign queue admission using task importance and max wait/deadline.
+- Important work should get higher scheduling priority.
+- Work that cannot wait long should not sit behind low-priority jobs indefinitely.
+
+Implementation notes:
+- Replace or extend FIFO queue behavior with priority/deadline-aware admission.
+- Queue ordering should consider:
+  - importance
+  - queue class, with interactive work ahead of background work by default
+  - deadline/max wait
+  - submitted timestamp
+  - provider/runtime availability
+  - fairness by client
+  - privacy/provider constraints
+- Treat Visual Runtime and Training Runtime jobs as background work by default:
+  - they may sit in a longer local queue
+  - they should not block quick text/vision interactions unless explicitly elevated
+  - their status should communicate that the wait is intentional background scheduling
+- Add admission outcomes:
+  - accepted_local
+  - accepted_cloud
+  - queued_local
+  - queued_cloud
+  - rejected_deadline_unreachable
+  - rejected_no_provider
+  - rejected_policy
+- Estimate whether a queued job can start before its max wait/deadline.
+- Keep existing per-client fairness limits, but make high-priority/deadline work visible in the decision reason.
+- Include queue position and ETA in job status.
+
+Validation:
+- Higher importance work is ordered before lower importance work when otherwise compatible.
+- Near-deadline work can skip lower-priority queued work when fairness/policy allows.
+- Jobs that cannot meet max wait are rejected or routed elsewhere instead of silently waiting.
+- Default background Visual Runtime / Training Runtime jobs accept longer local waits and report background queue placement.
+- Existing async execution tests are updated for new ordering behavior.
+
+## Task 1002
+Original task details:
+- If the task can be sent to cloud and the local model is not available, route it to cloud.
+- This should happen when local residency/model availability cannot satisfy the request within the queue wait budget.
+
+Implementation notes:
+- Integrate local scheduler availability with provider routing.
+- When local model/runtime is unavailable:
+  - check privacy constraints
+  - check task allows cloud
+  - check provider/model compatibility
+  - check budget/cost guardrails
+  - route to cloud if allowed and local wait budget cannot be met
+- Make local-unavailable reasons explicit:
+  - model_not_loaded
+  - runtime_blocked
+  - insufficient_vram
+  - lower_priority_running
+  - busy_until_after_deadline
+  - local_model_missing
+- Do not cloud-route when:
+  - privacy/local-only policy forbids it
+  - cloud provider lacks required features
+  - budget/cost limits block it
+  - user explicitly requires local execution
+- Return routing metadata showing local considered, local rejected reason, cloud selected reason.
+
+Validation:
+- Cloud-capable task routes to cloud when local model is unavailable and wait budget cannot be met.
+- Local-only task does not route to cloud.
+- Privacy-restricted task does not route to cloud.
+- Cost/budget blocked cloud route returns clear rejection/degraded metadata.
+- Route preview shows the same decision path as execution.
+
+## Task 1003
+Original task details:
+- Add queue deadline monitoring and escalation.
+- A queued task should not exceed its declared max wait silently.
+- If a local queued job is approaching its deadline and cloud spillover is allowed, it should be rerouted or escalated.
+
+Implementation notes:
+- Add a queue monitor that periodically checks queued jobs against max wait/deadline.
+- For each queued job:
+  - compute remaining wait budget
+  - recompute local ETA
+  - respect background queue class defaults for Visual Runtime and Training Runtime
+  - check cloud spillover eligibility
+  - reroute to cloud if allowed and local ETA misses the deadline
+  - reject/expire if no provider can satisfy the deadline
+- Add terminal states:
+  - expired_wait_budget
+  - rerouted_to_cloud
+  - escalated_priority
+- Preserve audit trail:
+  - original provider choice
+  - local wait estimate
+  - cloud reroute reason
+  - time spent queued
+- Avoid duplicate execution when rerouting from local queue to cloud queue.
+
+Validation:
+- Queued local job reroutes to cloud before deadline when allowed.
+- Queued local-only job expires or remains blocked with clear status when deadline cannot be met.
+- Rerouted jobs cannot run twice.
+- Queue status includes remaining wait budget and escalation decision.
+- Background Visual Runtime / Training Runtime jobs show long-wait status without being treated as stuck.
+
+## Task 1004
+Original task details:
+- Surface the redesigned queue model in APIs and UI.
+- Users/operators should see importance, wait budget, ETA, queue deadline, and cloud spillover decisions.
+
+Implementation notes:
+- Add API fields to queued job status and execution results:
+  - importance
+  - queue_class
+  - max_wait_seconds
+  - deadline_at
+  - remaining_wait_seconds
+  - queue_eta_seconds
+  - queued_duration_ms
+  - execution_duration_ms
+  - total_duration_ms
+  - spillover_allowed
+  - spillover_selected
+  - local_unavailable_reason
+  - routing_decision_reason
+- Update route preview API to show:
+  - local route possibility
+  - cloud spillover possibility
+  - deadline feasibility
+  - provider selected
+- Update UI:
+  - show queue importance and deadline in Activity/Scheduled Tasks or relevant queue view
+  - show background queue class for default Visual Runtime and Training Runtime jobs
+  - make long-wait background placement explicit so operators do not mistake it for a stuck job
+  - show warning when deadline cannot be met locally
+  - show when a task was rerouted to cloud and why
+  - show local-only/cloud-allowed policy clearly
+- Keep operator controls conservative:
+  - refresh
+  - cancel queued job
+  - optionally escalate importance if policy allows
+
+Validation:
+- UI/API shows priority and wait budget for queued jobs.
+- UI/API can show queue time separately from execution time for completed jobs.
+- Route preview explains local vs cloud decision.
+- Cloud spillover reason is visible in final result.
+- Frontend build passes.
+- Targeted backend/API tests pass.
+
+## Task 1005
+Original task details:
+- Standardize ecosystem-facing runtime names so the node UI feels like one system instead of exposing implementation project names.
+- Use:
+  - `Visual Runtime` as the user-facing name for ComfyUI-backed image generation.
+  - `visual_runtime` as the scheduler/component key.
+  - `ComfyUI` / `comfyui` only as the internal adapter or provider detail.
+  - `Training Runtime` as the user-facing name for sd-scripts LoRA training.
+  - `training_runtime` as the scheduler/component key.
+  - `sd-scripts` / `sd_scripts` only as the internal adapter or provider detail.
+
+Implementation notes:
+- Add a central component naming map used by backend status payloads and frontend labels.
+- Migrate scheduler state naming to the ecosystem keys:
+  - `visual_runtime`
+  - `training_runtime`
+- Preserve adapter identifiers in debug metadata:
+  - `adapter: comfyui`
+  - `adapter: sd_scripts`
+- Runtime UI, queue UI, activity logs, and avatar workflow controls should show Visual Runtime and Training Runtime as primary labels.
+- Technical logs may include the adapter/provider name when useful for troubleshooting.
+- Avoid hardcoding both names in multiple frontend components; prefer one shared label helper or payload field.
+- Add migration/fallback handling for any existing `.run/local-scheduler/comfyui.state.json` and `.run/local-scheduler/sd_scripts.state.json` files if they already exist.
+
+Validation:
+- Runtime UI shows Visual Runtime and Training Runtime, not ComfyUI and sd-scripts, as primary component names.
+- Queue/activity status shows ecosystem names.
+- Debug/provider detail still exposes ComfyUI and sd-scripts where needed.
+- Existing runtime control and status behavior still maps to the correct underlying adapters.
+- Frontend build passes.
+- Python compile checks pass.

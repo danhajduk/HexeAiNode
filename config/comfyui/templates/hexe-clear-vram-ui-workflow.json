@@ -1,0 +1,45 @@
+{
+  "last_node_id": 1,
+  "last_link_id": 0,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "HexeClearVRAM",
+      "title": "Hexe Clear VRAM",
+      "pos": [
+        420,
+        260
+      ],
+      "size": [
+        300,
+        110
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "HexeClearVRAM"
+      },
+      "widgets_values": [
+        true,
+        true
+      ]
+    }
+  ],
+  "links": [],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1,
+      "offset": [
+        0,
+        0
+      ]
+    },
+    "notes": "Queue this workflow to unload ComfyUI models and request CUDA cache cleanup. Requires the local HexeClearVRAM custom node and a ComfyUI restart after first install."
+  },
+  "version": 0.4
+}

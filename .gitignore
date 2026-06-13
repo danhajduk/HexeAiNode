@@ -2,6 +2,7 @@ AGENTS.md
 docs/tmp_tasks.txt
 docs/New_tasks.txt
 docs/completed.txt
+temp/
 docs/core/
 docs/Core-Documents/
 docs/Core-Documents
@@ -35,3 +36,4 @@ runtime/input/
 runtime/output/
 runtime/manual/
 runtime/user/
+runtime/lora-training/

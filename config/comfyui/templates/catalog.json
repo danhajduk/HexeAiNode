@@ -111,6 +111,220 @@
       }
     },
     {
+      "template_id": "template.avatar_upper_torso_preview.realvisxl.v1",
+      "template_name": "Avatar Upper Torso Preview",
+      "description": "Text-only RealVisXL SDXL RGB preview workflow for an avatar profile's upper torso prompt workspace. This quick preview keeps fitted bodysuit/body-shape framing separate from the head/face preview surface.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "avatar-upper-torso-preview-realvisxl/api_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Upper torso prompt for the avatar profile."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress."
+        },
+        {
+          "name": "avatar_name",
+          "type": "string",
+          "required": false,
+          "description": "Filesystem-safe avatar name used in output filenames."
+        },
+        {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width."
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed. Use null for runtime randomization."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        },
+        {
+          "name": "denoise",
+          "type": "number",
+          "required": false,
+          "description": "Sampler denoise strength."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "low quality, blurry, distorted body, distorted torso, distorted arms, extra limbs, cropped shoulders, cropped torso, loose clothing, bulky clothing, jacket, coat, text, watermark, child, teen, underage",
+        "avatar_name": "avatar_upper_torso_preview",
+        "width": 512,
+        "height": 512,
+        "seed": null,
+        "steps": 4,
+        "cfg": 1.2,
+        "denoise": 1.0
+      },
+      "model_requirements": {
+        "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "loras": [
+          "sdxl_lightning_4step_lora.safetensors"
+        ],
+        "vae": null,
+        "controlnets": [],
+        "other": {
+          "nodes": [
+            "CheckpointLoaderSimple",
+            "LoraLoader",
+            "CLIPTextEncode",
+            "EmptyLatentImage",
+            "KSampler",
+            "VAEDecode",
+            "SaveImage"
+          ]
+        }
+      },
+      "output_scope": "manual",
+      "metadata": {
+        "domain": "avatar_profile",
+        "input_mode": "text",
+        "edit_intent": "avatar_upper_torso_preview",
+        "reference_roles": [],
+        "transparent_background": false
+      }
+    },
+    {
+      "template_id": "template.avatar_head_lora_epoch_review.realvisxl.v1",
+      "template_name": "Avatar Head LoRA Epoch Review",
+      "description": "RealVisXL SDXL review workflow that applies one trained avatar head LoRA checkpoint and creates evaluation portraits for checkpoint comparison.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "avatar-head-lora-epoch-review-realvisxl/api_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Prompt used to evaluate the trained face LoRA checkpoint."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress."
+        },
+        {
+          "name": "avatar_name",
+          "type": "string",
+          "required": false,
+          "description": "Filesystem-safe avatar name used in output filenames."
+        },
+        {
+          "name": "avatar_lora_name",
+          "type": "string",
+          "required": true,
+          "description": "ComfyUI LoRA name for the trained checkpoint being reviewed."
+        },
+        {
+          "name": "avatar_lora_strength",
+          "type": "number",
+          "required": false,
+          "description": "LoRA strength for the checkpoint review image."
+        },
+        {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width."
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        },
+        {
+          "name": "denoise",
+          "type": "number",
+          "required": false,
+          "description": "Sampler denoise strength."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "low quality, blurry, distorted face, asymmetrical eyes, extra limbs, full body, cropped head, text, watermark, child, teen, underage",
+        "avatar_name": "avatar_head_lora_epoch_review",
+        "avatar_lora_name": "",
+        "avatar_lora_strength": 1.0,
+        "width": 1024,
+        "height": 1024,
+        "seed": null,
+        "steps": 24,
+        "cfg": 5.5,
+        "denoise": 1.0
+      },
+      "model_requirements": {
+        "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "loras": [
+          "trained_avatar_head_epoch_lora"
+        ],
+        "vae": null,
+        "controlnets": [],
+        "other": {
+          "nodes": [
+            "CheckpointLoaderSimple",
+            "LoraLoader",
+            "CLIPTextEncode",
+            "EmptyLatentImage",
+            "KSampler",
+            "VAEDecode",
+            "SaveImage"
+          ]
+        }
+      },
+      "output_scope": "manual",
+      "metadata": {
+        "domain": "avatar_profile",
+        "input_mode": "text_lora",
+        "edit_intent": "avatar_head_lora_epoch_review",
+        "reference_roles": [],
+        "transparent_background": false
+      }
+    },
+    {
       "template_id": "template.avatar_body_depth_reference_transparent.realvisxl.v1",
       "template_name": "Simple Avatar Generation",
       "description": "Transparent avatar workflow that uses PuLID for face identity and a padded body reference depth map through SDXL ControlNet, saves an RGB fallback, then removes the background.",
@@ -358,6 +572,220 @@
           "body"
         ],
         "transparent_background": true
+      }
+    },
+    {
+      "template_id": "template.avatar_head_lora_pose_control.realvisxl.v1",
+      "template_name": "Avatar Head LoRA Pose Control",
+      "description": "RGB head/face LoRA dataset workflow that uses an SDXL pose ControlNet image to force yaw-sensitive head poses.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "avatar-head-lora-pose-control-realvisxl/api_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Head and face prompt for the LoRA dataset pose image."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress."
+        },
+        {
+          "name": "face_reference_image",
+          "type": "image",
+          "required": true,
+          "description": "Selected reference face image used by PuLID to preserve avatar identity."
+        },
+        {
+          "name": "face_strength",
+          "type": "number",
+          "required": false,
+          "description": "PuLID identity weight from 0 to 1."
+        },
+        {
+          "name": "pulid_model",
+          "type": "string",
+          "required": false,
+          "description": "Local PuLID SDXL model filename from the ComfyUI pulid model folder."
+        },
+        {
+          "name": "pulid_provider",
+          "type": "string",
+          "required": false,
+          "description": "InsightFace execution provider for PuLID."
+        },
+        {
+          "name": "pulid_projection",
+          "type": "string",
+          "required": false,
+          "description": "PuLID projection mode."
+        },
+        {
+          "name": "pulid_fidelity",
+          "type": "number",
+          "required": false,
+          "description": "PuLID fidelity setting."
+        },
+        {
+          "name": "pulid_noise",
+          "type": "number",
+          "required": false,
+          "description": "PuLID noise setting."
+        },
+        {
+          "name": "pulid_start_at",
+          "type": "number",
+          "required": false,
+          "description": "Sampler percentage where PuLID identity guidance begins applying."
+        },
+        {
+          "name": "pulid_end_at",
+          "type": "number",
+          "required": false,
+          "description": "Sampler percentage where PuLID identity guidance stops applying."
+        },
+        {
+          "name": "pose_reference_image",
+          "type": "image",
+          "required": true,
+          "description": "OpenPose or pose-control guide image used by SDXL pose ControlNet."
+        },
+        {
+          "name": "pose_strength",
+          "type": "number",
+          "required": false,
+          "description": "Pose ControlNet strength from 0 to 1."
+        },
+        {
+          "name": "pose_start",
+          "type": "number",
+          "required": false,
+          "description": "Sampler percentage where pose ControlNet begins applying."
+        },
+        {
+          "name": "pose_end",
+          "type": "number",
+          "required": false,
+          "description": "Sampler percentage where pose ControlNet stops applying."
+        },
+        {
+          "name": "pose_controlnet",
+          "type": "string",
+          "required": false,
+          "description": "Local SDXL OpenPose ControlNet model filename."
+        },
+        {
+          "name": "avatar_name",
+          "type": "string",
+          "required": false,
+          "description": "Filesystem-safe avatar name used in output filenames."
+        },
+        {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width."
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        },
+        {
+          "name": "denoise",
+          "type": "number",
+          "required": false,
+          "description": "Sampler denoise strength."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "low quality, blurry, distorted face, cropped head, text, watermark, child, teen, underage, straight-on frontal face, front-facing portrait, looking directly at camera, direct eye contact, centered forward gaze, beauty front portrait, hands, fingers, hand near face, arms, full body, split screen, two faces, duplicate portrait, collage",
+        "avatar_name": "avatar_head_lora_pose",
+        "width": 512,
+        "height": 512,
+        "seed": null,
+        "steps": 4,
+        "cfg": 1.2,
+        "denoise": 1,
+        "face_reference_image": "",
+        "face_strength": 0.55,
+        "pulid_model": "ip-adapter_pulid_sdxl_fp16.safetensors",
+        "pulid_provider": "CUDA",
+        "pulid_projection": "ortho_v2",
+        "pulid_fidelity": 8,
+        "pulid_noise": 0,
+        "pulid_start_at": 0,
+        "pulid_end_at": 0.85,
+        "pose_reference_image": "references/pose/300w_lp/three_quarter_left/three_quarter_left_001_idx00007_control.png",
+        "pose_strength": 0.42,
+        "pose_start": 0,
+        "pose_end": 0.55,
+        "pose_controlnet": "controlnet-openpose-sdxl-1.0.safetensors"
+      },
+      "model_requirements": {
+        "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "loras": [
+          "sdxl_lightning_4step_lora.safetensors"
+        ],
+        "vae": null,
+        "controlnets": [
+          "controlnet-openpose-sdxl-1.0.safetensors"
+        ],
+        "other": {
+          "nodes": [
+            "CheckpointLoaderSimple",
+            "LoraLoader",
+            "CLIPTextEncode",
+            "LoadImage",
+            "PulidModelLoader",
+            "PulidEvaClipLoader",
+            "PulidInsightFaceLoader",
+            "ApplyPulidAdvanced",
+            "ResizeAndPadImage",
+            "ControlNetLoader",
+            "ControlNetApplyAdvanced",
+            "EmptyLatentImage",
+            "KSampler",
+            "VAEDecode",
+            "SaveImage"
+          ],
+          "identity_model": "ip-adapter_pulid_sdxl_fp16.safetensors",
+          "identity_strength": "pulid_face_identity",
+          "pose_preservation": "openpose_controlnet"
+        }
+      },
+      "output_scope": "manual",
+      "metadata": {
+        "domain": "avatar_profile",
+        "input_mode": "text_face_identity_pose_control",
+        "edit_intent": "avatar_head_lora_pose_dataset",
+        "reference_roles": [
+          "face",
+          "pose"
+        ],
+        "transparent_background": false
       }
     },
     {

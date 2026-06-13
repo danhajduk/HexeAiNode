@@ -1,0 +1,141 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "RealVisXL_V5.0_fp16.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": ["1", 0],
+      "clip": ["1", 1],
+      "lora_name": "sdxl_lightning_4step_lora.safetensors",
+      "strength_model": 1.0,
+      "strength_clip": 1.0
+    }
+  },
+  "3": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": "{{width}}",
+      "height": "{{height}}",
+      "batch_size": 1
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["2", 1],
+      "text": "{{positive_prompt}}"
+    }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["2", 1],
+      "text": "{{negative_prompt}}"
+    }
+  },
+  "9": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{face_reference_image}}"
+    }
+  },
+  "13": {
+    "class_type": "PulidModelLoader",
+    "inputs": {
+      "pulid_file": "{{pulid_model}}"
+    }
+  },
+  "14": {
+    "class_type": "PulidEvaClipLoader",
+    "inputs": {}
+  },
+  "15": {
+    "class_type": "PulidInsightFaceLoader",
+    "inputs": {
+      "provider": "{{pulid_provider}}"
+    }
+  },
+  "16": {
+    "class_type": "ApplyPulidAdvanced",
+    "inputs": {
+      "model": ["2", 0],
+      "pulid": ["13", 0],
+      "eva_clip": ["14", 0],
+      "face_analysis": ["15", 0],
+      "image": ["9", 0],
+      "weight": "{{face_strength}}",
+      "projection": "{{pulid_projection}}",
+      "fidelity": "{{pulid_fidelity}}",
+      "noise": "{{pulid_noise}}",
+      "start_at": "{{pulid_start_at}}",
+      "end_at": "{{pulid_end_at}}"
+    }
+  },
+  "20": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{pose_reference_image}}"
+    }
+  },
+  "21": {
+    "class_type": "ResizeAndPadImage",
+    "inputs": {
+      "image": ["20", 0],
+      "target_width": "{{width}}",
+      "target_height": "{{height}}",
+      "padding_color": "black",
+      "interpolation": "nearest-exact"
+    }
+  },
+  "22": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "{{pose_controlnet}}"
+    }
+  },
+  "23": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "positive": ["4", 0],
+      "negative": ["5", 0],
+      "control_net": ["22", 0],
+      "image": ["21", 0],
+      "strength": "{{pose_strength}}",
+      "start_percent": "{{pose_start}}",
+      "end_percent": "{{pose_end}}"
+    }
+  },
+  "6": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["16", 0],
+      "positive": ["23", 0],
+      "negative": ["23", 1],
+      "latent_image": ["3", 0],
+      "seed": "{{seed}}",
+      "steps": "{{steps}}",
+      "cfg": "{{cfg}}",
+      "sampler_name": "euler",
+      "scheduler": "sgm_uniform",
+      "denoise": "{{denoise}}"
+    }
+  },
+  "7": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["6", 0],
+      "vae": ["1", 2]
+    }
+  },
+  "8": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["7", 0],
+      "filename_prefix": "hexe/avatar_head_face_preview/{{avatar_name}}_seed{{seed}}_rgb"
+    }
+  }
+}
