@@ -56,6 +56,15 @@ function componentWork({ component, executionQueue }) {
   };
 }
 
+function residencyDisplayState(component, work) {
+  const observed = compactText(component.observed_state, "unknown").toLowerCase();
+  const hasWork = (work.running || 0) > 0 || (work.staged || 0) > 0 || (work.backlog || 0) > 0;
+  if (observed === "running") {
+    return hasWork ? "busy" : "idle";
+  }
+  return observed;
+}
+
 export function LocalResidencyCard({
   serviceStatus = {},
   executionQueue = null,
@@ -71,6 +80,10 @@ export function LocalResidencyCard({
   return (
     <article className={`card ${className}`.trim()}>
       <CardHeader title="Local Residency" subtitle="Scheduler view of local model and runtime residency." />
+      <div className="runtime-residency-legend">
+        <span><b>Work</b></span>
+        <span><code>run / staged / backlog</code></span>
+      </div>
       <div className="runtime-residency-grid">
         {localSchedulerComponents.map((component) => {
           const blockers = Array.isArray(component.blockers) ? component.blockers : [];
@@ -79,6 +92,7 @@ export function LocalResidencyCard({
           const work = componentWork({ component, executionQueue });
           const busy = localSchedulerBusyTarget === component.component_id;
           const reason = compactText(preview.reason || blockers.join(", "), "");
+          const displayState = residencyDisplayState(component, work);
           return (
             <article className="runtime-residency-card" key={component.component_id}>
               <div className="runtime-residency-card-header">
@@ -86,7 +100,7 @@ export function LocalResidencyCard({
                   <strong>{component.display_name || component.component_id}</strong>
                   <span className="muted tiny">{component.adapter_id || "adapter_unknown"}</span>
                 </div>
-                <StatusBadge value={component.observed_state || "unknown"} />
+                <StatusBadge value={displayState} />
               </div>
               <div className="runtime-residency-summary">
                 <div>
@@ -100,7 +114,7 @@ export function LocalResidencyCard({
                 <div>
                   <span>Work</span>
                   <code>
-                    {work.running} run / {work.staged} staged / {work.backlog} backlog
+                    {work.running} / {work.staged} / {work.backlog}
                   </code>
                 </div>
                 <div>

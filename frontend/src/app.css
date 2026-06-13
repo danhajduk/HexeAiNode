@@ -2290,6 +2290,24 @@
   gap: 10px;
 }
 
+.runtime-residency-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  margin-bottom: 10px;
+  color: hsl(var(--sx-muted-foreground));
+  font-size: 11px;
+}
+
+.runtime-residency-legend code {
+  padding: 4px 7px;
+  border: 1px solid hsl(var(--sx-border) / 0.7);
+  border-radius: var(--sx-radius-pill);
+  background: hsl(var(--sx-panel) / 0.6);
+  color: hsl(var(--sx-text));
+}
+
 .runtime-residency-card {
   display: flex;
   min-width: 0;
