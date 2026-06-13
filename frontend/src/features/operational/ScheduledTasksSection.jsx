@@ -194,6 +194,37 @@ function laneCapacityLabel(queue) {
   return `${active} active + ${staged} staged`;
 }
 
+function compactJobName(job) {
+  return String(job?.job_name || job?.task_id || job?.job_id || "unknown job").trim();
+}
+
+function compactJobDetail(job) {
+  const queueState = job?.queue_state && typeof job.queue_state === "object" ? job.queue_state : {};
+  const parts = [
+    job?.task_family,
+    job?.importance || queueState.importance,
+    job?.client_id,
+    job?.runtime_lane || queueState.runtime_lane || queueState.queue,
+  ].map((part) => String(part || "").trim()).filter(Boolean);
+  if (job?.queue_position !== null && job?.queue_position !== undefined) {
+    parts.push(`pos ${job.queue_position}`);
+  }
+  return parts.join(" / ") || String(job?.status || "queued");
+}
+
+function legacyQueueJobs(queues) {
+  return Object.entries(queues || {}).flatMap(([queueName, queue]) => {
+    const jobs = [];
+    if (queue?.active_job) {
+      jobs.push({ ...queue.active_job, status: "active", runtime_lane: queue.active_job.runtime_lane || queueName });
+    }
+    if (queue?.next_job) {
+      jobs.push({ ...queue.next_job, status: queue.next_job.status || "queued", runtime_lane: queue.next_job.runtime_lane || queueName });
+    }
+    return jobs;
+  });
+}
+
 function sortScheduleCatalog(entries) {
   return [...entries].sort((left, right) => {
     const leftName = String(left?.name || "").trim();
@@ -307,6 +338,7 @@ function GlobalQueueSummary({ executionQueue = null }) {
   const nextCandidate = globalQueue?.next_dispatch_candidate
     || Object.values(legacyQueues).map((queue) => queue?.next_job || queue?.active_job).find(Boolean)
     || null;
+  const jobs = Array.isArray(globalQueue?.queued_jobs) ? globalQueue.queued_jobs : legacyQueueJobs(legacyQueues);
   const legacyFallback = !hasLaneDiagnostics && Object.keys(legacyQueues).length > 0;
 
   if (!globalQueue && !Object.keys(legacyQueues).length) {
@@ -353,6 +385,28 @@ function GlobalQueueSummary({ executionQueue = null }) {
             <strong>No candidate</strong>
           )}
         </div>
+      </div>
+      <div className="execution-queue-job-list">
+        <div className="execution-queue-job-list-header">
+          <strong>Jobs</strong>
+          <span className="muted tiny">{jobs.length} listed</span>
+        </div>
+        {jobs.length ? (
+          <div className="execution-queue-job-rows">
+            {jobs.map((job, index) => (
+              <div className="execution-queue-job-row" key={job.job_id || `${job.task_id || "job"}-${index}`}>
+                <span className="execution-queue-job-index">{index + 1}</span>
+                <div>
+                  <strong>{compactJobName(job)}</strong>
+                  <code>{compactJobDetail(job)}</code>
+                </div>
+                <StatusBadge value={job.status || "queued"} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted tiny">No queued jobs are waiting in the global scheduler backlog.</p>
+        )}
       </div>
     </section>
   );

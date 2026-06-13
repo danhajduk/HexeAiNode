@@ -2340,6 +2340,7 @@ export default function App() {
     ["overview", "Overview"],
     ["capabilities", "Capabilities"],
     ["runtime", "Runtime"],
+    ["jobs_queue", "Jobs Queue"],
     ["manual_image", "Manual Images"],
     ["avatar_generation", "Avatar Generation"],
     ["activity", "Activity"],

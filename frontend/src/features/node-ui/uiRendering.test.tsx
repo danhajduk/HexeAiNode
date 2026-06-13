@@ -12,6 +12,7 @@ function buildOperationalProps(overrides = {}) {
     sections: [
       { id: "overview", label: "Overview", onClick: () => {} },
       { id: "runtime", label: "Runtime", onClick: () => {} },
+      { id: "jobs_queue", label: "Jobs Queue", onClick: () => {} },
       { id: "manual_image", label: "Manual Images", onClick: () => {} },
       { id: "avatar_generation", label: "Avatar Generation", onClick: () => {} },
       { id: "scheduled", label: "Scheduled Tasks", onClick: () => {} },
@@ -135,6 +136,31 @@ function buildOperationalProps(overrides = {}) {
           { name: "every_10_seconds", detail: "Every 10 seconds" },
         ],
       },
+      executionQueue: {
+        global_queue: {
+          queued_count: 1,
+          active_count: 0,
+          staged_count: 0,
+          backlog_count: 1,
+          next_dispatch_candidate: {
+            job_id: "job-queue-test",
+            job_name: "Queue test render",
+            runtime_lane: "visual_gpu",
+          },
+          queued_jobs: [
+            {
+              job_id: "job-queue-test",
+              job_name: "Queue test render",
+              task_family: "task.image_generation",
+              runtime_lane: "visual_gpu",
+              status: "queued",
+              client_id: "queue-test",
+              queue_position: 1,
+            },
+          ],
+        },
+        lanes: {},
+      },
     },
     onboardingSteps: [{ key: "registration", label: "Registration" }],
     onboardingProgress: { registration: "completed" },
@@ -254,6 +280,18 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Vision Residency");
     expect(markup).toContain("model_loaded");
     expect(markup).not.toContain("Manual Image Generation");
+  });
+
+  it("shows the jobs queue on its own section", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard {...buildOperationalProps({ currentSection: "jobs_queue" })} />
+    );
+
+    expect(markup).toContain("Jobs Queue");
+    expect(markup).toContain("Scheduler Backlog");
+    expect(markup).toContain("Queue test render");
+    expect(markup).toContain("task.image_generation");
+    expect(markup).not.toContain("Runtime Health");
   });
 
   it("shows manual image generation on its own section", () => {

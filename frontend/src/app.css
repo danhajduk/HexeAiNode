@@ -583,6 +583,64 @@
   white-space: nowrap;
 }
 
+.execution-queue-job-list {
+  display: grid;
+  gap: 8px;
+}
+
+.execution-queue-job-list-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.execution-queue-job-rows {
+  display: grid;
+  gap: 7px;
+}
+
+.execution-queue-job-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  padding: 8px 9px;
+  border: 1px solid hsl(var(--sx-border) / 0.72);
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-bg) / 0.68);
+}
+
+.execution-queue-job-index {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid hsl(var(--sx-border) / 0.8);
+  border-radius: var(--sx-radius-pill);
+  color: hsl(var(--sx-muted-foreground));
+  font-size: 11px;
+}
+
+.execution-queue-job-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.execution-queue-job-row strong,
+.execution-queue-job-row code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.execution-queue-job-row code {
+  color: hsl(var(--sx-muted-foreground));
+  font-size: 11px;
+}
+
 .execution-queue-meta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
