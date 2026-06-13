@@ -94,6 +94,16 @@ Lane capacity contract:
 - Each local runtime lane has at most one active job and one staged job.
 - Runtimes must not hide extra queue depth from the scheduler beyond the staged slot.
 
+`GET /api/execution/queues` exposes this model through:
+
+- `global_queue.active_count`
+- `global_queue.staged_count`
+- `global_queue.backlog_count`
+- `global_queue.next_dispatch_candidate`
+- `lanes.<lane>.active_count`
+- `lanes.<lane>.staged_count`
+- `lanes.<lane>.backlog_count`
+
 Queue intent separates urgency from ordering:
 
 - `importance` is business/user urgency and is the first scheduling key.

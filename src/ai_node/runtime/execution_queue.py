@@ -259,31 +259,41 @@ class ExecutionQueueService:
                 if oldest_queued_at:
                     oldest_queued_age_seconds = self._age_seconds(iso_value=str(oldest_queued_at))
                 next_job = self._jobs.get(queued_ids[0]) if queued_ids else None
+                staged_job = self._queue_job_summary(next_job) if isinstance(next_job, dict) else None
+                staged_count = 1 if staged_job is not None else 0
                 queues[queue_key] = {
                     "queued_count": len(queued_ids),
                     "active_count": self._active_counts.get(queue_key, 0),
-                    "staged_count": 0,
+                    "staged_count": staged_count,
+                    "backlog_count": max(len(queued_ids) - staged_count, 0),
                     "concurrency": self._concurrency(queue_key),
                     "runtime_lane": self._queue_runtime_lane(queue_key=queue_key, next_job=next_job),
                     "oldest_queued_at": oldest_queued_at,
                     "oldest_queued_age_seconds": oldest_queued_age_seconds,
                     "active_job": active_job,
                     "staged_job": staged_job,
-                    "next_job": self._queue_job_summary(next_job) if isinstance(next_job, dict) else None,
+                    "next_job": staged_job,
                     "per_importance": per_importance,
                     "per_client_pending": per_client_pending,
                 }
             lanes = self._lane_diagnostics_locked(queues=queues)
+            global_queue = self._global_queue_diagnostics_locked(queues=queues, lanes=lanes)
             return {
                 "configured": True,
                 "schema_version": "2.0",
+                "dispatch_model": {
+                    "backlog_owner": "scheduler",
+                    "max_active_per_runtime_lane": 1,
+                    "max_staged_per_runtime_lane": 1,
+                },
                 "fairness": {
                     "max_pending_per_client": self._max_pending_per_client,
                     "scope": "all_queues",
                 },
                 "lane_contract": lane_contract_snapshot(),
+                "global_queue": global_queue,
                 "lanes": lanes,
-                "global_backlog_count": sum(int(item.get("queued_count") or 0) for item in lanes.values()),
+                "global_backlog_count": global_queue.get("backlog_count"),
                 "persistence": {
                     "configured": self._state_path is not None,
                     "path": str(self._state_path) if self._state_path is not None else None,
@@ -852,6 +862,7 @@ class ExecutionQueueService:
                 "queued_count": 0,
                 "active_count": 0,
                 "staged_count": 0,
+                "backlog_count": 0,
                 "capacity": lane_capacity(lane),
                 "active_job": None,
                 "staged_job": None,
@@ -867,6 +878,7 @@ class ExecutionQueueService:
             lanes[lane]["queued_count"] += int(queue_payload.get("queued_count") or 0)
             lanes[lane]["active_count"] += int(queue_payload.get("active_count") or 0)
             lanes[lane]["staged_count"] += int(queue_payload.get("staged_count") or 0)
+            lanes[lane]["backlog_count"] += int(queue_payload.get("backlog_count") or 0)
             if lanes[lane]["active_job"] is None and queue_payload.get("active_job"):
                 lanes[lane]["active_job"] = queue_payload.get("active_job")
             if lanes[lane]["staged_job"] is None and queue_payload.get("staged_job"):
@@ -874,6 +886,37 @@ class ExecutionQueueService:
             if lanes[lane]["next_job"] is None and queue_payload.get("next_job"):
                 lanes[lane]["next_job"] = queue_payload.get("next_job")
         return lanes
+
+    def _global_queue_diagnostics_locked(self, *, queues: dict, lanes: dict) -> dict:
+        queued_jobs = []
+        for entries in self._queues.values():
+            for entry in entries:
+                job_id = self._job_id_from_queue_entry(entry)
+                job = self._jobs.get(job_id)
+                if not isinstance(job, dict) or str(job.get("status") or "") != "queued":
+                    continue
+                queued_jobs.append((entry, job))
+        ordered_jobs = [self._queue_job_summary(job) for _, job in sorted(queued_jobs, key=lambda item: item[0])]
+        active_count = sum(int(item.get("active_count") or 0) for item in lanes.values())
+        staged_count = sum(int(item.get("staged_count") or 0) for item in lanes.values())
+        queued_count = len(ordered_jobs)
+        return {
+            "queued_count": queued_count,
+            "active_count": active_count,
+            "staged_count": staged_count,
+            "backlog_count": max(queued_count - staged_count, 0),
+            "next_dispatch_candidate": ordered_jobs[0] if ordered_jobs else None,
+            "queued_jobs": ordered_jobs,
+            "lanes": {
+                lane_key: {
+                    "queued_count": lane.get("queued_count"),
+                    "active_count": lane.get("active_count"),
+                    "staged_count": lane.get("staged_count"),
+                    "backlog_count": lane.get("backlog_count"),
+                }
+                for lane_key, lane in lanes.items()
+            },
+        }
 
     @staticmethod
     def _age_seconds(*, iso_value: str) -> float | None:

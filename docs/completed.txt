@@ -579,3 +579,4 @@ Task 1004: Surface queue priority wait and spillover decisions in UI and APIs - 
 Task 1005: Standardize ecosystem names for image and training runtimes - Completed on 06/13/2026 10:11
 Task 1006: Update Client AI communication docs for queue and runtime naming changes - Completed on 06/13/2026 10:24
 Task 1007: Define unified queue lane contract - Completed on 06/13/2026 12:27
+Task 1008: Implement global intake queue and runtime lane dispatch - Completed on 06/13/2026 12:29

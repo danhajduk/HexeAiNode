@@ -178,6 +178,41 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         release_gpu.set()
         release_cpu.set()
 
+    async def test_global_queue_reports_active_staged_and_scheduler_backlog(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
+        release_first = asyncio.Event()
+        first = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="first",
+            request_payload={"task_id": "first", "task_family": "task.chat"},
+            runner=lambda: _blocking_job(name="first", order=[], release=release_first),
+        )
+        await _wait_for_status(queue, job_id=first["job_id"], status="running")
+        for index in range(9):
+            await queue.enqueue(
+                queue="local",
+                importance="normal",
+                job_name=f"queued-{index}",
+                request_payload={"task_id": f"queued-{index}", "task_family": "task.chat"},
+                runner=lambda: _completed({"ok": True}),
+            )
+
+        diagnostics = await queue.diagnostics()
+        global_queue = diagnostics["global_queue"]
+        text_lane = diagnostics["lanes"]["text_llm"]
+
+        self.assertEqual(global_queue["active_count"], 1)
+        self.assertEqual(global_queue["queued_count"], 9)
+        self.assertEqual(global_queue["staged_count"], 1)
+        self.assertEqual(global_queue["backlog_count"], 8)
+        self.assertEqual(text_lane["active_count"], 1)
+        self.assertEqual(text_lane["staged_count"], 1)
+        self.assertEqual(text_lane["backlog_count"], 8)
+        self.assertEqual(text_lane["staged_job"]["task_id"], "queued-0")
+        self.assertEqual(global_queue["next_dispatch_candidate"]["task_id"], "queued-0")
+        release_first.set()
+
     async def test_queue_eta_estimates_start_time_from_position_and_active_jobs(self):
         queue = ExecutionQueueService(
             logger=logging.getLogger("execution-queue-test"),
