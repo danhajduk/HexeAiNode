@@ -2108,3 +2108,65 @@ Validation:
 - Visual GPU/CPU lanes are distinguishable.
 - Cloud spillover decisions are visible.
 - Frontend build passes.
+
+## Task 1013
+Original task details:
+- Update the Client AI communication markdown after the unified queue lane implementation.
+- The communication contract should reflect the global queue, dedicated lanes, local/cloud routing, and residency behavior.
+
+Implementation notes:
+- Update `docs/json-schemas/client-ai-v2/communication.md`.
+- Document the global intake queue and dedicated lane model:
+  - cloud
+  - text_llm
+  - vision_llm
+  - visual_gpu
+  - visual_cpu
+  - training_runtime
+- Document that Visual Runtime is split into GPU and CPU lanes:
+  - `visual_gpu` for GPU image generation work
+  - `visual_cpu` for CPU/low-resource visual work where supported
+- Document default behavior for non-V3 client prompts:
+  - importance `normal`
+  - priority `normal`
+  - routing `local_preferred`
+  - interactive defaults for text/vision
+  - background/long-wait defaults for visual/training work unless overridden
+- Document queue fields used by Prompt V3 and queue responses:
+  - importance
+  - priority
+  - queue_class
+  - max_wait_seconds
+  - deadline_at
+  - local/cloud routing policy
+  - spillover allowed/selected
+  - selected lane
+  - original lane
+  - local wait estimate
+  - queued/staged/started/completed timestamps
+- Document lane capacity semantics:
+  - scheduler owns the backlog
+  - each local runtime lane has at most one active job and one staged job
+  - runtimes should not hide extra internal queue depth from the scheduler
+- Document spillover behavior:
+  - local_only never spills to cloud
+  - local_preferred may spill when local wait exceeds budget and cloud is allowed/configured
+  - jobs already started locally must not reroute and run twice
+- Document residency interaction:
+  - text_llm maps to Text LLM
+  - vision_llm maps to Vision LLM
+  - visual_gpu maps to Visual Runtime GPU
+  - visual_cpu maps to Visual Runtime CPU
+  - training_runtime maps to Training Runtime
+  - cloud has no local residency requirement
+- Include request/response examples for:
+  - normal non-V3 local-preferred text work
+  - high-importance text work spilling to cloud
+  - visual_gpu background image work
+  - training_runtime long-running background work
+
+Validation:
+- Communication MD matches the implemented API fields and lane names.
+- Examples use the final request/response schema, not planning placeholders.
+- Existing technical adapter names remain documented only where still exposed by API/debug metadata.
+- Markdown examples are internally consistent and readable.
