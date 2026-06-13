@@ -11461,6 +11461,8 @@ class NodeControlState:
         if not template_id:
             template_id = self._direct_visual_runtime_template_id()
         started = time.perf_counter()
+        timeout_s = max(int(request.timeout_s or 180), 180)
+        await self._wait_for_manual_comfyui_takeover_ready(timeout_s=timeout_s)
         payload = ManualImageGenerationRequest(
             template_id=template_id,
             mode=str(inputs.get("mode") or "txt2img").strip() or "txt2img",
@@ -11486,7 +11488,6 @@ class NodeControlState:
             },
         )
         submission = await self.submit_manual_image_generation(payload=payload)
-        timeout_s = max(int(request.timeout_s or 180), 180)
         terminal_statuses = {"completed", "completed_with_fallback", "failed"}
         latest_job: dict = {}
         while (time.perf_counter() - started) < timeout_s:
@@ -13154,6 +13155,15 @@ class NodeControlState:
         task_family = str(request.get("task_family") or "").strip().lower()
         if lane in {"visual_gpu", "visual_cpu"} and task_family not in {"task.image_generation", "task.generation.image"}:
             return {"allowed": True, "reason": "non_image_visual_lane_job"}
+        if lane in {"visual_gpu", "visual_cpu"}:
+            vision_work = self._local_vision_work_snapshot_nowait()
+            if max(int(vision_work.get("active_count") or 0), 0) > 0 or max(int(vision_work.get("queued_count") or 0), 0) > 0:
+                return {
+                    "allowed": False,
+                    "reason": "vision_work_pending",
+                    "runtime_lane": lane,
+                    "vision_work": vision_work,
+                }
 
         scheduler_request = None
         if self._service_manager is not None and hasattr(self._service_manager, "request_local_scheduler_component"):
@@ -13201,11 +13211,39 @@ class NodeControlState:
             "scheduler_request": scheduler_request,
         }
 
+    def _local_vision_work_snapshot_nowait(self) -> dict:
+        task_families = {"task.document_ocr", "task.image_description", "task.object_detection", "task.vision_analysis"}
+        if self._execution_queue is not None and hasattr(self._execution_queue, "matching_work_snapshot_nowait"):
+            return self._execution_queue.matching_work_snapshot_nowait(
+                queue="local",
+                task_families=task_families,
+                statuses={"queued", "running"},
+            )
+        return {
+            "queue": "local",
+            "task_families": sorted(task_families),
+            "statuses": ["queued", "running"],
+            "jobs": [],
+            "queued_count": 0,
+            "active_count": 0,
+            "cloud_reroute_candidate_count": 0,
+        }
+
     async def _assert_manual_comfyui_takeover_ready(self) -> dict:
         preflight = await self.manual_comfyui_takeover_preflight()
         if not preflight.get("ready"):
             raise ValueError(json.dumps(preflight, sort_keys=True))
         return preflight
+
+    async def _wait_for_manual_comfyui_takeover_ready(self, *, timeout_s: int | float) -> dict:
+        deadline = time.perf_counter() + max(float(timeout_s), 1.0)
+        latest_preflight: dict = {}
+        while time.perf_counter() < deadline:
+            latest_preflight = await self.manual_comfyui_takeover_preflight()
+            if latest_preflight.get("ready"):
+                return latest_preflight
+            await asyncio.sleep(1.0)
+        raise TimeoutError(json.dumps(latest_preflight or {"reason": "manual_comfyui_takeover_timeout"}, sort_keys=True))
 
     async def manual_comfyui_takeover_preflight(self) -> dict:
         if self._execution_queue is None or not hasattr(self._execution_queue, "matching_work_snapshot"):

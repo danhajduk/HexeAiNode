@@ -7261,6 +7261,93 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.sleep(0.01)
             self.assertEqual(status["status"], "completed")
 
+    async def test_visual_lane_waits_for_vision_work_before_requesting_residency(self):
+        class _VisualReadyServiceManager:
+            def __init__(self):
+                self.calls = []
+
+            def request_local_scheduler_component(self, *, component_id: str, importance: str | None = None, request_metadata=None):
+                self.calls.append(
+                    {
+                        "component_id": component_id,
+                        "importance": importance,
+                        "request_metadata": dict(request_metadata or {}),
+                    }
+                )
+                return {
+                    "status": "ok",
+                    "component_id": component_id,
+                    "start_result": {"target": component_id, "result": "ready_for_job_submission"},
+                    "decision": {"decision": "allowed", "reason": "compatible"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            service_manager = _VisualReadyServiceManager()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=service_manager,
+            )
+            release_vision = asyncio.Event()
+            visual_ran = asyncio.Event()
+
+            async def _vision_runner():
+                await release_vision.wait()
+                return {"status": "ok"}
+
+            async def _visual_runner():
+                visual_ran.set()
+                return {"status": "ok"}
+
+            vision = await state._execution_queue.enqueue(
+                queue="local",
+                importance="normal",
+                job_name="vision-blocker",
+                request_payload={
+                    "task_id": "vision-blocker",
+                    "task_family": "task.vision_analysis",
+                    "constraints": {"routing_policy": {"mode": "local_only"}},
+                },
+                runner=_vision_runner,
+            )
+            visual = await state._execution_queue.enqueue(
+                queue="visual_gpu",
+                importance="normal",
+                job_name="visual-after-vision",
+                request_payload={
+                    "task_id": "visual-after-vision",
+                    "task_family": "task.image_generation",
+                    "constraints": {"routing_policy": {"mode": "local_only"}},
+                },
+                runner=_visual_runner,
+            )
+
+            for _ in range(50):
+                vision_status = await state._execution_queue.job_status(job_id=vision["job_id"])
+                visual_status = await state._execution_queue.job_status(job_id=visual["job_id"])
+                if vision_status.get("status") == "running" and visual_status.get("blocked_reason") == "vision_work_pending":
+                    break
+                await asyncio.sleep(0.01)
+
+            self.assertEqual(vision_status["status"], "running")
+            self.assertEqual(visual_status["status"], "queued")
+            self.assertEqual(visual_status["blocked_reason"], "vision_work_pending")
+            self.assertEqual(service_manager.calls, [])
+            self.assertFalse(visual_ran.is_set())
+
+            release_vision.set()
+            for _ in range(50):
+                visual_status = await state._execution_queue.job_status(job_id=visual["job_id"])
+                if visual_status.get("status") == "completed":
+                    break
+                await asyncio.sleep(0.01)
+
+            self.assertEqual(visual_status["status"], "completed")
+            self.assertTrue(visual_ran.is_set())
+            self.assertEqual([call["component_id"] for call in service_manager.calls], ["visual_gpu"])
+
     def test_execution_queue_visual_lane_admission_allows_ready_runtime(self):
         class _VisualReadyServiceManager:
             def request_local_scheduler_component(self, *, component_id: str, importance: str | None = None, request_metadata=None):
@@ -7376,6 +7463,64 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(state.submitted_payload.prompt, "gray cube")
             self.assertEqual(state.submitted_payload.template_id, "template.avatar_head_face_preview.realvisxl.v1")
             self.assertEqual(state.submitted_payload.scheduler_request_metadata["idle_policy"], "client_job")
+
+    async def test_direct_local_image_generation_waits_for_vision_takeover_preflight(self):
+        class _VisualExecutionState(NodeControlState):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.preflight_calls = 0
+                self.submitted_payload = None
+
+            async def manual_comfyui_takeover_preflight(self):
+                self.preflight_calls += 1
+                if self.preflight_calls == 1:
+                    return {"ready": False, "reason": "vision_work_pending", "vision_work": {"active_count": 1}}
+                return {"ready": True, "reason": "vision_work_drained", "vision_work": {"active_count": 0}}
+
+            async def submit_manual_image_generation(self, *, payload):
+                self.submitted_payload = payload
+                return {
+                    "status": "submitted",
+                    "template_id": payload.template_id or "manual_sdxl_txt2img",
+                    "prompt_id": "prompt-visual",
+                    "prompt_ids": ["prompt-visual"],
+                    "submitted_count": 1,
+                }
+
+            def manual_image_generation_status(self):
+                return {
+                    "latest_job": {
+                        "status": "completed",
+                        "prompt_id": "prompt-visual",
+                        "prompt_ids": ["prompt-visual"],
+                        "completed_output_count": 1,
+                        "latest_output": {"relative_path": "direct/visual.png", "filename": "visual.png"},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = _VisualExecutionState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+            )
+            request = TaskExecutionRequest(
+                task_id="direct-visual",
+                task_family="task.image_generation",
+                requested_by="test",
+                requested_provider="local",
+                inputs={"prompt": "gray cube", "width": 512, "height": 512, "steps": 4},
+                constraints={"routing_policy": {"mode": "local_only"}},
+                response_mode="async_if_queued",
+                trace_id="trace-direct-visual",
+            )
+
+            result = await state._execute_direct_now(request=request)
+
+            self.assertEqual(result["provider_used"], "visual_runtime")
+            self.assertGreaterEqual(state.preflight_calls, 2)
+            self.assertEqual(state.submitted_payload.prompt, "gray cube")
 
     async def test_direct_local_vision_analysis_uses_vision_runtime(self):
         class _VisionExecutionState(NodeControlState):

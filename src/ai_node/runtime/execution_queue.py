@@ -370,40 +370,71 @@ class ExecutionQueueService:
         queue_key = self._normalize_queue_key(queue)
         family_keys = {str(item or "").strip().lower() for item in task_families if str(item or "").strip()}
         status_keys = {str(item or "").strip().lower() for item in (statuses or {"queued", "running"}) if str(item or "").strip()}
-        jobs = []
         async with self._lock:
-            for job in self._jobs.values():
-                if str(job.get("queue") or "").strip().lower() != queue_key:
-                    continue
-                status_key = str(job.get("status") or "").strip().lower()
-                if status_key not in status_keys:
-                    continue
-                request = job.get("request") if isinstance(job.get("request"), dict) else {}
-                task_family = str(request.get("task_family") or "").strip().lower()
-                if task_family not in family_keys:
-                    continue
-                constraints = request.get("constraints") if isinstance(request.get("constraints"), dict) else {}
-                routing_policy = constraints.get("routing_policy") if isinstance(constraints.get("routing_policy"), dict) else {}
-                requested_provider = str(request.get("requested_provider") or "").strip().lower()
-                routing_mode = str(routing_policy.get("mode") or "").strip().lower()
-                jobs.append(
-                    {
-                        "job_id": job.get("job_id"),
-                        "job_name": job.get("job_name"),
-                        "status": status_key,
-                        "queue": queue_key,
-                        "importance": job.get("importance"),
-                        "task_id": request.get("task_id"),
-                        "task_family": task_family,
-                        "requested_provider": requested_provider or None,
-                        "routing_policy_mode": routing_mode or None,
-                        "cloud_reroute_candidate": bool(
-                            status_key == "queued"
-                            and requested_provider not in {"local", "local_vision"}
-                            and routing_mode not in {"local_only"}
-                        ),
-                    }
-                )
+            return self._matching_work_snapshot_from_jobs_locked(
+                queue_key=queue_key,
+                family_keys=family_keys,
+                status_keys=status_keys,
+            )
+
+    def matching_work_snapshot_nowait(
+        self,
+        *,
+        queue: str,
+        task_families: set[str],
+        statuses: set[str] | None = None,
+    ) -> dict:
+        queue_key = self._normalize_queue_key(queue)
+        family_keys = {str(item or "").strip().lower() for item in task_families if str(item or "").strip()}
+        status_keys = {str(item or "").strip().lower() for item in (statuses or {"queued", "running"}) if str(item or "").strip()}
+        return self._matching_work_snapshot_from_jobs_locked(
+            queue_key=queue_key,
+            family_keys=family_keys,
+            status_keys=status_keys,
+            jobs_snapshot=self._jobs_snapshot_nowait(),
+        )
+
+    def _matching_work_snapshot_from_jobs_locked(
+        self,
+        *,
+        queue_key: str,
+        family_keys: set[str],
+        status_keys: set[str],
+        jobs_snapshot: list[dict] | None = None,
+    ) -> dict:
+        jobs = []
+        for job in jobs_snapshot if jobs_snapshot is not None else self._jobs.values():
+            if str(job.get("queue") or "").strip().lower() != queue_key:
+                continue
+            status_key = str(job.get("status") or "").strip().lower()
+            if status_key not in status_keys:
+                continue
+            request = job.get("request") if isinstance(job.get("request"), dict) else {}
+            task_family = str(request.get("task_family") or "").strip().lower()
+            if task_family not in family_keys:
+                continue
+            constraints = request.get("constraints") if isinstance(request.get("constraints"), dict) else {}
+            routing_policy = constraints.get("routing_policy") if isinstance(constraints.get("routing_policy"), dict) else {}
+            requested_provider = str(request.get("requested_provider") or "").strip().lower()
+            routing_mode = str(routing_policy.get("mode") or "").strip().lower()
+            jobs.append(
+                {
+                    "job_id": job.get("job_id"),
+                    "job_name": job.get("job_name"),
+                    "status": status_key,
+                    "queue": queue_key,
+                    "importance": job.get("importance"),
+                    "task_id": request.get("task_id"),
+                    "task_family": task_family,
+                    "requested_provider": requested_provider or None,
+                    "routing_policy_mode": routing_mode or None,
+                    "cloud_reroute_candidate": bool(
+                        status_key == "queued"
+                        and requested_provider not in {"local", "local_vision"}
+                        and routing_mode not in {"local_only"}
+                    ),
+                }
+            )
         return {
             "queue": queue_key,
             "task_families": sorted(family_keys),
@@ -413,6 +444,14 @@ class ExecutionQueueService:
             "active_count": sum(1 for item in jobs if item.get("status") == "running"),
             "cloud_reroute_candidate_count": sum(1 for item in jobs if item.get("cloud_reroute_candidate")),
         }
+
+    def _jobs_snapshot_nowait(self) -> list[dict]:
+        for _attempt in range(3):
+            try:
+                return [deepcopy(job) for job in self._jobs.values() if isinstance(job, dict)]
+            except RuntimeError:
+                continue
+        return []
 
     def _ensure_dispatcher_locked(self, queue_key: str) -> None:
         task = self._dispatcher_tasks.get(queue_key)
@@ -434,7 +473,20 @@ class ExecutionQueueService:
                 if not isinstance(job, dict) or job.get("status") != "queued":
                     heapq.heappop(queue_entries)
                     continue
-                admission = self._lane_admission_for_job(job)
+                admission_job = deepcopy(job)
+            admission = await asyncio.to_thread(self._lane_admission_for_job, admission_job)
+            async with self._lock:
+                queue_entries = self._queues.get(queue_key) or []
+                if not queue_entries:
+                    continue
+                entry = queue_entries[0]
+                current_job_id = self._job_id_from_queue_entry(entry)
+                if current_job_id != job_id:
+                    continue
+                job = self._jobs.get(job_id)
+                if not isinstance(job, dict) or job.get("status") != "queued":
+                    heapq.heappop(queue_entries)
+                    continue
                 if not admission.get("allowed"):
                     job["blocked_reason"] = admission.get("reason") or "runtime_lane_not_ready"
                     job["blocked_detail"] = admission
@@ -483,7 +535,8 @@ class ExecutionQueueService:
         finally:
             async with self._lock:
                 self._active_counts[queue_key] = max(self._active_counts.get(queue_key, 0) - 1, 0)
-                self._ensure_dispatcher_locked(queue_key)
+                for candidate_queue in list(self._queues.keys()):
+                    self._ensure_dispatcher_locked(candidate_queue)
 
     def _queue_position(self, *, job_id: str) -> int | None:
         job = self._jobs.get(job_id)
