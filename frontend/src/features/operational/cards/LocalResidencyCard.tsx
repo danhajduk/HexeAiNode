@@ -87,8 +87,16 @@ function cloudWork(executionQueue) {
 
 function residencyDisplayState(component, work) {
   const observed = compactText(component.observed_state, "unknown").toLowerCase();
+  const containerState = compactText(component.container_state, "").toLowerCase();
+  const modelState = compactText(component.model_state, "").toLowerCase();
   const hasWork = (work.running || 0) > 0 || (work.staged || 0) > 0 || (work.backlog || 0) > 0;
-  if (observed === "running") {
+  if (modelState === "loading" || modelState === "unloading" || modelState === "failed") {
+    return modelState;
+  }
+  if (modelState === "unloaded" && (containerState === "running" || observed === "running")) {
+    return "model_unloaded";
+  }
+  if (modelState === "loaded") {
     return hasWork ? "busy" : "idle";
   }
   return observed;
@@ -142,6 +150,22 @@ function laneWorkMetadata({ executionQueue, laneName }) {
     { label: "Staged", job: Object.keys(stagedJob).length ? stagedJob : null },
     { label: "Backlog", job: backlogJob },
   ];
+}
+
+function previewNextAction(preview) {
+  const actions = Array.isArray(preview?.actions) ? preview.actions : [];
+  const action = actions[0] && typeof actions[0] === "object" ? actions[0] : null;
+  if (!action) {
+    return "none";
+  }
+  const actionName = compactText(action.action, "action");
+  const componentId = compactText(action.component_id, "");
+  return componentId ? `${actionName}:${componentId}` : actionName;
+}
+
+function loadedModelText(component) {
+  const loadedModels = Array.isArray(component.loaded_models) ? component.loaded_models.filter(Boolean) : [];
+  return compactText(component.loaded_model || loadedModels.join(", "), "none");
 }
 
 function RuntimeWorkMetadata({ items }) {
@@ -227,6 +251,7 @@ export function LocalResidencyCard({
           const work = componentWork({ component, executionQueue });
           const busy = localSchedulerBusyTarget === component.component_id;
           const reason = compactText(preview.reason || blockers.join(", "), "");
+          const nextAction = previewNextAction(preview);
           const displayState = residencyDisplayState(component, work);
           const metadata = laneWorkMetadata({ executionQueue, laneName: laneForComponentId(component.component_id) });
           return (
@@ -241,11 +266,23 @@ export function LocalResidencyCard({
               <div className="runtime-residency-summary">
                 <div>
                   <span>Desired</span>
-                  <StatusBadge value={component.desired_state || "unknown"} />
+                  <code>{compactText(component.desired_state)}</code>
                 </div>
                 <div>
-                  <span>Phase</span>
-                  <code>{compactText(component.phase)}</code>
+                  <span>Target</span>
+                  <code>{compactText(component.desired_model_state, "unloaded")}</code>
+                </div>
+                <div>
+                  <span>Container</span>
+                  <code>{compactText(component.container_state, compactText(component.observed_state))}</code>
+                </div>
+                <div>
+                  <span>Model</span>
+                  <code>{compactText(component.model_state, "unknown")}</code>
+                </div>
+                <div>
+                  <span>Loaded</span>
+                  <code>{loadedModelText(component)}</code>
                 </div>
                 <div>
                   <span>Work</span>
@@ -256,6 +293,10 @@ export function LocalResidencyCard({
                 <div>
                   <span>Decision</span>
                   <code>{compactText(preview.decision)}</code>
+                </div>
+                <div>
+                  <span>Next</span>
+                  <code>{nextAction}</code>
                 </div>
               </div>
               <div className="runtime-residency-metrics">
@@ -285,12 +326,10 @@ export function LocalResidencyCard({
                 </span>
               </div>
               <RuntimeWorkMetadata items={metadata} />
-              {reason ? (
-                <p className="runtime-residency-reason">
-                  <span>Reason</span>
-                  <code>{reason}</code>
-                </p>
-              ) : null}
+              <p className="runtime-residency-reason">
+                <span>Reason</span>
+                <code>{reason || "none"}</code>
+              </p>
               <div className="runtime-residency-actions">
                 <button
                   className="btn"

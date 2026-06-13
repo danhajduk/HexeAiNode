@@ -588,3 +588,4 @@ Task 1013: Update Client AI communication docs for unified queue lanes - Complet
 Task 1014: Add runtime model-residency adapters while keeping containers running - Completed on 06/13/2026 16:27
 Task 1015: Refactor residency scheduler to manage VRAM-loaded models separately from containers - Completed on 06/13/2026 16:33
 Task 1016: Add automated tests for model-residency load/unload scheduling - Completed on 06/13/2026 16:36
+Task 1017: Surface container state and model residency state in runtime APIs and UI - Completed on 06/13/2026 16:39

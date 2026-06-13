@@ -282,6 +282,59 @@ describe("OperationalDashboard", () => {
     expect(markup).not.toContain("Manual Image Generation");
   });
 
+  it("shows model residency separately from container state", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "runtime",
+          runtimeServicesProps: {
+            serviceStatus: {
+              local_scheduler: {
+                components: [
+                  {
+                    component_id: "visual_gpu",
+                    display_name: "Visual Runtime GPU",
+                    adapter_id: "comfyui_gpu",
+                    desired_state: "loaded",
+                    desired_model_state: "loaded",
+                    observed_state: "running",
+                    container_state: "running",
+                    model_state: "unloaded",
+                    loaded_models: [],
+                    phase: "runtime_observed",
+                    idle: { in_flight: 0, queued: 0 },
+                    usage_statistics: {
+                      current: { vram_mib: 0, gpu_util_percent: 0 },
+                      rolling_average: { vram_mib: 2048, gpu_util_percent: 12 },
+                      rolling_max: { vram_mib: 5120, gpu_util_percent: 90 },
+                    },
+                  },
+                ],
+                request_previews: {
+                  visual_gpu: {
+                    decision: "allowed",
+                    reason: "visual_gpu_vram_budget_available",
+                    actions: [],
+                  },
+                },
+              },
+            },
+            localSchedulerBusyTarget: "",
+            taskAvailability: [],
+            onRequestLocalScheduler: () => {},
+            onReleaseLocalScheduler: () => {},
+          },
+        })}
+      />
+    );
+
+    expect(markup).toContain("Visual Runtime GPU");
+    expect(markup).toContain("Container");
+    expect(markup).toContain("Model");
+    expect(markup).toContain("model_unloaded");
+    expect(markup).toContain("visual_gpu_vram_budget_available");
+  });
+
   it("shows the jobs queue on its own section", () => {
     const markup = renderToStaticMarkup(
       <OperationalDashboard {...buildOperationalProps({ currentSection: "jobs_queue" })} />

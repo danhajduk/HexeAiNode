@@ -82,6 +82,17 @@ def _safe_state(value: object, *, default: str = "unknown") -> str:
     return normalized if normalized in LOCAL_SCHEDULER_ALLOWED_STATES else default
 
 
+def _desired_model_state_from_desired(value: object) -> str:
+    desired = str(value or "").strip().lower()
+    if desired in {"loaded", "running", "starting", "requested"}:
+        return "loaded"
+    if desired in {"unloading", "pausing"}:
+        return "unloading"
+    if desired in {"failed", "blocked"}:
+        return "failed"
+    return "unloaded"
+
+
 def _safe_dict(value: object) -> dict:
     return deepcopy(value) if isinstance(value, dict) else {}
 
@@ -110,6 +121,7 @@ def create_local_scheduler_component_state(
         "display_name": display_name,
         "adapter_id": str(component.get("adapter_id") or "").strip() or None,
         "desired_state": _safe_state(desired_state, default="unloaded"),
+        "desired_model_state": "unloaded",
         "observed_state": _safe_state(observed_state),
         "container_state": "unknown",
         "model_state": "unloaded",
@@ -218,6 +230,7 @@ def normalize_local_scheduler_component_state(data: object, *, component: dict) 
             or component_id,
             "adapter_id": str(data.get("adapter_id") or component.get("adapter_id") or "").strip() or None,
             "desired_state": _safe_state(data.get("desired_state"), default="unloaded"),
+            "desired_model_state": str(data.get("desired_model_state") or "unloaded").strip().lower() or "unloaded",
             "observed_state": _safe_state(data.get("observed_state")),
             "container_state": str(data.get("container_state") or "unknown").strip().lower() or "unknown",
             "model_state": str(data.get("model_state") or "unloaded").strip().lower() or "unloaded",
@@ -330,6 +343,11 @@ class LocalSchedulerStateStore:
                 services=services,
                 observed_state=observed["observed_state"],
             )
+            desired_state = _policy_desired_state(
+                component_id=str(component["component_id"]),
+                persisted_desired=str(persisted.get("desired_state") or "unloaded"),
+                services=services,
+            )
             component_stats = self.update_component_stats(
                 stats=stats,
                 component_id=str(component["component_id"]),
@@ -339,11 +357,8 @@ class LocalSchedulerStateStore:
                 **persisted,
                 "display_name": str(component.get("display_name") or persisted.get("display_name") or component["component_id"]),
                 "adapter_id": str(component.get("adapter_id") or persisted.get("adapter_id") or "") or None,
-                "desired_state": _policy_desired_state(
-                    component_id=str(component["component_id"]),
-                    persisted_desired=str(persisted.get("desired_state") or "unloaded"),
-                    services=services,
-                ),
+                "desired_state": desired_state,
+                "desired_model_state": _desired_model_state_from_desired(desired_state),
                 "observed_state": observed["observed_state"],
                 "container_state": model_residency["container_state"],
                 "model_state": model_residency["model_state"],

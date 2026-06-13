@@ -47,5 +47,4 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-[TODO] Task 1017: Surface container state and model residency state in runtime APIs and UI
 [TODO] Task 1018: Add live switching smoke test for forced residency load/unload jobs
