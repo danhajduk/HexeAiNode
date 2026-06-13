@@ -535,7 +535,18 @@ def _resource_from_service(service: object) -> dict:
 
 
 def _aggregate_resource_metrics(entries: list[dict]) -> dict:
-    resources = [_resource_from_service(entry) for entry in entries if isinstance(entry, dict)]
+    resources = []
+    seen_pids = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        resource = _resource_from_service(entry)
+        pid = resource.get("pid")
+        if isinstance(pid, int) and pid > 0:
+            if pid in seen_pids:
+                continue
+            seen_pids.add(pid)
+        resources.append(resource)
     vram_values = [value for value in (resource.get("vram_mib") for resource in resources) if isinstance(value, (int, float))]
     gpu_values = [
         value for value in (resource.get("gpu_util_percent") for resource in resources) if isinstance(value, (int, float))

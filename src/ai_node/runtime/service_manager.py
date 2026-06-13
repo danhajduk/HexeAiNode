@@ -2069,9 +2069,37 @@ class UserSystemdServiceManager:
         except Exception:
             return None
 
+    @staticmethod
+    def _descendant_pids(pid: int) -> set[int]:
+        if pid <= 0:
+            return set()
+        children_by_parent: dict[int, list[int]] = {}
+        for stat_path in Path("/proc").glob("[0-9]*/stat"):
+            try:
+                child_pid = int(stat_path.parent.name)
+                raw = stat_path.read_text(encoding="utf-8", errors="replace")
+                after_name = raw.rsplit(")", 1)[1].strip()
+                parts = after_name.split()
+                if len(parts) < 2:
+                    continue
+                parent_pid = int(parts[1])
+            except Exception:
+                continue
+            children_by_parent.setdefault(parent_pid, []).append(child_pid)
+        descendants: set[int] = set()
+        stack = list(children_by_parent.get(pid, []))
+        while stack:
+            child_pid = stack.pop()
+            if child_pid in descendants:
+                continue
+            descendants.add(child_pid)
+            stack.extend(children_by_parent.get(child_pid, []))
+        return descendants
+
     def _gpu_process_metrics(self, pid: int) -> dict:
         if pid <= 0:
             return {}
+        candidate_pids = {pid, *self._descendant_pids(pid)}
         metrics: dict[str, float | int] = {}
         try:
             result = subprocess.run(
@@ -2081,14 +2109,22 @@ class UserSystemdServiceManager:
                 text=True,
             )
             if result.returncode == 0:
+                total_vram = 0.0
                 for line in str(result.stdout or "").splitlines():
                     parts = [part.strip() for part in line.split(",")]
-                    if len(parts) < 2 or parts[0] != str(pid):
+                    if len(parts) < 2:
+                        continue
+                    try:
+                        process_pid = int(parts[0])
+                    except ValueError:
+                        continue
+                    if process_pid not in candidate_pids:
                         continue
                     vram = self._parse_nvidia_number(parts[1])
                     if vram is not None:
-                        metrics["vram_mib"] = int(round(vram))
-                    break
+                        total_vram += vram
+                if total_vram > 0:
+                    metrics["vram_mib"] = int(round(total_vram))
         except Exception:
             pass
         try:
@@ -2099,21 +2135,32 @@ class UserSystemdServiceManager:
                 text=True,
             )
             if result.returncode == 0:
+                gpu_values = []
+                gpu_mem_values = []
                 for line in str(result.stdout or "").splitlines():
                     parts = line.split()
-                    if not parts or parts[0].startswith("#") or len(parts) < 5 or parts[1] != str(pid):
+                    if not parts or parts[0].startswith("#") or len(parts) < 5:
+                        continue
+                    try:
+                        process_pid = int(parts[1])
+                    except ValueError:
+                        continue
+                    if process_pid not in candidate_pids:
                         continue
                     gpu_util = self._parse_nvidia_number(parts[3])
                     gpu_mem_util = self._parse_nvidia_number(parts[4])
                     if gpu_util is not None:
-                        metrics["gpu_util_percent"] = round(gpu_util, 2)
+                        gpu_values.append(gpu_util)
                     elif str(parts[3]).strip() == "-":
-                        metrics["gpu_util_percent"] = 0.0
+                        gpu_values.append(0.0)
                     if gpu_mem_util is not None:
-                        metrics["gpu_mem_util_percent"] = round(gpu_mem_util, 2)
+                        gpu_mem_values.append(gpu_mem_util)
                     elif str(parts[4]).strip() == "-":
-                        metrics["gpu_mem_util_percent"] = 0.0
-                    break
+                        gpu_mem_values.append(0.0)
+                if gpu_values:
+                    metrics["gpu_util_percent"] = round(max(gpu_values), 2)
+                if gpu_mem_values:
+                    metrics["gpu_mem_util_percent"] = round(max(gpu_mem_values), 2)
         except Exception:
             pass
         return metrics
