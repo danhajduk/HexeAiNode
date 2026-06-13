@@ -479,6 +479,21 @@
   justify-content: space-between;
 }
 
+.execution-queue-legacy-note {
+  display: grid;
+  gap: 4px;
+  padding: 9px 11px;
+  border: 1px solid hsl(var(--sx-warning) / 0.55);
+  border-radius: var(--sx-radius-md);
+  background: hsl(var(--sx-warning) / 0.08);
+  color: hsl(var(--sx-muted-foreground));
+  font-size: 12px;
+}
+
+.execution-queue-legacy-note strong {
+  color: hsl(var(--sx-text));
+}
+
 .execution-queue-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

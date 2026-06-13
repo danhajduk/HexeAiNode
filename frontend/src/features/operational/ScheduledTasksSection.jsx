@@ -132,6 +132,9 @@ function friendlyQueueName(value) {
   if (normalized === "cloud") {
     return "Cloud";
   }
+  if (normalized === "local") {
+    return "Local Legacy";
+  }
   return normalized.replaceAll("_", " ") || "queue";
 }
 
@@ -287,6 +290,7 @@ export function JobsQueueCard({ executionQueue = null, className = "" }) {
 
 function ExecutionQueueSummary({ executionQueue = null, compact = false }) {
   const laneOrder = ["cloud", "text_llm", "vision_llm", "visual_gpu", "visual_cpu", "training_runtime"];
+  const hasLaneDiagnostics = executionQueue?.lanes && typeof executionQueue.lanes === "object";
   const lanes = executionQueue?.lanes && typeof executionQueue.lanes === "object"
     ? laneOrder
         .map((laneName) => [laneName, executionQueue.lanes[laneName] || {}])
@@ -300,6 +304,7 @@ function ExecutionQueueSummary({ executionQueue = null, compact = false }) {
     ? executionQueue.global_queue
     : null;
   const globalCounts = summarizeQueueCounts(globalQueue);
+  const legacyFallback = !hasLaneDiagnostics && queues.length > 0;
 
   if (!queues.length) {
     return <p className="muted tiny">No shared execution queue data is available yet.</p>;
@@ -315,6 +320,14 @@ function ExecutionQueueSummary({ executionQueue = null, compact = false }) {
           </span>
         </div>
       )}
+      {legacyFallback ? (
+        <div className="execution-queue-legacy-note">
+          <strong>Legacy queue diagnostics</strong>
+          <span>
+            Backend is returning compatibility queues. Restart/update the backend to show Global Intake plus Text, Vision, Visual GPU, Visual CPU, and Training lanes.
+          </span>
+        </div>
+      ) : null}
       {globalQueue ? (
         <div className="execution-queue-global">
           <div className="execution-queue-global-main">
