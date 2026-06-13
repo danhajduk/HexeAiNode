@@ -335,6 +335,7 @@ class LocalSchedulerStateStore:
             "state_dir": str(self._state_dir),
             "components": components,
             "statistics": stats,
+            "gpu_resources": _safe_dict(services.get("gpu_resources")),
             "updated_at": _now_iso(),
         }
         payload["policy"] = local_scheduler_policy_payload()

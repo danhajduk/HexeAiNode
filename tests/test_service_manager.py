@@ -214,6 +214,22 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(metrics["gpu_util_percent"], 0.0)
         self.assertEqual(metrics["gpu_mem_util_percent"], 0.0)
 
+    def test_gpu_memory_status_reads_total_used_and_free_vram(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+        def _fake_run(cmd, check, capture_output, text, env=None):
+            if cmd[:2] == ["nvidia-smi", "--query-gpu=memory.total,memory.used,memory.free"]:
+                return _Completed("12288, 9852, 2191\n")
+            return _Completed("", returncode=1)
+
+        with patch("subprocess.run", side_effect=_fake_run):
+            status = manager._gpu_memory_status()
+
+        self.assertTrue(status["available"])
+        self.assertEqual(status["memory_total_mib"], 12288)
+        self.assertEqual(status["memory_used_mib"], 9852)
+        self.assertEqual(status["memory_free_mib"], 2191)
+
     def test_local_scheduler_stats_record_execution_timing_separately(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = LocalSchedulerStateStore(state_dir=Path(tmp), logger=logging.getLogger("service-manager-test"))
@@ -239,38 +255,70 @@ class ServiceManagerTests(unittest.TestCase):
             self.assertEqual(timing["rolling_max_ms"]["execution_duration_ms"], 1500)
             self.assertIn("execution_duration_ms", timing["rolling_average_ms"])
 
-    def test_local_scheduler_policy_background_visual_waits_for_vision(self):
+    def test_local_scheduler_policy_visual_unloads_vision_only_when_vram_is_needed(self):
         scheduler_status = {
+            "gpu_resources": {"memory_free_mib": 6000},
             "components": [
-                {"component_id": "text_llm", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}},
-                {"component_id": "vision_llm", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}},
+                {
+                    "component_id": "text_llm",
+                    "observed_state": "running",
+                    "idle": {"in_flight": 0, "queued": 0},
+                    "usage_statistics": {"current": {"vram_mib": 5500}},
+                },
+                {
+                    "component_id": "vision_llm",
+                    "observed_state": "running",
+                    "idle": {"in_flight": 0, "queued": 0},
+                    "usage_statistics": {"current": {"vram_mib": 4100}},
+                },
                 {"component_id": "visual_runtime", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
                 {"component_id": "training_runtime", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
             ]
         }
 
-        background = plan_local_scheduler_request(
+        fits = plan_local_scheduler_request(
             scheduler_status=scheduler_status,
             component_id="visual_runtime",
             importance="normal",
         )
-        urgent = plan_local_scheduler_request(
+        scheduler_status["gpu_resources"]["memory_free_mib"] = 2300
+        needs_vram = plan_local_scheduler_request(
             scheduler_status=scheduler_status,
             component_id="visual_runtime",
-            importance="high",
+            importance="normal",
         )
 
-        self.assertEqual(background["decision"], "blocked")
-        self.assertEqual(background["reason"], "background_waits_for_vision")
-        self.assertEqual(urgent["decision"], "needs_unload")
-        self.assertIn({"action": "unload", "component_id": "vision_llm", "reason": "visual_runtime_high_importance_requires_vision_unloaded"}, urgent["actions"])
+        self.assertEqual(fits["decision"], "allowed")
+        self.assertEqual(fits["reason"], "visual_runtime_vram_budget_available")
+        self.assertEqual(needs_vram["decision"], "needs_unload")
+        self.assertIn(
+            {"action": "unload", "component_id": "vision_llm", "reason": "visual_runtime_requires_vision_llm_vram"},
+            needs_vram["actions"],
+        )
+        self.assertNotIn("text_llm", needs_vram["affected_components"])
 
     def test_local_scheduler_policy_training_conflicts_with_visual_runtime(self):
         scheduler_status = {
+            "gpu_resources": {"memory_free_mib": 0},
             "components": [
-                {"component_id": "text_llm", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}},
-                {"component_id": "vision_llm", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
-                {"component_id": "visual_runtime", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}},
+                {
+                    "component_id": "text_llm",
+                    "observed_state": "running",
+                    "idle": {"in_flight": 0, "queued": 0},
+                    "usage_statistics": {"current": {"vram_mib": 5500}},
+                },
+                {
+                    "component_id": "vision_llm",
+                    "observed_state": "running",
+                    "idle": {"in_flight": 0, "queued": 0},
+                    "usage_statistics": {"current": {"vram_mib": 4100}},
+                },
+                {
+                    "component_id": "visual_runtime",
+                    "observed_state": "running",
+                    "idle": {"in_flight": 0, "queued": 0},
+                    "usage_statistics": {"current": {"vram_mib": 100}},
+                },
                 {"component_id": "training_runtime", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
             ]
         }
@@ -282,7 +330,11 @@ class ServiceManagerTests(unittest.TestCase):
         )
 
         self.assertEqual(decision["decision"], "needs_unload")
-        self.assertEqual(decision["affected_components"], ["visual_runtime"])
+        self.assertEqual(decision["affected_components"], ["text_llm", "vision_llm", "visual_runtime"])
+        self.assertIn(
+            {"action": "unload", "component_id": "text_llm", "reason": "training_runtime_requires_text_llm_vram"},
+            decision["actions"],
+        )
 
     def test_local_scheduler_request_executes_needed_unload_before_visual_start(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(

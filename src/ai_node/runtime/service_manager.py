@@ -192,6 +192,7 @@ class UserSystemdServiceManager:
             "comfyui_cpu": self._comfyui_runtime_status(runtime="cpu"),
             "comfyui_webui": self._comfyui_webui_status(),
             "gpu_exclusive": self.gpu_exclusive_workload_status(),
+            "gpu_resources": self._gpu_memory_status(),
             "node": node,
         }
         services["local_scheduler"] = self._local_scheduler_state_store.status_from_services(services=services)
@@ -1979,6 +1980,32 @@ class UserSystemdServiceManager:
         except Exception:
             pass
         return metrics
+
+    def _gpu_memory_status(self) -> dict:
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.total,memory.used,memory.free", "--format=csv,noheader,nounits"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                return {"available": False, "reason": "nvidia_smi_failed"}
+            line = str(result.stdout or "").splitlines()[0]
+            parts = [part.strip() for part in line.split(",")]
+            if len(parts) < 3:
+                return {"available": False, "reason": "invalid_nvidia_smi_output"}
+            total = self._parse_nvidia_number(parts[0])
+            used = self._parse_nvidia_number(parts[1])
+            free = self._parse_nvidia_number(parts[2])
+            return {
+                "available": total is not None and used is not None and free is not None,
+                "memory_total_mib": int(round(total)) if total is not None else None,
+                "memory_used_mib": int(round(used)) if used is not None else None,
+                "memory_free_mib": int(round(free)) if free is not None else None,
+            }
+        except Exception as exc:
+            return {"available": False, "reason": str(exc) or "gpu_memory_status_failed"}
 
     @staticmethod
     def _read_cpu_total() -> float | None:

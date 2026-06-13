@@ -188,9 +188,12 @@ are gone. Gate latency is written to `.run/comfyui-gpu-vision-gate.json` as `vis
 tracked separately by the vision residency scheduler, so the artifact keeps `vision_reload_pending: true` after an
 unload. Set `COMFYUI_GPU_VISION_GATE_ENABLED=false` only for manual maintenance.
 
-Vision has higher residency priority than GPU ComfyUI when ComfyUI is idle or only has a non-critical workload. The
-vision residency scheduler reloads the vision model when no local work is in flight and only defers to GPU ComfyUI
-when a critical GPU image-generation job is queued or running.
+Text and vision llama.cpp runtimes are resident by default. The local residency scheduler uses registered VRAM
+reservations before admitting GPU work: Visual Runtime currently reserves 5 GiB and Training Runtime currently reserves
+9 GiB. When a Visual Runtime job is queued, the scheduler starts Visual Runtime if the reservation fits in free VRAM;
+otherwise it unloads Vision first and unloads Text only as a last resort. Training Runtime unloads Visual Runtime and
+Vision before admission, then unloads Text if the 9 GiB reservation still cannot fit. These registered values are
+temporary policy hints until runtime-specific measured maxima are promoted into the scheduler statistics.
 
 CPU ComfyUI is reserved for low-priority background image work. The direct execution queue exposes a `cpu_comfyui` lane
 with concurrency `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` defaulting to 1. Only `task.image_generation` or
