@@ -7261,6 +7261,68 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.sleep(0.01)
             self.assertEqual(status["status"], "completed")
 
+    def test_execution_queue_visual_lane_admission_allows_ready_runtime(self):
+        class _VisualReadyServiceManager:
+            def request_local_scheduler_component(self, *, component_id: str, importance: str | None = None, request_metadata=None):
+                return {
+                    "status": "ok",
+                    "component_id": component_id,
+                    "start_result": {"target": component_id, "result": "ready_for_job_submission"},
+                    "decision": {"decision": "allowed", "reason": "compatible"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=_VisualReadyServiceManager(),
+            )
+
+            admission = state._execution_queue_lane_admission(
+                {
+                    "job_id": "visual-ready",
+                    "importance": "normal",
+                    "runtime_lane": "visual_gpu",
+                    "request": {"task_id": "visual-ready", "task_family": "task.image_generation"},
+                }
+            )
+
+            self.assertTrue(admission["allowed"])
+            self.assertEqual(admission["reason"], "visual_gpu_executor_ready")
+
+    def test_execution_queue_visual_lane_admission_blocks_unready_runtime(self):
+        class _VisualBlockedServiceManager:
+            def request_local_scheduler_component(self, *, component_id: str, importance: str | None = None, request_metadata=None):
+                return {
+                    "status": "blocked",
+                    "component_id": component_id,
+                    "start_result": {"target": component_id, "result": "blocked", "reason": "insufficient_resources"},
+                    "decision": {"decision": "insufficient_resources", "reason": "insufficient_vram"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=_VisualBlockedServiceManager(),
+            )
+
+            admission = state._execution_queue_lane_admission(
+                {
+                    "job_id": "visual-blocked",
+                    "importance": "normal",
+                    "runtime_lane": "visual_gpu",
+                    "request": {"task_id": "visual-blocked", "task_family": "task.image_generation"},
+                }
+            )
+
+            self.assertFalse(admission["allowed"])
+            self.assertEqual(admission["reason"], "visual_runtime_executor_not_ready")
+
     async def test_vision_runtime_residency_job_passes_critical_gpu_comfyui_work(self):
         with tempfile.TemporaryDirectory() as tmp:
             service_manager = self._FakeServiceManager()

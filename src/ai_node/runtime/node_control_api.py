@@ -12909,6 +12909,17 @@ class NodeControlState:
                     "error": str(exc).strip() or type(exc).__name__,
                 }
 
+        start_result = scheduler_request.get("start_result") if isinstance(scheduler_request, dict) else None
+        start_status = str(start_result.get("result") or "").strip().lower() if isinstance(start_result, dict) else ""
+        scheduler_status = str(scheduler_request.get("status") or "").strip().lower() if isinstance(scheduler_request, dict) else ""
+        if scheduler_status == "ok" and start_status in {"started", "already_running", "ready_for_job_submission"}:
+            return {
+                "allowed": True,
+                "reason": f"{lane}_executor_ready",
+                "runtime_lane": lane,
+                "scheduler_request": scheduler_request,
+            }
+
         if lane in {"visual_gpu", "visual_cpu"}:
             return {
                 "allowed": False,
