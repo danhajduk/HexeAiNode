@@ -282,9 +282,79 @@ export function ScheduledTasksSection({ scheduler = null, executionQueue = null,
 export function JobsQueueCard({ executionQueue = null, className = "" }) {
   return (
     <article className={`card ${className}`.trim()}>
-      <CardHeader title="Jobs Queue" subtitle="Global intake queue with scheduler-owned runtime lanes." />
-      <ExecutionQueueSummary executionQueue={executionQueue} compact />
+      <CardHeader title="Jobs Queue" subtitle="Global scheduler backlog before lane execution." />
+      <GlobalQueueSummary executionQueue={executionQueue} />
     </article>
+  );
+}
+
+function GlobalQueueSummary({ executionQueue = null }) {
+  const hasLaneDiagnostics = executionQueue?.lanes && typeof executionQueue.lanes === "object";
+  const legacyQueues = executionQueue?.queues && typeof executionQueue.queues === "object"
+    ? executionQueue.queues
+    : {};
+  const globalQueue = executionQueue?.global_queue && typeof executionQueue.global_queue === "object"
+    ? executionQueue.global_queue
+    : null;
+  const globalCounts = globalQueue
+    ? summarizeQueueCounts(globalQueue)
+    : summarizeQueueCounts({
+        queued_count: Object.values(legacyQueues).reduce((total, queue) => total + Number(queue?.queued_count || 0), 0),
+        active_count: Object.values(legacyQueues).reduce((total, queue) => total + Number(queue?.active_count || 0), 0),
+        staged_count: 0,
+        backlog_count: Object.values(legacyQueues).reduce((total, queue) => total + Number(queue?.queued_count || 0), 0),
+      });
+  const nextCandidate = globalQueue?.next_dispatch_candidate
+    || Object.values(legacyQueues).map((queue) => queue?.next_job || queue?.active_job).find(Boolean)
+    || null;
+  const legacyFallback = !hasLaneDiagnostics && Object.keys(legacyQueues).length > 0;
+
+  if (!globalQueue && !Object.keys(legacyQueues).length) {
+    return <p className="muted tiny">No global execution queue data is available yet.</p>;
+  }
+
+  return (
+    <section className="execution-queue-summary execution-queue-summary-compact" aria-label="Global execution queue summary">
+      {legacyFallback ? (
+        <div className="execution-queue-legacy-note">
+          <strong>Legacy queue diagnostics</strong>
+          <span>
+            Backend is returning compatibility queues. Global backlog counts are estimated until lane diagnostics are available.
+          </span>
+        </div>
+      ) : null}
+      <div className="execution-queue-global">
+        <div className="execution-queue-global-main">
+          <span className="muted tiny">Global Intake</span>
+          <strong>Scheduler Backlog</strong>
+          <div className="execution-queue-global-flow" aria-label="Global intake queue counts">
+            <span>
+              <b>{globalCounts.queued}</b>
+              <small>Total Queued</small>
+            </span>
+            <span>
+              <b>{globalCounts.staged}</b>
+              <small>Staged In Lanes</small>
+            </span>
+            <span>
+              <b>{globalCounts.backlog}</b>
+              <small>Waiting For Lane</small>
+            </span>
+          </div>
+        </div>
+        <div className="execution-queue-global-next">
+          <span className="muted tiny">Next Dispatch</span>
+          {nextCandidate ? (
+            <>
+              <strong>{nextCandidate.job_name || nextCandidate.task_id || nextCandidate.job_id}</strong>
+              <code>{friendlyQueueName(nextCandidate.runtime_lane || nextCandidate.queue_state?.runtime_lane || nextCandidate.queue_state?.queue)}</code>
+            </>
+          ) : (
+            <strong>No candidate</strong>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
