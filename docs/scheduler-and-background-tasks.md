@@ -126,6 +126,15 @@ Non-V3 or incomplete requests default conservatively:
 - interactive wait budgets for text/vision work
 - long background wait budgets for visual/training work unless overridden
 
+Local-preferred cloud spillover:
+
+- `local_only` work never spills to cloud.
+- `local_preferred` work prefers the local lane while its wait budget remains feasible.
+- High and critical `local_preferred` text work may spill to cloud when local queue pressure crosses the configured
+  threshold and an eligible cloud provider is available.
+- Spillover decisions include the original queue, selected queue, local unavailable reason, cloud selected reason, and
+  local pressure or wait-estimate metadata.
+
 ## Provider-Specific Refresh Behavior
 
 Provider-related recurring work currently includes:

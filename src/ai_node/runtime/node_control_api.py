@@ -11636,21 +11636,25 @@ class NodeControlState:
             queue_intent=queue_intent,
             queue_key=queue_key,
         )
-        if wait_budget_spillover.get("spillover"):
-            queue_key = "cloud"
-            spillover = True
-            reason = "local_wait_budget_spillover"
-        elif await self._should_spill_local_preferred_to_cloud(
+        priority_spillover = await self._local_preferred_spillover_decision(
             request=request,
             importance=importance,
             routing_mode=routing_mode,
             queue_key=queue_key,
-        ):
+        )
+        if wait_budget_spillover.get("spillover"):
+            queue_key = "cloud"
+            spillover = True
+            reason = "local_wait_budget_spillover"
+            spillover_decision = wait_budget_spillover
+        elif priority_spillover.get("spillover"):
             queue_key = "cloud"
             spillover = True
             reason = "local_preferred_spillover"
+            spillover_decision = priority_spillover
         else:
             spillover = False
+            spillover_decision = wait_budget_spillover if isinstance(wait_budget_spillover, dict) else {}
             reason = self._direct_execution_queue_reason(
                 request=request,
                 routing_mode=routing_mode,
@@ -11676,9 +11680,11 @@ class NodeControlState:
                 "original_queue": original_queue,
                 "spillover": spillover,
                 "reason": reason,
-                "local_unavailable_reason": wait_budget_spillover.get("local_unavailable_reason") if wait_budget_spillover else None,
-                "cloud_selected_reason": wait_budget_spillover.get("cloud_selected_reason") if wait_budget_spillover else None,
-                "local_wait_estimate": wait_budget_spillover.get("local_wait_estimate") if wait_budget_spillover else None,
+                "local_unavailable_reason": spillover_decision.get("local_unavailable_reason") if spillover_decision else None,
+                "cloud_selected_reason": spillover_decision.get("cloud_selected_reason") if spillover_decision else None,
+                "local_wait_estimate": spillover_decision.get("local_wait_estimate") if spillover_decision else None,
+                "local_pressure": spillover_decision.get("local_pressure") if spillover_decision else None,
+                "spillover_allowed": bool(spillover_decision.get("spillover_allowed")) if spillover_decision else False,
             },
         }
 
@@ -12088,23 +12094,23 @@ class NodeControlState:
             return None
         return effective_mode
 
-    async def _should_spill_local_preferred_to_cloud(
+    async def _local_preferred_spillover_decision(
         self,
         *,
         request: TaskExecutionRequest,
         importance: str,
         routing_mode: str | None,
         queue_key: str,
-    ) -> bool:
+    ) -> dict:
         if not self._local_preferred_spillover_enabled:
-            return False
+            return {"spillover": False, "spillover_allowed": False, "reason": "local_preferred_spillover_disabled"}
         if queue_key != "local" or routing_mode != "local_preferred":
-            return False
+            return {"spillover": False, "spillover_allowed": False, "reason": "not_local_preferred_local_queue"}
         if str(request.requested_provider or "").strip():
-            return False
+            return {"spillover": False, "spillover_allowed": False, "reason": "explicit_provider"}
         importance_key = str(importance or "normal").strip().lower()
         if importance_key not in {"critical", "high"}:
-            return False
+            return {"spillover": False, "spillover_allowed": False, "reason": "importance_not_high_enough"}
         pressure = await self._execution_queue.queue_pressure(queue="local")
         threshold = (
             self._local_preferred_spillover_critical_pending
@@ -12112,8 +12118,28 @@ class NodeControlState:
             else self._local_preferred_spillover_high_pending
         )
         if int(pressure.get("pending_count") or 0) < threshold:
-            return False
-        return self._cloud_execution_queue_available(request=request)
+            return {
+                "spillover": False,
+                "spillover_allowed": True,
+                "reason": "local_pressure_below_threshold",
+                "local_pressure": {**pressure, "threshold": threshold},
+            }
+        if not self._cloud_execution_queue_available(request=request):
+            return {
+                "spillover": False,
+                "spillover_allowed": True,
+                "reason": "cloud_unavailable",
+                "local_unavailable_reason": "local_queue_pressure",
+                "local_pressure": {**pressure, "threshold": threshold},
+            }
+        return {
+            "spillover": True,
+            "spillover_allowed": True,
+            "reason": "local_preferred_spillover",
+            "local_unavailable_reason": "local_queue_pressure",
+            "cloud_selected_reason": "high_importance_local_queue_pressure",
+            "local_pressure": {**pressure, "threshold": threshold},
+        }
 
     async def _should_spill_local_wait_budget_to_cloud(
         self,
