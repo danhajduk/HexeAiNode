@@ -2231,7 +2231,7 @@
 
 .runtime-residency-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -2924,6 +2924,10 @@ h2 {
   .operational-runtime-residency-card,
   .operational-runtime-jobs-card {
     grid-column: auto;
+  }
+
+  .runtime-residency-grid {
+    grid-template-columns: 1fr;
   }
 
   .flow-sidebar,
