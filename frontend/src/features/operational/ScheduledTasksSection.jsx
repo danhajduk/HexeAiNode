@@ -114,8 +114,23 @@ function formatSeconds(value) {
 
 function friendlyQueueName(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  if (normalized === "cpu_comfyui") {
+  if (normalized === "visual_cpu" || normalized === "cpu_comfyui") {
     return "Visual CPU";
+  }
+  if (normalized === "visual_gpu") {
+    return "Visual GPU";
+  }
+  if (normalized === "text_llm") {
+    return "Text LLM";
+  }
+  if (normalized === "vision_llm") {
+    return "Vision LLM";
+  }
+  if (normalized === "training_runtime") {
+    return "Training";
+  }
+  if (normalized === "cloud") {
+    return "Cloud";
   }
   return normalized.replaceAll("_", " ") || "queue";
 }
@@ -240,9 +255,20 @@ export function JobsQueueCard({ executionQueue = null, className = "" }) {
 }
 
 function ExecutionQueueSummary({ executionQueue = null, compact = false }) {
-  const queues = executionQueue?.queues && typeof executionQueue.queues === "object"
-    ? Object.entries(executionQueue.queues).sort(([left], [right]) => left.localeCompare(right))
+  const laneOrder = ["cloud", "text_llm", "vision_llm", "visual_gpu", "visual_cpu", "training_runtime"];
+  const lanes = executionQueue?.lanes && typeof executionQueue.lanes === "object"
+    ? laneOrder
+        .filter((laneName) => executionQueue.lanes[laneName])
+        .map((laneName) => [laneName, executionQueue.lanes[laneName]])
     : [];
+  const queues = lanes.length
+    ? lanes
+    : executionQueue?.queues && typeof executionQueue.queues === "object"
+      ? Object.entries(executionQueue.queues).sort(([left], [right]) => left.localeCompare(right))
+      : [];
+  const globalQueue = executionQueue?.global_queue && typeof executionQueue.global_queue === "object"
+    ? executionQueue.global_queue
+    : null;
 
   if (!queues.length) {
     return <p className="muted tiny">No shared execution queue data is available yet.</p>;
@@ -252,21 +278,42 @@ function ExecutionQueueSummary({ executionQueue = null, compact = false }) {
     <section className={`execution-queue-summary ${compact ? "execution-queue-summary-compact" : ""}`.trim()} aria-label="Execution queue summary">
       {compact ? null : (
         <div className="execution-queue-summary-header">
-          <strong>Execution Queues</strong>
+          <strong>Execution Lanes</strong>
           <span className="muted tiny">
-            priority, wait budget, and cloud spillover decisions
+            global queue, runtime lanes, and cloud spillover decisions
           </span>
         </div>
       )}
+      {globalQueue ? (
+        <div className="execution-queue-card execution-queue-global">
+          <div className="execution-queue-card-title">
+            <strong>Global Queue</strong>
+            <StatusBadge
+              value={`${globalQueue.active_count || 0} active / ${globalQueue.staged_count || 0} staged / ${globalQueue.backlog_count || 0} backlog`}
+              tone={globalQueue.active_count || globalQueue.staged_count || globalQueue.backlog_count ? "success" : "meta"}
+            />
+          </div>
+          {globalQueue.next_dispatch_candidate ? (
+            <div className="muted tiny">
+              Next: {globalQueue.next_dispatch_candidate.job_name || globalQueue.next_dispatch_candidate.task_id || globalQueue.next_dispatch_candidate.job_id}
+            </div>
+          ) : (
+            <div className="muted tiny">No global dispatch candidate.</div>
+          )}
+        </div>
+      ) : null}
       <div className="execution-queue-grid">
         {queues.map(([queueName, queue]) => {
-          const nextJob = queue.next_job || queue.active_job || null;
+          const nextJob = queue.staged_job || queue.next_job || queue.active_job || null;
           const queueState = nextJob?.queue_state || {};
           return (
             <div key={queueName} className="execution-queue-card">
               <div className="execution-queue-card-title">
                 <strong>{friendlyQueueName(queueName)}</strong>
-                <StatusBadge value={`${queue.active_count || 0} active / ${queue.queued_count || 0} queued`} tone={queue.active_count || queue.queued_count ? "success" : "meta"} />
+                <StatusBadge
+                  value={`${queue.active_count || 0} active / ${queue.staged_count || 0} staged / ${queue.backlog_count || 0} backlog`}
+                  tone={queue.active_count || queue.staged_count || queue.backlog_count ? "success" : "meta"}
+                />
               </div>
               <div className="muted tiny">{queueDecisionLine(queue)}</div>
               {nextJob ? (

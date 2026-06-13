@@ -113,6 +113,10 @@ Lane capacity contract:
 - `lanes.<lane>.staged_count`
 - `lanes.<lane>.backlog_count`
 
+The Runtime UI uses the same payload for the Jobs Queue card. It displays the global queue first, then ordered lane
+cards for Cloud, Text LLM, Vision LLM, Visual GPU, Visual CPU, and Training. Local Residency work counts read from
+`lanes.<component_id>` so residency cards and queue cards agree on active, staged, and backlog work.
+
 Queue intent separates urgency from ordering:
 
 - `importance` is business/user urgency and is the first scheduling key.
