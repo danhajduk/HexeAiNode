@@ -14,8 +14,9 @@ from urllib.request import urlopen
 from unittest.mock import patch
 
 from ai_node.runtime.local_scheduler_state import LocalSchedulerStateStore
+from ai_node.runtime.model_residency import normalize_container_state, normalize_model_state
 from ai_node.runtime.local_scheduler_policy import plan_local_scheduler_request
-from ai_node.runtime.service_manager import UserSystemdServiceManager
+from ai_node.runtime.service_manager import NullServiceManager, UserSystemdServiceManager
 
 
 class _Completed:
@@ -66,6 +67,81 @@ class ServiceManagerTests(unittest.TestCase):
             encoding="utf-8",
         )
         return config_path
+
+    def test_model_residency_state_normalizers(self):
+        self.assertEqual(normalize_container_state("healthy"), "running")
+        self.assertEqual(normalize_container_state("restarting"), "starting")
+        self.assertEqual(normalize_container_state("exited"), "stopped")
+        self.assertEqual(normalize_container_state("mystery"), "unknown")
+        self.assertEqual(normalize_model_state("model_loaded"), "loaded")
+        self.assertEqual(normalize_model_state("on_demand"), "unloaded")
+        self.assertEqual(normalize_model_state("not_supported"), "unsupported")
+
+    def test_model_residency_status_reports_container_running_model_unloaded(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+        manager._vision_llm_control_script = "scripts/llamacpp-vision-control.sh"
+
+        def _fake_exists(path):
+            value = str(path)
+            if value == "scripts/llamacpp-vision-control.sh":
+                return True
+            if value in {manager._vision_llm_socket, manager._vision_llm_health_socket}:
+                return False
+            return False
+
+        with (
+            patch("os.path.exists", side_effect=_fake_exists),
+            patch.object(manager, "_query_container_pid", return_value=4243),
+            patch.object(manager, "_active_model_ids_for_socket", return_value=[]),
+        ):
+            payload = manager.model_residency_status("vision_llm")
+
+        self.assertEqual(payload["component_id"], "vision_llm")
+        self.assertEqual(payload["container_state"], "running")
+        self.assertEqual(payload["model_state"], "loading")
+        self.assertFalse(payload["can_unload_model"])
+        self.assertEqual(payload["unload_model_mode"], "container_stop_fallback")
+
+    def test_local_llm_status_includes_model_residency_contract(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+        with (
+            patch("os.path.exists", return_value=True),
+            patch.object(manager, "_query_container_pid", return_value=4242),
+            patch.object(manager, "_active_local_llm_model_ids", return_value=["qwen3-8b-q4_k_m"]),
+            patch.object(manager, "_gpu_process_metrics", return_value={"vram_mib": 5512, "gpu_util_percent": 0.0, "gpu_mem_util_percent": 0.0}),
+        ):
+            payload = manager._local_llm_status()
+
+        residency = payload["model_residency"]
+        self.assertEqual(residency["container_state"], "running")
+        self.assertEqual(residency["model_state"], "loaded")
+        self.assertEqual(residency["loaded_model"], "qwen3-8b-q4_k_m")
+        self.assertEqual(residency["observed_vram_mib"], 5512)
+
+    def test_unload_model_reports_text_llm_unsupported_without_stopping_container(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+        with patch.object(manager, "stop") as fake_stop:
+            result = manager.unload_model("text_llm")
+
+        self.assertEqual(result["status"], "blocked")
+        self.assertEqual(result["result"], "unsupported")
+        self.assertFalse(result["model_residency"]["can_unload_model"])
+        self.assertEqual(result["model_residency"]["unload_model_mode"], "container_stop_fallback")
+        fake_stop.assert_not_called()
+
+    def test_null_service_manager_exposes_model_residency_adapter_contract(self):
+        manager = NullServiceManager()
+
+        status = manager.model_residency_status("visual_gpu")
+        load = manager.load_model("visual_gpu", model_id="model")
+        unload = manager.unload_model("visual_gpu")
+
+        self.assertEqual(status["component_id"], "visual_gpu")
+        self.assertEqual(status["container_state"], "unknown")
+        self.assertEqual(status["model_state"], "unsupported")
+        self.assertEqual(load["status"], "blocked")
+        self.assertEqual(unload["result"], "service_manager_unconfigured")
 
     def test_get_status_maps_systemctl_states(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
@@ -494,7 +570,7 @@ class ServiceManagerTests(unittest.TestCase):
         def _fake_run(cmd, check, capture_output, text, env=None):
             self.assertEqual(cmd[:3], ["docker", "inspect", "--format"])
             self.assertEqual(cmd[-1], "hexe-ai-node-comfyui")
-            return _Completed("5151\n")
+            return _Completed("5151\trunning\t0\tfalse\t2026-06-13T00:00:00Z\t\t0\n")
 
         with patch("os.path.exists", side_effect=_fake_exists), patch("subprocess.run", side_effect=_fake_run):
             gpu_payload = manager._comfyui_runtime_status(runtime="gpu")

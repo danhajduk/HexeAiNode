@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ai_node.runtime.local_scheduler_policy import plan_local_scheduler_request
 from ai_node.runtime.local_scheduler_state import LocalSchedulerStateStore
+from ai_node.runtime.model_residency import ModelResidencyStatus, normalize_container_state, normalize_model_state
 
 
 LOCAL_LLM_BUILTIN_DEFAULT_MODEL_ID = "qwen3-8b-q4_k_m"
@@ -228,6 +229,78 @@ class UserSystemdServiceManager:
         }
         services["local_scheduler"] = self._local_scheduler_state_store.status_from_services(services=services)
         return services
+
+    def ensure_container_running(self, component_id: str) -> dict:
+        component = self._normalize_local_scheduler_component_id(component_id)
+        status = self.model_residency_status(component)
+        if status.get("container_state") == "running":
+            return {"status": "ok", "component_id": component, "result": "already_running", "model_residency": status}
+        if component == "text_llm":
+            return self.start(target="local_llm", request_metadata={"source": "model_residency_adapter", "operation": "ensure_container"})
+        if component == "vision_llm":
+            return self.start(target="vision_llm", request_metadata={"source": "model_residency_adapter", "operation": "ensure_container"})
+        if component in {"visual_gpu", "visual_cpu"}:
+            return self.start(target="comfyui_webui", request_metadata={"source": "model_residency_adapter", "operation": "ensure_container", "component_id": component})
+        if component == "training_runtime":
+            return {
+                "status": "ok",
+                "component_id": component,
+                "result": "job_scoped",
+                "reason": "training_runtime_container_is_job_scoped",
+                "model_residency": status,
+            }
+        raise ValueError("unknown local scheduler component")
+
+    def load_model(self, component_id: str, model_id: str | None = None, metadata: dict | None = None) -> dict:
+        component = self._normalize_local_scheduler_component_id(component_id)
+        if component == "text_llm":
+            normalized_model = str(model_id or self._local_llm_default_model_id).strip()
+            return {"status": "ok", "component_id": component, "result": "model_loaded", **self.ensure_local_llm_model(model_id=normalized_model)}
+        if component == "vision_llm":
+            return {"status": "ok", "component_id": component, "result": "model_loaded", **self.ensure_vision_runtime_resident()}
+        if component in {"visual_gpu", "visual_cpu", "training_runtime"}:
+            request = self.request_local_scheduler_component(
+                component_id=component,
+                importance=str((metadata or {}).get("importance") or "normal"),
+                request_metadata={"source": "model_residency_adapter", "operation": "load_model", **dict(metadata or {})},
+            )
+            return {"status": request.get("status"), "component_id": component, "result": request.get("status"), "request": request}
+        raise ValueError("unknown local scheduler component")
+
+    def unload_model(self, component_id: str, metadata: dict | None = None) -> dict:
+        component = self._normalize_local_scheduler_component_id(component_id)
+        if component == "text_llm":
+            return {
+                "status": "blocked",
+                "component_id": component,
+                "result": "unsupported",
+                "reason": "text_llm_model_unload_requires_container_stop_fallback",
+                "model_residency": self.model_residency_status(component),
+            }
+        if component == "vision_llm":
+            result = self.unload_vision_model()
+            return {"status": "ok", "component_id": component, "result": result.get("result"), "unload_result": result}
+        if component in {"visual_gpu", "visual_cpu", "training_runtime"}:
+            result = self.release_local_scheduler_component(
+                component_id=component,
+                request_metadata={"source": "model_residency_adapter", "operation": "unload_model", **dict(metadata or {})},
+            )
+            return {"status": result.get("status"), "component_id": component, "result": result.get("status"), "release": result}
+        raise ValueError("unknown local scheduler component")
+
+    def model_residency_status(self, component_id: str) -> dict:
+        component = self._normalize_local_scheduler_component_id(component_id)
+        if component == "text_llm":
+            return self._text_llm_model_residency_status().to_payload()
+        if component == "vision_llm":
+            return self._vision_llm_model_residency_status().to_payload()
+        if component == "visual_gpu":
+            return self._visual_model_residency_status(runtime="gpu").to_payload()
+        if component == "visual_cpu":
+            return self._visual_model_residency_status(runtime="cpu").to_payload()
+        if component == "training_runtime":
+            return self._training_model_residency_status().to_payload()
+        raise ValueError("unknown local scheduler component")
 
     def restart(self, *, target: str) -> dict:
         value = str(target or "").strip().lower()
@@ -1302,6 +1375,12 @@ class UserSystemdServiceManager:
             "always_on": self.local_llm_always_on_status(active_model_ids=active_model_ids),
             "default_revert": self.local_llm_default_revert_status(active_model_ids=active_model_ids),
             "model_states": self.local_llm_model_states_payload(active_model_ids=active_model_ids),
+            "model_residency": self._text_llm_model_residency_status(
+                state=state,
+                pid=pid,
+                active_model_ids=active_model_ids,
+                observed_vram_mib=gpu_metrics.get("vram_mib"),
+            ).to_payload(),
         }
 
     def _vision_llm_status(self) -> dict:
@@ -1333,6 +1412,12 @@ class UserSystemdServiceManager:
             "health_socket_path": self._vision_llm_health_socket or None,
             "default_model_id": self._vision_llm_default_model_id,
             "residency": residency,
+            "model_residency": self._vision_llm_model_residency_status(
+                residency=residency,
+                state=state,
+                pid=pid,
+                observed_vram_mib=gpu_metrics.get("vram_mib"),
+            ).to_payload(),
         }
 
     def _comfyui_runtime_status(self, *, runtime: str) -> dict:
@@ -1372,6 +1457,12 @@ class UserSystemdServiceManager:
             "health_socket_ready": health_socket_ready,
             "api_transport": "unix_socket",
             "model_residency": "on_demand",
+            "model_residency_status": self._visual_model_residency_status(
+                runtime=runtime_key,
+                state=state,
+                pid=pid,
+                observed_vram_mib=gpu_metrics.get("vram_mib"),
+            ).to_payload(),
             "container_status": container_state.get("status") or None,
             "restart_count": container_state.get("restart_count"),
             "last_exit_code": container_state.get("exit_code"),
@@ -1379,6 +1470,133 @@ class UserSystemdServiceManager:
             "started_at": container_state.get("started_at") or None,
             "finished_at": container_state.get("finished_at") or None,
         }
+
+    def _text_llm_model_residency_status(
+        self,
+        *,
+        state: str | None = None,
+        pid: int | None = None,
+        active_model_ids: list[str] | None = None,
+        observed_vram_mib: int | None = None,
+    ) -> ModelResidencyStatus:
+        runtime_state = str(state or "").strip().lower()
+        if not runtime_state:
+            socket_ready = bool(self._local_llm_socket and os.path.exists(self._local_llm_socket))
+            health_ready = bool(self._local_llm_health_socket and os.path.exists(self._local_llm_health_socket))
+            runtime_state = "running" if socket_ready and health_ready else "stopped"
+        active_models = [
+            str(item or "").strip()
+            for item in (list(active_model_ids) if isinstance(active_model_ids, list) else self._active_local_llm_model_ids())
+            if str(item or "").strip()
+        ]
+        container_state = "running" if (pid or runtime_state == "running") else runtime_state
+        if runtime_state == "unknown":
+            container_state = "unknown"
+        model_state = "loaded" if active_models else ("loading" if runtime_state == "running" else "unloaded")
+        return ModelResidencyStatus(
+            component_id="text_llm",
+            adapter_id="llamacpp",
+            container_state=normalize_container_state(container_state),
+            model_state=normalize_model_state(model_state),
+            loaded_model=active_models[0] if active_models else None,
+            loaded_models=active_models,
+            observed_vram_mib=observed_vram_mib,
+            can_load_model=True,
+            can_unload_model=False,
+            unload_model_mode="container_stop_fallback",
+            reason="text_llm_model_unload_requires_container_stop_fallback",
+        )
+
+    def _vision_llm_model_residency_status(
+        self,
+        *,
+        residency: dict | None = None,
+        state: str | None = None,
+        pid: int | None = None,
+        observed_vram_mib: int | None = None,
+    ) -> ModelResidencyStatus:
+        payload = residency if isinstance(residency, dict) else self.vision_runtime_status()
+        active_models = [
+            str(item or "").strip()
+            for item in list(payload.get("active_model_ids") or [])
+            if str(item or "").strip()
+        ]
+        container_running = bool(payload.get("container_running")) or bool(pid)
+        runtime_ready = bool(payload.get("runtime_ready"))
+        model_loaded = bool(payload.get("model_loaded"))
+        if model_loaded:
+            model_state = "loaded"
+        elif container_running and runtime_ready:
+            model_state = "unloaded"
+        elif container_running:
+            model_state = "loading"
+        else:
+            model_state = "unloaded"
+        return ModelResidencyStatus(
+            component_id="vision_llm",
+            adapter_id="llamacpp_vision",
+            container_state=normalize_container_state("running" if container_running else state or "stopped"),
+            model_state=normalize_model_state(model_state),
+            loaded_model=active_models[0] if active_models else (self._vision_llm_default_model_id if model_loaded else None),
+            loaded_models=active_models or ([self._vision_llm_default_model_id] if model_loaded else []),
+            observed_vram_mib=observed_vram_mib,
+            can_load_model=True,
+            can_unload_model=False,
+            unload_model_mode=str(payload.get("unload_model_mode") or "container_stop_fallback"),
+            reason=payload.get("reason"),
+        )
+
+    def _visual_model_residency_status(
+        self,
+        *,
+        runtime: str,
+        state: str | None = None,
+        pid: int | None = None,
+        observed_vram_mib: int | None = None,
+    ) -> ModelResidencyStatus:
+        runtime_key = "cpu" if str(runtime or "").strip().lower() == "cpu" else "gpu"
+        runtime_state = str(state or "").strip().lower()
+        if not runtime_state:
+            socket_path = self._comfyui_cpu_socket if runtime_key == "cpu" else self._comfyui_gpu_socket
+            health_socket = self._comfyui_cpu_health_socket if runtime_key == "cpu" else self._comfyui_gpu_health_socket
+            socket_ready = bool(socket_path and os.path.exists(socket_path))
+            health_ready = bool(health_socket and os.path.exists(health_socket))
+            runtime_state = "running" if socket_ready and health_ready else "stopped"
+        if observed_vram_mib is not None and int(observed_vram_mib) > 512:
+            model_state = "loaded"
+        elif pid or runtime_state == "running":
+            model_state = "unloaded"
+        else:
+            model_state = "unloaded"
+        return ModelResidencyStatus(
+            component_id=f"visual_{runtime_key}",
+            adapter_id=f"comfyui_{runtime_key}",
+            container_state=normalize_container_state("running" if pid else runtime_state),
+            model_state=normalize_model_state(model_state),
+            loaded_model=None,
+            loaded_models=[],
+            observed_vram_mib=observed_vram_mib,
+            can_load_model=True,
+            can_unload_model=False,
+            unload_model_mode="container_stop_fallback",
+            reason="comfyui_model_unload_endpoint_not_available",
+        )
+
+    def _training_model_residency_status(self) -> ModelResidencyStatus:
+        active = self._sd_scripts_training_active()
+        return ModelResidencyStatus(
+            component_id="training_runtime",
+            adapter_id="sd_scripts",
+            container_state="running" if active else "stopped",
+            model_state="loaded" if active else "unloaded",
+            loaded_model="sdxl-training-process" if active else None,
+            loaded_models=["sdxl-training-process"] if active else [],
+            active_jobs=1 if active else 0,
+            can_load_model=False,
+            can_unload_model=False,
+            unload_model_mode="job_scoped",
+            reason="training_runtime_is_job_scoped",
+        )
 
     def _comfyui_webui_status(self) -> dict:
         pid = self._read_pid_file(self._comfyui_webui_pid_file)
@@ -2641,3 +2859,47 @@ class NullServiceManager:
             "unload_model_mode": "container_stop_fallback",
             **self.vision_runtime_status(),
         }
+
+    def ensure_container_running(self, component_id: str) -> dict:
+        return {
+            "status": "blocked",
+            "component_id": str(component_id or "").strip(),
+            "result": "service_manager_unconfigured",
+            "model_residency": self.model_residency_status(component_id),
+        }
+
+    def load_model(self, component_id: str, model_id: str | None = None, metadata: dict | None = None) -> dict:
+        return {
+            "status": "blocked",
+            "component_id": str(component_id or "").strip(),
+            "result": "service_manager_unconfigured",
+            "model_id": str(model_id or "").strip() or None,
+            "model_residency": self.model_residency_status(component_id),
+        }
+
+    def unload_model(self, component_id: str, metadata: dict | None = None) -> dict:
+        return {
+            "status": "blocked",
+            "component_id": str(component_id or "").strip(),
+            "result": "service_manager_unconfigured",
+            "model_residency": self.model_residency_status(component_id),
+        }
+
+    def model_residency_status(self, component_id: str) -> dict:
+        component = UserSystemdServiceManager._normalize_local_scheduler_component_id(component_id)
+        adapter = {
+            "text_llm": "llamacpp",
+            "vision_llm": "llamacpp_vision",
+            "visual_gpu": "comfyui_gpu",
+            "visual_cpu": "comfyui_cpu",
+            "training_runtime": "sd_scripts",
+        }.get(component, "unknown")
+        return ModelResidencyStatus(
+            component_id=component,
+            adapter_id=adapter,
+            container_state="unknown",
+            model_state="unsupported",
+            can_load_model=False,
+            can_unload_model=False,
+            reason="service_manager_unconfigured",
+        ).to_payload()

@@ -585,3 +585,4 @@ Task 1010: Implement local-preferred cloud spillover decisions - Completed on 06
 Task 1011: Route visual GPU CPU and training work through lanes - Completed on 06/13/2026 12:42
 Task 1012: Surface unified queue lanes in APIs and Runtime UI - Completed on 06/13/2026 12:45
 Task 1013: Update Client AI communication docs for unified queue lanes - Completed on 06/13/2026 12:48
+Task 1014: Add runtime model-residency adapters while keeping containers running - Completed on 06/13/2026 16:27
