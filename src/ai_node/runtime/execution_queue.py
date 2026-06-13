@@ -95,13 +95,15 @@ class ExecutionQueueService:
         job_id = f"job-{uuid.uuid4().hex[:16]}"
         now = local_now()
         client_key = str(client_id or "").strip()
+        normalized_queue_intent = deepcopy(queue_intent) if isinstance(queue_intent, dict) else {}
+        deadline_sort = self._deadline_sort_value(queue_intent=normalized_queue_intent)
         job = {
             "job_id": job_id,
             "job_name": str(job_name or job_id).strip() or job_id,
             "client_id": client_key or None,
             "queue": queue_key,
             "importance": importance_key if importance_key in IMPORTANCE_RANK else "normal",
-            "queue_intent": deepcopy(queue_intent) if isinstance(queue_intent, dict) else None,
+            "queue_intent": normalized_queue_intent or None,
             "routing_decision": deepcopy(routing_decision) if isinstance(routing_decision, dict) else None,
             "status": "queued",
             "request": deepcopy(request_payload) if isinstance(request_payload, dict) else {},
@@ -129,8 +131,25 @@ class ExecutionQueueService:
                         "max_pending_per_client": self._max_pending_per_client,
                         "check_after_seconds": self._check_after_seconds,
                     }
+            estimated_start_seconds = self._estimated_start_seconds_locked(
+                queue_key=queue_key,
+                position=len(self._queues.get(queue_key) or []) + 1,
+            )
+            max_wait_seconds = self._queue_intent_max_wait_seconds(normalized_queue_intent)
+            if max_wait_seconds is not None and estimated_start_seconds > max_wait_seconds:
+                return {
+                    "status": "rejected",
+                    "error_code": "rejected_deadline_unreachable",
+                    "error_message": "queue_wait_budget_unreachable",
+                    "queue": queue_key,
+                    "importance": job["importance"],
+                    "queue_intent": normalized_queue_intent or None,
+                    "estimated_start_seconds": estimated_start_seconds,
+                    "max_wait_seconds": max_wait_seconds,
+                    "check_after_seconds": self._check_after_seconds,
+                }
             self._jobs[job_id] = job
-            heapq.heappush(self._queues[queue_key], (rank, sequence, job_id))
+            heapq.heappush(self._queues[queue_key], self._queue_entry(rank=rank, deadline_sort=deadline_sort, sequence=sequence, job_id=job_id))
             self._persist_jobs_locked()
             self._ensure_dispatcher_locked(queue_key)
         return self.queued_response(job_id=job_id)
@@ -152,7 +171,7 @@ class ExecutionQueueService:
             if current_status == "queued":
                 queue_key = str(job.get("queue") or "")
                 self._queues[queue_key] = [
-                    item for item in list(self._queues.get(queue_key) or []) if item[2] != normalized_job_id
+                    item for item in list(self._queues.get(queue_key) or []) if self._job_id_from_queue_entry(item) != normalized_job_id
                 ]
                 heapq.heapify(self._queues[queue_key])
                 cancelled_at = local_now_iso()
@@ -177,7 +196,7 @@ class ExecutionQueueService:
         async with self._lock:
             queues = {}
             for queue_key, entries in self._queues.items():
-                queued_ids = [item[2] for item in sorted(entries)]
+                queued_ids = [self._job_id_from_queue_entry(item) for item in sorted(entries)]
                 per_importance: dict[str, int] = {}
                 per_client_pending: dict[str, int] = {}
                 oldest_queued_at = None
@@ -343,7 +362,8 @@ class ExecutionQueueService:
                 queue_entries = self._queues.get(queue_key) or []
                 if not queue_entries:
                     return
-                _, _, job_id = heapq.heappop(queue_entries)
+                entry = heapq.heappop(queue_entries)
+                job_id = self._job_id_from_queue_entry(entry)
                 job = self._jobs.get(job_id)
                 if not isinstance(job, dict) or job.get("status") != "queued":
                     continue
@@ -394,7 +414,7 @@ class ExecutionQueueService:
         if not isinstance(job, dict):
             return None
         queue_key = str(job.get("queue") or "")
-        queued_ids = [item[2] for item in sorted(self._queues.get(queue_key) or [])]
+        queued_ids = [self._job_id_from_queue_entry(item) for item in sorted(self._queues.get(queue_key) or [])]
         if job_id not in queued_ids:
             return None
         return queued_ids.index(job_id) + 1
@@ -417,17 +437,58 @@ class ExecutionQueueService:
         position = self._queue_position(job_id=job_id)
         if position is None:
             return None
-        concurrency = max(self._concurrency(queue_key), 1)
-        active_count = max(int(self._active_counts.get(queue_key, 0) or 0), 0)
-        jobs_ahead = max(active_count + position - 1, 0)
-        waves_ahead = (jobs_ahead + concurrency - 1) // concurrency if jobs_ahead else 0
-        estimated_seconds = waves_ahead * self._check_after_seconds
+        estimated_seconds = self._estimated_start_seconds_locked(queue_key=queue_key, position=position)
         return {
             "estimated_start_seconds": estimated_seconds,
             "estimated_start_at": (local_now() + timedelta(seconds=estimated_seconds)).isoformat(),
             "source": "queue_position",
             "confidence": "rough",
         }
+
+    def _estimated_start_seconds_locked(self, *, queue_key: str, position: int) -> int:
+        concurrency = max(self._concurrency(queue_key), 1)
+        active_count = max(int(self._active_counts.get(queue_key, 0) or 0), 0)
+        jobs_ahead = max(active_count + max(int(position), 1) - 1, 0)
+        waves_ahead = (jobs_ahead + concurrency - 1) // concurrency if jobs_ahead else 0
+        return int(waves_ahead * self._check_after_seconds)
+
+    @staticmethod
+    def _job_id_from_queue_entry(entry) -> str:
+        if isinstance(entry, tuple) and entry:
+            return str(entry[-1] or "")
+        return ""
+
+    @staticmethod
+    def _queue_entry(*, rank: int, deadline_sort: float, sequence: int, job_id: str) -> tuple:
+        return (int(rank), float(deadline_sort), int(sequence), str(job_id))
+
+    @staticmethod
+    def _queue_intent_max_wait_seconds(queue_intent: dict) -> int | None:
+        if not isinstance(queue_intent, dict):
+            return None
+        value = queue_intent.get("max_wait_seconds")
+        if value is None:
+            return None
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed >= 0 else None
+
+    @staticmethod
+    def _deadline_sort_value(*, queue_intent: dict) -> float:
+        if not isinstance(queue_intent, dict):
+            return float("inf")
+        deadline = queue_intent.get("deadline_at")
+        if deadline:
+            try:
+                return datetime.fromisoformat(str(deadline)).timestamp()
+            except Exception:
+                pass
+        max_wait = ExecutionQueueService._queue_intent_max_wait_seconds(queue_intent)
+        if max_wait is not None:
+            return (local_now() + timedelta(seconds=max_wait)).timestamp()
+        return float("inf")
 
     def _concurrency(self, queue_key: str) -> int:
         return max(int(self._queue_concurrency.get(queue_key) or self._cloud_concurrency), 1)
