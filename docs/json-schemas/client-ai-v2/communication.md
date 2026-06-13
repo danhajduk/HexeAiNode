@@ -364,6 +364,11 @@ longer wait budgets unless the user is actively waiting for the result. Queue la
 `visual_gpu`, `visual_cpu`, and `training_runtime`. Technical adapter identifiers such as `comfyui_gpu`,
 `comfyui_cpu`, and `sd_scripts` may still appear in runtime assignment or debug metadata.
 
+Visual Runtime and Training Runtime jobs are slow jobs. Clients must not send `timeout_s` below `180` seconds for
+`visual_gpu`, `visual_cpu`, or `training_runtime` work, even when the job is interactive. Visual jobs can include cold
+runtime startup and model load time, and training jobs need enough execution budget to report progress or complete the
+current training step cleanly.
+
 Queued responses use HTTP `200` and this shape:
 
 ```json
