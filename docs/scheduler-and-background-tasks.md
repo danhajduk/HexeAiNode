@@ -88,6 +88,15 @@ Runtime lanes:
 - `visual_cpu`: CPU/low-resource Visual Runtime work where supported.
 - `training_runtime`: local LoRA/training work.
 
+Residency mapping:
+
+- `text_llm` -> Text LLM
+- `vision_llm` -> Vision LLM
+- `visual_gpu` -> Visual Runtime GPU
+- `visual_cpu` -> Visual Runtime CPU
+- `training_runtime` -> Training Runtime
+- `cloud` -> no local residency component
+
 Lane capacity contract:
 
 - The scheduler owns the backlog.

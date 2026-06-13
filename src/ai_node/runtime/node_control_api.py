@@ -13832,7 +13832,7 @@ class NodeControlState:
             for component in components
             if isinstance(component, dict)
         }
-        for component_id in ("visual_runtime", "training_runtime"):
+        for component_id in ("visual_gpu", "visual_cpu", "training_runtime"):
             component = runtime_components.get(component_id) or {}
             observed = str(component.get("observed_state") or "").strip().lower()
             desired = str(component.get("desired_state") or "").strip().lower()

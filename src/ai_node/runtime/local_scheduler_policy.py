@@ -3,12 +3,12 @@ from __future__ import annotations
 from copy import deepcopy
 
 
-LOCAL_SCHEDULER_PRIORITY_ORDER = ("text_llm", "vision_llm", "visual_runtime", "training_runtime")
+LOCAL_SCHEDULER_PRIORITY_ORDER = ("text_llm", "vision_llm", "visual_gpu", "visual_cpu", "training_runtime")
 LOCAL_SCHEDULER_PRIORITY = {component_id: index for index, component_id in enumerate(LOCAL_SCHEDULER_PRIORITY_ORDER)}
-LOCAL_SCHEDULER_BACKGROUND_COMPONENTS = {"visual_runtime", "training_runtime"}
+LOCAL_SCHEDULER_BACKGROUND_COMPONENTS = {"visual_gpu", "visual_cpu", "training_runtime"}
 LOCAL_SCHEDULER_IMPORTANCE_VALUES = {"low", "normal", "high", "critical"}
 LOCAL_SCHEDULER_RESERVED_VRAM_MIB = {
-    "visual_runtime": 5 * 1024,
+    "visual_gpu": 5 * 1024,
     "training_runtime": 9 * 1024,
 }
 
@@ -77,12 +77,13 @@ def local_scheduler_policy_payload() -> dict:
         ],
         "rules": [
             "Text LLM and Vision LLM are resident by default.",
-            "Visual Runtime reserves 5 GiB VRAM before job admission.",
+            "Visual Runtime GPU reserves 5 GiB VRAM before job admission.",
+            "Visual Runtime CPU does not reserve GPU VRAM unless a later template policy explicitly requires it.",
             "Training Runtime reserves 9 GiB VRAM before job admission.",
             "Vision LLM unloads before GPU-heavy visual or training work when more VRAM is needed.",
             "Text LLM unloads only as a last resort when the requested GPU runtime still cannot fit.",
-            "Visual Runtime and Training Runtime are background workloads by default.",
-            "Visual Runtime and Training Runtime do not run together unless a later policy explicitly allows it.",
+            "Visual Runtime GPU, Visual Runtime CPU, and Training Runtime are background workloads by default.",
+            "Visual Runtime GPU/CPU and Training Runtime do not run together unless a later policy explicitly allows it.",
         ],
         "reserved_vram_mib": dict(LOCAL_SCHEDULER_RESERVED_VRAM_MIB),
     }
@@ -111,7 +112,8 @@ def plan_local_scheduler_request(
     actions = []
     reasons = []
 
-    visual = components.get("visual_runtime")
+    visual_gpu = components.get("visual_gpu")
+    visual_cpu = components.get("visual_cpu")
     training = components.get("training_runtime")
     vision = components.get("vision_llm")
     text = components.get("text_llm")
@@ -166,24 +168,30 @@ def plan_local_scheduler_request(
             reasons.append(f"{runtime_id}_vram_budget_unavailable")
 
     if requested == "text_llm":
-        if _is_resident(visual):
-            actions.append({"action": "wait_for_idle", "component_id": "visual_runtime", "reason": "text_llm_waits_for_visual_runtime"})
-            affected.append("visual_runtime")
-            reasons.append("visual_runtime_resident")
+        for visual_id, visual in (("visual_gpu", visual_gpu), ("visual_cpu", visual_cpu)):
+            if _is_resident(visual):
+                actions.append({"action": "wait_for_idle", "component_id": visual_id, "reason": f"text_llm_waits_for_{visual_id}"})
+                affected.append(visual_id)
+                reasons.append(f"{visual_id}_resident")
         if _is_resident(training) and _is_busy(training):
             actions.append({"action": "wait_for_idle", "component_id": "training_runtime", "reason": "text_llm_priority"})
             affected.append("training_runtime")
             reasons.append("training_runtime_busy")
     elif requested == "vision_llm":
-        _require_unload("visual_runtime", "vision_requires_visual_runtime_unloaded")
+        _require_unload("visual_gpu", "vision_requires_visual_gpu_unloaded")
+        _require_unload("visual_cpu", "vision_requires_visual_cpu_unloaded")
         _require_unload("training_runtime", "vision_requires_training_runtime_unloaded")
-    elif requested == "visual_runtime":
+    elif requested == "visual_gpu":
         if _is_resident(training):
-            _require_unload("training_runtime", "visual_runtime_requires_training_runtime_unloaded")
-        _ensure_vram_for_runtime("visual_runtime", ("vision_llm", "text_llm"))
+            _require_unload("training_runtime", "visual_gpu_requires_training_runtime_unloaded")
+        _ensure_vram_for_runtime("visual_gpu", ("vision_llm", "text_llm"))
+    elif requested == "visual_cpu":
+        if _is_resident(training):
+            _require_unload("training_runtime", "visual_cpu_requires_training_runtime_unloaded")
     elif requested == "training_runtime":
-        _require_unload("visual_runtime", "training_runtime_requires_visual_runtime_unloaded")
-        _ensure_vram_for_runtime("training_runtime", ("vision_llm", "visual_runtime", "text_llm"))
+        _require_unload("visual_gpu", "training_runtime_requires_visual_gpu_unloaded")
+        _require_unload("visual_cpu", "training_runtime_requires_visual_cpu_unloaded")
+        _ensure_vram_for_runtime("training_runtime", ("vision_llm", "visual_gpu", "text_llm"))
 
     if any(action.get("action") == "wait_for_idle" for action in actions):
         decision = "waiting_for_idle"

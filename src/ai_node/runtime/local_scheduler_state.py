@@ -28,12 +28,20 @@ LOCAL_SCHEDULER_COMPONENTS = (
         "priority": 20,
     },
     {
-        "component_id": "visual_runtime",
-        "display_name": "Visual Runtime",
-        "adapter_id": "comfyui",
-        "state_filename": "visual_runtime.state.json",
-        "legacy_state_filenames": ("comfyui.state.json",),
+        "component_id": "visual_gpu",
+        "display_name": "Visual Runtime GPU",
+        "adapter_id": "comfyui_gpu",
+        "state_filename": "visual_gpu.state.json",
+        "legacy_state_filenames": ("visual_runtime.state.json", "comfyui.state.json"),
+        "legacy_component_ids": ("visual_runtime", "comfyui"),
         "priority": 30,
+    },
+    {
+        "component_id": "visual_cpu",
+        "display_name": "Visual Runtime CPU",
+        "adapter_id": "comfyui_cpu",
+        "state_filename": "visual_cpu.state.json",
+        "priority": 35,
     },
     {
         "component_id": "training_runtime",
@@ -193,7 +201,8 @@ def normalize_local_scheduler_component_state(data: object, *, component: dict) 
     if str(data.get("schema_version") or "").strip() != LOCAL_SCHEDULER_STATE_SCHEMA_VERSION:
         raise ValueError("invalid_local_scheduler_component_state_schema")
     component_id = str(component.get("component_id") or "").strip()
-    if str(data.get("component_id") or "").strip() not in {"", component_id}:
+    legacy_component_ids = {str(item or "").strip() for item in tuple(component.get("legacy_component_ids") or ())}
+    if str(data.get("component_id") or "").strip() not in {"", component_id, *legacy_component_ids}:
         raise ValueError("local_scheduler_component_mismatch")
     normalized = create_local_scheduler_component_state(component=component)
     normalized.update(
@@ -600,12 +609,17 @@ def metrics_sample_from_observed(observed: dict) -> dict:
     }
 
 
-def _aggregate_visual_runtime(services: dict) -> tuple[str, str, list, dict]:
+def _aggregate_visual_runtime(services: dict, *, runtime: str) -> tuple[str, str, list, dict]:
+    runtime_key = "cpu" if str(runtime or "").strip().lower() == "cpu" else "gpu"
+    service_key = f"comfyui_{runtime_key}"
+    webui = services.get("comfyui_webui") if isinstance(services.get("comfyui_webui"), dict) else {}
+    webui_session = webui.get("session") if isinstance(webui.get("session"), dict) else {}
+    webui_runtime = str(webui_session.get("runtime") or webui.get("runtime") or "").strip().lower()
     entries = [
-        services.get("comfyui_gpu") if isinstance(services.get("comfyui_gpu"), dict) else {},
-        services.get("comfyui_cpu") if isinstance(services.get("comfyui_cpu"), dict) else {},
-        services.get("comfyui_webui") if isinstance(services.get("comfyui_webui"), dict) else {},
+        services.get(service_key) if isinstance(services.get(service_key), dict) else {},
     ]
+    if webui_runtime == runtime_key:
+        entries.append(webui)
     states = [_observed_from_service_state(_service_state(entry)) for entry in entries]
     if "running" in states:
         observed = "running"
@@ -676,8 +690,11 @@ def observed_component_state(*, component_id: str, services: dict) -> dict:
             "idle": {"active": observed in {"running", "starting"}},
             "resource_snapshot": _resource_from_service(service),
         }
-    if component_id == "visual_runtime":
-        observed, phase, blockers, resource_snapshot = _aggregate_visual_runtime(services)
+    if component_id in {"visual_gpu", "visual_cpu"}:
+        observed, phase, blockers, resource_snapshot = _aggregate_visual_runtime(
+            services,
+            runtime="cpu" if component_id == "visual_cpu" else "gpu",
+        )
         return {
             "observed_state": observed,
             "phase": phase,

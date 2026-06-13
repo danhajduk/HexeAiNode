@@ -35,12 +35,12 @@ function componentStats(component) {
 
 function componentWork({ component, executionQueue }) {
   const idle = serviceObject(component.idle);
-  if (component.component_id === "text_llm") {
-    const queues = serviceObject(executionQueue?.queues);
-    const localQueue = serviceObject(queues.local);
+  const lanes = serviceObject(executionQueue?.lanes);
+  const lane = serviceObject(lanes[component.component_id]);
+  if (Object.keys(lane).length) {
     return {
-      inFlight: Number.isFinite(Number(localQueue.active_count)) ? Number(localQueue.active_count) : idle.in_flight ?? 0,
-      queued: Number.isFinite(Number(localQueue.queued_count)) ? Number(localQueue.queued_count) : idle.queued ?? 0,
+      inFlight: Number.isFinite(Number(lane.active_count)) ? Number(lane.active_count) : idle.in_flight ?? 0,
+      queued: Number.isFinite(Number(lane.queued_count)) ? Number(lane.queued_count) : idle.queued ?? 0,
     };
   }
   return {

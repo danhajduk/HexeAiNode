@@ -36,6 +36,15 @@ LANE_CAPACITY = {
     "training_runtime": {"max_active": 1, "max_staged": 1, "local_residency_required": True},
 }
 
+RESIDENCY_COMPONENT_BY_LANE = {
+    "cloud": None,
+    "text_llm": "text_llm",
+    "vision_llm": "vision_llm",
+    "visual_gpu": "visual_gpu",
+    "visual_cpu": "visual_cpu",
+    "training_runtime": "training_runtime",
+}
+
 QUEUE_LANE_ALIASES = {
     "cloud": "cloud",
     "cloud_queue": "cloud",
@@ -102,10 +111,16 @@ def lane_capacity(runtime_lane: object) -> dict:
     return dict(LANE_CAPACITY.get(lane) or LANE_CAPACITY["text_llm"])
 
 
+def residency_component_for_lane(runtime_lane: object) -> str | None:
+    lane = normalize_runtime_lane(runtime_lane)
+    return RESIDENCY_COMPONENT_BY_LANE.get(lane)
+
+
 def lane_contract_snapshot() -> dict:
     return {
         lane: {
             "lane": lane,
+            "residency_component_id": residency_component_for_lane(lane),
             **lane_capacity(lane),
         }
         for lane in RUNTIME_LANES

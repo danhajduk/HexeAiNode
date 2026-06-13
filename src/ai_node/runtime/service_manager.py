@@ -182,6 +182,18 @@ class UserSystemdServiceManager:
     def _set_scheduler_control_active(self, active: bool) -> None:
         self._local_scheduler_control_context.active = bool(active)
 
+    def _comfyui_scheduler_component(self) -> str:
+        return "visual_cpu" if self._comfyui_webui_runtime == "cpu" else "visual_gpu"
+
+    @staticmethod
+    def _normalize_local_scheduler_component_id(component_id: str) -> str:
+        normalized = str(component_id or "").strip().lower().replace("-", "_")
+        if normalized in {"visual_runtime", "comfyui", "comfyui_gpu", "gpu_comfyui"}:
+            return "visual_gpu"
+        if normalized in {"comfyui_cpu", "cpu_comfyui"}:
+            return "visual_cpu"
+        return normalized
+
     def get_status(self) -> dict:
         backend = self._unit_status(self._backend_unit, service_id="backend")
         frontend = self._unit_status(self._frontend_unit, service_id="frontend")
@@ -246,12 +258,13 @@ class UserSystemdServiceManager:
             )
             return {"target": "vision_llm", "result": request.get("status"), "release": release, "request": request}
         if value == "comfyui_webui":
+            component_id = self._comfyui_scheduler_component()
             release = self.release_local_scheduler_component(
-                component_id="visual_runtime",
+                component_id=component_id,
                 request_metadata={"source": "service_restart", "target": value},
             )
             request = self.request_local_scheduler_component(
-                component_id="visual_runtime",
+                component_id=component_id,
                 importance="high",
                 request_metadata={"source": "service_restart", "target": value},
             )
@@ -314,7 +327,7 @@ class UserSystemdServiceManager:
         if value == "comfyui_webui":
             if not self._scheduler_control_active():
                 request = self.request_local_scheduler_component(
-                    component_id="visual_runtime",
+                    component_id=self._comfyui_scheduler_component(),
                     importance="high",
                     request_metadata={"source": "service_start", "target": value},
                 )
@@ -359,7 +372,7 @@ class UserSystemdServiceManager:
         if value == "comfyui_webui":
             if not self._scheduler_control_active():
                 return self.release_local_scheduler_component(
-                    component_id="visual_runtime",
+                    component_id=self._comfyui_scheduler_component(),
                     request_metadata={"source": "service_stop", "target": value},
                 )
             return self.stop_comfyui_webui()
@@ -372,7 +385,7 @@ class UserSystemdServiceManager:
         importance: str | None = None,
         request_metadata: dict | None = None,
     ) -> dict:
-        requested = str(component_id or "").strip()
+        requested = self._normalize_local_scheduler_component_id(component_id)
         metadata = dict(request_metadata or {})
         if importance:
             metadata["importance"] = str(importance)
@@ -443,7 +456,7 @@ class UserSystemdServiceManager:
             }
 
     def release_local_scheduler_component(self, *, component_id: str, request_metadata: dict | None = None) -> dict:
-        requested = str(component_id or "").strip()
+        requested = self._normalize_local_scheduler_component_id(component_id)
         with self._local_scheduler_transition_lock:
             self._local_scheduler_state_store.update_desired_state(
                 component_id=requested,
@@ -479,12 +492,21 @@ class UserSystemdServiceManager:
             return self.start(target="local_llm")
         if component_id == "vision_llm":
             return {"target": "vision_llm", "result": "started", **self.ensure_vision_runtime_resident(local_in_flight=0)}
-        if component_id == "visual_runtime":
+        if component_id == "visual_gpu":
             started = time.perf_counter()
             self._run_comfyui_control("gpu", "ready")
             return {
-                "target": "visual_runtime",
-                "adapter": "comfyui",
+                "target": "visual_gpu",
+                "adapter": "comfyui_gpu",
+                "result": "started",
+                "load_seconds": round(time.perf_counter() - started, 3),
+            }
+        if component_id == "visual_cpu":
+            started = time.perf_counter()
+            self._run_comfyui_control("cpu", "ready")
+            return {
+                "target": "visual_cpu",
+                "adapter": "comfyui_cpu",
                 "result": "started",
                 "load_seconds": round(time.perf_counter() - started, 3),
             }
@@ -502,14 +524,14 @@ class UserSystemdServiceManager:
             return self.stop(target="local_llm")
         if component_id == "vision_llm":
             return self.unload_vision_model()
-        if component_id == "visual_runtime":
+        if component_id == "visual_gpu":
             started = time.perf_counter()
             self.stop_comfyui_progress_listener()
             if self._manual_comfyui_webui_active():
                 result = self.stop_comfyui_webui()
                 return {
-                    "target": "visual_runtime",
-                    "adapter": "comfyui",
+                    "target": "visual_gpu",
+                    "adapter": "comfyui_gpu",
                     "result": "stopped",
                     "unload_seconds": round(time.perf_counter() - started, 3),
                     "webui_stop_result": result,
@@ -517,8 +539,27 @@ class UserSystemdServiceManager:
             self._run_comfyui_control("gpu", "stop")
             self._wait_comfyui_runtime_stopped(runtime="gpu")
             return {
-                "target": "visual_runtime",
-                "adapter": "comfyui",
+                "target": "visual_gpu",
+                "adapter": "comfyui_gpu",
+                "result": "stopped",
+                "unload_seconds": round(time.perf_counter() - started, 3),
+            }
+        if component_id == "visual_cpu":
+            started = time.perf_counter()
+            if self._manual_comfyui_webui_active():
+                result = self.stop_comfyui_webui()
+                return {
+                    "target": "visual_cpu",
+                    "adapter": "comfyui_cpu",
+                    "result": "stopped",
+                    "unload_seconds": round(time.perf_counter() - started, 3),
+                    "webui_stop_result": result,
+                }
+            self._run_comfyui_control("cpu", "stop")
+            self._wait_comfyui_runtime_stopped(runtime="cpu")
+            return {
+                "target": "visual_cpu",
+                "adapter": "comfyui_cpu",
                 "result": "stopped",
                 "unload_seconds": round(time.perf_counter() - started, 3),
             }
@@ -972,7 +1013,7 @@ class UserSystemdServiceManager:
     def start_comfyui_webui(self) -> dict:
         if not self._scheduler_control_active():
             request = self.request_local_scheduler_component(
-                component_id="visual_runtime",
+                component_id=self._comfyui_scheduler_component(),
                 importance="high",
                 request_metadata={"source": "comfyui_webui_start", "target": "comfyui_webui"},
             )
@@ -1047,7 +1088,7 @@ class UserSystemdServiceManager:
     def stop_comfyui_webui(self) -> dict:
         if not self._scheduler_control_active():
             return self.release_local_scheduler_component(
-                component_id="visual_runtime",
+                component_id=self._comfyui_scheduler_component(),
                 request_metadata={"source": "comfyui_webui_stop", "target": "comfyui_webui"},
             )
         self.stop_comfyui_progress_listener()
@@ -1098,7 +1139,7 @@ class UserSystemdServiceManager:
         if float(idle_seconds) < self._comfyui_webui_idle_timeout_seconds:
             return {"closed": False, "reason": "idle_timeout_not_reached", "session": session_status}
         result = self.release_local_scheduler_component(
-            component_id="visual_runtime",
+            component_id=self._comfyui_scheduler_component(),
             request_metadata={"source": "comfyui_webui_idle_close", "target": "comfyui_webui"},
         )
         vision_restore = self.request_local_scheduler_component(

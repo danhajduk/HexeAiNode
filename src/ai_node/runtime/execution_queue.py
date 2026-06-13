@@ -14,6 +14,7 @@ from ai_node.execution.queue_contract import (
     lane_capacity,
     lane_contract_snapshot,
     normalize_runtime_lane,
+    residency_component_for_lane,
 )
 from ai_node.time_utils import local_now, local_now_iso
 
@@ -859,6 +860,7 @@ class ExecutionQueueService:
         lanes = {
             lane: {
                 "lane": lane,
+                "residency_component_id": residency_component_for_lane(lane),
                 "queued_count": 0,
                 "active_count": 0,
                 "staged_count": 0,
