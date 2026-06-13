@@ -10,6 +10,8 @@ import threading
 import time
 from pathlib import Path
 
+from ai_node.runtime.local_scheduler_state import LocalSchedulerStateStore
+
 
 LOCAL_LLM_BUILTIN_DEFAULT_MODEL_ID = "qwen3-8b-q4_k_m"
 LOCAL_LLM_DEFAULT_REVERT_IDLE_SECONDS = 900
@@ -169,6 +171,7 @@ class UserSystemdServiceManager:
         uid = os.getuid()
         self._runtime_dir = f"/run/user/{uid}"
         self._bus_address = f"unix:path={self._runtime_dir}/bus"
+        self._local_scheduler_state_store = LocalSchedulerStateStore(logger=logger)
 
     def get_status(self) -> dict:
         backend = self._unit_status(self._backend_unit, service_id="backend")
@@ -178,7 +181,7 @@ class UserSystemdServiceManager:
         node = "running" if backend_state == "running" and frontend_state == "running" else "degraded"
         if backend_state == "unknown" and frontend_state == "unknown":
             node = "unknown"
-        return {
+        services = {
             "backend": backend,
             "frontend": frontend,
             "local_llm": self._local_llm_status(),
@@ -186,8 +189,11 @@ class UserSystemdServiceManager:
             "comfyui_gpu": self._comfyui_runtime_status(runtime="gpu"),
             "comfyui_cpu": self._comfyui_runtime_status(runtime="cpu"),
             "comfyui_webui": self._comfyui_webui_status(),
+            "gpu_exclusive": self.gpu_exclusive_workload_status(),
             "node": node,
         }
+        services["local_scheduler"] = self._local_scheduler_state_store.status_from_services(services=services)
+        return services
 
     def restart(self, *, target: str) -> dict:
         value = str(target or "").strip().lower()

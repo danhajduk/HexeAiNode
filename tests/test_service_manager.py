@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.request import urlopen
 from unittest.mock import patch
 
+from ai_node.runtime.local_scheduler_state import LocalSchedulerStateStore
 from ai_node.runtime.service_manager import UserSystemdServiceManager
 
 
@@ -65,28 +66,59 @@ class ServiceManagerTests(unittest.TestCase):
         return config_path
 
     def test_get_status_maps_systemctl_states(self):
-        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {"HEXE_LOCAL_SCHEDULER_STATE_DIR": str(Path(tmp) / "local-scheduler")},
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
 
-        calls = {"count": 0}
+            calls = {"count": 0}
 
-        def _fake_run(cmd, check, capture_output, text, env=None):
-            if cmd[:2] == ["docker", "inspect"]:
-                return _Completed("0\n")
-            if cmd[:3] == ["systemctl", "--user", "show"]:
-                return _Completed("MainPID=0\n")
-            self.assertEqual(cmd[:3], ["systemctl", "--user", "is-active"])
-            calls["count"] += 1
-            return _Completed("active\n" if calls["count"] == 1 else "failed\n")
+            def _fake_run(cmd, check, capture_output, text, env=None):
+                if cmd[:2] == ["docker", "inspect"]:
+                    return _Completed("0\n")
+                if cmd[:3] == ["systemctl", "--user", "show"]:
+                    return _Completed("MainPID=0\n")
+                if cmd[:2] == ["pgrep", "-f"]:
+                    return _Completed("")
+                self.assertEqual(cmd[:3], ["systemctl", "--user", "is-active"])
+                calls["count"] += 1
+                return _Completed("active\n" if calls["count"] == 1 else "failed\n")
 
-        with patch("subprocess.run", side_effect=_fake_run):
-            payload = manager.get_status()
+            with patch("subprocess.run", side_effect=_fake_run):
+                payload = manager.get_status()
         self.assertEqual(payload["backend"]["state"], "running")
         self.assertEqual(payload["frontend"]["state"], "failed")
         self.assertEqual(payload["local_llm"]["service_id"], "local_llm")
         self.assertEqual(payload["comfyui_gpu"]["service_id"], "comfyui_gpu")
         self.assertEqual(payload["comfyui_cpu"]["service_id"], "comfyui_cpu")
         self.assertEqual(payload["comfyui_webui"]["service_id"], "comfyui_webui")
+        self.assertIn("gpu_exclusive", payload)
+        self.assertIn("local_scheduler", payload)
+        component_ids = {item["component_id"] for item in payload["local_scheduler"]["components"]}
+        self.assertEqual(component_ids, {"text_llm", "vision_llm", "visual_runtime", "training_runtime"})
         self.assertEqual(payload["node"], "degraded")
+
+    def test_local_scheduler_state_store_recovers_corrupt_component_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LocalSchedulerStateStore(state_dir=Path(tmp), logger=logging.getLogger("service-manager-test"))
+            (Path(tmp) / "visual_runtime.state.json").write_text("{not json", encoding="utf-8")
+
+            payload = store.status_from_services(
+                services={
+                    "comfyui_gpu": {"service_id": "comfyui_gpu", "state": "stopped"},
+                    "comfyui_cpu": {"service_id": "comfyui_cpu", "state": "stopped"},
+                    "comfyui_webui": {"service_id": "comfyui_webui", "state": "stopped"},
+                    "gpu_exclusive": {"sd_scripts_training_active": False},
+                }
+            )
+
+            components = {item["component_id"]: item for item in payload["components"]}
+            self.assertEqual(components["visual_runtime"]["display_name"], "Visual Runtime")
+            self.assertEqual(components["visual_runtime"]["adapter_id"], "comfyui")
+            self.assertEqual(components["visual_runtime"]["observed_state"], "unloaded")
+            self.assertTrue((Path(tmp) / "visual_runtime.state.json").exists())
 
     def test_restart_node_restarts_both_units(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))

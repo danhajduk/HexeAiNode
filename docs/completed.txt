@@ -566,3 +566,4 @@ Task 991: Add scene/place prompt-reference workflow support - Completed on 06/09
 Task 992: Implement local text-to-pose helper for manual avatar generation - Completed on 06/09/2026 17:06
 Task 993: Face LoRA training upload path for avatar - Completed on 06/12/2026 21:48
 Task 994: Generalize avatar LoRA workflow for Upper Torso - Completed on 06/12/2026 22:27
+Task 995: Add local residency scheduler state contract - Completed on 06/13/2026 09:40

@@ -48,7 +48,6 @@ Standards reference:
 Do not edit above this line:
 #######################################################################
 
-[TODO] Task 995: Add local residency scheduler state contract
 [TODO] Task 996: Track local model resource usage statistics
 [TODO] Task 997: Add local model priority and compatibility policy
 [TODO] Task 998: Implement local scheduler transition executor
