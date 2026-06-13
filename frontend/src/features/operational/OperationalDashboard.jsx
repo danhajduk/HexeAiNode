@@ -7,6 +7,7 @@ import { CapabilitySummaryCard } from "./cards/CapabilitySummaryCard";
 import { ProviderRefreshCard } from "./cards/ProviderRefreshCard";
 import { ResolvedTasksCard } from "./cards/ResolvedTasksCard";
 import { RuntimeServicesCard } from "./cards/RuntimeServicesCard";
+import { LocalResidencyCard } from "./cards/LocalResidencyCard";
 import { ImageTemplatesCard } from "./cards/ImageTemplatesCard";
 import { ManualImageGenerationCard } from "./cards/ManualImageGenerationCard";
 import { AvatarGenerationCard } from "./cards/AvatarGenerationCard";
@@ -169,6 +170,7 @@ export function OperationalDashboard({
               </div>
             </article>
             <RuntimeServicesCard {...runtimeServicesProps} />
+            <LocalResidencyCard {...runtimeServicesProps} />
             <ImageTemplatesCard {...imageTemplatesProps} />
             <OperationalActionsCard {...operationalActions} />
           </>

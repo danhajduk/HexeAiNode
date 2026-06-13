@@ -1422,7 +1422,22 @@ Fields:
 - `Manual Output`
 - `Node`
 
-### 23.3 Shared Actions Card
+### 23.3 Local Residency Card
+
+Subtitle:
+
+- `Scheduler view of local model and runtime residency.`
+
+Shows scheduler-owned residency state for:
+
+- `Text LLM`
+- `Vision LLM`
+- `Visual Runtime`
+- `Training Runtime`
+
+Each component shows desired state, observed state, phase, CPU/RAM usage, queue/in-flight counts, current scheduler decision, adapter detail, and request/release controls. Task availability remains in this card so local/cloud/local+cloud residency decisions are separate from service process status.
+
+### 23.4 Shared Actions Card
 
 The same `Actions` card component from Overview is reused here.
 
