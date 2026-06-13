@@ -991,6 +991,25 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(cpu_image["queue"], "visual_cpu")
             self.assertGreaterEqual(len(catalog["assignments"]), 10)
 
+    def test_declared_task_families_include_scheduler_owned_local_runtimes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                capability_runner=self._FakeCapabilityRunner(),
+            )
+
+            declared = state._declared_task_families_payload()
+            accepted = state._accepted_capability_profile_payload()
+
+            self.assertIn("task.classification", declared)
+            self.assertIn("task.vision_analysis", declared)
+            self.assertIn("task.image_generation", declared)
+            self.assertIn("task.vision_analysis", accepted["declared_task_families"])
+            self.assertIn("task.image_generation", accepted["declared_task_families"])
+
     def test_vision_route_preview_includes_local_vision_runtime_assignment(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:

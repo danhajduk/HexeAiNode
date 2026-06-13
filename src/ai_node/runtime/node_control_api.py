@@ -11010,7 +11010,17 @@ class NodeControlState:
             else {}
         )
         accepted = payload.get("accepted_profile") if isinstance(payload, dict) else {}
-        return accepted if isinstance(accepted, dict) else {}
+        if not isinstance(accepted, dict):
+            accepted = {}
+        runtime_families = self._local_runtime_task_families()
+        if not runtime_families:
+            return accepted
+        accepted_families = accepted.get("declared_task_families")
+        merged_families = self._merge_task_family_lists(
+            accepted_families if isinstance(accepted_families, list) else [],
+            runtime_families,
+        )
+        return {**accepted, "declared_task_families": merged_families}
 
     def _governance_bundle_payload(self) -> dict:
         capability_payload = (
@@ -11129,10 +11139,11 @@ class NodeControlState:
         }
 
     def _declared_task_families_payload(self) -> list[str]:
+        runtime_families = self._local_runtime_task_families()
         accepted_profile = self._accepted_capability_profile_payload()
         accepted_families = accepted_profile.get("declared_task_families") if isinstance(accepted_profile, dict) else []
         if isinstance(accepted_families, list) and accepted_families:
-            return [str(item).strip() for item in accepted_families if str(item).strip()]
+            return self._merge_task_family_lists(accepted_families, runtime_families)
         node_capabilities = self.node_capabilities_payload()
         resolved = (
             node_capabilities.get("enabled_task_capabilities")
@@ -11140,13 +11151,45 @@ class NodeControlState:
             or []
         )
         if isinstance(resolved, list) and resolved:
-            return [str(item).strip() for item in resolved if str(item).strip()]
+            return self._merge_task_family_lists(resolved, runtime_families)
         configured = (
             self._task_capability_selection_config.get("selected_task_families")
             if isinstance(self._task_capability_selection_config, dict)
             else []
         )
-        return [str(item).strip() for item in configured if str(item).strip()]
+        return self._merge_task_family_lists(configured, runtime_families)
+
+    def _local_runtime_task_families(self) -> list[str]:
+        try:
+            assignments = self.local_runtime_assignments_payload().get("assignments")
+        except Exception:
+            return []
+        if not isinstance(assignments, list):
+            return []
+        families: list[str] = []
+        for assignment in assignments:
+            if not isinstance(assignment, dict):
+                continue
+            if str(assignment.get("status") or "").strip().lower() != "selected":
+                continue
+            task_family = str(assignment.get("task_family") or "").strip()
+            if task_family:
+                families.append(task_family)
+        return self._merge_task_family_lists(families)
+
+    @staticmethod
+    def _merge_task_family_lists(*family_lists: object) -> list[str]:
+        merged: list[str] = []
+        seen: set[str] = set()
+        for family_list in family_lists:
+            if not isinstance(family_list, list):
+                continue
+            for item in family_list:
+                normalized = str(item or "").strip()
+                if normalized and normalized not in seen:
+                    merged.append(normalized)
+                    seen.add(normalized)
+        return merged
 
     def _get_task_execution_service(self) -> TaskExecutionService:
         if self._task_execution_service is not None:

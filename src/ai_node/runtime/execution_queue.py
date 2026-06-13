@@ -872,20 +872,50 @@ class ExecutionQueueService:
             }
             for lane in RUNTIME_LANES
         }
-        for queue_key, queue_payload in queues.items():
-            lane = normalize_runtime_lane(queue_payload.get("runtime_lane") or queue_key)
+        queued_by_lane: dict[str, list[dict]] = {lane: [] for lane in RUNTIME_LANES}
+        for job in self._jobs.values():
+            if not isinstance(job, dict):
+                continue
+            status = str(job.get("status") or "").strip().lower()
+            if status not in {"queued", "running"}:
+                continue
+            lane = normalize_runtime_lane(job.get("runtime_lane") or job.get("queue"))
             if lane not in lanes:
                 continue
-            lanes[lane]["queued_count"] += int(queue_payload.get("queued_count") or 0)
-            lanes[lane]["active_count"] += int(queue_payload.get("active_count") or 0)
-            lanes[lane]["staged_count"] += int(queue_payload.get("staged_count") or 0)
-            lanes[lane]["backlog_count"] += int(queue_payload.get("backlog_count") or 0)
-            if lanes[lane]["active_job"] is None and queue_payload.get("active_job"):
-                lanes[lane]["active_job"] = queue_payload.get("active_job")
-            if lanes[lane]["staged_job"] is None and queue_payload.get("staged_job"):
-                lanes[lane]["staged_job"] = queue_payload.get("staged_job")
-            if lanes[lane]["next_job"] is None and queue_payload.get("next_job"):
-                lanes[lane]["next_job"] = queue_payload.get("next_job")
+            if status == "queued":
+                queued_by_lane[lane].append(job)
+                lanes[lane]["queued_count"] += 1
+                continue
+            lanes[lane]["active_count"] += 1
+            if lanes[lane]["active_job"] is None:
+                lanes[lane]["active_job"] = {
+                    "job_id": job.get("job_id"),
+                    "job_name": job.get("job_name"),
+                    "task_id": (job.get("request") or {}).get("task_id") if isinstance(job.get("request"), dict) else None,
+                    "importance": job.get("importance"),
+                    "started_at": job.get("started_at"),
+                    "client_id": job.get("client_id"),
+                    "queue_state": self._queue_state(job=job, eta=self._queue_eta(job_id=str(job.get("job_id") or ""))),
+                }
+        for lane, jobs in queued_by_lane.items():
+            if not jobs:
+                continue
+            jobs = sorted(
+                jobs,
+                key=lambda job: self._queue_entry(
+                    rank=IMPORTANCE_RANK.get(str(job.get("importance") or "normal"), IMPORTANCE_RANK["normal"]),
+                    deadline_sort=self._deadline_sort_value(
+                        queue_intent=job.get("queue_intent") if isinstance(job.get("queue_intent"), dict) else {}
+                    ),
+                    sequence=int(job.get("sequence") or 0),
+                    job_id=str(job.get("job_id") or ""),
+                ),
+            )
+            staged_job = self._queue_job_summary(jobs[0])
+            lanes[lane]["staged_count"] = 1
+            lanes[lane]["backlog_count"] = max(int(lanes[lane]["queued_count"]) - 1, 0)
+            lanes[lane]["staged_job"] = staged_job
+            lanes[lane]["next_job"] = staged_job
         return lanes
 
     def _global_queue_diagnostics_locked(self, *, queues: dict, lanes: dict) -> dict:
