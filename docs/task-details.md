@@ -1849,3 +1849,41 @@ Validation:
 - Existing runtime control and status behavior still maps to the correct underlying adapters.
 - Frontend build passes.
 - Python compile checks pass.
+
+## Task 1006
+Original task details:
+- Update the Client AI communication documentation to reflect the recent queue model and runtime naming changes.
+
+Implementation notes:
+- Update `docs/json-schemas/client-ai-v2/communication.md`.
+- Document Prompt V3 queue intent fields and defaults:
+  - `queue.importance`
+  - `queue.queue_class`
+  - `queue.max_wait_seconds`
+  - `queue.deadline_at`
+  - `queue.allow_cloud_spillover`
+  - `queue.local_preferred`
+  - `queue.reason`
+- Document queue response/status fields added for operator/client visibility:
+  - `queue_state`
+  - queue class
+  - remaining wait budget
+  - estimated start
+  - wait/deadline timestamps
+  - spillover allowed/selected
+  - local unavailable reason
+  - routing decision reason
+- Document deadline monitoring behavior:
+  - local-only jobs expire as `expired_wait_budget`
+  - cloud-allowed local jobs may reroute to cloud after wait budget/deadline expiry
+  - queue wait time is separate from execution time
+- Update user-facing runtime naming:
+  - `Visual Runtime` is the user-facing name for ComfyUI-backed image generation
+  - `Training Runtime` is the user-facing name for sd-scripts LoRA training
+  - keep `comfyui_*`, `cpu_comfyui`, and `sd_scripts` as technical adapter/API identifiers where the contract still uses them
+- Ensure examples do not imply Visual Runtime / Training Runtime jobs are foreground by default; they should be documented as background-capable work with long wait budgets unless overridden.
+
+Validation:
+- Communication MD accurately describes implemented request/response fields.
+- Existing endpoint/API paths remain accurate.
+- Markdown examples are internally consistent with current code.
