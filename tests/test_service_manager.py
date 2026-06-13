@@ -152,6 +152,34 @@ class ServiceManagerTests(unittest.TestCase):
             self.assertEqual(stats["rolling_max"]["vram_mib"], 4096)
             self.assertEqual(stats["rolling_max"]["gpu_util_percent"], 61.5)
 
+    def test_local_scheduler_desired_state_reflects_always_on_policies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LocalSchedulerStateStore(state_dir=Path(tmp), logger=logging.getLogger("service-manager-test"))
+
+            payload = store.status_from_services(
+                services={
+                    "local_llm": {
+                        "service_id": "local_llm",
+                        "state": "running",
+                        "always_on": {"enabled": True},
+                    },
+                    "vision_llm": {
+                        "service_id": "vision_llm",
+                        "state": "running",
+                        "residency": {"enabled": True},
+                    },
+                    "comfyui_gpu": {"service_id": "comfyui_gpu", "state": "stopped"},
+                    "comfyui_cpu": {"service_id": "comfyui_cpu", "state": "stopped"},
+                    "comfyui_webui": {"service_id": "comfyui_webui", "state": "stopped"},
+                    "gpu_exclusive": {"sd_scripts_training_active": False},
+                }
+            )
+
+            components = {item["component_id"]: item for item in payload["components"]}
+            self.assertEqual(components["text_llm"]["desired_state"], "running")
+            self.assertEqual(components["vision_llm"]["desired_state"], "running")
+            self.assertEqual(components["visual_runtime"]["desired_state"], "unloaded")
+
     def test_gpu_process_metrics_reads_vram_and_gpu_util_by_pid(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
 

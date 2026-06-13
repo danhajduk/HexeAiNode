@@ -316,6 +316,11 @@ class LocalSchedulerStateStore:
                 **persisted,
                 "display_name": str(component.get("display_name") or persisted.get("display_name") or component["component_id"]),
                 "adapter_id": str(component.get("adapter_id") or persisted.get("adapter_id") or "") or None,
+                "desired_state": _policy_desired_state(
+                    component_id=str(component["component_id"]),
+                    persisted_desired=str(persisted.get("desired_state") or "unloaded"),
+                    services=services,
+                ),
                 "observed_state": observed["observed_state"],
                 "phase": observed["phase"],
                 "blockers": observed["blockers"],
@@ -551,6 +556,21 @@ def _aggregate_resource_metrics(entries: list[dict]) -> dict:
     if mem_values:
         metrics["mem_percent"] = min(sum(mem_values), 100.0)
     return metrics
+
+
+def _policy_desired_state(*, component_id: str, persisted_desired: str, services: dict) -> str:
+    normalized = _safe_state(persisted_desired, default="unloaded")
+    if component_id == "text_llm":
+        service = services.get("local_llm") if isinstance(services.get("local_llm"), dict) else {}
+        always_on = service.get("always_on") if isinstance(service.get("always_on"), dict) else {}
+        if always_on.get("enabled"):
+            return "running"
+    if component_id == "vision_llm":
+        service = services.get("vision_llm") if isinstance(services.get("vision_llm"), dict) else {}
+        residency = service.get("residency") if isinstance(service.get("residency"), dict) else {}
+        if residency.get("enabled"):
+            return "running"
+    return normalized
 
 
 def metrics_sample_from_observed(observed: dict) -> dict:
