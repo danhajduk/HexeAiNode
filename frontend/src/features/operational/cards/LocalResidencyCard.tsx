@@ -30,6 +30,27 @@ function numericCount(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function laneForComponentId(componentId) {
+  const normalized = compactText(componentId, "").toLowerCase();
+  if (normalized === "visual_runtime") {
+    return "visual_gpu";
+  }
+  return normalized;
+}
+
+function lanePayload(executionQueue, laneName) {
+  const lanes = serviceObject(executionQueue?.lanes);
+  const queues = serviceObject(executionQueue?.queues);
+  const lane = serviceObject(lanes[laneName]);
+  if (Object.keys(lane).length) {
+    return lane;
+  }
+  if (laneName === "visual_cpu") {
+    return Object.keys(serviceObject(queues.visual_cpu)).length ? serviceObject(queues.visual_cpu) : serviceObject(queues.cpu_comfyui);
+  }
+  return serviceObject(queues[laneName]);
+}
+
 function componentStats(component) {
   const stats = serviceObject(component.usage_statistics);
   const current = serviceObject(stats.current);
@@ -40,8 +61,7 @@ function componentStats(component) {
 
 function componentWork({ component, executionQueue }) {
   const idle = serviceObject(component.idle);
-  const lanes = serviceObject(executionQueue?.lanes);
-  const lane = serviceObject(lanes[component.component_id]);
+  const lane = lanePayload(executionQueue, laneForComponentId(component.component_id));
   if (Object.keys(lane).length) {
     return {
       running: numericCount(lane.active_count, idle.in_flight ?? 0),
@@ -57,9 +77,7 @@ function componentWork({ component, executionQueue }) {
 }
 
 function cloudWork(executionQueue) {
-  const lanes = serviceObject(executionQueue?.lanes);
-  const queues = serviceObject(executionQueue?.queues);
-  const cloud = Object.keys(serviceObject(lanes.cloud)).length ? serviceObject(lanes.cloud) : serviceObject(queues.cloud);
+  const cloud = lanePayload(executionQueue, "cloud");
   return {
     running: numericCount(cloud.active_count, 0),
     staged: numericCount(cloud.staged_count, 0),
@@ -80,6 +98,70 @@ function queueDisplayState(work) {
   return (work.running || 0) > 0 || (work.staged || 0) > 0 || (work.backlog || 0) > 0 ? "busy" : "idle";
 }
 
+function compactJobName(job) {
+  return compactText(job?.job_name || job?.task_id || job?.job_id, "none");
+}
+
+function compactJobMeta(job) {
+  const parts = [];
+  if (job?.task_family) {
+    parts.push(job.task_family);
+  }
+  if (job?.importance) {
+    parts.push(job.importance);
+  } else if (job?.queue_state?.importance) {
+    parts.push(job.queue_state.importance);
+  }
+  if (job?.client_id) {
+    parts.push(job.client_id);
+  }
+  if (job?.queue_position !== null && job?.queue_position !== undefined) {
+    parts.push(`pos ${job.queue_position}`);
+  }
+  return parts.join(" / ") || compactText(job?.status, "queued");
+}
+
+function laneBacklogJob({ executionQueue, laneName, stagedJobId }) {
+  const globalQueue = serviceObject(executionQueue?.global_queue);
+  const queuedJobs = Array.isArray(globalQueue.queued_jobs) ? globalQueue.queued_jobs : [];
+  return queuedJobs.find((job) => {
+    const runtimeLane = laneForComponentId(job?.runtime_lane);
+    const jobId = compactText(job?.job_id, "");
+    return runtimeLane === laneName && (!stagedJobId || jobId !== stagedJobId);
+  }) || null;
+}
+
+function laneWorkMetadata({ executionQueue, laneName }) {
+  const lane = lanePayload(executionQueue, laneName);
+  const activeJob = serviceObject(lane.active_job);
+  const stagedJob = serviceObject(lane.staged_job || lane.next_job);
+  const stagedJobId = compactText(stagedJob.job_id, "");
+  const backlogJob = laneBacklogJob({ executionQueue, laneName, stagedJobId });
+  return [
+    { label: "Active", job: Object.keys(activeJob).length ? activeJob : null },
+    { label: "Staged", job: Object.keys(stagedJob).length ? stagedJob : null },
+    { label: "Backlog", job: backlogJob },
+  ];
+}
+
+function RuntimeWorkMetadata({ items }) {
+  const visibleItems = Array.isArray(items) ? items.filter((item) => item?.job) : [];
+  if (!visibleItems.length) {
+    return null;
+  }
+  return (
+    <div className="runtime-residency-job-meta">
+      {visibleItems.map((item) => (
+        <div key={item.label}>
+          <span>{item.label}</span>
+          <strong>{compactJobName(item.job)}</strong>
+          <code>{compactJobMeta(item.job)}</code>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function LocalResidencyCard({
   serviceStatus = {},
   executionQueue = null,
@@ -92,6 +174,7 @@ export function LocalResidencyCard({
   const localSchedulerComponents = Array.isArray(localScheduler.components) ? localScheduler.components : [];
   const requestPreviews = serviceObject(localScheduler.request_previews);
   const cloudQueueWork = cloudWork(executionQueue);
+  const cloudMetadata = laneWorkMetadata({ executionQueue, laneName: "cloud" });
 
   return (
     <article className={`card ${className}`.trim()}>
@@ -129,6 +212,7 @@ export function LocalResidencyCard({
               <code>cloud_lane</code>
             </div>
           </div>
+          <RuntimeWorkMetadata items={cloudMetadata} />
           <p className="runtime-residency-reason">
             <span>Note</span>
             <code>not local residency</code>
@@ -142,6 +226,7 @@ export function LocalResidencyCard({
           const busy = localSchedulerBusyTarget === component.component_id;
           const reason = compactText(preview.reason || blockers.join(", "), "");
           const displayState = residencyDisplayState(component, work);
+          const metadata = laneWorkMetadata({ executionQueue, laneName: laneForComponentId(component.component_id) });
           return (
             <article className="runtime-residency-card" key={component.component_id}>
               <div className="runtime-residency-card-header">
@@ -197,6 +282,7 @@ export function LocalResidencyCard({
                   <code>{formatPercent(stats.max.gpu_util_percent)}</code>
                 </span>
               </div>
+              <RuntimeWorkMetadata items={metadata} />
               {reason ? (
                 <p className="runtime-residency-reason">
                   <span>Reason</span>
