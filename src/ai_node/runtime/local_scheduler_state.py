@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Iterable
 
 from ai_node.persistence.file_storage_lock import file_storage_lock, locked_json_temp_path
+from ai_node.runtime.local_scheduler_policy import local_scheduler_policy_payload, plan_local_scheduler_request
 from ai_node.time_utils import local_now_iso
 
 
@@ -291,13 +292,22 @@ class LocalSchedulerStateStore:
             }
             components.append(self.save_component(component, merged))
         stats = self.save_stats(stats)
-        return {
+        payload = {
             "schema_version": LOCAL_SCHEDULER_STATE_SCHEMA_VERSION,
             "state_dir": str(self._state_dir),
             "components": components,
             "statistics": stats,
             "updated_at": _now_iso(),
         }
+        payload["policy"] = local_scheduler_policy_payload()
+        payload["request_previews"] = {
+            str(component["component_id"]): plan_local_scheduler_request(
+                scheduler_status=payload,
+                component_id=str(component["component_id"]),
+            )
+            for component in LOCAL_SCHEDULER_COMPONENTS
+        }
+        return payload
 
     @property
     def stats_path(self) -> Path:

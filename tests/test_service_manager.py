@@ -14,6 +14,7 @@ from urllib.request import urlopen
 from unittest.mock import patch
 
 from ai_node.runtime.local_scheduler_state import LocalSchedulerStateStore
+from ai_node.runtime.local_scheduler_policy import plan_local_scheduler_request
 from ai_node.runtime.service_manager import UserSystemdServiceManager
 
 
@@ -147,6 +148,51 @@ class ServiceManagerTests(unittest.TestCase):
             self.assertEqual(timing["rolling_max_ms"]["queued_duration_ms"], 300)
             self.assertEqual(timing["rolling_max_ms"]["execution_duration_ms"], 1500)
             self.assertIn("execution_duration_ms", timing["rolling_average_ms"])
+
+    def test_local_scheduler_policy_background_visual_waits_for_vision(self):
+        scheduler_status = {
+            "components": [
+                {"component_id": "text_llm", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}},
+                {"component_id": "vision_llm", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}},
+                {"component_id": "visual_runtime", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                {"component_id": "training_runtime", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+            ]
+        }
+
+        background = plan_local_scheduler_request(
+            scheduler_status=scheduler_status,
+            component_id="visual_runtime",
+            importance="normal",
+        )
+        urgent = plan_local_scheduler_request(
+            scheduler_status=scheduler_status,
+            component_id="visual_runtime",
+            importance="high",
+        )
+
+        self.assertEqual(background["decision"], "blocked")
+        self.assertEqual(background["reason"], "background_waits_for_vision")
+        self.assertEqual(urgent["decision"], "needs_unload")
+        self.assertIn({"action": "unload", "component_id": "vision_llm", "reason": "visual_runtime_high_importance_requires_vision_unloaded"}, urgent["actions"])
+
+    def test_local_scheduler_policy_training_conflicts_with_visual_runtime(self):
+        scheduler_status = {
+            "components": [
+                {"component_id": "text_llm", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}},
+                {"component_id": "vision_llm", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                {"component_id": "visual_runtime", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}},
+                {"component_id": "training_runtime", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+            ]
+        }
+
+        decision = plan_local_scheduler_request(
+            scheduler_status=scheduler_status,
+            component_id="training_runtime",
+            importance="normal",
+        )
+
+        self.assertEqual(decision["decision"], "needs_unload")
+        self.assertEqual(decision["affected_components"], ["visual_runtime"])
 
     def test_restart_node_restarts_both_units(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
