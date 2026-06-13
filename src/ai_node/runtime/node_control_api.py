@@ -11331,6 +11331,10 @@ class NodeControlState:
         }
 
     async def _execute_direct_now(self, *, request: TaskExecutionRequest) -> dict:
+        if self._direct_execution_should_use_visual_runtime(request=request):
+            return await self._execute_direct_visual_runtime_now(request=request)
+        if self._direct_execution_should_use_vision_runtime(request=request):
+            return await self._execute_direct_vision_runtime_now(request=request)
         self._acquire_execution_admission(route="direct")
         try:
             service = self._get_task_execution_service()
@@ -11338,6 +11342,249 @@ class NodeControlState:
             return result.model_dump(mode="json")
         finally:
             self._release_execution_admission(route="direct")
+
+    @staticmethod
+    def _direct_execution_should_use_visual_runtime(*, request: TaskExecutionRequest) -> bool:
+        if not NodeControlState._direct_execution_is_image_generation(request=request):
+            return False
+        requested_provider = str(request.requested_provider or "").strip().lower()
+        queue_lane = str(getattr(request.queue, "runtime_lane", "") or "").strip().lower()
+        constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        routing_policy = constraints.get("routing_policy") if isinstance(constraints.get("routing_policy"), dict) else {}
+        routing_mode = TaskExecutionService._normalize_routing_policy_mode(routing_policy.get("mode"))
+        return requested_provider == "local" or queue_lane in {"visual_gpu", "visual_cpu"} or routing_mode == "local_only"
+
+    @staticmethod
+    def _direct_execution_should_use_vision_runtime(*, request: TaskExecutionRequest) -> bool:
+        task_key = str(request.task_family or "").strip().lower()
+        if task_key != "task.vision_analysis":
+            return False
+        requested_provider = str(request.requested_provider or "").strip().lower()
+        queue_lane = str(getattr(request.queue, "runtime_lane", "") or "").strip().lower()
+        constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        routing_policy = constraints.get("routing_policy") if isinstance(constraints.get("routing_policy"), dict) else {}
+        routing_mode = TaskExecutionService._normalize_routing_policy_mode(routing_policy.get("mode"))
+        return requested_provider == "local" or queue_lane == "vision_llm" or routing_mode == "local_only"
+
+    async def _execute_direct_vision_runtime_now(self, *, request: TaskExecutionRequest) -> dict:
+        inputs = request.inputs if isinstance(request.inputs, dict) else {}
+        if self._service_manager is not None and hasattr(self._service_manager, "request_local_scheduler_component"):
+            await asyncio.to_thread(
+                self._service_manager.request_local_scheduler_component,
+                component_id="vision_llm",
+                importance=str(getattr(request.queue, "importance", "") or request.priority or "normal"),
+                request_metadata={
+                    "source": "direct_execution_vision_runtime",
+                    "task_id": request.task_id,
+                    "task_family": request.task_family,
+                },
+            )
+        image_bytes, mime_type, image_name = self._direct_vision_image_payload(inputs=inputs)
+        prompt = str(inputs.get("prompt") or inputs.get("text") or "").strip()
+        if not prompt:
+            prompt = self._manual_vision_describe_prompt(mode="scene", custom_prompt=None)
+        started = time.perf_counter()
+        description, model_id = await asyncio.to_thread(
+            self._vision_describe_image_bytes,
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            image_name=image_name,
+            prompt=prompt,
+            max_tokens=int(inputs.get("max_tokens") or 450),
+            timeout_s=float(request.timeout_s or 60),
+        )
+        return {
+            "task_id": request.task_id,
+            "status": "completed",
+            "output": {"text": description, "image_name": image_name},
+            "metrics": {"execution_duration_ms": round((time.perf_counter() - started) * 1000.0, 3)},
+            "error_code": None,
+            "error_message": None,
+            "provider_used": "vision_runtime",
+            "model_used": model_id,
+            "resolution_metadata": {
+                "selected_provider": "vision_runtime",
+                "selected_model": model_id,
+                "runtime_lane": "vision_llm",
+            },
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _direct_vision_image_payload(self, *, inputs: dict) -> tuple[bytes, str, str]:
+        encoded = str(inputs.get("image_data_base64") or "")
+        image_filename = str(inputs.get("image_filename") or "vision-input.png")
+        if encoded:
+            return self._manual_vision_image_payload(
+                payload=ManualImageVisionDescribeRequest(
+                    image_filename=image_filename,
+                    image_data_base64=encoded,
+                    custom_prompt=str(inputs.get("prompt") or ""),
+                )
+            )
+        image_path_value = str(inputs.get("image_path") or "").strip()
+        if image_path_value:
+            image_path = Path(image_path_value).expanduser()
+            if not image_path.is_absolute():
+                image_path = (Path.cwd() / image_path).resolve()
+            if not image_path.exists() or not image_path.is_file():
+                raise ValueError("vision_image_path_not_found")
+            data = image_path.read_bytes()
+            if not data:
+                raise ValueError("vision_image_empty")
+            if len(data) > 20 * 1024 * 1024:
+                raise ValueError("vision_image_too_large")
+            return data, self._image_mime_type(image_path.suffix), image_path.name
+        raise ValueError("vision_image_required")
+
+    async def _execute_direct_visual_runtime_now(self, *, request: TaskExecutionRequest) -> dict:
+        inputs = request.inputs if isinstance(request.inputs, dict) else {}
+        constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        resolved_template = (
+            constraints.get("image_template_resolved")
+            if isinstance(constraints.get("image_template_resolved"), dict)
+            else {}
+        )
+        prompt = str(inputs.get("prompt") or "").strip()
+        if not prompt:
+            raise ValueError("image_generation_prompt_required")
+        template_id = str(inputs.get("template_id") or resolved_template.get("template_id") or "").strip()
+        if not template_id:
+            template_id = self._direct_visual_runtime_template_id()
+        started = time.perf_counter()
+        payload = ManualImageGenerationRequest(
+            template_id=template_id,
+            mode=str(inputs.get("mode") or "txt2img").strip() or "txt2img",
+            prompt=prompt,
+            negative_prompt=inputs.get("negative_prompt"),
+            width=inputs.get("width"),
+            height=inputs.get("height"),
+            seed=inputs.get("seed"),
+            steps=inputs.get("steps"),
+            cfg=inputs.get("cfg") if inputs.get("cfg") is not None else inputs.get("cfg_scale"),
+            denoise=inputs.get("denoise"),
+            batch_count=inputs.get("batch_count") or 1,
+            randomize_seed=inputs.get("randomize_seed") if inputs.get("randomize_seed") is not None else False,
+            input_image=inputs.get("input_image"),
+            template_variables=inputs.get("template_variables") if isinstance(inputs.get("template_variables"), dict) else None,
+            create_lora_metadata=bool(inputs.get("create_lora_metadata")),
+        )
+        submission = await self.submit_manual_image_generation(payload=payload)
+        timeout_s = max(int(request.timeout_s or 180), 180)
+        terminal_statuses = {"completed", "completed_with_fallback", "failed"}
+        latest_job: dict = {}
+        while (time.perf_counter() - started) < timeout_s:
+            status_payload = await asyncio.to_thread(self.manual_image_generation_status)
+            latest_job = status_payload.get("latest_job") if isinstance(status_payload.get("latest_job"), dict) else {}
+            latest_prompt_ids = {
+                str(item or "").strip()
+                for item in list(latest_job.get("prompt_ids") or [])
+                if str(item or "").strip()
+            }
+            submitted_prompt_ids = {
+                str(item or "").strip()
+                for item in list(submission.get("prompt_ids") or [])
+                if str(item or "").strip()
+            }
+            if submitted_prompt_ids and not latest_prompt_ids.intersection(submitted_prompt_ids):
+                await asyncio.sleep(1.0)
+                continue
+            status = str(latest_job.get("status") or "").strip().lower()
+            if status in terminal_statuses:
+                if status == "failed":
+                    failure = latest_job.get("failure") if isinstance(latest_job.get("failure"), dict) else {}
+                    raise RuntimeError(str(failure.get("reason") or "visual_runtime_generation_failed"))
+                break
+            await asyncio.sleep(1.0)
+        else:
+            raise TimeoutError("visual_runtime_generation_timeout")
+
+        latest_output = latest_job.get("latest_output") if isinstance(latest_job.get("latest_output"), dict) else None
+        return {
+            "task_id": request.task_id,
+            "status": "completed",
+            "output": {
+                "text": latest_output.get("relative_path") if isinstance(latest_output, dict) else None,
+                "image": latest_output,
+                "prompt_id": submission.get("prompt_id"),
+                "prompt_ids": submission.get("prompt_ids") or [],
+                "template_id": submission.get("template_id"),
+            },
+            "metrics": {
+                "execution_duration_ms": round((time.perf_counter() - started) * 1000.0, 3),
+                "submitted_count": submission.get("submitted_count"),
+                "completed_output_count": latest_job.get("completed_output_count"),
+            },
+            "error_code": None,
+            "error_message": None,
+            "provider_used": "visual_runtime",
+            "model_used": "comfyui_gpu",
+            "resolution_metadata": {
+                "selected_provider": "visual_runtime",
+                "selected_model": "comfyui_gpu",
+                "runtime_lane": str(getattr(request.queue, "runtime_lane", "") or "visual_gpu"),
+                "template_id": submission.get("template_id"),
+                "prompt_id": submission.get("prompt_id"),
+            },
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _direct_visual_runtime_template_id(self) -> str:
+        allowed_required = {
+            "positive_prompt",
+            "negative_prompt",
+            "avatar_name",
+            "width",
+            "height",
+            "seed",
+            "steps",
+            "cfg",
+            "denoise",
+        }
+        blocked_required = {
+            "face_reference_image",
+            "body_reference_image",
+            "pose_reference_image",
+            "body_depth_image",
+            "input_image",
+            "source_image",
+            "mask_image",
+            "avatar_lora_name",
+        }
+        try:
+            catalog = self.comfyui_template_catalog_payload()
+        except Exception:
+            return AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID
+        candidates: list[tuple[int, str]] = []
+        for entry in catalog.get("templates", []):
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("runtime_id") or "").strip() != "comfyui_gpu":
+                continue
+            template_id = str(entry.get("template_id") or "").strip()
+            if not template_id:
+                continue
+            variables = entry.get("variables") if isinstance(entry.get("variables"), list) else []
+            required = {
+                str(variable.get("name") or "").strip()
+                for variable in variables
+                if isinstance(variable, dict) and variable.get("required")
+            }
+            if required.intersection(blocked_required) or not required.issubset(allowed_required):
+                continue
+            score = 0
+            metadata = entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {}
+            if str(metadata.get("input_mode") or "").strip().lower() == "text":
+                score += 30
+            if "preview" in template_id:
+                score += 10
+            if "head_face" in template_id:
+                score += 5
+            if "torso" in template_id or "body" in template_id:
+                score -= 5
+            candidates.append((score, template_id))
+        if not candidates:
+            return AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID
+        return sorted(candidates, key=lambda item: (-item[0], item[1]))[0][1]
 
     async def _enqueue_direct_execution(self, *, request: TaskExecutionRequest) -> dict:
         request_copy = self._resolve_image_generation_template_request(request=request)

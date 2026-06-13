@@ -7323,6 +7323,99 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(admission["allowed"])
             self.assertEqual(admission["reason"], "visual_runtime_executor_not_ready")
 
+    async def test_direct_local_image_generation_uses_visual_runtime(self):
+        class _VisualExecutionState(NodeControlState):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.submitted_payload = None
+
+            async def submit_manual_image_generation(self, *, payload):
+                self.submitted_payload = payload
+                return {
+                    "status": "submitted",
+                    "template_id": payload.template_id or "manual_sdxl_txt2img",
+                    "prompt_id": "prompt-visual",
+                    "prompt_ids": ["prompt-visual"],
+                    "submitted_count": 1,
+                }
+
+            def manual_image_generation_status(self):
+                return {
+                    "latest_job": {
+                        "status": "completed",
+                        "prompt_id": "prompt-visual",
+                        "prompt_ids": ["prompt-visual"],
+                        "completed_output_count": 1,
+                        "latest_output": {"relative_path": "direct/visual.png", "filename": "visual.png"},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = _VisualExecutionState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+            )
+            request = TaskExecutionRequest(
+                task_id="direct-visual",
+                task_family="task.image_generation",
+                requested_by="test",
+                requested_provider="local",
+                inputs={"prompt": "gray cube", "width": 512, "height": 512, "steps": 4},
+                constraints={"routing_policy": {"mode": "local_only"}},
+                response_mode="async_if_queued",
+                trace_id="trace-direct-visual",
+            )
+
+            result = await state._execute_direct_now(request=request)
+
+            self.assertEqual(result["provider_used"], "visual_runtime")
+            self.assertEqual(result["model_used"], "comfyui_gpu")
+            self.assertEqual(result["output"]["image"]["relative_path"], "direct/visual.png")
+            self.assertEqual(state.submitted_payload.prompt, "gray cube")
+            self.assertEqual(state.submitted_payload.template_id, "template.avatar_head_face_preview.realvisxl.v1")
+
+    async def test_direct_local_vision_analysis_uses_vision_runtime(self):
+        class _VisionExecutionState(NodeControlState):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.vision_call = None
+
+            def _vision_describe_image_bytes(self, **kwargs):
+                self.vision_call = kwargs
+                return "person detected", "qwen2.5-vl-3b-instruct-q4_k_m"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = _VisionExecutionState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+            )
+            request = TaskExecutionRequest(
+                task_id="direct-vision",
+                task_family="task.vision_analysis",
+                requested_by="test",
+                requested_provider="local",
+                requested_model="different-model-should-not-be-used",
+                inputs={
+                    "prompt": "Is there a person?",
+                    "image_filename": "one-pixel.png",
+                    "image_data_base64": base64.b64encode(b"not-a-real-png-but-valid-bytes").decode("ascii"),
+                },
+                constraints={"routing_policy": {"mode": "local_only"}},
+                response_mode="async_if_queued",
+                trace_id="trace-direct-vision",
+            )
+
+            result = await state._execute_direct_now(request=request)
+
+            self.assertEqual(result["provider_used"], "vision_runtime")
+            self.assertEqual(result["model_used"], "qwen2.5-vl-3b-instruct-q4_k_m")
+            self.assertEqual(result["output"]["text"], "person detected")
+            self.assertEqual(state.vision_call["prompt"], "Is there a person?")
+
     async def test_vision_runtime_residency_job_passes_critical_gpu_comfyui_work(self):
         with tempfile.TemporaryDirectory() as tmp:
             service_manager = self._FakeServiceManager()
