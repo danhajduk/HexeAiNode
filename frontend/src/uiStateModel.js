@@ -67,7 +67,10 @@ export function buildDashboardUiState({
   const capabilitySetup = nodeStatus?.capability_setup || {};
   const trustedContext = nodeStatus?.trusted_runtime_context || {};
   const governance = governanceStatus?.status || capability?.governance_status || {};
-  const providerEnabled = providerConfig?.config?.providers?.enabled || [];
+  const providerEnabled =
+    providerConfig?.config?.providers?.enabled ||
+    capabilitySetup?.provider_selection?.enabled ||
+    [];
   const selectedTaskFamiliesFromConfig = capabilityConfig?.config?.selected_task_families || [];
   const readiness = capability?.operational_mqtt_readiness || {};
   const telemetry = capability?.telemetry || {};
