@@ -627,7 +627,29 @@ def _aggregate_visual_runtime(services: dict) -> tuple[str, str, list, dict]:
         for entry in entries
         if isinstance(entry, dict) and _observed_from_service_state(_service_state(entry)) in {"running", "starting"}
     ]
-    return observed, "runtime_observed", [], {"runtimes": active_entries, **_aggregate_resource_metrics(entries)}
+    running_count = 0
+    pending_count = 0
+    queue_active = False
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        session = entry.get("session") if isinstance(entry.get("session"), dict) else {}
+        try:
+            running_count = max(running_count, int(session.get("running_count") or 0))
+        except Exception:
+            pass
+        try:
+            pending_count = max(pending_count, int(session.get("pending_count") or 0))
+        except Exception:
+            pass
+        queue_active = queue_active or bool(session.get("queue_active"))
+    return observed, "runtime_observed", [], {
+        "runtimes": active_entries,
+        "queue_active": queue_active,
+        "running_count": running_count,
+        "pending_count": pending_count,
+        **_aggregate_resource_metrics(entries),
+    }
 
 
 def observed_component_state(*, component_id: str, services: dict) -> dict:
@@ -660,7 +682,11 @@ def observed_component_state(*, component_id: str, services: dict) -> dict:
             "observed_state": observed,
             "phase": phase,
             "blockers": blockers,
-            "idle": {"active": observed in {"running", "starting"}},
+            "idle": {
+                "active": observed in {"running", "starting"} or bool(resource_snapshot.get("queue_active")),
+                "in_flight": resource_snapshot.get("running_count") if isinstance(resource_snapshot.get("running_count"), int) else 0,
+                "queued": resource_snapshot.get("pending_count") if isinstance(resource_snapshot.get("pending_count"), int) else 0,
+            },
             "resource_snapshot": resource_snapshot,
         }
     if component_id == "training_runtime":

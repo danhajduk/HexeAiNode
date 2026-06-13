@@ -1253,7 +1253,7 @@ class UserSystemdServiceManager:
             "pid_file": self._comfyui_webui_pid_file,
             "session_file": self._comfyui_webui_session_file,
             "manual_session_active": self._manual_comfyui_webui_active(),
-            "session": self.comfyui_webui_session_status(include_queue=False),
+            "session": self.comfyui_webui_session_status(include_queue=True),
             "api_transport": "tcp_bridge_to_unix_socket",
         }
 
@@ -1404,7 +1404,11 @@ class UserSystemdServiceManager:
         }
 
     def _comfyui_queue_state(self) -> dict:
-        payload = self._uds_json_get(self._comfyui_socket_for_runtime(self._comfyui_webui_runtime), "/queue")
+        payload = self._uds_json_get(
+            self._comfyui_socket_for_runtime(self._comfyui_webui_runtime),
+            "/queue",
+            timeout_seconds=0.5,
+        )
         if not isinstance(payload, dict):
             return {
                 "queue_available": False,
@@ -1920,13 +1924,13 @@ class UserSystemdServiceManager:
         return out
 
     @staticmethod
-    def _uds_json_get(socket_path: str, path: str) -> dict | None:
+    def _uds_json_get(socket_path: str, path: str, *, timeout_seconds: float = 5.0) -> dict | None:
         if not socket_path:
             return None
         try:
             request = f"GET {path} HTTP/1.1\r\nHost: local-runtime\r\nConnection: close\r\n\r\n".encode("utf-8")
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-                client.settimeout(5)
+                client.settimeout(max(float(timeout_seconds), 0.1))
                 client.connect(socket_path)
                 client.sendall(request)
                 chunks: list[bytes] = []
