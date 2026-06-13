@@ -11231,6 +11231,7 @@ class NodeControlState:
             "response_mode": request_copy.response_mode,
             "queue": queue_context["queue"],
             "importance": queue_context["importance"],
+            "queue_intent": queue_context.get("queue_intent"),
             "routing_decision": queue_context["routing_decision"],
             "local_runtime_assignment": runtime_assignment,
             "effective_request": {
@@ -11305,6 +11306,7 @@ class NodeControlState:
             request_payload=execution_request.model_dump(mode="json"),
             runner=lambda: self._execute_direct_now(request=execution_request),
             routing_decision=queue_context.get("routing_decision") if isinstance(queue_context.get("routing_decision"), dict) else None,
+            queue_intent=queue_context.get("queue_intent") if isinstance(queue_context.get("queue_intent"), dict) else None,
             client_id=request_copy.requested_by,
         )
         if response.get("status") != "queued":
@@ -11602,12 +11604,14 @@ class NodeControlState:
     async def _direct_execution_queue_context(self, *, request: TaskExecutionRequest) -> dict:
         authorization = self._direct_execution_authorization_snapshot(request=request)
         importance = self._direct_execution_importance(request=request, authorization=authorization)
+        queue_intent = request.queue.model_dump(mode="json") if request.queue is not None else {}
         routing_mode = self._direct_execution_effective_routing_mode(request=request, authorization=authorization)
         cpu_comfyui_policy = self._cpu_comfyui_queue_policy(request=request, importance=importance)
         if cpu_comfyui_policy.get("selected"):
             return {
                 "queue": "cpu_comfyui",
                 "importance": importance,
+                "queue_intent": queue_intent,
                 "routing_mode": routing_mode,
                 "spillover": False,
                 "execution_routing_mode": "local_only",
@@ -11652,6 +11656,7 @@ class NodeControlState:
         return {
             "queue": queue_key,
             "importance": importance,
+            "queue_intent": queue_intent,
             "routing_mode": routing_mode,
             "spillover": spillover,
             "execution_routing_mode": execution_routing_mode,
@@ -12000,11 +12005,14 @@ class NodeControlState:
 
     @staticmethod
     def _direct_execution_importance(*, request: TaskExecutionRequest, authorization) -> str:
+        queue_importance = str(request.queue.importance or "").strip().lower() if request.queue is not None else ""
+        if queue_importance in {"background", "low", "normal", "high", "critical"}:
+            return queue_importance
         prompt_level = TaskExecutionService._prompt_importance_level(authorization=authorization)
         if prompt_level:
             return prompt_level
         priority = str(request.priority or "normal").strip().lower()
-        return priority if priority in {"background", "low", "normal", "high"} else "normal"
+        return priority if priority in {"background", "low", "normal", "high", "critical"} else "normal"
 
     def _direct_execution_queue_reason(self, *, request: TaskExecutionRequest, routing_mode: str | None, queue_key: str) -> str:
         requested_provider = str(request.requested_provider or "").strip().lower()

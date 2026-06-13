@@ -71,6 +71,7 @@ class ExecutionQueueService:
             "queue_position": self._queue_position(job_id=job_id),
             "eta": eta,
             "importance": job.get("importance"),
+            "queue_intent": deepcopy(job.get("queue_intent")) if isinstance(job.get("queue_intent"), dict) else None,
             "routing_decision": deepcopy(job.get("routing_decision")) if isinstance(job.get("routing_decision"), dict) else None,
             "expires_at": job.get("expires_at"),
         }
@@ -84,6 +85,7 @@ class ExecutionQueueService:
         request_payload: dict,
         runner: Callable[[], Awaitable[dict]],
         routing_decision: dict | None = None,
+        queue_intent: dict | None = None,
         client_id: str | None = None,
     ) -> dict:
         queue_key = self._normalize_queue_key(queue)
@@ -99,6 +101,7 @@ class ExecutionQueueService:
             "client_id": client_key or None,
             "queue": queue_key,
             "importance": importance_key if importance_key in IMPORTANCE_RANK else "normal",
+            "queue_intent": deepcopy(queue_intent) if isinstance(queue_intent, dict) else None,
             "routing_decision": deepcopy(routing_decision) if isinstance(routing_decision, dict) else None,
             "status": "queued",
             "request": deepcopy(request_payload) if isinstance(request_payload, dict) else {},
@@ -438,6 +441,7 @@ class ExecutionQueueService:
                 "client_id",
                 "queue",
                 "importance",
+                "queue_intent",
                 "routing_decision",
                 "status",
                 "created_at",

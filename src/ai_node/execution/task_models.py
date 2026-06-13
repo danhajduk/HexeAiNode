@@ -6,9 +6,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from ai_node.capabilities.task_families import canonicalize_task_family, validate_task_family_capabilities
 
 
-TaskExecutionPriority = Literal["background", "low", "normal", "high"]
+TaskExecutionPriority = Literal["background", "low", "normal", "high", "critical"]
 TaskExecutionResponseMode = Literal["sync", "async_if_queued"]
 TaskExecutionStatus = Literal["accepted", "completed", "failed", "rejected", "degraded", "unsupported"]
+TaskExecutionQueueImportance = Literal["background", "low", "normal", "high", "critical"]
+TaskExecutionQueueClass = Literal["interactive", "background", "scheduled"]
 
 
 def _normalized_non_empty_string(value: object, *, field_name: str, max_length: int = 128) -> str:
@@ -18,6 +20,48 @@ def _normalized_non_empty_string(value: object, *, field_name: str, max_length: 
     if len(normalized) > max_length:
         raise ValueError(f"{field_name}_too_long")
     return normalized
+
+
+class TaskExecutionQueueIntent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    importance: TaskExecutionQueueImportance = "normal"
+    queue_class: TaskExecutionQueueClass | None = None
+    max_wait_seconds: int | None = None
+    deadline_at: datetime | None = None
+    allow_cloud_spillover: bool | None = None
+    local_preferred: bool | None = None
+    reason: str | None = None
+
+    @field_validator("max_wait_seconds")
+    @classmethod
+    def _validate_max_wait_seconds(cls, value: int | None) -> int | None:
+        if value is None:
+            return None
+        normalized = int(value)
+        if normalized < 0:
+            raise ValueError("queue_max_wait_seconds_must_be_non_negative")
+        return normalized
+
+    @field_validator("reason")
+    @classmethod
+    def _validate_queue_reason(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value or "").strip()
+        if len(normalized) > 512:
+            raise ValueError("queue_reason_too_long")
+        return normalized or None
+
+    @field_validator("deadline_at")
+    @classmethod
+    def _validate_deadline_at(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        now = datetime.now(tz=value.tzinfo)
+        if value <= now:
+            raise ValueError("queue_deadline_at_must_be_in_future")
+        return value
 
 
 class TaskExecutionRequest(BaseModel):
@@ -35,6 +79,7 @@ class TaskExecutionRequest(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
     constraints: dict[str, Any] = Field(default_factory=dict)
     priority: TaskExecutionPriority = "normal"
+    queue: TaskExecutionQueueIntent = Field(default_factory=TaskExecutionQueueIntent)
     response_mode: TaskExecutionResponseMode = "sync"
     job_name: str | None = None
     timeout_s: int = 60
@@ -121,6 +166,20 @@ class TaskExecutionRequest(BaseModel):
     def _normalize_identity_fields(self) -> "TaskExecutionRequest":
         if self.service_id is None:
             self.service_id = self.requested_by
+        if self.queue.importance == "normal" and self.priority != "normal":
+            self.queue.importance = self.priority
+        if self.queue.queue_class is None:
+            task_key = str(self.task_family or "").strip().lower()
+            image_background = task_key in {"task.image_generation", "task.generation.image"} and self.priority in {
+                "background",
+                "low",
+            }
+            if self.queue.importance == "background" or image_background:
+                self.queue.queue_class = "background"
+            else:
+                self.queue.queue_class = "interactive"
+        if self.queue.max_wait_seconds is None:
+            self.queue.max_wait_seconds = 6 * 60 * 60 if self.queue.queue_class == "background" else 5 * 60
         return self
 
 

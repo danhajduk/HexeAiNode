@@ -48,7 +48,6 @@ Standards reference:
 Do not edit above this line:
 #######################################################################
 
-[TODO] Task 1000: Add Prompt V3 queue importance and wait budget fields
 [TODO] Task 1001: Redesign queue admission around importance and wait deadlines
 [TODO] Task 1002: Add local-unavailable cloud spillover routing
 [TODO] Task 1003: Add queue deadline monitoring and escalation
