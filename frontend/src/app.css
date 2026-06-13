@@ -2203,16 +2203,16 @@
 
 .runtime-residency-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
 }
 
 .runtime-residency-card {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px 12px;
   overflow: hidden;
   border: 1px solid hsl(var(--sx-border));
   border-radius: var(--sx-radius-sm);
@@ -2221,23 +2221,90 @@
 
 .runtime-residency-card-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
-.runtime-residency-card-header > div {
-  display: flex;
+.runtime-residency-card-title {
+  display: grid;
   min-width: 0;
-  flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .runtime-residency-card-header strong,
-.runtime-residency-card-header code {
+.runtime-residency-card-title span,
+.runtime-residency-summary code,
+.runtime-residency-reason code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.runtime-residency-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  font-size: 12px;
+}
+
+.runtime-residency-summary > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(54px, auto) minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+
+.runtime-residency-summary span,
+.runtime-residency-metrics b,
+.runtime-residency-reason span {
+  color: hsl(var(--sx-muted-foreground));
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.runtime-residency-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.runtime-residency-metrics span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 6px 7px;
+  border: 1px solid hsl(var(--sx-border) / 0.7);
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-panel) / 0.55);
+}
+
+.runtime-residency-metrics code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-residency-reason {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  font-size: 12px;
+}
+
+.runtime-residency-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.runtime-residency-actions .btn {
+  min-height: 32px;
+  padding: 6px 10px;
 }
 
 .runtime-task-availability {

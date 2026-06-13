@@ -9,6 +9,11 @@ function formatPercent(value) {
   return Number.isFinite(parsed) ? `${parsed.toFixed(1)}%` : "-";
 }
 
+function compactText(value, fallback = "unknown") {
+  const text = String(value || "").trim();
+  return text || fallback;
+}
+
 function componentStats(component) {
   const stats = serviceObject(component.usage_statistics);
   const current = serviceObject(stats.current);
@@ -38,38 +43,61 @@ export function LocalResidencyCard({
           const preview = serviceObject(requestPreviews[component.component_id]);
           const stats = componentStats(component);
           const busy = localSchedulerBusyTarget === component.component_id;
+          const reason = compactText(preview.reason || blockers.join(", "), "");
           return (
             <article className="runtime-residency-card" key={component.component_id}>
               <div className="runtime-residency-card-header">
-                <div>
+                <div className="runtime-residency-card-title">
                   <strong>{component.display_name || component.component_id}</strong>
-                  <code>{component.adapter_id || "adapter_unknown"}</code>
+                  <span className="muted tiny">{component.adapter_id || "adapter_unknown"}</span>
                 </div>
                 <StatusBadge value={component.observed_state || "unknown"} />
               </div>
-              <div className="state-grid compact-grid">
-                <span>Desired</span>
-                <StatusBadge value={component.desired_state || "unknown"} />
-                <span>Phase</span>
-                <code>{component.phase || "unknown"}</code>
-                <span>CPU</span>
-                <code>{formatPercent(stats.current.cpu_percent)}</code>
-                <span>RAM</span>
-                <code>{formatPercent(stats.current.ram_percent)}</code>
-                <span>Avg CPU</span>
-                <code>{formatPercent(stats.average.cpu_percent)}</code>
-                <span>Max CPU</span>
-                <code>{formatPercent(stats.max.cpu_percent)}</code>
-                <span>In Flight</span>
-                <code>{idle.in_flight ?? 0}</code>
-                <span>Queued</span>
-                <code>{idle.queued ?? 0}</code>
-                <span>Decision</span>
-                <code>{preview.decision || "unknown"}</code>
-                <span>Reason</span>
-                <code>{preview.reason || blockers.join(", ") || "none"}</code>
+              <div className="runtime-residency-summary">
+                <div>
+                  <span>Desired</span>
+                  <StatusBadge value={component.desired_state || "unknown"} />
+                </div>
+                <div>
+                  <span>Phase</span>
+                  <code>{compactText(component.phase)}</code>
+                </div>
+                <div>
+                  <span>Work</span>
+                  <code>
+                    {idle.in_flight ?? 0} running / {idle.queued ?? 0} queued
+                  </code>
+                </div>
+                <div>
+                  <span>Decision</span>
+                  <code>{compactText(preview.decision)}</code>
+                </div>
               </div>
-              <div className="row">
+              <div className="runtime-residency-metrics">
+                <span>
+                  <b>CPU</b>
+                  <code>{formatPercent(stats.current.cpu_percent)}</code>
+                </span>
+                <span>
+                  <b>RAM</b>
+                  <code>{formatPercent(stats.current.ram_percent)}</code>
+                </span>
+                <span>
+                  <b>Avg</b>
+                  <code>{formatPercent(stats.average.cpu_percent)}</code>
+                </span>
+                <span>
+                  <b>Max</b>
+                  <code>{formatPercent(stats.max.cpu_percent)}</code>
+                </span>
+              </div>
+              {reason ? (
+                <p className="runtime-residency-reason">
+                  <span>Reason</span>
+                  <code>{reason}</code>
+                </p>
+              ) : null}
+              <div className="runtime-residency-actions">
                 <button
                   className="btn"
                   type="button"

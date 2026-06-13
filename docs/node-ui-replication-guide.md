@@ -1435,7 +1435,7 @@ Shows scheduler-owned residency state for:
 - `Visual Runtime`
 - `Training Runtime`
 
-Each component shows desired state, observed state, phase, CPU/RAM usage, queue/in-flight counts, current scheduler decision, adapter detail, and request/release controls. Task availability remains in this card so local/cloud/local+cloud residency decisions are separate from service process status.
+Each component is shown as a compact runtime tile with desired state, observed state, phase, CPU/RAM usage, queue/in-flight counts, current scheduler decision, adapter detail, and request/release controls. Task availability remains in this card so local/cloud/local+cloud residency decisions are separate from service process status.
 
 ### 23.4 Shared Actions Card
 
