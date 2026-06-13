@@ -195,10 +195,10 @@ Vision before admission, then unloads Text if the 9 GiB reservation still cannot
 temporary policy hints until runtime-specific measured maxima are promoted into the scheduler statistics. Text
 always-on reloads wait while Visual Runtime or Training Runtime owns local GPU residency.
 
-CPU ComfyUI is reserved for low-priority background image work. The direct execution queue exposes a `cpu_comfyui` lane
-with concurrency `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` defaulting to 1. Only `task.image_generation` or
+CPU Visual Runtime is reserved for low-priority background image work. The direct execution queue exposes a
+`visual_cpu` lane with concurrency `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` defaulting to 1. Only `task.image_generation` or
 `task.generation.image` requests with `priority: "background"` or `priority: "low"` are eligible for that lane; normal
-and high-priority image work stays off the CPU ComfyUI queue. Queue diagnostics include `queues.cpu_comfyui` with
+and high-priority image work stays off the CPU Visual Runtime queue. Queue diagnostics include `queues.visual_cpu` with
 queued depth, active job, and oldest queued age.
 
 GPU presets live in `config/comfyui-gpu-presets.json` and are exposed through:

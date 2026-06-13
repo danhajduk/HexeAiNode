@@ -112,11 +112,11 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(pressure["pending_count"], 2)
         release_first.set()
 
-    async def test_cpu_comfyui_queue_diagnostics_reports_active_and_oldest_queued_age(self):
+    async def test_visual_cpu_queue_diagnostics_reports_active_and_oldest_queued_age(self):
         queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
         release_first = asyncio.Event()
         first = await queue.enqueue(
-            queue="cpu_comfyui",
+            queue="visual_cpu",
             importance="background",
             job_name="cpu image first",
             request_payload={"task_id": "cpu-image-first"},
@@ -124,7 +124,7 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         await _wait_for_status(queue, job_id=first["job_id"], status="running")
         await queue.enqueue(
-            queue="cpu_comfyui",
+            queue="visual_cpu",
             importance="background",
             job_name="cpu image queued",
             request_payload={"task_id": "cpu-image-queued"},
@@ -132,7 +132,7 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         )
 
         diagnostics = await queue.diagnostics()
-        cpu_queue = diagnostics["queues"]["cpu_comfyui"]
+        cpu_queue = diagnostics["queues"]["visual_cpu"]
 
         self.assertEqual(cpu_queue["active_count"], 1)
         self.assertEqual(cpu_queue["queued_count"], 1)

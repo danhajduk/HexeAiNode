@@ -764,7 +764,7 @@ class NodeControlApiTests(unittest.TestCase):
 
         asyncio.run(run_scenario())
 
-    def test_low_priority_image_generation_routes_to_cpu_comfyui_queue(self):
+    def test_low_priority_image_generation_routes_to_visual_cpu_queue(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:
                 provider_runtime_manager = self._FakeProviderRuntimeManager()
@@ -792,21 +792,21 @@ class NodeControlApiTests(unittest.TestCase):
                     )
                 )
 
-                self.assertEqual(preview["queue"], "cpu_comfyui")
+                self.assertEqual(preview["queue"], "visual_cpu")
                 self.assertEqual(preview["importance"], "background")
-                self.assertEqual(preview["routing_decision"]["reason"], "cpu_comfyui_background_image_policy")
+                self.assertEqual(preview["routing_decision"]["reason"], "visual_cpu_background_image_policy")
                 self.assertTrue(preview["routing_decision"]["cpu_comfyui_policy"]["selected"])
                 self.assertEqual(preview["routing_decision"]["execution_routing_mode"], "local_only")
                 self.assertEqual(preview["local_runtime_assignment"]["runtime_id"], "comfyui_cpu")
                 self.assertEqual(preview["local_runtime_assignment"]["checkpoint"], "DreamShaper8_LCM.safetensors")
 
                 diagnostics = await state.execution_queue_diagnostics()
-                self.assertIn("cpu_comfyui", diagnostics["queues"])
+                self.assertIn("visual_cpu", diagnostics["queues"])
                 self.assertEqual(diagnostics["cpu_comfyui_policy"]["allowed_importance"], ["background", "low"])
 
         asyncio.run(run_scenario())
 
-    def test_normal_priority_image_generation_does_not_route_to_cpu_comfyui_queue(self):
+    def test_normal_priority_image_generation_routes_to_visual_gpu_queue(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:
                 state = NodeControlState(
@@ -832,8 +832,8 @@ class NodeControlApiTests(unittest.TestCase):
                     )
                 )
 
-                self.assertEqual(preview["queue"], "local")
-                self.assertNotEqual(preview["routing_decision"]["selected_queue"], "cpu_comfyui")
+                self.assertEqual(preview["queue"], "visual_gpu")
+                self.assertNotEqual(preview["routing_decision"]["selected_queue"], "visual_cpu")
                 self.assertEqual(preview["routing_decision"]["reason"], "explicit_provider")
                 self.assertEqual(preview["local_runtime_assignment"]["runtime_id"], "comfyui_gpu")
                 self.assertEqual(preview["local_runtime_assignment"]["checkpoint"], "RealVisXL_V5.0_fp16.safetensors")
@@ -986,9 +986,9 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(vision["runtime_id"], "local_vision_llm")
             self.assertEqual(vision["model_id"], "qwen2.5-vl-3b-instruct-q4_k_m")
             self.assertEqual(gpu_image["runtime_id"], "comfyui_gpu")
-            self.assertEqual(gpu_image["queue"], "local")
+            self.assertEqual(gpu_image["queue"], "visual_gpu")
             self.assertEqual(cpu_image["runtime_id"], "comfyui_cpu")
-            self.assertEqual(cpu_image["queue"], "cpu_comfyui")
+            self.assertEqual(cpu_image["queue"], "visual_cpu")
             self.assertGreaterEqual(len(catalog["assignments"]), 10)
 
     def test_vision_route_preview_includes_local_vision_runtime_assignment(self):

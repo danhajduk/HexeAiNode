@@ -846,7 +846,7 @@ class NodeControlState:
             check_after_seconds=max(_env_int("HEXE_EXECUTION_QUEUE_CHECK_AFTER_SECONDS", 5), 1),
             job_ttl_seconds=max(_env_int("HEXE_EXECUTION_QUEUE_JOB_TTL_SECONDS", 3600), 60),
             extra_queue_concurrency={
-                "cpu_comfyui": max(_env_int("HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY", 1), 1),
+                "visual_cpu": max(_env_int("HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY", 1), 1),
             },
             state_path=str(
                 Path(
@@ -11327,7 +11327,7 @@ class NodeControlState:
         if isinstance(payload, dict):
             payload["cpu_comfyui_policy"] = {
                 "enabled": True,
-                "queue": "cpu_comfyui",
+                "queue": "visual_cpu",
                 "runtime_id": "comfyui_cpu",
                 "allowed_task_families": ["task.image_generation", "task.generation.image"],
                 "allowed_importance": ["background", "low"],
@@ -11472,7 +11472,7 @@ class NodeControlState:
             "provider_id": "local_image",
             "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
             "lora": "sdxl_lightning_4step_lora.safetensors",
-            "queue": "local",
+            "queue": "visual_gpu",
             "importance": str(importance or "normal").strip().lower() or "normal",
             "default_preset_id": default_preset_id,
             "policy": "interactive_image_gpu",
@@ -11488,7 +11488,7 @@ class NodeControlState:
             "runtime_kind": "comfyui_cpu",
             "provider_id": "local_image",
             "checkpoint": "DreamShaper8_LCM.safetensors",
-            "queue": "cpu_comfyui",
+            "queue": "visual_cpu",
             "importance": str(importance or "background").strip().lower() or "background",
             "policy": "background_image_cpu",
             "reason": "low_priority_background_image",
@@ -11609,19 +11609,19 @@ class NodeControlState:
         cpu_comfyui_policy = self._cpu_comfyui_queue_policy(request=request, importance=importance)
         if cpu_comfyui_policy.get("selected"):
             return {
-                "queue": "cpu_comfyui",
+                "queue": "visual_cpu",
                 "importance": importance,
-                "queue_intent": queue_intent,
+                "queue_intent": {**queue_intent, "runtime_lane": "visual_cpu"},
                 "routing_mode": routing_mode,
                 "spillover": False,
                 "execution_routing_mode": "local_only",
                 "routing_decision": {
                     "original_routing_mode": routing_mode,
                     "execution_routing_mode": "local_only",
-                    "selected_queue": "cpu_comfyui",
+                    "selected_queue": "visual_cpu",
                     "original_queue": "local",
                     "spillover": False,
-                    "reason": "cpu_comfyui_background_image_policy",
+                    "reason": "visual_cpu_background_image_policy",
                     "cpu_comfyui_policy": cpu_comfyui_policy,
                 },
             }
@@ -11631,6 +11631,8 @@ class NodeControlState:
             routing_mode=routing_mode,
         )
         original_queue = queue_key
+        if queue_key == "local" and self._direct_execution_is_image_generation(request=request):
+            queue_key = "visual_gpu"
         wait_budget_spillover = await self._should_spill_local_wait_budget_to_cloud(
             request=request,
             queue_intent=queue_intent,
@@ -11669,7 +11671,7 @@ class NodeControlState:
         return {
             "queue": queue_key,
             "importance": importance,
-            "queue_intent": queue_intent,
+            "queue_intent": {**queue_intent, "runtime_lane": queue_key} if queue_key in {"visual_gpu", "visual_cpu"} else queue_intent,
             "routing_mode": routing_mode,
             "spillover": spillover,
             "execution_routing_mode": execution_routing_mode,
@@ -11697,6 +11699,10 @@ class NodeControlState:
         routing_policy["mode"] = execution_routing_mode
         constraints["routing_policy"] = routing_policy
         return request.model_copy(update={"constraints": constraints}, deep=True)
+
+    @staticmethod
+    def _direct_execution_is_image_generation(*, request: TaskExecutionRequest) -> bool:
+        return str(request.task_family or "").strip().lower() in {"task.image_generation", "task.generation.image"}
 
     def _resolve_image_generation_template_request(self, *, request: TaskExecutionRequest) -> TaskExecutionRequest:
         task_key = str(request.task_family or "").strip().lower()
@@ -11966,7 +11972,7 @@ class NodeControlState:
     ) -> str | None:
         if spillover:
             return "cloud_only"
-        if queue_key == "cpu_comfyui":
+        if queue_key in {"cpu_comfyui", "visual_cpu", "visual_gpu"}:
             return "local_only"
         capability_queue = self._direct_execution_task_capability_queue(request=request)
         if capability_queue == "local" and queue_key == "local" and routing_mode in {None, "cloud_fallback"}:
@@ -12037,7 +12043,8 @@ class NodeControlState:
         if requested_provider:
             return "explicit_provider"
         capability_queue = self._direct_execution_task_capability_queue(request=request)
-        if capability_queue == queue_key and routing_mode in {None, "local_preferred", "cloud_fallback"}:
+        effective_queue = "local" if queue_key in {"visual_gpu", "visual_cpu", "cpu_comfyui"} else queue_key
+        if capability_queue == effective_queue and routing_mode in {None, "local_preferred", "cloud_fallback"}:
             return f"task_capability_{queue_key}"
         if routing_mode:
             return f"routing_policy_{routing_mode}"
@@ -12062,7 +12069,7 @@ class NodeControlState:
         return {
             "selected": selected,
             "runtime_id": "comfyui_cpu",
-            "queue": "cpu_comfyui",
+            "queue": "visual_cpu",
             "task_family": task_family or None,
             "importance": importance_key,
             "allowed_importance": ["background", "low"],

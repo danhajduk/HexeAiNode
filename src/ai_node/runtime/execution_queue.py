@@ -53,7 +53,6 @@ class ExecutionQueueService:
         self._queue_concurrency: dict[str, int] = {
             "local": self._local_concurrency,
             "cloud": self._cloud_concurrency,
-            "cpu_comfyui": 1,
             "text_llm": 1,
             "vision_llm": 1,
             "visual_gpu": 1,
@@ -828,13 +827,13 @@ class ExecutionQueueService:
             return normalized
         if normalized in {"visual_runtime", "comfyui", "comfyui_gpu", "gpu_comfyui"}:
             return "visual_gpu"
-        if normalized in {"visual_cpu", "comfyui_cpu"}:
+        if normalized in {"visual_cpu", "comfyui_cpu", "cpu_comfyui"}:
             return "visual_cpu"
         if normalized in {"training", "sd_scripts", "sd_scripts_training"}:
             return "training_runtime"
         if normalized in {"vision", "local_vision"}:
             return "vision_llm"
-        if normalized in self._queue_concurrency or normalized == "cpu_comfyui":
+        if normalized in self._queue_concurrency:
             return normalized
         return "cloud"
 
