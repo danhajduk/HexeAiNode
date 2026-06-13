@@ -1404,7 +1404,7 @@ Note:
 
 Subtitle:
 
-- `Primary home for backend, frontend, node, local LLM, vision, and ComfyUI service state.`
+- `Primary home for backend, frontend, node, local LLM, vision, and visual runtime state.`
 
 Fields:
 
@@ -1413,9 +1413,9 @@ Fields:
 - `Local LLM`
 - `Vision Runtime`
 - `Vision Residency`
-- `ComfyUI GPU`
-- `ComfyUI CPU`
-- `ComfyUI Web UI`
+- `Visual Runtime GPU`
+- `Visual Runtime CPU`
+- `Visual Runtime Web UI`
 - `Manual Session`
 - `Idle`
 - `Idle Timeout`

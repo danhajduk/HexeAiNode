@@ -47,5 +47,3 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-
-[TODO] Task 1005: Standardize ecosystem names for image and training runtimes

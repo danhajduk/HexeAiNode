@@ -17,23 +17,23 @@ while [[ $# -gt 0 ]]; do
     --sd-progress|--show-sd-progress)
       show_sd_progress=1
       ;;
-    --comfyui-status|--comfy-status|--comfyui)
+    --visual-status|--visual-runtime-status|--comfyui-status|--comfy-status|--comfyui)
       show_comfyui_status=1
       ;;
     --help|-h)
       cat <<'EOF'
-Usage: gpu-processes.sh [--watch [seconds]] [--sd-progress] [--comfyui-status]
+Usage: gpu-processes.sh [--watch [seconds]] [--sd-progress] [--visual-status]
 
 Options:
   --watch, -w [seconds]       Refresh continuously.
-  --sd-progress               Show tail progress from the active sd-scripts LoRA log when GPU is active.
-  --comfyui-status            Show ComfyUI queue/history status from the active UNIX socket.
+  --sd-progress               Show tail progress from the active Training Runtime LoRA log when GPU is active.
+  --visual-status             Show Visual Runtime queue/history status from the active UNIX socket.
 EOF
       exit 0
       ;;
     *)
       echo "Unknown argument: $1" >&2
-      echo "Usage: gpu-processes.sh [--watch [seconds]] [--sd-progress] [--comfyui-status]" >&2
+      echo "Usage: gpu-processes.sh [--watch [seconds]] [--sd-progress] [--visual-status]" >&2
       exit 2
       ;;
   esac
@@ -102,7 +102,7 @@ render() {
         service="vision-llm"
         ;;
       /hexe-ai-node-comfyui)
-        service="comfyui"
+        service="visual-runtime"
         ;;
       host)
         service="host"
@@ -112,15 +112,15 @@ render() {
         ;;
     esac
     if [[ "${command}" =~ sdxl_train_network.py|train_network.py|accelerate[[:space:]]+launch ]]; then
-      service="sd-scripts"
+      service="training-runtime"
     elif [[ "${command}" =~ ComfyUI|main.py.*--base-directory[[:space:]]+/runtime/gpu|main.py.*--port[[:space:]]+8188 ]]; then
-      service="comfyui"
+      service="visual-runtime"
     fi
     if [[ "${command}" =~ --alias[[:space:]]+([^[:space:]]+) ]]; then
       model="${BASH_REMATCH[1]}"
-    elif [[ "${service}" == "sd-scripts" ]]; then
+    elif [[ "${service}" == "training-runtime" ]]; then
       model="sdxl-train"
-    elif [[ "${service}" == "comfyui" ]]; then
+    elif [[ "${service}" == "visual-runtime" ]]; then
       model="comfyui"
     elif [[ "${command}" =~ python ]]; then
       model="python"
@@ -135,7 +135,7 @@ render() {
     mem_util="${mem_util:--}"
     [[ "${sm_util}" == "-" ]] && sm_util="0"
     [[ "${mem_util}" == "-" ]] && mem_util="0"
-    if [[ "${service}" == "sd-scripts" && "${sm_util}" =~ ^[0-9]+$ && "${sm_util}" -gt 0 ]]; then
+    if [[ "${service}" == "training-runtime" && "${sm_util}" =~ ^[0-9]+$ && "${sm_util}" -gt 0 ]]; then
       sd_scripts_gpu_active=1
     fi
     read -r cpu_util_raw ram_util < <(ps -p "${pid}" -o %cpu=,%mem= 2>/dev/null | awk '{print $1, $2}')
@@ -150,8 +150,8 @@ render() {
   local known_services=(
     "text-llm:hexe-ai-node-llamacpp:qwen3-8b-q4_k_m"
     "vision-llm:hexe-ai-node-llamacpp-vision:qwen2.5-vl-3b"
-    "comfyui:hexe-ai-node-comfyui:comfyui"
-    "sd-scripts::sdxl-train"
+    "visual-runtime:hexe-ai-node-comfyui:comfyui"
+    "training-runtime::sdxl-train"
   )
   for entry in "${known_services[@]}"; do
     IFS=":" read -r service docker_name model <<<"${entry}"
@@ -177,7 +177,7 @@ render() {
     sd_log_path="$(find runtime/lora-training/jobs -name train.log -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR==1 {print $2}')"
   fi
   if [[ "${show_sd_progress}" -eq 1 && "${sd_scripts_gpu_active}" -eq 1 && -f "${sd_log_path}" ]]; then
-    printf "\nSD LoRA progress (%s)\n" "${sd_log_path}"
+    printf "\nTraining Runtime LoRA progress (%s)\n" "${sd_log_path}"
     printf "%s\n" "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
     tail -c 262144 "${sd_log_path}" | tr '\r' '\n' | awk '
       /^[[:space:]]*epoch[[:space:]]+[0-9]+\/[0-9]+/ {
@@ -333,7 +333,7 @@ comfyui_get_json() {
 
 print_comfyui_status() {
   local socket_path queue_file history_file output_count
-  printf "\nComfyUI status\n"
+  printf "\nVisual Runtime status\n"
   printf "%s\n" "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
   if ! socket_path="$(comfyui_socket_path)"; then
     printf "socket: unavailable\n"

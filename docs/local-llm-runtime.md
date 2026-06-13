@@ -68,13 +68,14 @@ currently uses a `container_stop_fallback` that frees VRAM by stopping the visio
 node reports `unload_model_supported: false` and `unload_model_mode: container_stop_fallback` until a true model unload
 primitive is available.
 
-## Experimental Image Generation Runtimes
+## Visual Runtime
 
-The node includes one ComfyUI container with two ComfyUI server processes for local image generation experiments. The
-container is intentionally separate from the text and vision llama.cpp runtimes because diffusion models place different
-pressure on VRAM and model storage.
+The node UI calls local diffusion image generation the **Visual Runtime**. Its current adapter is ComfyUI, so API paths,
+environment variables, sockets, and control scripts still use the `comfyui` technical identifier. The node includes one
+ComfyUI container with two server processes. The container is intentionally separate from the text and vision llama.cpp
+runtimes because diffusion models place different pressure on VRAM and model storage.
 
-GPU ComfyUI target:
+Visual Runtime GPU target:
 
 - image: `hexe-ai-node-comfyui:local`
 - container: `hexe-ai-node-comfyui`
@@ -88,7 +89,7 @@ GPU ComfyUI target:
 - checkpoint target: `RealVisXL_V5.0_fp16.safetensors`
 - LoRA target: `sdxl_lightning_4step_lora.safetensors`
 
-CPU ComfyUI target:
+Visual Runtime CPU target:
 
 - image: `hexe-ai-node-comfyui:local`
 - container: `hexe-ai-node-comfyui`

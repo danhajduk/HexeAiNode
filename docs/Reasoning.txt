@@ -837,3 +837,9 @@ Step objective: Surface queue priority, wait budget, and spillover decisions.
 Chosen fix: Added a compact `queue_state` payload to queued job responses, job status responses, and queue diagnostics, then rendered the diagnostics in the Scheduled Tasks dashboard.
 What changed: Queue payloads now expose queue class, importance, wait budget/deadline, remaining wait, estimated start, and spillover/routing reasons. The UI loads `/api/execution/queues` and shows execution queue cards with next-job decision details.
 Verification: `PYTHONPATH=src .venv/bin/python -m unittest tests.test_execution_queue_deadlines tests.test_execution_queue`, `python3 -m py_compile src/ai_node/runtime/execution_queue.py tests/test_execution_queue_deadlines.py`, and `npm --prefix frontend run build` passed.
+###########
+Task #1005
+Step objective: Standardize ecosystem names for image and training runtimes.
+Chosen fix: Kept technical ComfyUI and sd-scripts identifiers in APIs, paths, commands, and adapter fields while changing primary operator-facing labels to Visual Runtime and Training Runtime.
+What changed: Updated runtime/manual image/template UI copy, service display names, scheduler idle-close display name, GPU process script labels/help text, setup script output, and runtime UI documentation.
+Verification: `python3 -m py_compile src/ai_node/runtime/service_manager.py src/ai_node/runtime/node_control_api.py`, `bash -n scripts/gpu-processes.sh scripts/setup-sd-scripts-lora.sh`, `npm --prefix frontend run build`, `npm --prefix frontend test -- uiRendering.test.tsx`, and `./scripts/gpu-processes.sh --help` passed.

@@ -63,7 +63,7 @@ export function ImageTemplatesCard({
 
   return (
     <article className="card operational-card-full-span">
-      <CardHeader title="Image Templates" subtitle="Registered ComfyUI workflow templates, validation state, and prompt bindings." />
+      <CardHeader title="Image Templates" subtitle="Registered visual workflow templates, validation state, and prompt bindings." />
       <div className="state-grid">
         <span>Registered</span>
         <code>{templates.length}</code>

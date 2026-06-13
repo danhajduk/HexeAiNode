@@ -576,3 +576,4 @@ Task 1001: Redesign queue admission around importance and wait deadlines - Compl
 Task 1002: Add local-unavailable cloud spillover routing - Completed on 06/13/2026 09:40
 Task 1003: Add queue deadline monitoring and escalation - Completed on 06/13/2026 09:40
 Task 1004: Surface queue priority wait and spillover decisions in UI and APIs - Completed on 06/13/2026 10:07
+Task 1005: Standardize ecosystem names for image and training runtimes - Completed on 06/13/2026 10:11

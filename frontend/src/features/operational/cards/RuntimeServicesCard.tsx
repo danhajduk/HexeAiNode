@@ -72,7 +72,7 @@ export function RuntimeServicesCard({
 
   return (
     <article className="card">
-      <CardHeader title="Runtime Services" subtitle="Primary home for backend, frontend, node, local LLM, vision, and ComfyUI service state." />
+      <CardHeader title="Runtime Services" subtitle="Primary home for backend, frontend, node, local LLM, vision, and visual runtime state." />
       <div className="state-grid">
         <span>Backend</span>
         <StatusBadge value={serviceState(serviceStatus.backend)} />
@@ -84,11 +84,11 @@ export function RuntimeServicesCard({
         <StatusBadge value={serviceState(visionRuntime)} />
         <span>Vision Residency</span>
         <code>{visionRuntimeDetail}</code>
-        <span>ComfyUI GPU</span>
+        <span>Visual Runtime GPU</span>
         <StatusBadge value={serviceState(comfyuiGpu)} />
-        <span>ComfyUI CPU</span>
+        <span>Visual Runtime CPU</span>
         <StatusBadge value={serviceState(comfyuiCpu)} />
-        <span>ComfyUI Web UI</span>
+        <span>Visual Runtime Web UI</span>
         <StatusBadge value={serviceState(comfyuiWebui)} />
         <span>Manual Session</span>
         <StatusBadge value={session.state || (webuiActive ? "active" : "inactive")} />
@@ -104,11 +104,11 @@ export function RuntimeServicesCard({
       <div className="row">
         <label className="inline-toggle">
           <input type="checkbox" checked={webuiActive} onChange={onToggleComfyuiWebui} disabled={comfyuiWebuiBusy} />
-          <span>{comfyuiWebuiBusy ? "Working..." : "ComfyUI Web UI"}</span>
+          <span>{comfyuiWebuiBusy ? "Working..." : "Visual Runtime Web UI"}</span>
         </label>
         {comfyuiWebui.url && serviceState(comfyuiWebui) === "running" ? (
           <button className="btn btn-primary" type="button" onClick={onOpenComfyuiWebui}>
-            Open ComfyUI
+            Open Visual Runtime
           </button>
         ) : null}
       </div>

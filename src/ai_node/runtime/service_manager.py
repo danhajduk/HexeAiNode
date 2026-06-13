@@ -990,6 +990,7 @@ class UserSystemdServiceManager:
         return {
             "service_id": service_id,
             "service_name": service_id,
+            "display_name": f"Visual Runtime {runtime_key.upper()}",
             "state": state,
             "cpu_percent": cpu_percent,
             "mem_percent": mem_percent,
@@ -1090,6 +1091,7 @@ class UserSystemdServiceManager:
         return {
             "service_id": "comfyui_webui",
             "service_name": "comfyui_webui",
+            "display_name": "Visual Runtime Web UI",
             "state": "running" if running else "stopped",
             "pid": pid or None,
             "boot_order": 46,

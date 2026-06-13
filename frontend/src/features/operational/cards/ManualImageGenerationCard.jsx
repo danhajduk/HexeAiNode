@@ -627,15 +627,15 @@ export function ManualImageGenerationCard({
   return (
     <>
     <article className="card operational-card-full-span">
-      <CardHeader title="Manual Image Generation" subtitle="Prompt-driven ComfyUI generation for the manual session." />
+      <CardHeader title="Manual Image Generation" subtitle="Prompt-driven visual runtime generation for the manual session." />
       <div className="manual-generation-status-grid">
         <div className="manual-generation-status-row manual-generation-status-row-primary">
           <div className="manual-generation-status-item">
-            <span>ComfyUI Runtime</span>
+            <span>Visual Runtime</span>
             <StatusBadge value={serviceState(runtimeService)} />
           </div>
           <div className="manual-generation-status-item">
-            <span>ComfyUI Web UI</span>
+            <span>Visual Runtime Web UI</span>
             <StatusBadge value={serviceState(service)} />
           </div>
           <div className="manual-generation-status-item">
@@ -708,7 +708,7 @@ export function ManualImageGenerationCard({
 
     <form className="setup-form manual-generation-card-stack operational-card-full-span" onSubmit={handleSubmit}>
       <article className="card manual-generation-card-wide">
-        <CardHeader title="Template" subtitle="Select the ComfyUI workflow for this manual job." />
+        <CardHeader title="Template" subtitle="Select the visual workflow for this manual job." />
         <div className="form-grid two-column-form-grid">
           <label>
             Template
@@ -1192,7 +1192,7 @@ export function ManualImageGenerationCard({
     </form>
 
     <article className="card operational-card-full-span">
-      <CardHeader title="Outputs" subtitle="Recent manual ComfyUI results stored in the manual output folder." />
+      <CardHeader title="Outputs" subtitle="Recent manual visual runtime results stored in the manual output folder." />
       {outputs.length ? (
         <div className="image-output-grid">
           {outputs.map((output) => (

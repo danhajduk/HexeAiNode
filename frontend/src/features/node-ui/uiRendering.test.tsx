@@ -359,7 +359,7 @@ describe("OperationalDashboard", () => {
     );
 
     expect(markup).toContain("Manual Image Generation");
-    expect(markup).toContain("ComfyUI Runtime");
+    expect(markup).toContain("Visual Runtime");
     expect(markup).toContain("Latest Job");
     expect(markup).toContain("prompt-running");
     expect(markup).toContain("1 running / 2 pending");

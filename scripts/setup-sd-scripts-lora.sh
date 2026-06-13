@@ -62,4 +62,4 @@ if not torch.cuda.is_available():
     raise SystemExit("cuda_unavailable")
 PY
 
-echo "sd-scripts GPU environment ready at ${SD_SCRIPTS_DIR}"
+echo "Training Runtime GPU environment ready at ${SD_SCRIPTS_DIR} (sd-scripts adapter)"

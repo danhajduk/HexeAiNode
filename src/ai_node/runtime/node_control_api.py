@@ -13570,7 +13570,7 @@ class NodeControlState:
         )
         self._internal_scheduler.register_interval_task(
             task_id="comfyui_webui_idle_close",
-            display_name="ComfyUI Web UI Idle Close",
+            display_name="Visual Runtime Web UI Idle Close",
             interval_seconds=self._comfyui_webui_idle_check_interval_seconds,
             schedule_name="interval_seconds",
             schedule_detail=f"Every {self._comfyui_webui_idle_check_interval_seconds} seconds",
