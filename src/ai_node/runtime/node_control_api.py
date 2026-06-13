@@ -902,6 +902,10 @@ class NodeControlState:
             _env_int("HEXE_COMFYUI_WEBUI_IDLE_CHECK_INTERVAL_SECONDS", 15),
             1,
         )
+        self._visual_training_client_idle_check_interval_seconds = max(
+            _env_int("HEXE_VISUAL_TRAINING_CLIENT_IDLE_CHECK_INTERVAL_SECONDS", 5),
+            1,
+        )
         self._manual_image_generation_job_path = Path(
             os.environ.get("HEXE_MANUAL_IMAGE_GENERATION_JOB_PATH")
             or self._config_path.parent / "manual_image_generation_job.json"
@@ -1591,7 +1595,13 @@ class NodeControlState:
         }
 
     async def submit_manual_image_generation(self, *, payload: "ManualImageGenerationRequest") -> dict:
-        service = await self.start_service(target="comfyui_webui")
+        if payload.scheduler_request_metadata:
+            service = await self.start_service(
+                target="comfyui_webui",
+                request_metadata=payload.scheduler_request_metadata,
+            )
+        else:
+            service = await self.start_service(target="comfyui_webui")
         services = service.get("services") if isinstance(service.get("services"), dict) else self.service_status_payload().get("services", {})
         webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
         runtime_service = services.get("comfyui_gpu") if isinstance(services, dict) else {}
@@ -11467,6 +11477,13 @@ class NodeControlState:
             input_image=inputs.get("input_image"),
             template_variables=inputs.get("template_variables") if isinstance(inputs.get("template_variables"), dict) else None,
             create_lora_metadata=bool(inputs.get("create_lora_metadata")),
+            scheduler_request_metadata={
+                "source": "direct_execution_visual_runtime",
+                "idle_policy": "client_job",
+                "task_id": request.task_id,
+                "task_family": request.task_family,
+                "runtime_lane": str(getattr(request.queue, "runtime_lane", "") or "visual_gpu"),
+            },
         )
         submission = await self.submit_manual_image_generation(payload=payload)
         timeout_s = max(int(request.timeout_s or 180), 180)
@@ -13080,12 +13097,15 @@ class NodeControlState:
         result = self._service_manager.restart(target=target)
         return {"status": "ok", **result, "services": self._service_manager.get_status()}
 
-    async def start_service(self, *, target: str) -> dict:
+    async def start_service(self, *, target: str, request_metadata: dict | None = None) -> dict:
         if self._service_manager is None or not hasattr(self._service_manager, "start"):
             raise ValueError("service manager is not configured")
         if str(target or "").strip().lower() == "comfyui_webui":
             await self._assert_manual_comfyui_takeover_ready()
-        result = self._service_manager.start(target=target)
+        try:
+            result = self._service_manager.start(target=target, request_metadata=request_metadata)
+        except TypeError:
+            result = self._service_manager.start(target=target)
         return {"status": "ok", **result, "services": self._service_manager.get_status()}
 
     def stop_service(self, *, target: str) -> dict:
@@ -13956,6 +13976,15 @@ class NodeControlState:
             task_kind="local_recurring",
             readiness_critical=False,
         )
+        self._internal_scheduler.register_interval_task(
+            task_id="visual_training_client_idle_release",
+            display_name="Visual/Training Client Idle Release",
+            interval_seconds=self._visual_training_client_idle_check_interval_seconds,
+            schedule_name="interval_seconds",
+            schedule_detail=f"Every {self._visual_training_client_idle_check_interval_seconds} seconds",
+            task_kind="local_recurring",
+            readiness_critical=False,
+        )
         self._sync_operational_mqtt_health_schedule()
 
     def _operational_mqtt_health_schedule_definition(self) -> dict:
@@ -14112,6 +14141,11 @@ class NodeControlState:
                 initial_delay_seconds=self._comfyui_webui_idle_check_interval_seconds,
             )
             self._internal_scheduler.start_interval_task(
+                task_id="visual_training_client_idle_release",
+                coroutine_factory=self._visual_training_client_idle_release_job_once,
+                initial_delay_seconds=self._visual_training_client_idle_check_interval_seconds,
+            )
+            self._internal_scheduler.start_interval_task(
                 task_id="operational_mqtt_health",
                 coroutine_factory=self._operational_mqtt_health_job_once,
                 initial_delay_seconds=0,
@@ -14243,6 +14277,12 @@ class NodeControlState:
         if self._service_manager is None or not hasattr(self._service_manager, "close_comfyui_webui_if_idle"):
             return {"status": "skipped", "reason": "service_manager_not_configured"}
         result = await asyncio.to_thread(self._service_manager.close_comfyui_webui_if_idle)
+        return {"status": "ok", "result": result if isinstance(result, dict) else {}}
+
+    async def _visual_training_client_idle_release_job_once(self) -> dict | None:
+        if self._service_manager is None or not hasattr(self._service_manager, "release_visual_training_client_jobs_if_idle"):
+            return {"status": "skipped", "reason": "service_manager_not_configured"}
+        result = await asyncio.to_thread(self._service_manager.release_visual_training_client_jobs_if_idle)
         return {"status": "ok", "result": result if isinstance(result, dict) else {}}
 
     async def _gpu_comfyui_critical_work_pending(self) -> bool:
@@ -14945,6 +14985,7 @@ class ManualImageGenerationRequest(BaseModel):
     reference_image_data_base64: str | None = None
     template_variables: dict | None = None
     create_lora_metadata: bool | None = False
+    scheduler_request_metadata: dict | None = None
 
 
 class ManualImagePromptHelperRequest(BaseModel):

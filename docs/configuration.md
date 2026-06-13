@@ -63,7 +63,10 @@ Backend runtime:
 - `HEXE_COMFYUI_WEBUI_BRIDGE_SCRIPT` default `scripts/unix-socket-tcp-bridge.py`
 - `HEXE_COMFYUI_WEBUI_PID_FILE` default `.run/comfyui-webui-bridge.pid`
 - `HEXE_COMFYUI_WEBUI_SESSION_FILE` default `.run/comfyui-webui-session.json`; manual session lock used to block vision reload while ComfyUI owns the GPU
-- `HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS` default `900`; continuous ComfyUI `/queue` idle time before the manual Web UI session auto-closes
+- `HEXE_VISUAL_TRAINING_CLIENT_IDLE_SECONDS` default `30`; idle time after client-owned Visual Runtime or Training Runtime queue work before the scheduler releases that runtime and restores the default operational residency
+- `HEXE_VISUAL_TRAINING_CLIENT_IDLE_CHECK_INTERVAL_SECONDS` default `5`; scheduler interval for evaluating client-owned Visual Runtime and Training Runtime idle release
+- `HEXE_VISUAL_TRAINING_MANUAL_IDLE_SECONDS` default `900`; continuous ComfyUI `/queue` idle time before manual/operator Visual Runtime sessions auto-close and return to default operational residency
+- `HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS` legacy fallback for `HEXE_VISUAL_TRAINING_MANUAL_IDLE_SECONDS`
 - `HEXE_COMFYUI_WEBUI_IDLE_CHECK_INTERVAL_SECONDS` default `15`; scheduler interval for evaluating manual Web UI idle auto-close
 - `HEXE_COMFYUI_TEMPLATE_CATALOG_DIR` default `config/comfyui/templates`; directory containing governed ComfyUI workflow template catalog files
 - `HEXE_COMFYUI_MANUAL_GPU_INPUT_DIR` default `runtime/manual/comfyui-gpu/input`

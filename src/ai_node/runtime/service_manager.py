@@ -18,6 +18,8 @@ LOCAL_LLM_BUILTIN_DEFAULT_MODEL_ID = "qwen3-8b-q4_k_m"
 LOCAL_LLM_DEFAULT_REVERT_IDLE_SECONDS = 900
 LOCAL_LLM_ALWAYS_ON_CHECK_INTERVAL_SECONDS = 60
 VISION_LLM_BUILTIN_DEFAULT_MODEL_ID = "qwen2.5-vl-3b-instruct-q4_k_m"
+VISUAL_TRAINING_CLIENT_IDLE_SECONDS = 30
+VISUAL_TRAINING_MANUAL_IDLE_SECONDS = 900
 
 
 def _env_int(name: str, *, default: int) -> int:
@@ -124,7 +126,17 @@ class UserSystemdServiceManager:
         self._comfyui_webui_session_file = str(
             os.environ.get("HEXE_COMFYUI_WEBUI_SESSION_FILE") or ".run/comfyui-webui-session.json"
         ).strip()
-        self._comfyui_webui_idle_timeout_seconds = max(_env_int("HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS", default=900), 1)
+        self._visual_training_client_idle_seconds = max(
+            _env_int("HEXE_VISUAL_TRAINING_CLIENT_IDLE_SECONDS", default=VISUAL_TRAINING_CLIENT_IDLE_SECONDS),
+            1,
+        )
+        self._comfyui_webui_idle_timeout_seconds = max(
+            _env_int(
+                "HEXE_VISUAL_TRAINING_MANUAL_IDLE_SECONDS",
+                default=_env_int("HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS", default=VISUAL_TRAINING_MANUAL_IDLE_SECONDS),
+            ),
+            1,
+        )
         self._comfyui_manual_gpu_input_dir = str(
             os.environ.get("HEXE_COMFYUI_MANUAL_GPU_INPUT_DIR") or "runtime/manual/comfyui-gpu/input"
         ).strip()
@@ -278,8 +290,9 @@ class UserSystemdServiceManager:
             return {"target": "comfyui_webui", "result": started.get("result"), "release": release, "request": request, "webui": started}
         raise ValueError("unsupported restart target")
 
-    def start(self, *, target: str) -> dict:
+    def start(self, *, target: str, request_metadata: dict | None = None) -> dict:
         value = str(target or "").strip().lower()
+        metadata = dict(request_metadata or {})
         if value == "backend":
             self._start_unit(self._backend_unit)
             return {"target": "backend", "result": "started"}
@@ -295,7 +308,7 @@ class UserSystemdServiceManager:
                 return self.request_local_scheduler_component(
                     component_id="text_llm",
                     importance="high",
-                    request_metadata={"source": "service_start", "target": value},
+                    request_metadata={"source": "service_start", "target": value, **metadata},
                 )
             gpu_exclusive = self.gpu_exclusive_workload_status()
             if gpu_exclusive.get("active") and gpu_exclusive.get("local_llm_blocked"):
@@ -312,7 +325,7 @@ class UserSystemdServiceManager:
                 return self.request_local_scheduler_component(
                     component_id="vision_llm",
                     importance="high",
-                    request_metadata={"source": "service_start", "target": value},
+                    request_metadata={"source": "service_start", "target": value, **metadata},
                 )
             gpu_exclusive = self.gpu_exclusive_workload_status()
             if gpu_exclusive.get("active") and gpu_exclusive.get("vision_llm_blocked"):
@@ -329,7 +342,7 @@ class UserSystemdServiceManager:
                 request = self.request_local_scheduler_component(
                     component_id=self._comfyui_scheduler_component(),
                     importance="high",
-                    request_metadata={"source": "service_start", "target": value},
+                    request_metadata={"source": "service_start", "target": value, **metadata},
                 )
                 if request.get("status") != "ok":
                     return {"target": "comfyui_webui", "result": request.get("status"), "request": request}
@@ -389,6 +402,7 @@ class UserSystemdServiceManager:
         metadata = dict(request_metadata or {})
         if importance:
             metadata["importance"] = str(importance)
+        metadata.setdefault("requested_at_epoch", time.time())
         with self._local_scheduler_transition_lock:
             self._local_scheduler_state_store.update_desired_state(
                 component_id=requested,
@@ -1153,6 +1167,109 @@ class UserSystemdServiceManager:
             "stop_result": result,
             "vision_restore": vision_restore,
         }
+
+    def release_visual_training_client_jobs_if_idle(self, *, idle_seconds: int | None = None) -> dict:
+        threshold_seconds = max(
+            int(idle_seconds if idle_seconds is not None else self._visual_training_client_idle_seconds),
+            1,
+        )
+        status = self.get_status()
+        scheduler = status.get("local_scheduler") if isinstance(status.get("local_scheduler"), dict) else {}
+        components = scheduler.get("components") if isinstance(scheduler.get("components"), list) else []
+        component_map = {
+            str(component.get("component_id") or ""): component
+            for component in components
+            if isinstance(component, dict)
+        }
+        released = []
+        skipped = []
+        for component_id in ("visual_gpu", "visual_cpu", "training_runtime"):
+            component = component_map.get(component_id) or {}
+            metadata = component.get("request_metadata") if isinstance(component.get("request_metadata"), dict) else {}
+            if not self._visual_training_request_is_client_job(metadata=metadata):
+                skipped.append({"component_id": component_id, "reason": "not_client_job"})
+                continue
+            idle = component.get("idle") if isinstance(component.get("idle"), dict) else {}
+            if int(idle.get("in_flight") or 0) > 0 or int(idle.get("queued") or 0) > 0:
+                skipped.append({"component_id": component_id, "reason": "runtime_work_active"})
+                continue
+            idle_age = self._visual_training_client_idle_age(component_id=component_id, component=component)
+            if idle_age is None:
+                skipped.append({"component_id": component_id, "reason": "idle_timer_started"})
+                continue
+            if idle_age < threshold_seconds:
+                skipped.append(
+                    {
+                        "component_id": component_id,
+                        "reason": "idle_timeout_not_reached",
+                        "idle_seconds": round(idle_age, 3),
+                        "threshold_seconds": threshold_seconds,
+                    }
+                )
+                continue
+            release = self.release_local_scheduler_component(
+                component_id=component_id,
+                request_metadata={
+                    "source": "visual_training_client_idle_release",
+                    "idle_policy": "client_job",
+                    "idle_seconds": round(idle_age, 3),
+                    "threshold_seconds": threshold_seconds,
+                },
+            )
+            released.append({"component_id": component_id, "idle_seconds": round(idle_age, 3), "release": release})
+        vision_restore = None
+        if released:
+            vision_restore = self.request_local_scheduler_component(
+                component_id="vision_llm",
+                importance="normal",
+                request_metadata={
+                    "source": "visual_training_client_idle_release",
+                    "target": "vision_llm",
+                    "released_components": [item["component_id"] for item in released],
+                },
+            )
+        return {
+            "released": released,
+            "skipped": skipped,
+            "threshold_seconds": threshold_seconds,
+            "vision_restore": vision_restore,
+        }
+
+    @staticmethod
+    def _visual_training_request_is_client_job(*, metadata: dict) -> bool:
+        idle_policy = str(metadata.get("idle_policy") or "").strip().lower()
+        source = str(metadata.get("source") or "").strip().lower()
+        return idle_policy == "client_job" or source == "execution_queue_lane_admission"
+
+    def _visual_training_client_idle_age(self, *, component_id: str, component: dict) -> float | None:
+        now = time.time()
+        if component_id in {"visual_gpu", "visual_cpu"}:
+            session = self.comfyui_webui_session_status()
+            session_runtime = str(session.get("runtime") or "").strip().lower()
+            expected_runtime = "cpu" if component_id == "visual_cpu" else "gpu"
+            if session.get("manual_session_active") and session_runtime == expected_runtime:
+                if session.get("queue_active"):
+                    return 0.0
+                idle_seconds = session.get("idle_seconds")
+                if idle_seconds is not None:
+                    try:
+                        return max(float(idle_seconds), 0.0)
+                    except Exception:
+                        return None
+                self._write_comfyui_webui_session(
+                    state="idle",
+                    reason="client_visual_job_idle",
+                    last_active_epoch=now,
+                )
+                return None
+        if component_id == "training_runtime" and self._sd_scripts_training_active():
+            return 0.0
+        metadata = component.get("request_metadata") if isinstance(component.get("request_metadata"), dict) else {}
+        requested_at = metadata.get("requested_at_epoch")
+        try:
+            return max(now - float(requested_at), 0.0)
+        except Exception:
+            return None
 
     def _local_llm_status(self) -> dict:
         service_id = "local_llm"

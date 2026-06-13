@@ -593,22 +593,110 @@ class ServiceManagerTests(unittest.TestCase):
 
             def _restore_vision(**_kwargs):
                 calls.append("restore_vision")
-                return {"started": True, "reason": "vision_container_stopped"}
+                return {"status": "ok", "reason": "compatible"}
 
             with (
                 patch("time.time", return_value=401.0),
                 patch.object(manager, "_uds_json_get", return_value={"queue_running": [], "queue_pending": []}),
                 patch.object(manager, "stop_comfyui_webui", side_effect=_stop_webui) as fake_stop,
-                patch.object(manager, "ensure_vision_runtime_resident", side_effect=_restore_vision) as fake_restore,
+                patch.object(manager, "request_local_scheduler_component", side_effect=_restore_vision) as fake_restore,
             ):
                 result = manager.close_comfyui_webui_if_idle()
 
         self.assertTrue(result["closed"])
         self.assertEqual(result["reason"], "idle_timeout_reached")
-        self.assertTrue(result["vision_restore"]["started"])
+        self.assertEqual(result["vision_restore"]["status"], "ok")
         self.assertEqual(calls, ["stop_comfyui", "restore_vision"])
         fake_stop.assert_called_once()
-        fake_restore.assert_called_once_with(local_in_flight=0, gpu_comfyui_critical_in_flight=False)
+        fake_restore.assert_called_once()
+        self.assertEqual(fake_restore.call_args.kwargs["component_id"], "vision_llm")
+        self.assertEqual(fake_restore.call_args.kwargs["request_metadata"]["source"], "comfyui_webui_idle_close")
+
+    def test_visual_training_client_idle_release_releases_client_owned_visual_runtime(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {"HEXE_LOCAL_SCHEDULER_STATE_DIR": str(Path(tmp) / "local-scheduler")},
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            scheduler_status = {
+                "local_scheduler": {
+                    "components": [
+                        {
+                            "component_id": "visual_gpu",
+                            "desired_state": "running",
+                            "observed_state": "running",
+                            "request_metadata": {
+                                "idle_policy": "client_job",
+                                "source": "direct_execution_visual_runtime",
+                                "requested_at_epoch": 100.0,
+                            },
+                            "idle": {"in_flight": 0, "queued": 0},
+                        },
+                        {
+                            "component_id": "visual_cpu",
+                            "desired_state": "unloaded",
+                            "observed_state": "unloaded",
+                            "request_metadata": {},
+                            "idle": {"in_flight": 0, "queued": 0},
+                        },
+                        {
+                            "component_id": "training_runtime",
+                            "desired_state": "unloaded",
+                            "observed_state": "unloaded",
+                            "request_metadata": {},
+                            "idle": {"in_flight": 0, "queued": 0},
+                        },
+                    ]
+                }
+            }
+            with (
+                patch("time.time", return_value=131.0),
+                patch.object(manager, "get_status", return_value=scheduler_status),
+                patch.object(manager, "comfyui_webui_session_status", return_value={"manual_session_active": False}),
+                patch.object(manager, "release_local_scheduler_component", return_value={"status": "ok"}) as fake_release,
+                patch.object(manager, "request_local_scheduler_component", return_value={"status": "ok"}) as fake_restore,
+            ):
+                result = manager.release_visual_training_client_jobs_if_idle(idle_seconds=30)
+
+        self.assertEqual([item["component_id"] for item in result["released"]], ["visual_gpu"])
+        fake_release.assert_called_once()
+        self.assertEqual(fake_release.call_args.kwargs["component_id"], "visual_gpu")
+        self.assertEqual(fake_release.call_args.kwargs["request_metadata"]["source"], "visual_training_client_idle_release")
+        fake_restore.assert_called_once()
+        self.assertEqual(fake_restore.call_args.kwargs["component_id"], "vision_llm")
+
+    def test_visual_training_client_idle_release_ignores_manual_visual_runtime(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+        scheduler_status = {
+            "local_scheduler": {
+                "components": [
+                    {
+                        "component_id": "visual_gpu",
+                        "desired_state": "running",
+                        "observed_state": "running",
+                        "request_metadata": {
+                            "source": "service_start",
+                            "target": "comfyui_webui",
+                            "requested_at_epoch": 100.0,
+                        },
+                        "idle": {"in_flight": 0, "queued": 0},
+                    }
+                ]
+            }
+        }
+        with (
+            patch("time.time", return_value=500.0),
+            patch.object(manager, "get_status", return_value=scheduler_status),
+            patch.object(manager, "release_local_scheduler_component") as fake_release,
+            patch.object(manager, "request_local_scheduler_component") as fake_restore,
+        ):
+            result = manager.release_visual_training_client_jobs_if_idle(idle_seconds=30)
+
+        self.assertFalse(result["released"])
+        self.assertEqual(result["skipped"][0]["reason"], "not_client_job")
+        fake_release.assert_not_called()
+        fake_restore.assert_not_called()
 
     def test_comfyui_webui_idle_close_resets_when_queue_active(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(

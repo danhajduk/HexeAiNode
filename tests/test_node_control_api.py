@@ -7375,6 +7375,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["output"]["image"]["relative_path"], "direct/visual.png")
             self.assertEqual(state.submitted_payload.prompt, "gray cube")
             self.assertEqual(state.submitted_payload.template_id, "template.avatar_head_face_preview.realvisxl.v1")
+            self.assertEqual(state.submitted_payload.scheduler_request_metadata["idle_policy"], "client_job")
 
     async def test_direct_local_vision_analysis_uses_vision_runtime(self):
         class _VisionExecutionState(NodeControlState):
