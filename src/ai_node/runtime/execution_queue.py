@@ -40,6 +40,7 @@ class ExecutionQueueService:
         state_path: str | None = None,
         max_pending_per_client: int = 20,
         extra_queue_concurrency: dict[str, int] | None = None,
+        lane_admission_provider: Callable[[dict], dict] | None = None,
     ) -> None:
         self._logger = logger
         self._local_concurrency = max(int(local_concurrency), 1)
@@ -47,6 +48,7 @@ class ExecutionQueueService:
         self._check_after_seconds = max(int(check_after_seconds), 1)
         self._job_ttl_seconds = max(int(job_ttl_seconds), 60)
         self._max_pending_per_client = max(int(max_pending_per_client), 0)
+        self._lane_admission_provider = lane_admission_provider
         self._sequence = itertools.count(1)
         self._lock = asyncio.Lock()
         self._jobs: dict[str, dict] = {}
@@ -426,11 +428,21 @@ class ExecutionQueueService:
                 queue_entries = self._queues.get(queue_key) or []
                 if not queue_entries:
                     return
-                entry = heapq.heappop(queue_entries)
+                entry = queue_entries[0]
                 job_id = self._job_id_from_queue_entry(entry)
                 job = self._jobs.get(job_id)
                 if not isinstance(job, dict) or job.get("status") != "queued":
+                    heapq.heappop(queue_entries)
                     continue
+                admission = self._lane_admission_for_job(job)
+                if not admission.get("allowed"):
+                    job["blocked_reason"] = admission.get("reason") or "runtime_lane_not_ready"
+                    job["blocked_detail"] = admission
+                    self._persist_jobs_locked()
+                    return
+                heapq.heappop(queue_entries)
+                job["blocked_reason"] = None
+                job["blocked_detail"] = None
                 job["status"] = "running"
                 job["started_at"] = local_now_iso()
                 self._active_counts[queue_key] = self._active_counts.get(queue_key, 0) + 1
@@ -567,6 +579,8 @@ class ExecutionQueueService:
             "staged_at": job.get("staged_at"),
             "started_at": job.get("started_at"),
             "client_id": job.get("client_id"),
+            "blocked_reason": job.get("blocked_reason"),
+            "blocked_detail": deepcopy(job.get("blocked_detail")) if isinstance(job.get("blocked_detail"), dict) else None,
             "queue_position": self._queue_position(job_id=job_id),
             "queue_state": self._queue_state(job=job, eta=eta),
         }
@@ -727,6 +741,8 @@ class ExecutionQueueService:
                 "request",
                 "result",
                 "error",
+                "blocked_reason",
+                "blocked_detail",
             )
         }
         payload["queue_position"] = self._queue_position(job_id=str(job.get("job_id") or ""))
@@ -916,7 +932,24 @@ class ExecutionQueueService:
             lanes[lane]["backlog_count"] = max(int(lanes[lane]["queued_count"]) - 1, 0)
             lanes[lane]["staged_job"] = staged_job
             lanes[lane]["next_job"] = staged_job
+            if staged_job.get("blocked_reason"):
+                lanes[lane]["blocked_reason"] = staged_job.get("blocked_reason")
         return lanes
+
+    def _lane_admission_for_job(self, job: dict) -> dict:
+        if not callable(self._lane_admission_provider):
+            return {"allowed": True, "reason": "no_lane_admission_provider"}
+        try:
+            payload = self._lane_admission_provider(self._public_job_payload(job))
+        except Exception as exc:
+            return {
+                "allowed": False,
+                "reason": "lane_admission_provider_failed",
+                "error": str(exc).strip() or type(exc).__name__,
+            }
+        if not isinstance(payload, dict):
+            return {"allowed": True, "reason": "lane_admission_provider_empty"}
+        return {**payload, "allowed": bool(payload.get("allowed"))}
 
     def _global_queue_diagnostics_locked(self, *, queues: dict, lanes: dict) -> dict:
         queued_jobs = []

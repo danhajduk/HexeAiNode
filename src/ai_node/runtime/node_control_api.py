@@ -848,6 +848,7 @@ class NodeControlState:
             extra_queue_concurrency={
                 "visual_cpu": max(_env_int("HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY", 1), 1),
             },
+            lane_admission_provider=self._execution_queue_lane_admission,
             state_path=str(
                 Path(
                     os.environ.get("HEXE_EXECUTION_QUEUE_STATE_PATH")
@@ -12877,6 +12878,50 @@ class NodeControlState:
             request_metadata=request_metadata or {},
         )
         return {"status": result.get("status") or "ok", **result}
+
+    def _execution_queue_lane_admission(self, job: dict) -> dict:
+        lane = str(job.get("runtime_lane") or "").strip().lower()
+        if lane not in {"visual_gpu", "visual_cpu", "training_runtime"}:
+            return {"allowed": True, "reason": "lane_does_not_require_admission"}
+        request = job.get("request") if isinstance(job.get("request"), dict) else {}
+        task_family = str(request.get("task_family") or "").strip().lower()
+        if lane in {"visual_gpu", "visual_cpu"} and task_family not in {"task.image_generation", "task.generation.image"}:
+            return {"allowed": True, "reason": "non_image_visual_lane_job"}
+
+        scheduler_request = None
+        if self._service_manager is not None and hasattr(self._service_manager, "request_local_scheduler_component"):
+            try:
+                scheduler_request = self._service_manager.request_local_scheduler_component(
+                    component_id=lane,
+                    importance=str(job.get("importance") or "normal"),
+                    request_metadata={
+                        "source": "execution_queue_lane_admission",
+                        "job_id": job.get("job_id"),
+                        "task_id": request.get("task_id"),
+                        "task_family": task_family,
+                        "runtime_lane": lane,
+                    },
+                )
+            except Exception as exc:
+                scheduler_request = {
+                    "status": "failed",
+                    "reason": "local_scheduler_request_failed",
+                    "error": str(exc).strip() or type(exc).__name__,
+                }
+
+        if lane in {"visual_gpu", "visual_cpu"}:
+            return {
+                "allowed": False,
+                "reason": "visual_runtime_executor_not_ready",
+                "runtime_lane": lane,
+                "scheduler_request": scheduler_request,
+            }
+        return {
+            "allowed": False,
+            "reason": "training_runtime_executor_not_ready",
+            "runtime_lane": lane,
+            "scheduler_request": scheduler_request,
+        }
 
     async def _assert_manual_comfyui_takeover_ready(self) -> dict:
         preflight = await self.manual_comfyui_takeover_preflight()

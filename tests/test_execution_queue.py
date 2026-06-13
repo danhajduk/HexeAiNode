@@ -86,6 +86,37 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["error"]["code"], "boom")
         self.assertNotIn("traceback", status["error"])
 
+    async def test_lane_admission_blocks_job_without_dropping_queue_entry(self):
+        def _deny_visual_lane(job):
+            return {"allowed": False, "reason": "visual_runtime_executor_not_ready", "job_id": job.get("job_id")}
+
+        async def _should_not_run():
+            raise AssertionError("blocked job should not execute")
+
+        queue = ExecutionQueueService(
+            logger=logging.getLogger("execution-queue-test"),
+            local_concurrency=1,
+            lane_admission_provider=_deny_visual_lane,
+        )
+        response = await queue.enqueue(
+            queue="visual_gpu",
+            importance="normal",
+            job_name="visual blocked",
+            request_payload={"task_id": "visual-blocked", "task_family": "task.image_generation"},
+            runner=_should_not_run,
+        )
+        await asyncio.sleep(0.05)
+
+        status = await queue.job_status(job_id=response["job_id"])
+        diagnostics = await queue.diagnostics()
+
+        self.assertEqual(status["status"], "queued")
+        self.assertEqual(status["blocked_reason"], "visual_runtime_executor_not_ready")
+        self.assertEqual(status["queue_position"], 1)
+        self.assertEqual(diagnostics["lanes"]["visual_gpu"]["queued_count"], 1)
+        self.assertEqual(diagnostics["lanes"]["visual_gpu"]["blocked_reason"], "visual_runtime_executor_not_ready")
+        self.assertEqual(diagnostics["lanes"]["visual_gpu"]["next_job"]["job_name"], "visual blocked")
+
     async def test_queue_pressure_counts_active_and_queued_jobs(self):
         queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
         release_first = asyncio.Event()
