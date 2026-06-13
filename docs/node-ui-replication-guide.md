@@ -1394,6 +1394,7 @@ Fields:
 - `Governance`
 - `Last Telemetry`
 - `Node Health`
+- `Task Availability`
 
 Note:
 
@@ -1435,7 +1436,7 @@ Shows scheduler-owned residency state for:
 - `Visual Runtime`
 - `Training Runtime`
 
-Each component is shown as a compact runtime tile with desired state, observed state, phase, CPU/RAM usage, queue/in-flight counts, current scheduler decision, adapter detail, and request/release controls. Task availability remains in this card so local/cloud/local+cloud residency decisions are separate from service process status.
+Each component is shown as a compact runtime tile with desired state, observed state, phase, CPU/RAM usage, queue/in-flight counts, current scheduler decision, adapter detail, and request/release controls. Task availability lives in `Runtime Health` so local/cloud/local+cloud capability status is grouped with runtime health signals instead of scheduler residency controls.
 
 ### 23.4 Shared Actions Card
 

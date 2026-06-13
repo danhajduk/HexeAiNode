@@ -2307,23 +2307,26 @@
   padding: 6px 10px;
 }
 
-.runtime-task-availability {
+.runtime-health-task-availability {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid hsl(var(--sx-border) / 0.75);
 }
 
-.runtime-task-availability h3 {
+.runtime-health-task-availability h3 {
   margin: 0;
   font-size: 0.95rem;
 }
 
-.runtime-task-availability-grid {
+.runtime-health-task-availability-grid {
   display: grid;
   gap: 8px;
 }
 
-.runtime-task-availability-row {
+.runtime-health-task-availability-row {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto minmax(160px, 1fr);
   gap: 10px;
@@ -2334,8 +2337,8 @@
   border-radius: var(--sx-radius-sm);
 }
 
-.runtime-task-availability-row code,
-.runtime-task-availability-row span {
+.runtime-health-task-availability-row code,
+.runtime-health-task-availability-row span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -1,4 +1,4 @@
-import { CardHeader, HealthIndicator, StageBadge } from "../../components/uiPrimitives";
+import { CardHeader, HealthIndicator, StageBadge, StatusBadge } from "../../components/uiPrimitives";
 import { OperationalShell } from "./OperationalShell";
 import { NodeHealthStrip } from "./NodeHealthStrip";
 import { DegradedStateBanner } from "./DegradedStateBanner";
@@ -73,6 +73,32 @@ function telemetryFreshnessFromAge(ageSeconds, connected) {
     return "stale";
   }
   return "inactive";
+}
+
+function TaskAvailabilitySection({ items = [] }) {
+  const taskItems = Array.isArray(items) ? items : [];
+
+  return (
+    <div className="runtime-health-task-availability">
+      <h3>Task Availability</h3>
+      <div className="runtime-health-task-availability-grid">
+        {taskItems.map((item) => (
+          <div className="runtime-health-task-availability-row" key={item.taskFamily}>
+            <code>{item.taskFamily}</code>
+            <StatusBadge value={item.providerMode || "unavailable"} />
+            <span>{item.reason || "no_reason"}</span>
+          </div>
+        ))}
+        {taskItems.length ? null : (
+          <div className="runtime-health-task-availability-row">
+            <code>none</code>
+            <StatusBadge value="unavailable" />
+            <span>no resolved tasks</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function OperationalDashboard({
@@ -168,6 +194,7 @@ export function OperationalDashboard({
                 <span>Node Health</span>
                 <HealthIndicator value={runtimeHealth.nodeHealthState} />
               </div>
+              <TaskAvailabilitySection items={runtimeServicesProps?.taskAvailability} />
             </article>
             <RuntimeServicesCard {...runtimeServicesProps} />
             <LocalResidencyCard {...runtimeServicesProps} />

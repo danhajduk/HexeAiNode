@@ -25,7 +25,6 @@ function componentStats(component) {
 export function LocalResidencyCard({
   serviceStatus = {},
   localSchedulerBusyTarget = "",
-  taskAvailability = [],
   onRequestLocalScheduler,
   onReleaseLocalScheduler,
 }) {
@@ -121,25 +120,6 @@ export function LocalResidencyCard({
         {localSchedulerComponents.length ? null : (
           <p className="muted tiny">No local residency data is available yet.</p>
         )}
-      </div>
-      <div className="runtime-task-availability">
-        <h3>Task Availability</h3>
-        <div className="runtime-task-availability-grid">
-          {(Array.isArray(taskAvailability) ? taskAvailability : []).map((item) => (
-            <div className="runtime-task-availability-row" key={item.taskFamily}>
-              <code>{item.taskFamily}</code>
-              <StatusBadge value={item.providerMode || "unavailable"} />
-              <span>{item.reason || "no_reason"}</span>
-            </div>
-          ))}
-          {Array.isArray(taskAvailability) && taskAvailability.length ? null : (
-            <div className="runtime-task-availability-row">
-              <code>none</code>
-              <StatusBadge value="unavailable" />
-              <span>no resolved tasks</span>
-            </div>
-          )}
-        </div>
       </div>
     </article>
   );
