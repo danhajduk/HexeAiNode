@@ -101,6 +101,8 @@ Lane capacity contract:
 
 - The scheduler owns the backlog.
 - Each local runtime lane has at most one active job and one staged job.
+- If a lane cannot admit its next job because the required runtime is unavailable, that job stays in backlog with a
+  blocked reason until it can run or its queue wait budget expires.
 - Runtimes must not hide extra queue depth from the scheduler beyond the staged slot.
 
 `GET /api/execution/queues` exposes this model through:

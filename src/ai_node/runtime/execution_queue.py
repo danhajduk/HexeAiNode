@@ -928,12 +928,15 @@ class ExecutionQueueService:
                 ),
             )
             staged_job = self._queue_job_summary(jobs[0])
+            lanes[lane]["next_job"] = staged_job
+            if staged_job.get("blocked_reason"):
+                lanes[lane]["staged_count"] = 0
+                lanes[lane]["backlog_count"] = int(lanes[lane]["queued_count"])
+                lanes[lane]["blocked_reason"] = staged_job.get("blocked_reason")
+                continue
             lanes[lane]["staged_count"] = 1
             lanes[lane]["backlog_count"] = max(int(lanes[lane]["queued_count"]) - 1, 0)
             lanes[lane]["staged_job"] = staged_job
-            lanes[lane]["next_job"] = staged_job
-            if staged_job.get("blocked_reason"):
-                lanes[lane]["blocked_reason"] = staged_job.get("blocked_reason")
         return lanes
 
     def _lane_admission_for_job(self, job: dict) -> dict:
