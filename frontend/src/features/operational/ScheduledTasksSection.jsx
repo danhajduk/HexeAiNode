@@ -289,8 +289,7 @@ function ExecutionQueueSummary({ executionQueue = null, compact = false }) {
   const laneOrder = ["cloud", "text_llm", "vision_llm", "visual_gpu", "visual_cpu", "training_runtime"];
   const lanes = executionQueue?.lanes && typeof executionQueue.lanes === "object"
     ? laneOrder
-        .filter((laneName) => executionQueue.lanes[laneName])
-        .map((laneName) => [laneName, executionQueue.lanes[laneName]])
+        .map((laneName) => [laneName, executionQueue.lanes[laneName] || {}])
     : [];
   const queues = lanes.length
     ? lanes
