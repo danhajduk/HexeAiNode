@@ -846,3 +846,12 @@ Verification: `python3 -m py_compile src/ai_node/runtime/service_manager.py src/
 #############
 All Tasks completed 06/13/2026 10:12:24
 #############
+###########
+Task #1006
+Step objective: Update Client AI communication docs for queue and runtime naming changes.
+Chosen fix: Documented the implemented queue intent, queue state, deadline expiry, and local/cloud spillover contract while keeping technical adapter identifiers distinct from operator-facing Visual Runtime and Training Runtime names.
+What changed: Updated `docs/json-schemas/client-ai-v2/communication.md` with the `queue` request object, `queue_intent`, `queue_state`, `expired_wait_budget`, deadline rejection, CPU Visual Runtime queue policy, execution queue diagnostics shape, and runtime naming notes.
+Verification: Verified against `src/ai_node/execution/task_models.py`, `src/ai_node/runtime/node_control_api.py`, and `src/ai_node/runtime/execution_queue.py`; validated all JSON fenced examples; `git diff --check` passed.
+#############
+All Tasks completed 06/13/2026 10:24
+#############

@@ -29,8 +29,8 @@ Implemented client-facing routes in this repository:
 | `PUT /api/image-templates/{template_id}` | Implemented | Update template metadata or add/replace a version. |
 | `POST /api/image-templates/{template_id}/lifecycle` | Implemented | Transition template lifecycle state. |
 | `POST /api/image-templates/{template_id}/review` | Implemented | Mark a template review complete. |
-| `GET /api/comfyui/templates` | Implemented | Discover validated ComfyUI workflow templates and editable variables. |
-| `GET /api/comfyui/templates/{template_id}` | Implemented | Inspect one validated ComfyUI workflow template. |
+| `GET /api/comfyui/templates` | Implemented | Discover validated Visual Runtime workflow templates and editable variables. The API path keeps the `comfyui` adapter identifier. |
+| `GET /api/comfyui/templates/{template_id}` | Implemented | Inspect one validated Visual Runtime workflow template. The API path keeps the `comfyui` adapter identifier. |
 | `POST /api/benchmarks/execution/v2` | Implemented | Execution-only multi-target benchmark run. The client owns scoring. |
 | `GET /api/schemas/client-ai/v2` | Implemented | Schema catalog discovery. |
 | `GET /api/schemas/client-ai/v2/{schema_name}` | Implemented | Fetch one schema document. |
@@ -113,8 +113,7 @@ V3 prompt importance levels:
 - `background`: low urgency and batchable work.
 - `normal`: default behavior. V1, V2, and V3 prompts without an explicit importance policy normalize to this level.
 - `high`: user-visible or time-sensitive work.
-- `critical`: rare user-blocking or operations-sensitive work. In the current direct execution API this maps to `high`
-  execution priority because `TaskExecutionRequest.priority` supports `background`, `low`, `normal`, and `high`.
+- `critical`: rare user-blocking or operations-sensitive work.
 
 Importance does not weaken routing or privacy. A `critical` prompt with `routing_policy.mode = local_only` still remains
 local-only. When a prompt is used, the prompt owner's importance policy determines the effective execution priority;
@@ -210,6 +209,7 @@ The request is task-family based. Do not use separate classify or summarize rout
 - `inputs`
 - `constraints`
 - `priority`
+- `queue`
 - `response_mode`
 - `job_name`
 - `timeout_s`
@@ -257,6 +257,15 @@ Example response:
   "response_mode": "async_if_queued",
   "queue": "local",
   "importance": "normal",
+  "queue_intent": {
+    "importance": "normal",
+    "queue_class": "interactive",
+    "max_wait_seconds": 300,
+    "deadline_at": null,
+    "allow_cloud_spillover": null,
+    "local_preferred": null,
+    "reason": null
+  },
   "routing_decision": {
     "original_routing_mode": "local_preferred",
     "execution_routing_mode": "local_preferred",
@@ -317,12 +326,38 @@ instead of blocking the HTTP call until model execution finishes.
   "service_id": "mail-node",
   "trace_id": "trace-queued-123",
   "response_mode": "async_if_queued",
+  "priority": "background",
+  "queue": {
+    "importance": "background",
+    "queue_class": "background",
+    "max_wait_seconds": 21600,
+    "allow_cloud_spillover": true,
+    "local_preferred": true,
+    "reason": "nightly batch work can wait locally but may spill to cloud"
+  },
   "inputs": {
     "subject": "Package update",
     "body": "Your package has shipped."
   }
 }
 ```
+
+`queue` is implemented by `TaskExecutionQueueIntent` and rejects unknown fields. Supported fields:
+
+| Field | Implemented behavior |
+| --- | --- |
+| `importance` | `background`, `low`, `normal`, `high`, or `critical`. Defaults to `normal`, but if left normal and top-level `priority` is not normal, the request copies `priority`. |
+| `queue_class` | `interactive`, `background`, or `scheduled`. Defaults to `background` for background image-generation work and otherwise `interactive`. |
+| `max_wait_seconds` | Non-negative wait budget. Defaults to 6 hours for `background` queue class and 5 minutes otherwise. |
+| `deadline_at` | Future ISO datetime. When present, it participates in deadline sorting and expiry. |
+| `allow_cloud_spillover` | Allows a local queued job to reroute to cloud when local wait budget or deadline cannot be met and cloud is eligible. |
+| `local_preferred` | Preserved intent metadata for clients and future policy. Current routing is still governed by prompt/request routing policy and provider availability. |
+| `reason` | Optional client-readable explanation, max 512 characters. |
+
+Visual Runtime image generation and Training Runtime work should normally be submitted as background-capable work with
+longer wait budgets unless the user is actively waiting for the result. The current API still uses technical queue and
+adapter identifiers such as `cpu_comfyui`, `comfyui_gpu`, and `sd_scripts` where those are part of the implemented
+contract.
 
 Queued responses use HTTP `200` and this shape:
 
@@ -343,6 +378,15 @@ Queued responses use HTTP `200` and this shape:
     "confidence": "rough"
   },
   "importance": "normal",
+  "queue_intent": {
+    "importance": "background",
+    "queue_class": "background",
+    "max_wait_seconds": 21600,
+    "deadline_at": null,
+    "allow_cloud_spillover": true,
+    "local_preferred": true,
+    "reason": "nightly batch work can wait locally but may spill to cloud"
+  },
   "routing_decision": {
     "original_routing_mode": "local_preferred",
     "execution_routing_mode": "local_preferred",
@@ -350,6 +394,22 @@ Queued responses use HTTP `200` and this shape:
     "original_queue": "local",
     "spillover": false,
     "reason": "routing_policy_local_preferred"
+  },
+  "queue_state": {
+    "queue": "local",
+    "importance": "normal",
+    "queue_class": "background",
+    "max_wait_seconds": 21600,
+    "deadline_at": null,
+    "wait_budget_deadline_at": "2026-06-04T23:30:00-07:00",
+    "remaining_wait_seconds": 21595.0,
+    "estimated_start_seconds": 5,
+    "estimated_start_at": "2026-06-04T17:30:05-07:00",
+    "spillover_allowed": true,
+    "spillover_selected": false,
+    "routing_reason": "routing_policy_local_preferred",
+    "local_unavailable_reason": null,
+    "cloud_selected_reason": null
   },
   "expires_at": "2026-06-04T17:30:00-07:00"
 }
@@ -375,17 +435,50 @@ The fairness cap is keyed by `requested_by` and counts queued plus running async
 Clients should poll existing jobs or retry after `check_after_seconds`. The node default is
 `HEXE_EXECUTION_QUEUE_MAX_PENDING_PER_CLIENT = 20`; `0` disables this cap.
 
+If the estimated local queue start already exceeds the submitted wait budget, the node returns HTTP `200` with a
+deadline rejection payload instead of creating a job:
+
+```json
+{
+  "status": "rejected",
+  "error_code": "rejected_deadline_unreachable",
+  "error_message": "queue_wait_budget_unreachable",
+  "queue": "local",
+  "importance": "background",
+  "queue_intent": {
+    "importance": "background",
+    "queue_class": "background",
+    "max_wait_seconds": 0,
+    "allow_cloud_spillover": false
+  },
+  "estimated_start_seconds": 10,
+  "max_wait_seconds": 0,
+  "check_after_seconds": 5
+}
+```
+
 Poll the job status with:
 
 ```text
 GET /api/execution/jobs/{job_id}
 ```
 
-The job status payload includes `status` as `queued`, `running`, `completed`, `failed`, or `not_found`. Completed jobs
-place the normal `TaskExecutionResult` under `result`; failed jobs return a short `error` object. Both the initial
-queued response and the polled job status include `routing_decision` and `eta`. The `eta` object is a rough start-time
-estimate based on current queue position, active jobs, queue concurrency, and `check_after_seconds`; clients should poll
-using `check_after_seconds` rather than treating the estimate as a guarantee.
+The job status payload includes `status` as `queued`, `running`, `completed`, `failed`, `cancelled`,
+`expired_wait_budget`, or `not_found`. Completed jobs place the normal `TaskExecutionResult` under `result`; failed,
+cancelled, and expired jobs return a short `error` object. Both the initial queued response and the polled job status
+include `routing_decision`, `queue_intent`, `queue_state`, and `eta`. The `eta` object is a rough start-time estimate
+based on current queue position, active jobs, queue concurrency, and `check_after_seconds`; clients should poll using
+`check_after_seconds` rather than treating the estimate as a guarantee.
+
+Deadline monitoring is implemented for queued jobs:
+
+- Local-only queued jobs whose `deadline_at` or wait budget expires before execution become `expired_wait_budget`.
+- Local queued jobs with `allow_cloud_spillover = true` may move to the cloud queue after wait budget/deadline expiry
+  when cloud execution is eligible.
+- Rerouted jobs set `routing_decision.reason = "rerouted_to_cloud"`,
+  `routing_decision.local_unavailable_reason = "expired_wait_budget"`, and `queue_state.spillover_selected = true`.
+- Queue wait time is separate from provider/model execution time. Current job status exposes queue timestamps and
+  `queue_state`; `TaskExecutionResult.metrics.execution_duration_ms` measures execution after a runner starts.
 
 Queued job status is persisted to `HEXE_EXECUTION_QUEUE_STATE_PATH`, or by default to `execution_queue_jobs.json` next
 to the node config. Completed, failed, and cancelled job records can still be polled after API restart while they remain
@@ -424,9 +517,16 @@ Queue selection:
 - Capability-aware queue selection: when no hard route is declared, or when a flexible route such as
   `local_preferred`/`cloud_fallback` can only be served by one side, the node uses provider task capability maps to
   choose the local or cloud queue and narrows execution routing to match that choice.
-- Spillover: `local_preferred` high-importance or critical queued requests may enter the cloud queue when the local
-  queue is already backed up, an eligible cloud model is available, and the request passes configured cloud budget and
-  max-cost guardrails. This does not apply to `local_only` or explicit `requested_provider = "local"` requests.
+- CPU Visual Runtime queue: background and low-importance image-generation work may use the technical `cpu_comfyui`
+  queue when provider selection allows local Visual Runtime execution. Normal, high, and critical image jobs do not use
+  this CPU background lane.
+- Wait-budget spillover: local queued requests with `queue.allow_cloud_spillover = true` may enter the cloud queue
+  immediately when the current local estimated start exceeds `queue.max_wait_seconds`, provided cloud is eligible.
+- Deadline spillover: local queued requests with `queue.allow_cloud_spillover = true` may reroute to cloud after their
+  wait budget or `deadline_at` expires before local execution starts.
+- Priority spillover: `local_preferred` high-importance or critical queued requests may enter the cloud queue when the
+  local queue is already backed up, an eligible cloud model is available, and the request passes configured cloud budget
+  and max-cost guardrails. This does not apply to `local_only` or explicit `requested_provider = "local"` requests.
 - If neither side declares a route, the queued request defaults to the cloud queue and normal provider resolution still
   runs at execution time.
 
@@ -437,9 +537,9 @@ Importance selection:
 - V1 and V2 prompts, and V3 prompts without explicit importance, are treated as `normal`.
 
 Local queue capacity is configured as `LLAMACPP_PARALLEL + 1` by default. This intentionally keeps only a small number
-of local jobs in or near llama.cpp while the AI Node queue decides which job enters next by importance and FIFO order
-within the same importance. Requests that need a local model swap remain queued until they can enter local execution;
-the existing local runtime switch path handles the swap, then the idle reversion policy returns to
+of local jobs in or near llama.cpp while the AI Node queue decides which job enters next by importance, deadline, and
+FIFO order within the same importance. Requests that need a local model swap remain queued until they can enter local
+execution; the existing local runtime switch path handles the swap, then the idle reversion policy returns to
 `qwen3-8b-q4_k_m` when the alternate model is idle long enough.
 
 Local model state is exposed through `GET /api/node/status` under `services.local_llm.model_states`:
@@ -485,8 +585,31 @@ Use `GET /api/execution/queues` for operational diagnostics:
       "active_count": 1,
       "concurrency": 2,
       "oldest_queued_at": "2026-06-04T17:00:00-07:00",
+      "oldest_queued_age_seconds": 5.0,
+      "active_job": null,
+      "next_job": {
+        "job_id": "job-0123456789abcdef",
+        "job_name": "mail classification 123",
+        "task_id": "task-queued-123",
+        "task_family": "task.classification",
+        "queue_position": 1,
+        "queue_state": {
+          "queue": "local",
+          "importance": "high",
+          "queue_class": "interactive",
+          "max_wait_seconds": 300,
+          "remaining_wait_seconds": 295.0,
+          "estimated_start_seconds": 5,
+          "spillover_allowed": true,
+          "spillover_selected": false,
+          "routing_reason": "routing_policy_local_preferred"
+        }
+      },
       "per_importance": {
         "high": 1
+      },
+      "per_client_pending": {
+        "mail-node": 1
       }
     },
     "cloud": {
@@ -494,8 +617,31 @@ Use `GET /api/execution/queues` for operational diagnostics:
       "active_count": 0,
       "concurrency": 4,
       "oldest_queued_at": null,
-      "per_importance": {}
+      "oldest_queued_age_seconds": null,
+      "active_job": null,
+      "next_job": null,
+      "per_importance": {},
+      "per_client_pending": {}
+    },
+    "cpu_comfyui": {
+      "queued_count": 0,
+      "active_count": 0,
+      "concurrency": 1,
+      "oldest_queued_at": null,
+      "oldest_queued_age_seconds": null,
+      "active_job": null,
+      "next_job": null,
+      "per_importance": {},
+      "per_client_pending": {}
     }
+  },
+  "cpu_comfyui_policy": {
+    "enabled": true,
+    "queue": "cpu_comfyui",
+    "runtime_id": "comfyui_cpu",
+    "allowed_task_families": ["task.image_generation", "task.generation.image"],
+    "allowed_importance": ["background", "low"],
+    "rejected_importance": ["normal", "high", "critical"]
   },
   "job_count": 2,
   "generated_at": "2026-06-04T17:00:05-07:00"
