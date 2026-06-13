@@ -333,11 +333,20 @@ function ExecutionQueueSummary({ executionQueue = null, compact = false }) {
           <div className="execution-queue-global-main">
             <span className="muted tiny">Global Intake</span>
             <strong>Scheduler Backlog</strong>
-            <code>{globalCounts.queued} total queued</code>
-            <StatusBadge
-              value={queueWorkLabel(globalQueue)}
-              tone={globalCounts.hasWork ? "success" : "meta"}
-            />
+            <div className="execution-queue-global-flow" aria-label="Global intake queue counts">
+              <span>
+                <b>{globalCounts.queued}</b>
+                <small>Total Queued</small>
+              </span>
+              <span>
+                <b>{globalCounts.staged}</b>
+                <small>Staged In Lanes</small>
+              </span>
+              <span>
+                <b>{globalCounts.backlog}</b>
+                <small>Waiting For Lane</small>
+              </span>
+            </div>
           </div>
           <div className="execution-queue-global-next">
             <span className="muted tiny">Next Dispatch</span>

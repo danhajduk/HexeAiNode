@@ -56,6 +56,17 @@ function componentWork({ component, executionQueue }) {
   };
 }
 
+function cloudWork(executionQueue) {
+  const lanes = serviceObject(executionQueue?.lanes);
+  const queues = serviceObject(executionQueue?.queues);
+  const cloud = Object.keys(serviceObject(lanes.cloud)).length ? serviceObject(lanes.cloud) : serviceObject(queues.cloud);
+  return {
+    running: numericCount(cloud.active_count, 0),
+    staged: numericCount(cloud.staged_count, 0),
+    backlog: numericCount(cloud.backlog_count, numericCount(cloud.queued_count, 0)),
+  };
+}
+
 function residencyDisplayState(component, work) {
   const observed = compactText(component.observed_state, "unknown").toLowerCase();
   const hasWork = (work.running || 0) > 0 || (work.staged || 0) > 0 || (work.backlog || 0) > 0;
@@ -63,6 +74,10 @@ function residencyDisplayState(component, work) {
     return hasWork ? "busy" : "idle";
   }
   return observed;
+}
+
+function queueDisplayState(work) {
+  return (work.running || 0) > 0 || (work.staged || 0) > 0 || (work.backlog || 0) > 0 ? "busy" : "idle";
 }
 
 export function LocalResidencyCard({
@@ -76,6 +91,7 @@ export function LocalResidencyCard({
   const localScheduler = serviceObject(serviceStatus.local_scheduler);
   const localSchedulerComponents = Array.isArray(localScheduler.components) ? localScheduler.components : [];
   const requestPreviews = serviceObject(localScheduler.request_previews);
+  const cloudQueueWork = cloudWork(executionQueue);
 
   return (
     <article className={`card ${className}`.trim()}>
@@ -85,6 +101,39 @@ export function LocalResidencyCard({
         <span><code>run / staged / backlog</code></span>
       </div>
       <div className="runtime-residency-grid">
+        <article className="runtime-residency-card runtime-residency-card-cloud">
+          <div className="runtime-residency-card-header">
+            <div className="runtime-residency-card-title">
+              <strong>Cloud Execution</strong>
+              <span className="muted tiny">external_provider_queue</span>
+            </div>
+            <StatusBadge value={queueDisplayState(cloudQueueWork)} />
+          </div>
+          <div className="runtime-residency-summary">
+            <div>
+              <span>Type</span>
+              <code>queue</code>
+            </div>
+            <div>
+              <span>Phase</span>
+              <code>external</code>
+            </div>
+            <div>
+              <span>Work</span>
+              <code>
+                {cloudQueueWork.running} / {cloudQueueWork.staged} / {cloudQueueWork.backlog}
+              </code>
+            </div>
+            <div>
+              <span>Decision</span>
+              <code>cloud_lane</code>
+            </div>
+          </div>
+          <p className="runtime-residency-reason">
+            <span>Note</span>
+            <code>not local residency</code>
+          </p>
+        </article>
         {localSchedulerComponents.map((component) => {
           const blockers = Array.isArray(component.blockers) ? component.blockers : [];
           const preview = serviceObject(requestPreviews[component.component_id]);

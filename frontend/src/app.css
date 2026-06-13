@@ -549,6 +549,13 @@
   gap: 6px;
 }
 
+.execution-queue-global-flow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.execution-queue-global-flow span,
 .execution-queue-lane-flow span {
   display: grid;
   min-width: 0;
@@ -559,12 +566,14 @@
   background: hsl(var(--sx-bg) / 0.68);
 }
 
+.execution-queue-global-flow b,
 .execution-queue-lane-flow b {
   color: hsl(var(--sx-text));
   font-size: 16px;
   line-height: 1;
 }
 
+.execution-queue-global-flow small,
 .execution-queue-lane-flow small,
 .execution-queue-capacity {
   overflow: hidden;
@@ -2333,6 +2342,11 @@
   border: 1px solid hsl(var(--sx-border));
   border-radius: var(--sx-radius-sm);
   background: hsl(var(--sx-bg));
+}
+
+.runtime-residency-card-cloud {
+  border-color: hsl(var(--sx-accent) / 0.45);
+  background: hsl(var(--sx-accent) / 0.06);
 }
 
 .runtime-residency-card-header {
