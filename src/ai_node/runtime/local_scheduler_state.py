@@ -268,6 +268,39 @@ class LocalSchedulerStateStore:
         payload = create_local_scheduler_component_state(component=component)
         return self.save_component(component, payload)
 
+    def component_definition(self, component_id: str) -> dict | None:
+        normalized = str(component_id or "").strip()
+        return next((dict(component) for component in LOCAL_SCHEDULER_COMPONENTS if component["component_id"] == normalized), None)
+
+    def update_desired_state(
+        self,
+        *,
+        component_id: str,
+        desired_state: str,
+        request_metadata: dict | None = None,
+        last_transition: dict | None = None,
+        last_error: str | None = None,
+    ) -> dict:
+        component = self.component_definition(component_id)
+        if component is None:
+            raise ValueError("unknown_local_scheduler_component")
+        payload = self.load_or_create_component(component)
+        payload["desired_state"] = _safe_state(desired_state, default="unloaded")
+        if request_metadata is not None:
+            payload["request_metadata"] = _safe_dict(request_metadata)
+        if last_transition is not None:
+            payload["last_transition"] = _safe_dict(last_transition)
+        payload["last_error"] = str(last_error or "").strip() or None
+        return self.save_component(component, payload)
+
+    def append_event(self, event: dict) -> None:
+        path = self._state_dir / "events.log"
+        payload = {**_safe_dict(event), "created_at": _now_iso()}
+        with file_storage_lock(path):
+            self._state_dir.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload, sort_keys=True) + "\n")
+
     def status_from_services(self, *, services: dict) -> dict:
         stats = self.load_or_create_stats()
         components = []

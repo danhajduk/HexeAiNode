@@ -10,6 +10,7 @@ import threading
 import time
 from pathlib import Path
 
+from ai_node.runtime.local_scheduler_policy import plan_local_scheduler_request
 from ai_node.runtime.local_scheduler_state import LocalSchedulerStateStore
 
 
@@ -172,6 +173,7 @@ class UserSystemdServiceManager:
         self._runtime_dir = f"/run/user/{uid}"
         self._bus_address = f"unix:path={self._runtime_dir}/bus"
         self._local_scheduler_state_store = LocalSchedulerStateStore(logger=logger)
+        self._local_scheduler_transition_lock = threading.Lock()
 
     def get_status(self) -> dict:
         backend = self._unit_status(self._backend_unit, service_id="backend")
@@ -276,6 +278,167 @@ class UserSystemdServiceManager:
         if value == "comfyui_webui":
             return self.stop_comfyui_webui()
         raise ValueError("unsupported stop target")
+
+    def request_local_scheduler_component(
+        self,
+        *,
+        component_id: str,
+        importance: str | None = None,
+        request_metadata: dict | None = None,
+    ) -> dict:
+        requested = str(component_id or "").strip()
+        metadata = dict(request_metadata or {})
+        if importance:
+            metadata["importance"] = str(importance)
+        with self._local_scheduler_transition_lock:
+            self._local_scheduler_state_store.update_desired_state(
+                component_id=requested,
+                desired_state="requested",
+                request_metadata=metadata,
+                last_transition={"action": "request", "component_id": requested},
+            )
+            scheduler_status = self.get_status().get("local_scheduler", {})
+            decision = plan_local_scheduler_request(
+                scheduler_status=scheduler_status,
+                component_id=requested,
+                importance=importance,
+            )
+            self._local_scheduler_state_store.append_event(
+                {"event": "request_planned", "component_id": requested, "decision": decision}
+            )
+            if decision["decision"] in {"blocked", "waiting_for_idle", "insufficient_resources"}:
+                self._local_scheduler_state_store.update_desired_state(
+                    component_id=requested,
+                    desired_state="blocked" if decision["decision"] == "blocked" else "requested",
+                    request_metadata=metadata,
+                    last_transition={"action": "request_blocked", "decision": decision},
+                    last_error=decision.get("reason"),
+                )
+                return {"status": "blocked", "component_id": requested, "decision": decision, "executed_actions": []}
+
+            executed_actions = []
+            for action in decision.get("actions") or []:
+                if action.get("action") != "unload":
+                    continue
+                affected = str(action.get("component_id") or "").strip()
+                result = self._execute_local_scheduler_release(affected)
+                executed_actions.append({"action": action, "result": result})
+                self._local_scheduler_state_store.append_event(
+                    {"event": "action_executed", "component_id": affected, "action": action, "result": result}
+                )
+
+            start_result = self._execute_local_scheduler_start(requested)
+            desired_state = "running" if start_result.get("result") in {"started", "already_running", "ready_for_job_submission"} else "blocked"
+            self._local_scheduler_state_store.update_desired_state(
+                component_id=requested,
+                desired_state=desired_state,
+                request_metadata=metadata,
+                last_transition={"action": "request_executed", "result": start_result, "decision": decision},
+                last_error=None if desired_state == "running" else str(start_result.get("reason") or "start_failed"),
+            )
+            self._local_scheduler_state_store.append_event(
+                {"event": "request_executed", "component_id": requested, "decision": decision, "start_result": start_result}
+            )
+            return {
+                "status": "ok" if desired_state == "running" else "blocked",
+                "component_id": requested,
+                "decision": decision,
+                "executed_actions": executed_actions,
+                "start_result": start_result,
+                "local_scheduler": self.get_status().get("local_scheduler", {}),
+            }
+
+    def release_local_scheduler_component(self, *, component_id: str, request_metadata: dict | None = None) -> dict:
+        requested = str(component_id or "").strip()
+        with self._local_scheduler_transition_lock:
+            self._local_scheduler_state_store.update_desired_state(
+                component_id=requested,
+                desired_state="unloading",
+                request_metadata=dict(request_metadata or {}),
+                last_transition={"action": "release", "component_id": requested},
+            )
+            result = self._execute_local_scheduler_release(requested)
+            desired_state = "unloaded" if result.get("result") in {"stopped", "model_unloaded", "already_unloaded", "not_directly_releasable"} else "blocked"
+            self._local_scheduler_state_store.update_desired_state(
+                component_id=requested,
+                desired_state=desired_state,
+                request_metadata=dict(request_metadata or {}),
+                last_transition={"action": "release_executed", "result": result},
+                last_error=None if desired_state == "unloaded" else str(result.get("reason") or "release_failed"),
+            )
+            self._local_scheduler_state_store.append_event(
+                {"event": "release_executed", "component_id": requested, "result": result}
+            )
+            return {
+                "status": "ok" if desired_state == "unloaded" else "blocked",
+                "component_id": requested,
+                "release_result": result,
+                "local_scheduler": self.get_status().get("local_scheduler", {}),
+            }
+
+    def _execute_local_scheduler_start(self, component_id: str) -> dict:
+        if component_id == "text_llm":
+            return self.start(target="local_llm")
+        if component_id == "vision_llm":
+            return {"target": "vision_llm", "result": "started", **self.ensure_vision_runtime_resident(local_in_flight=0)}
+        if component_id == "visual_runtime":
+            started = time.perf_counter()
+            self._run_comfyui_control("gpu", "ready")
+            return {
+                "target": "visual_runtime",
+                "adapter": "comfyui",
+                "result": "started",
+                "load_seconds": round(time.perf_counter() - started, 3),
+            }
+        if component_id == "training_runtime":
+            return {
+                "target": "training_runtime",
+                "adapter": "sd_scripts",
+                "result": "ready_for_job_submission",
+                "reason": "training_runtime_starts_with_training_job",
+            }
+        raise ValueError("unknown local scheduler component")
+
+    def _execute_local_scheduler_release(self, component_id: str) -> dict:
+        if component_id == "text_llm":
+            return self.stop(target="local_llm")
+        if component_id == "vision_llm":
+            return self.unload_vision_model()
+        if component_id == "visual_runtime":
+            started = time.perf_counter()
+            self.stop_comfyui_progress_listener()
+            if self._manual_comfyui_webui_active():
+                result = self.stop_comfyui_webui()
+                return {
+                    "target": "visual_runtime",
+                    "adapter": "comfyui",
+                    "result": "stopped",
+                    "unload_seconds": round(time.perf_counter() - started, 3),
+                    "webui_stop_result": result,
+                }
+            self._run_comfyui_control("gpu", "stop")
+            self._wait_comfyui_runtime_stopped(runtime="gpu")
+            return {
+                "target": "visual_runtime",
+                "adapter": "comfyui",
+                "result": "stopped",
+                "unload_seconds": round(time.perf_counter() - started, 3),
+            }
+        if component_id == "training_runtime":
+            if self._sd_scripts_training_active():
+                return {
+                    "target": "training_runtime",
+                    "adapter": "sd_scripts",
+                    "result": "blocked",
+                    "reason": "training_job_active",
+                }
+            return {
+                "target": "training_runtime",
+                "adapter": "sd_scripts",
+                "result": "not_directly_releasable",
+                "reason": "training_runtime_is_job_scoped",
+            }
+        raise ValueError("unknown local scheduler component")
 
     def schedule_restart(self, *, target: str, delay_seconds: int) -> dict:
         value = str(target or "").strip().lower()
@@ -1858,7 +2021,7 @@ class UserSystemdServiceManager:
 
 class NullServiceManager:
     def get_status(self) -> dict:
-        return {
+        services = {
             "backend": "unknown",
             "frontend": "unknown",
             "local_llm": "unknown",
@@ -1866,8 +2029,11 @@ class NullServiceManager:
             "comfyui_gpu": "unknown",
             "comfyui_cpu": "unknown",
             "comfyui_webui": "unknown",
+            "gpu_exclusive": self.gpu_exclusive_workload_status(),
             "node": "unknown",
         }
+        services["local_scheduler"] = LocalSchedulerStateStore().status_from_services(services=services)
+        return services
 
     def restart(self, *, target: str) -> dict:
         raise ValueError("service manager is not configured")
@@ -1880,6 +2046,29 @@ class NullServiceManager:
 
     def schedule_restart(self, *, target: str, delay_seconds: int) -> dict:
         raise ValueError("service manager is not configured")
+
+    def request_local_scheduler_component(
+        self,
+        *,
+        component_id: str,
+        importance: str | None = None,
+        request_metadata: dict | None = None,
+    ) -> dict:
+        return {
+            "status": "blocked",
+            "component_id": str(component_id or "").strip(),
+            "reason": "service_manager_unconfigured",
+            "importance": str(importance or "normal"),
+            "request_metadata": dict(request_metadata or {}),
+        }
+
+    def release_local_scheduler_component(self, *, component_id: str, request_metadata: dict | None = None) -> dict:
+        return {
+            "status": "blocked",
+            "component_id": str(component_id or "").strip(),
+            "reason": "service_manager_unconfigured",
+            "request_metadata": dict(request_metadata or {}),
+        }
 
     def is_local_llm_model(self, *, model_id: str | None) -> bool:
         return False

@@ -194,6 +194,71 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(decision["decision"], "needs_unload")
         self.assertEqual(decision["affected_components"], ["visual_runtime"])
 
+    def test_local_scheduler_request_executes_needed_unload_before_visual_start(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {"HEXE_LOCAL_SCHEDULER_STATE_DIR": str(Path(tmp) / "local-scheduler")},
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+            def _fake_status():
+                return {
+                    "local_scheduler": {
+                        "components": [
+                            {"component_id": "text_llm", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}},
+                            {"component_id": "vision_llm", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}},
+                            {"component_id": "visual_runtime", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                            {"component_id": "training_runtime", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                        ]
+                    }
+                }
+
+            with (
+                patch.object(manager, "get_status", side_effect=_fake_status),
+                patch.object(manager, "_execute_local_scheduler_release", return_value={"target": "vision_llm", "result": "model_unloaded"}) as fake_release,
+                patch.object(manager, "_execute_local_scheduler_start", return_value={"target": "visual_runtime", "result": "started"}) as fake_start,
+            ):
+                result = manager.request_local_scheduler_component(component_id="visual_runtime", importance="high")
+
+        self.assertEqual(result["status"], "ok")
+        fake_release.assert_called_once_with("vision_llm")
+        fake_start.assert_called_once_with("visual_runtime")
+        self.assertEqual(result["decision"]["decision"], "needs_unload")
+
+    def test_local_scheduler_request_waits_when_background_visual_would_preempt_vision(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {"HEXE_LOCAL_SCHEDULER_STATE_DIR": str(Path(tmp) / "local-scheduler")},
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+            with (
+                patch.object(
+                    manager,
+                    "get_status",
+                    return_value={
+                        "local_scheduler": {
+                            "components": [
+                                {"component_id": "text_llm", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}},
+                                {"component_id": "vision_llm", "observed_state": "running", "idle": {"in_flight": 0, "queued": 0}},
+                                {"component_id": "visual_runtime", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                                {"component_id": "training_runtime", "observed_state": "unloaded", "idle": {"in_flight": 0, "queued": 0}},
+                            ]
+                        }
+                    },
+                ),
+                patch.object(manager, "_execute_local_scheduler_release") as fake_release,
+                patch.object(manager, "_execute_local_scheduler_start") as fake_start,
+            ):
+                result = manager.request_local_scheduler_component(component_id="visual_runtime", importance="normal")
+
+        self.assertEqual(result["status"], "blocked")
+        self.assertEqual(result["decision"]["reason"], "background_waits_for_vision")
+        fake_release.assert_not_called()
+        fake_start.assert_not_called()
+
     def test_restart_node_restarts_both_units(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
         invoked = []
