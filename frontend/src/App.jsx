@@ -51,6 +51,7 @@ import {
 import "./app.css";
 
 const REFRESH_INTERVAL_MS = 5000;
+const EXECUTION_QUEUE_REFRESH_INTERVAL_MS = 1000;
 const UI_VERSION = "0.1.0";
 const OPENAI_LATEST_MODELS_LIMIT = 200;
 const DIAGNOSTIC_ENDPOINTS = [
@@ -452,6 +453,15 @@ export default function App() {
     );
   }
 
+  async function loadExecutionQueueDiagnostics() {
+    try {
+      const executionQueuePayload = await apiGet("/api/execution/queues");
+      setExecutionQueueDiagnostics(executionQueuePayload);
+    } catch {
+      setExecutionQueueDiagnostics(null);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
     let timeoutId;
@@ -482,6 +492,17 @@ export default function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const operationalSection = resolveOperationalSection(routeHash);
+    if (!["runtime", "jobs_queue"].includes(operationalSection)) {
+      return undefined;
+    }
+    const intervalId = window.setInterval(() => {
+      loadExecutionQueueDiagnostics();
+    }, EXECUTION_QUEUE_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [routeHash]);
 
   async function onRetryBackendConnection() {
     if (retryingBackend) {
