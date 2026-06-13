@@ -2322,27 +2322,32 @@
 }
 
 .runtime-health-task-availability-grid {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.runtime-health-task-availability-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto minmax(160px, 1fr);
-  gap: 10px;
+.runtime-health-task-availability-pill {
+  display: inline-flex;
   align-items: center;
-  padding: 8px 10px;
+  max-width: 100%;
+  gap: 8px;
+  padding: 6px 8px;
   overflow: hidden;
   border: 1px solid hsl(var(--sx-border));
-  border-radius: var(--sx-radius-sm);
+  border-radius: var(--sx-radius-pill);
+  background: hsl(var(--sx-panel) / 0.65);
 }
 
-.runtime-health-task-availability-row code,
-.runtime-health-task-availability-row span {
+.runtime-health-task-availability-pill code {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.runtime-health-task-availability-pill .status-badge {
+  flex: 0 0 auto;
 }
 
 .mini-model-card.is-selected {

@@ -83,18 +83,20 @@ function TaskAvailabilitySection({ items = [] }) {
       <h3>Task Availability</h3>
       <div className="runtime-health-task-availability-grid">
         {taskItems.map((item) => (
-          <div className="runtime-health-task-availability-row" key={item.taskFamily}>
+          <span
+            className="runtime-health-task-availability-pill"
+            key={item.taskFamily}
+            title={item.reason || "no_reason"}
+          >
             <code>{item.taskFamily}</code>
             <StatusBadge value={item.providerMode || "unavailable"} />
-            <span>{item.reason || "no_reason"}</span>
-          </div>
+          </span>
         ))}
         {taskItems.length ? null : (
-          <div className="runtime-health-task-availability-row">
+          <span className="runtime-health-task-availability-pill" title="no resolved tasks">
             <code>none</code>
             <StatusBadge value="unavailable" />
-            <span>no resolved tasks</span>
-          </div>
+          </span>
         )}
       </div>
     </div>
