@@ -25,6 +25,11 @@ function compactText(value, fallback = "unknown") {
   return text || fallback;
 }
 
+function numericCount(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function componentStats(component) {
   const stats = serviceObject(component.usage_statistics);
   const current = serviceObject(stats.current);
@@ -39,13 +44,15 @@ function componentWork({ component, executionQueue }) {
   const lane = serviceObject(lanes[component.component_id]);
   if (Object.keys(lane).length) {
     return {
-      inFlight: Number.isFinite(Number(lane.active_count)) ? Number(lane.active_count) : idle.in_flight ?? 0,
-      queued: Number.isFinite(Number(lane.queued_count)) ? Number(lane.queued_count) : idle.queued ?? 0,
+      running: numericCount(lane.active_count, idle.in_flight ?? 0),
+      staged: numericCount(lane.staged_count, 0),
+      backlog: numericCount(lane.backlog_count, 0),
     };
   }
   return {
-    inFlight: idle.in_flight ?? 0,
-    queued: idle.queued ?? 0,
+    running: idle.in_flight ?? 0,
+    staged: 0,
+    backlog: idle.queued ?? 0,
   };
 }
 
@@ -93,7 +100,7 @@ export function LocalResidencyCard({
                 <div>
                   <span>Work</span>
                   <code>
-                    {work.inFlight} running / {work.queued} queued
+                    {work.running} run / {work.staged} staged / {work.backlog} backlog
                   </code>
                 </div>
                 <div>

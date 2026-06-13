@@ -135,6 +135,25 @@ function friendlyQueueName(value) {
   return normalized.replaceAll("_", " ") || "queue";
 }
 
+function toCount(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function summarizeQueueCounts(queue) {
+  const active = toCount(queue?.active_count);
+  const staged = toCount(queue?.staged_count);
+  const backlog = toCount(queue?.backlog_count);
+  const queued = toCount(queue?.queued_count);
+  return {
+    active,
+    staged,
+    backlog,
+    queued,
+    hasWork: active > 0 || staged > 0 || backlog > 0 || queued > 0,
+  };
+}
+
 function queueDecisionLine(queue) {
   const nextState = queue?.next_job?.queue_state || queue?.active_job?.queue_state || {};
   const parts = [];
@@ -158,6 +177,18 @@ function queueDecisionLine(queue) {
     parts.push(nextState.routing_reason);
   }
   return parts.length ? parts.join(" • ") : "No pending decision";
+}
+
+function queueWorkLabel(queue) {
+  const counts = summarizeQueueCounts(queue);
+  return `${counts.active} run / ${counts.staged} staged / ${counts.backlog} backlog`;
+}
+
+function laneCapacityLabel(queue) {
+  const capacity = queue?.capacity && typeof queue.capacity === "object" ? queue.capacity : {};
+  const active = capacity.max_active ?? queue?.concurrency ?? 1;
+  const staged = capacity.max_staged ?? 1;
+  return `${active} active + ${staged} staged`;
 }
 
 function sortScheduleCatalog(entries) {
@@ -248,7 +279,7 @@ export function ScheduledTasksSection({ scheduler = null, executionQueue = null,
 export function JobsQueueCard({ executionQueue = null, className = "" }) {
   return (
     <article className={`card ${className}`.trim()}>
-      <CardHeader title="Jobs Queue" subtitle="Shared local and cloud execution queue." />
+      <CardHeader title="Jobs Queue" subtitle="Global intake queue with scheduler-owned runtime lanes." />
       <ExecutionQueueSummary executionQueue={executionQueue} compact />
     </article>
   );
@@ -269,6 +300,7 @@ function ExecutionQueueSummary({ executionQueue = null, compact = false }) {
   const globalQueue = executionQueue?.global_queue && typeof executionQueue.global_queue === "object"
     ? executionQueue.global_queue
     : null;
+  const globalCounts = summarizeQueueCounts(globalQueue);
 
   if (!queues.length) {
     return <p className="muted tiny">No shared execution queue data is available yet.</p>;
@@ -285,35 +317,59 @@ function ExecutionQueueSummary({ executionQueue = null, compact = false }) {
         </div>
       )}
       {globalQueue ? (
-        <div className="execution-queue-card execution-queue-global">
-          <div className="execution-queue-card-title">
-            <strong>Global Queue</strong>
+        <div className="execution-queue-global">
+          <div className="execution-queue-global-main">
+            <span className="muted tiny">Global Intake</span>
+            <strong>Scheduler Backlog</strong>
+            <code>{globalCounts.queued} total queued</code>
             <StatusBadge
-              value={`${globalQueue.active_count || 0} active / ${globalQueue.staged_count || 0} staged / ${globalQueue.backlog_count || 0} backlog`}
-              tone={globalQueue.active_count || globalQueue.staged_count || globalQueue.backlog_count ? "success" : "meta"}
+              value={queueWorkLabel(globalQueue)}
+              tone={globalCounts.hasWork ? "success" : "meta"}
             />
           </div>
-          {globalQueue.next_dispatch_candidate ? (
-            <div className="muted tiny">
-              Next: {globalQueue.next_dispatch_candidate.job_name || globalQueue.next_dispatch_candidate.task_id || globalQueue.next_dispatch_candidate.job_id}
-            </div>
-          ) : (
-            <div className="muted tiny">No global dispatch candidate.</div>
-          )}
+          <div className="execution-queue-global-next">
+            <span className="muted tiny">Next Dispatch</span>
+            {globalQueue.next_dispatch_candidate ? (
+              <>
+                <strong>{globalQueue.next_dispatch_candidate.job_name || globalQueue.next_dispatch_candidate.task_id || globalQueue.next_dispatch_candidate.job_id}</strong>
+                <code>{friendlyQueueName(globalQueue.next_dispatch_candidate.runtime_lane)}</code>
+              </>
+            ) : (
+              <strong>No candidate</strong>
+            )}
+          </div>
         </div>
       ) : null}
       <div className="execution-queue-grid">
         {queues.map(([queueName, queue]) => {
           const nextJob = queue.staged_job || queue.next_job || queue.active_job || null;
           const queueState = nextJob?.queue_state || {};
+          const counts = summarizeQueueCounts(queue);
           return (
             <div key={queueName} className="execution-queue-card">
               <div className="execution-queue-card-title">
                 <strong>{friendlyQueueName(queueName)}</strong>
                 <StatusBadge
-                  value={`${queue.active_count || 0} active / ${queue.staged_count || 0} staged / ${queue.backlog_count || 0} backlog`}
-                  tone={queue.active_count || queue.staged_count || queue.backlog_count ? "success" : "meta"}
+                  value={counts.hasWork ? "work" : "idle"}
+                  tone={counts.hasWork ? "success" : "meta"}
                 />
+              </div>
+              <div className="execution-queue-lane-flow" aria-label={`${friendlyQueueName(queueName)} lane counts`}>
+                <span>
+                  <b>{counts.active}</b>
+                  <small>Running</small>
+                </span>
+                <span>
+                  <b>{counts.staged}</b>
+                  <small>Staged</small>
+                </span>
+                <span>
+                  <b>{counts.backlog}</b>
+                  <small>Backlog</small>
+                </span>
+              </div>
+              <div className="execution-queue-capacity muted tiny">
+                Runtime lane capacity: {laneCapacityLabel(queue)}
               </div>
               <div className="muted tiny">{queueDecisionLine(queue)}</div>
               {nextJob ? (
