@@ -361,6 +361,14 @@
   grid-column: 3;
 }
 
+.operational-jobs-residency-card {
+  grid-column: 1 / span 2;
+}
+
+.operational-jobs-queue-card {
+  grid-column: 3;
+}
+
 .dashboard-stack {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3119,7 +3127,9 @@ h2 {
   .operational-runtime-services-card,
   .operational-runtime-actions-card,
   .operational-runtime-residency-card,
-  .operational-runtime-jobs-card {
+  .operational-runtime-jobs-card,
+  .operational-jobs-residency-card,
+  .operational-jobs-queue-card {
     grid-column: auto;
   }
 

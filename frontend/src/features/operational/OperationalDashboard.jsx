@@ -211,11 +211,11 @@ export function OperationalDashboard({
             <LocalResidencyCard
               {...runtimeServicesProps}
               executionQueue={scheduledTasksProps?.executionQueue}
-              className="operational-card-full-span"
+              className="operational-jobs-residency-card"
             />
             <JobsQueueCard
               executionQueue={scheduledTasksProps?.executionQueue}
-              className="operational-card-full-span"
+              className="operational-jobs-queue-card"
             />
           </>
         ) : null}
