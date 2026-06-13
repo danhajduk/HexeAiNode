@@ -584,3 +584,4 @@ Task 1009: Integrate lane dispatch with local residency scheduler - Completed on
 Task 1010: Implement local-preferred cloud spillover decisions - Completed on 06/13/2026 12:37
 Task 1011: Route visual GPU CPU and training work through lanes - Completed on 06/13/2026 12:42
 Task 1012: Surface unified queue lanes in APIs and Runtime UI - Completed on 06/13/2026 12:45
+Task 1013: Update Client AI communication docs for unified queue lanes - Completed on 06/13/2026 12:48

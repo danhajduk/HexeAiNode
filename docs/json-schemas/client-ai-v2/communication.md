@@ -347,17 +347,22 @@ instead of blocking the HTTP call until model execution finishes.
 | Field | Implemented behavior |
 | --- | --- |
 | `importance` | `background`, `low`, `normal`, `high`, or `critical`. Defaults to `normal`, but if left normal and top-level `priority` is not normal, the request copies `priority`. |
+| `priority` | Optional ordering hint inside the same importance bucket. Defaults to `importance`. |
 | `queue_class` | `interactive`, `background`, or `scheduled`. Defaults to `background` for background image-generation work and otherwise `interactive`. |
+| `runtime_lane` | Optional explicit lane: `cloud`, `text_llm`, `vision_llm`, `visual_gpu`, `visual_cpu`, or `training_runtime`. If omitted, the node infers the lane from task family, requested provider, and routing. |
 | `max_wait_seconds` | Non-negative wait budget. Defaults to 6 hours for `background` queue class and 5 minutes otherwise. |
 | `deadline_at` | Future ISO datetime. When present, it participates in deadline sorting and expiry. |
 | `allow_cloud_spillover` | Allows a local queued job to reroute to cloud when local wait budget or deadline cannot be met and cloud is eligible. |
-| `local_preferred` | Preserved intent metadata for clients and future policy. Current routing is still governed by prompt/request routing policy and provider availability. |
+| `local_preferred` | Normalized intent metadata. Defaults from routing policy: true for `local_preferred` and `cloud_fallback`, false otherwise. |
+| `routing_policy` | Normalized queue-level routing policy metadata: `local_only`, `local_preferred`, `cloud_fallback`, or `cloud_only`. |
+| `estimated_vram_mib` | Optional non-negative local resource estimate. Used as scheduler metadata; exact admission still depends on runtime policy. |
+| `estimated_runtime_seconds` | Optional non-negative duration estimate. Used as scheduler metadata. |
 | `reason` | Optional client-readable explanation, max 512 characters. |
 
 Visual Runtime image generation and Training Runtime work should normally be submitted as background-capable work with
-longer wait budgets unless the user is actively waiting for the result. The current API still uses technical queue and
-adapter identifiers such as `cpu_comfyui`, `comfyui_gpu`, and `sd_scripts` where those are part of the implemented
-contract.
+longer wait budgets unless the user is actively waiting for the result. Queue lane names are ecosystem-facing:
+`visual_gpu`, `visual_cpu`, and `training_runtime`. Technical adapter identifiers such as `comfyui_gpu`,
+`comfyui_cpu`, and `sd_scripts` may still appear in runtime assignment or debug metadata.
 
 Queued responses use HTTP `200` and this shape:
 
@@ -397,7 +402,9 @@ Queued responses use HTTP `200` and this shape:
   },
   "queue_state": {
     "queue": "local",
+    "runtime_lane": "text_llm",
     "importance": "normal",
+    "priority": "background",
     "queue_class": "background",
     "max_wait_seconds": 21600,
     "deadline_at": null,
@@ -405,6 +412,16 @@ Queued responses use HTTP `200` and this shape:
     "remaining_wait_seconds": 21595.0,
     "estimated_start_seconds": 5,
     "estimated_start_at": "2026-06-04T17:30:05-07:00",
+    "staged_at": null,
+    "started_at": null,
+    "completed_at": null,
+    "estimated_vram_mib": null,
+    "estimated_runtime_seconds": null,
+    "lane_capacity": {
+      "max_active": 1,
+      "max_staged": 1,
+      "local_residency_required": true
+    },
     "spillover_allowed": true,
     "spillover_selected": false,
     "routing_reason": "routing_policy_local_preferred",
@@ -510,16 +527,18 @@ Diagnostics also include `fairness.max_pending_per_client` and per-queue `per_cl
 
 Queue selection:
 
-- Local queue: explicit `requested_provider = "local"`, request `constraints.routing_policy.mode = "local_only"`, or
-  a V3 prompt policy that is `local_only` or `local_preferred`.
+- Global intake queue: all queued jobs are accepted into scheduler-owned backlog and then surfaced by runtime lane.
+- Text LLM lane: `text_llm`, used by local text work. Compatibility queue name `local` may still appear for text jobs.
+- Vision LLM lane: `vision_llm`, used by local vision work.
+- Visual GPU lane: `visual_gpu`, used by normal, high, critical, or explicit-GPU local image-generation work.
+- Visual CPU lane: `visual_cpu`, used by background and low-importance image-generation work when provider selection
+  allows local Visual Runtime execution.
+- Training lane: `training_runtime`, used by local LoRA/training work.
 - Cloud queue: explicit cloud provider, request `cloud_only`, or a V3 prompt policy that is `cloud_only` or
   `cloud_fallback`.
 - Capability-aware queue selection: when no hard route is declared, or when a flexible route such as
   `local_preferred`/`cloud_fallback` can only be served by one side, the node uses provider task capability maps to
   choose the local or cloud queue and narrows execution routing to match that choice.
-- CPU Visual Runtime queue: background and low-importance image-generation work may use the technical `cpu_comfyui`
-  queue when provider selection allows local Visual Runtime execution. Normal, high, and critical image jobs do not use
-  this CPU background lane.
 - Wait-budget spillover: local queued requests with `queue.allow_cloud_spillover = true` may enter the cloud queue
   immediately when the current local estimated start exceeds `queue.max_wait_seconds`, provided cloud is eligible.
 - Deadline spillover: local queued requests with `queue.allow_cloud_spillover = true` may reroute to cloud after their
@@ -536,11 +555,11 @@ Importance selection:
 - Without prompt-owned importance, `TaskExecutionRequest.priority` controls queue priority.
 - V1 and V2 prompts, and V3 prompts without explicit importance, are treated as `normal`.
 
-Local queue capacity is configured as `LLAMACPP_PARALLEL + 1` by default. This intentionally keeps only a small number
-of local jobs in or near llama.cpp while the AI Node queue decides which job enters next by importance, deadline, and
-FIFO order within the same importance. Requests that need a local model swap remain queued until they can enter local
-execution; the existing local runtime switch path handles the swap, then the idle reversion policy returns to
-`qwen3-8b-q4_k_m` when the alternate model is idle long enough.
+Queue diagnostics expose a global queue plus dedicated lanes. Each local runtime lane reports one active slot, one
+staged slot, and the remaining scheduler backlog. Runtimes should not maintain hidden queue depth beyond the staged
+slot. Requests that need a local model swap remain queued until they can enter local execution; the existing local
+runtime switch path handles the swap, then the idle reversion policy returns to `qwen3-8b-q4_k_m` when the alternate
+model is idle long enough.
 
 Local model state is exposed through `GET /api/node/status` under `services.local_llm.model_states`:
 
@@ -579,6 +598,86 @@ Use `GET /api/execution/queues` for operational diagnostics:
 ```json
 {
   "configured": true,
+  "schema_version": "2.0",
+  "dispatch_model": {
+    "backlog_owner": "scheduler",
+    "max_active_per_runtime_lane": 1,
+    "max_staged_per_runtime_lane": 1
+  },
+  "global_queue": {
+    "queued_count": 2,
+    "active_count": 1,
+    "staged_count": 1,
+    "backlog_count": 0,
+    "next_dispatch_candidate": {
+      "job_id": "job-visual-123",
+      "job_name": "avatar preview",
+      "task_family": "task.image_generation",
+      "runtime_lane": "visual_gpu",
+      "importance": "normal",
+      "queue_position": 1
+    }
+  },
+  "lanes": {
+    "text_llm": {
+      "queued_count": 1,
+      "active_count": 1,
+      "staged_count": 1,
+      "backlog_count": 0,
+      "runtime_component": "text_llm",
+      "local_residency_required": true,
+      "active_job": null,
+      "next_job": {
+        "job_id": "job-0123456789abcdef",
+        "job_name": "mail classification 123",
+        "task_family": "task.classification",
+        "runtime_lane": "text_llm",
+        "queue_position": 1,
+        "queue_state": {
+          "queue": "local",
+          "runtime_lane": "text_llm",
+          "importance": "high",
+          "queue_class": "interactive",
+          "max_wait_seconds": 300,
+          "remaining_wait_seconds": 295.0,
+          "estimated_start_seconds": 5,
+          "spillover_allowed": true,
+          "spillover_selected": false,
+          "routing_reason": "routing_policy_local_preferred"
+        }
+      },
+      "per_importance": {
+        "high": 1
+      },
+      "per_client_pending": {
+        "mail-node": 1
+      }
+    },
+    "visual_gpu": {
+      "queued_count": 1,
+      "active_count": 0,
+      "staged_count": 0,
+      "backlog_count": 1,
+      "runtime_component": "visual_gpu",
+      "local_residency_required": true
+    },
+    "visual_cpu": {
+      "queued_count": 0,
+      "active_count": 0,
+      "staged_count": 0,
+      "backlog_count": 0,
+      "runtime_component": "visual_cpu",
+      "local_residency_required": false
+    },
+    "training_runtime": {
+      "queued_count": 0,
+      "active_count": 0,
+      "staged_count": 0,
+      "backlog_count": 0,
+      "runtime_component": "training_runtime",
+      "local_residency_required": true
+    }
+  },
   "queues": {
     "local": {
       "queued_count": 1,
@@ -623,7 +722,7 @@ Use `GET /api/execution/queues` for operational diagnostics:
       "per_importance": {},
       "per_client_pending": {}
     },
-    "cpu_comfyui": {
+    "visual_cpu": {
       "queued_count": 0,
       "active_count": 0,
       "concurrency": 1,
@@ -637,7 +736,7 @@ Use `GET /api/execution/queues` for operational diagnostics:
   },
   "cpu_comfyui_policy": {
     "enabled": true,
-    "queue": "cpu_comfyui",
+    "queue": "visual_cpu",
     "runtime_id": "comfyui_cpu",
     "allowed_task_families": ["task.image_generation", "task.generation.image"],
     "allowed_importance": ["background", "low"],
