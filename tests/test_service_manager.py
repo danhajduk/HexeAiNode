@@ -717,6 +717,22 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertTrue(result["started"])
         fake_run.assert_called_once_with("ready")
 
+    def test_comfyui_loaded_health_with_warm_idle_vram_does_not_block_vision(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+        with (
+            patch.object(
+                manager,
+                "_uds_json_get",
+                return_value={"model_residency": "loaded", "system_stats": {"devices": [{"torch_vram_total": 33554432}]}},
+            ),
+            patch.object(manager, "_query_container_pid", return_value=1234),
+            patch.object(manager, "_gpu_process_metrics", return_value={"vram_mib": 196}),
+        ):
+            loaded = manager._comfyui_gpu_model_loaded()
+
+        self.assertFalse(loaded)
+
     def test_comfyui_webui_idle_close_closes_after_timeout(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             "os.environ",
@@ -1236,6 +1252,8 @@ class ServiceManagerTests(unittest.TestCase):
                 invoked.append(cmd)
                 if cmd[:2] == ["docker", "inspect"]:
                     return _Completed("4243\n" if runtime_ready["value"] else "0\n")
+                if cmd[:1] == ["pgrep"]:
+                    return _Completed("")
                 runtime_ready["value"] = True
                 return _Completed("{}")
 
@@ -1244,7 +1262,7 @@ class ServiceManagerTests(unittest.TestCase):
                 patch.object(
                     manager,
                     "_active_model_ids_for_socket",
-                    side_effect=[[], ["qwen2.5-vl-3b-instruct-q4_k_m"]],
+                    return_value=[],
                 ),
                 patch("subprocess.run", side_effect=_fake_run),
             ):
@@ -1273,6 +1291,8 @@ class ServiceManagerTests(unittest.TestCase):
                 invoked.append(cmd)
                 if cmd[:2] == ["docker", "inspect"]:
                     return _Completed("4243\n" if runtime_ready["value"] else "0\n")
+                if cmd[:1] == ["pgrep"]:
+                    return _Completed("")
                 runtime_ready["value"] = True
                 return _Completed("{}")
 
@@ -1281,13 +1301,14 @@ class ServiceManagerTests(unittest.TestCase):
                 patch.object(
                     manager,
                     "_active_model_ids_for_socket",
-                    side_effect=[[], ["qwen2.5-vl-3b-instruct-q4_k_m"]],
+                    return_value=[],
                 ),
                 patch.object(
                     manager,
                     "_uds_json_get",
                     return_value={"model_residency": "on_demand", "system_stats": {"devices": [{"torch_vram_total": 0}]}},
                 ),
+                patch.object(manager, "_gpu_process_metrics", return_value={"vram_mib": 196}),
                 patch("subprocess.run", side_effect=_fake_run),
             ):
                 result = manager.ensure_vision_runtime_resident()
@@ -1316,6 +1337,8 @@ class ServiceManagerTests(unittest.TestCase):
                 invoked.append(cmd)
                 if cmd[:2] == ["docker", "inspect"]:
                     return _Completed("4243\n" if runtime_ready["value"] else "0\n")
+                if cmd[:1] == ["pgrep"]:
+                    return _Completed("")
                 runtime_ready["value"] = True
                 return _Completed("{}")
 
@@ -1324,22 +1347,25 @@ class ServiceManagerTests(unittest.TestCase):
                 patch.object(
                     manager,
                     "_active_model_ids_for_socket",
-                    side_effect=[[], ["qwen2.5-vl-3b-instruct-q4_k_m"]],
+                    return_value=[],
                 ),
                 patch.object(
                     manager,
                     "_uds_json_get",
                     return_value={"model_residency": "loaded", "system_stats": {"devices": [{"torch_vram_total": 4096}]}},
                 ),
+                patch.object(manager, "_gpu_process_metrics", return_value={"vram_mib": 4900}),
                 patch("subprocess.run", side_effect=_fake_run),
             ):
+                manager._set_scheduler_control_active(True)
                 result = manager.ensure_vision_runtime_resident()
+                manager._set_scheduler_control_active(False)
 
-        self.assertTrue(result["started"])
+        self.assertFalse(result["started"])
         self.assertTrue(result["comfyui_gpu_model_loaded"])
         self.assertFalse(result["gpu_comfyui_critical_in_flight"])
-        self.assertEqual(result["residency_state"], "model_loaded")
-        self.assertIn(["scripts/llamacpp-vision-control.sh", "ready"], invoked)
+        self.assertEqual(result["reason"], "blocked_by_comfyui_gpu_model")
+        self.assertNotIn(["scripts/llamacpp-vision-control.sh", "ready"], invoked)
 
     def test_vision_runtime_residency_waits_when_critical_comfyui_work_is_pending(self):
         with patch.dict("os.environ", {"HEXE_VISION_LLM_ALWAYS_ON_ENABLED": "true"}, clear=False):
@@ -1358,9 +1384,12 @@ class ServiceManagerTests(unittest.TestCase):
                     "_uds_json_get",
                     return_value={"model_residency": "on_demand", "system_stats": {"devices": [{"torch_vram_total": 0}]}},
                 ),
+                patch.object(manager, "_gpu_process_metrics", return_value={"vram_mib": 196}),
                 patch("subprocess.run") as fake_run,
             ):
+                manager._set_scheduler_control_active(True)
                 result = manager.ensure_vision_runtime_resident(gpu_comfyui_critical_in_flight=True)
+                manager._set_scheduler_control_active(False)
 
         self.assertFalse(result["started"])
         self.assertFalse(result["comfyui_gpu_model_loaded"])

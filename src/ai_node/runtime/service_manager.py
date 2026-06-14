@@ -2143,8 +2143,21 @@ class UserSystemdServiceManager:
         payload = self._uds_json_get(self._comfyui_gpu_health_socket, "/health")
         if not isinstance(payload, dict):
             return False
+        pid = self._query_container_pid(self._comfyui_container_name)
+        observed_vram_mib = 0
+        if pid > 0:
+            try:
+                observed_vram_mib = max(int((self._gpu_process_metrics(pid) or {}).get("vram_mib") or 0), 0)
+            except Exception:
+                observed_vram_mib = 0
+        try:
+            loaded_threshold_mib = max(int(os.environ.get("HEXE_COMFYUI_GPU_MODEL_LOADED_MIN_VRAM_MIB") or "1024"), 0)
+        except ValueError:
+            loaded_threshold_mib = 1024
         residency = str(payload.get("model_residency") or "").strip().lower()
         if residency == "loaded":
+            if observed_vram_mib > 0:
+                return observed_vram_mib >= loaded_threshold_mib
             return True
         if residency in {"on_demand", "unloaded"}:
             return False
