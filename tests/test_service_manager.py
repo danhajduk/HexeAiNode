@@ -717,6 +717,34 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertTrue(result["started"])
         fake_run.assert_called_once_with("ready")
 
+    def test_stale_comfyui_queue_marker_does_not_block_vision_residency(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {"HEXE_COMFYUI_WEBUI_SESSION_FILE": str(Path(tmp) / "session.json")},
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._write_comfyui_webui_session(state="active", reason="comfyui_queue_active")
+            session_file = manager._comfyui_webui_session_file
+            with (
+                patch.object(manager, "_comfyui_gpu_model_loaded", return_value=False),
+                patch.object(manager, "_comfyui_webui_status_without_session", return_value={"state": "running", "pid": 1234}),
+                patch.object(manager, "_uds_json_get", return_value={"queue_running": [], "queue_pending": []}),
+                patch.object(manager, "_active_model_ids_for_socket", return_value=[]),
+                patch.object(manager, "_query_container_pid", return_value=0),
+                patch("os.path.exists", side_effect=lambda path: str(path) == session_file),
+                patch.object(manager, "_run_vision_llm_control") as fake_run,
+            ):
+                manager._set_scheduler_control_active(True)
+                status = manager.vision_runtime_status()
+                result = manager.ensure_vision_runtime_resident()
+                manager._set_scheduler_control_active(False)
+
+        self.assertTrue(status["start_due"])
+        self.assertFalse(status["manual_comfyui_webui_active"])
+        self.assertTrue(result["started"])
+        fake_run.assert_called_once_with("ready")
+
     def test_comfyui_loaded_health_with_warm_idle_vram_does_not_block_vision(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
 

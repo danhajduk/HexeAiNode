@@ -2098,7 +2098,12 @@ class UserSystemdServiceManager:
             if state in {"starting", "closing", "restoring"}:
                 return True
             if state in {"active", "idle"}:
-                return self._comfyui_webui_status_without_session().get("state") == "running"
+                if self._comfyui_webui_status_without_session().get("state") != "running":
+                    return False
+                reason = str(payload.get("reason") or "").strip().lower()
+                if reason == "comfyui_queue_active":
+                    return bool(self._comfyui_queue_state().get("queue_active"))
+                return True
             return False
         return self._comfyui_webui_status_without_session().get("state") == "running"
 

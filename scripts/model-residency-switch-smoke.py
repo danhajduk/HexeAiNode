@@ -198,17 +198,28 @@ def snapshot(base_url: str, label: str) -> dict[str, Any]:
 def validate_snapshot(snapshot_payload: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     scheduler = snapshot_payload.get("scheduler") if isinstance(snapshot_payload.get("scheduler"), dict) else {}
+    visual = scheduler.get("visual_gpu") if isinstance(scheduler.get("visual_gpu"), dict) else {}
+    vision = scheduler.get("vision_llm") if isinstance(scheduler.get("vision_llm"), dict) else {}
+    visual_model_state = str(visual.get("model_state") or "").lower()
+    vision_model_state = str(vision.get("model_state") or "").lower()
+    if visual_model_state == "loaded" and vision_model_state == "loaded":
+        errors.append("visual_gpu and vision_llm models are both loaded")
+    return errors
+
+
+def validate_final_snapshot(snapshot_payload: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
     queues = snapshot_payload.get("queues") if isinstance(snapshot_payload.get("queues"), dict) else {}
     for lane, queue in queues.items():
-        if not isinstance(queue, dict) or not queue.get("active_job"):
+        if not isinstance(queue, dict):
             continue
-        component_id = "visual_gpu" if lane == "visual_gpu" else lane
-        if component_id == "cloud":
-            continue
-        component = scheduler.get(component_id) if isinstance(scheduler.get(component_id), dict) else {}
-        model_state = str(component.get("model_state") or "").lower()
-        if model_state == "unloaded":
-            errors.append(f"{lane} has active job {queue.get('active_job')} while model_state=unloaded")
+        active_count = int(queue.get("active_count") or 0)
+        staged_count = int(queue.get("staged_count") or 0)
+        backlog_count = int(queue.get("backlog_count") or 0)
+        if active_count or staged_count or backlog_count:
+            errors.append(
+                f"{lane} still has work active={active_count} staged={staged_count} backlog={backlog_count}"
+            )
     return errors
 
 
@@ -284,6 +295,7 @@ def main() -> int:
     report["snapshots"].append(snapshot(args.base_url, "after-jobs"))
     for item in report["snapshots"]:
         report["validation_errors"].extend(validate_snapshot(item))
+    report["validation_errors"].extend(validate_final_snapshot(report["snapshots"][-1]))
     for job_id, status in report["job_statuses"].items():
         if str(status.get("status") or "").lower() != "completed":
             report["validation_errors"].append(f"{job_id} finished with status={status.get('status')}")
