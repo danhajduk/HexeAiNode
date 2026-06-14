@@ -99,8 +99,8 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(payload["component_id"], "vision_llm")
         self.assertEqual(payload["container_state"], "running")
         self.assertEqual(payload["model_state"], "loading")
-        self.assertFalse(payload["can_unload_model"])
-        self.assertEqual(payload["unload_model_mode"], "container_stop_fallback")
+        self.assertTrue(payload["can_unload_model"])
+        self.assertEqual(payload["unload_model_mode"], "router_api")
 
     def test_local_llm_status_includes_model_residency_contract(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
@@ -1290,11 +1290,14 @@ class ServiceManagerTests(unittest.TestCase):
                 patch.object(
                     manager,
                     "_active_model_ids_for_socket",
-                    return_value=[],
+                    side_effect=lambda _socket: [manager._vision_llm_default_model_id] if runtime_ready["value"] else [],
                 ),
+                patch.object(manager, "_comfyui_gpu_model_loaded", return_value=False),
                 patch("subprocess.run", side_effect=_fake_run),
             ):
+                manager._set_scheduler_control_active(True)
                 result = manager.ensure_vision_runtime_resident()
+                manager._set_scheduler_control_active(False)
 
         self.assertTrue(result["started"])
         self.assertEqual(result["residency_state"], "model_loaded")
@@ -1329,7 +1332,7 @@ class ServiceManagerTests(unittest.TestCase):
                 patch.object(
                     manager,
                     "_active_model_ids_for_socket",
-                    return_value=[],
+                    side_effect=lambda _socket: [manager._vision_llm_default_model_id] if runtime_ready["value"] else [],
                 ),
                 patch.object(
                     manager,
@@ -1339,7 +1342,9 @@ class ServiceManagerTests(unittest.TestCase):
                 patch.object(manager, "_gpu_process_metrics", return_value={"vram_mib": 196}),
                 patch("subprocess.run", side_effect=_fake_run),
             ):
+                manager._set_scheduler_control_active(True)
                 result = manager.ensure_vision_runtime_resident()
+                manager._set_scheduler_control_active(False)
 
         self.assertTrue(result["started"])
         self.assertFalse(result["comfyui_gpu_model_loaded"])
@@ -1448,7 +1453,7 @@ class ServiceManagerTests(unittest.TestCase):
         ]
         self.assertEqual(control_calls, [])
 
-    def test_unload_vision_model_uses_container_stop_fallback(self):
+    def test_unload_vision_model_uses_router_api_without_stopping_container(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
         manager._vision_llm_control_script = "scripts/llamacpp-vision-control.sh"
         invoked = []
@@ -1456,21 +1461,31 @@ class ServiceManagerTests(unittest.TestCase):
         def _fake_run(cmd, check, capture_output, text, env=None):
             invoked.append(cmd)
             if cmd[:2] == ["docker", "inspect"]:
-                return _Completed("0\n")
+                return _Completed("4243\n")
             return _Completed("{}")
 
         with (
-            patch("os.path.exists", side_effect=lambda path: str(path) == "scripts/llamacpp-vision-control.sh"),
+            patch(
+                "os.path.exists",
+                side_effect=lambda path: str(path)
+                in {
+                    "scripts/llamacpp-vision-control.sh",
+                    manager._vision_llm_socket,
+                    manager._vision_llm_health_socket,
+                },
+            ),
             patch.object(manager, "_active_model_ids_for_socket", return_value=[]),
             patch("subprocess.run", side_effect=_fake_run),
         ):
+            manager._set_scheduler_control_active(True)
             result = manager.unload_vision_model()
+            manager._set_scheduler_control_active(False)
 
         self.assertIn(["scripts/llamacpp-vision-control.sh", "unload-model"], invoked)
         self.assertEqual(result["result"], "model_unloaded")
-        self.assertFalse(result["unload_model_supported"])
-        self.assertEqual(result["unload_model_mode"], "container_stop_fallback")
-        self.assertEqual(result["residency_state"], "container_stopped")
+        self.assertTrue(result["unload_model_supported"])
+        self.assertEqual(result["unload_model_mode"], "router_api")
+        self.assertEqual(result["residency_state"], "container_running_model_unloaded")
 
     def test_local_llm_model_states_reports_loaded_warm_cold_and_swap_required(self):
         with tempfile.TemporaryDirectory() as tmp:

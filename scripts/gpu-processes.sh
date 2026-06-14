@@ -115,6 +115,8 @@ render() {
       service="training-runtime"
     elif [[ "${command}" =~ ComfyUI|main.py.*--base-directory[[:space:]]+/runtime/gpu|main.py.*--port[[:space:]]+8188 ]]; then
       service="visual-runtime"
+    elif [[ "${command}" =~ qwen2\.5-vl|llamacpp-vision ]]; then
+      service="vision-llm"
     fi
     if [[ "${command}" =~ --alias[[:space:]]+([^[:space:]]+) ]]; then
       model="${BASH_REMATCH[1]}"
@@ -212,6 +214,8 @@ print_llm_status() {
   printf "%s\n" "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
   python3 - "${status_file}" <<'PY'
 import json
+import os
+import socket
 import sys
 
 path = sys.argv[1]
@@ -238,6 +242,44 @@ def short(value, limit=68):
     if len(text) <= limit:
         return text
     return text[: max(limit - 1, 1)] + "…"
+
+def uds_json_get(socket_path, path="/health", timeout=1.0):
+    if not socket_path or not os.path.exists(socket_path):
+        return None
+    request = f"GET {path} HTTP/1.1\r\nHost: health\r\nConnection: close\r\n\r\n".encode("utf-8")
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(timeout)
+            client.connect(socket_path)
+            client.sendall(request)
+            chunks = []
+            while True:
+                chunk = client.recv(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+    except OSError:
+        return None
+    _head, _sep, body = b"".join(chunks).partition(b"\r\n\r\n")
+    try:
+        payload = json.loads(body.decode("utf-8")) if body else {}
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+def vision_health_override(model_id):
+    health = uds_json_get(os.environ.get("LLAMACPP_VISION_HEALTH_SOCKET", "/run/hexe/ai-node/llamacpp-vision-health.sock"))
+    if not isinstance(health, dict):
+        return None
+    statuses = health.get("model_statuses") if isinstance(health.get("model_statuses"), dict) else {}
+    status = str(statuses.get(model_id) or "").strip().lower()
+    if not status:
+        return None
+    return {
+        "ready": bool(health.get("ready")),
+        "model_loaded": status in {"loaded", "running", "ready"},
+        "model_status": status,
+    }
 
 def print_local():
     svc = services.get("local_llm")
@@ -284,6 +326,16 @@ def print_vision():
     start_in_progress = bool(residency.get("start_in_progress"))
     blocked = bool(residency.get("gpu_exclusive_blocked"))
     reason = str(residency.get("reason") or "")
+    health = vision_health_override(model)
+    if health is not None:
+        model_loaded = bool(health["model_loaded"])
+        if model_loaded:
+            active = model
+        else:
+            active = "-"
+            runtime_ready = True
+            residency_state = "container_running_model_unloaded"
+            reason = f"configured_model_{health['model_status']}"
     if model_loaded:
         phase = "ready"
     elif residency_state:

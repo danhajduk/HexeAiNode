@@ -24,6 +24,9 @@ export LLAMACPP_VISION_MODEL_HF="${LLAMACPP_VISION_MODEL_HF_OVERRIDE:-${LLAMACPP
 export LLAMACPP_VISION_MODEL_ALIAS="${LLAMACPP_VISION_MODEL_ALIAS_OVERRIDE:-${LLAMACPP_VISION_MODEL_ALIAS:-qwen2.5-vl-3b-instruct-q4_k_m}}"
 export LLAMACPP_VISION_MODEL_DIR="${LLAMACPP_VISION_MODEL_DIR:-$ROOT_DIR/runtime/models/llamacpp-vision}"
 export LLAMACPP_VISION_CACHE_DIR="${LLAMACPP_VISION_CACHE_DIR:-$ROOT_DIR/runtime/cache/llamacpp-vision}"
+export LLAMACPP_VISION_MODELS_PRESET_HOST_PATH="${LLAMACPP_VISION_MODELS_PRESET_HOST_PATH:-$LLAMACPP_VISION_CACHE_DIR/models.ini}"
+export LLAMACPP_VISION_MODELS_PRESET_PATH="${LLAMACPP_VISION_MODELS_PRESET_PATH:-/cache/models.ini}"
+export LLAMACPP_VISION_MODELS_MAX="${LLAMACPP_VISION_MODELS_MAX:-1}"
 export LLAMACPP_VISION_SOCKET_DIR="${LLAMACPP_VISION_SOCKET_DIR:-/run/hexe/ai-node}"
 export LLAMACPP_VISION_SOCKET_PATH="${LLAMACPP_VISION_SOCKET_PATH:-$LLAMACPP_VISION_SOCKET_DIR/llamacpp-vision.sock}"
 export LLAMACPP_VISION_HEALTH_SOCKET="${LLAMACPP_VISION_HEALTH_SOCKET:-$LLAMACPP_VISION_SOCKET_DIR/llamacpp-vision-health.sock}"
@@ -86,6 +89,35 @@ prepare_runtime_dirs() {
   mkdir -p "$ROOT_DIR/.run"
 }
 
+write_models_preset() {
+  "$PYTHON_BIN" - "$LLAMACPP_VISION_MODELS_PRESET_HOST_PATH" <<'PY'
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+preset_path = Path(sys.argv[1])
+preset_path.parent.mkdir(parents=True, exist_ok=True)
+alias = os.environ["LLAMACPP_VISION_MODEL_ALIAS"].strip()
+hf_repo = os.environ["LLAMACPP_VISION_MODEL_HF"].strip()
+ctx_size = os.environ["LLAMACPP_VISION_CTX_SIZE"].strip()
+n_gpu_layers = os.environ["LLAMACPP_VISION_N_GPU_LAYERS"].strip()
+parallel = os.environ["LLAMACPP_VISION_PARALLEL"].strip()
+body = "\n".join(
+    [
+        f"[{alias}]",
+        f"hf-repo = {hf_repo}",
+        f"ctx-size = {ctx_size}",
+        f"n-gpu-layers = {n_gpu_layers}",
+        f"parallel = {parallel}",
+        "",
+    ]
+)
+preset_path.write_text(body, encoding="utf-8")
+PY
+}
+
 select_runtime() {
   local mode
   mode="$(cuda_mode)"
@@ -106,6 +138,10 @@ select_runtime() {
   esac
 }
 
+container_running() {
+  [[ "$("$DOCKER_BIN" inspect --format '{{.State.Running}}' "$LLAMACPP_VISION_CONTAINER_NAME" 2>/dev/null || true)" == "true" ]]
+}
+
 start_health_wrapper() {
   if [[ "${LLAMACPP_VISION_HEALTH_WRAPPER:-1}" == "0" ]]; then
     return
@@ -122,6 +158,141 @@ start_health_wrapper() {
     --llama-socket-path "$LLAMACPP_VISION_SOCKET_PATH" \
     --model-id "$LLAMACPP_VISION_MODEL_ALIAS" \
     >"$ROOT_DIR/.run/llamacpp-vision-health.log" 2>&1 &
+}
+
+uds_json_request() {
+  local method="$1"
+  local path="$2"
+  local body="${3:-}"
+  "$PYTHON_BIN" - "$LLAMACPP_VISION_SOCKET_PATH" "$method" "$path" "$body" <<'PY'
+from __future__ import annotations
+
+import json
+import socket
+import sys
+
+socket_path, method, path, body = sys.argv[1:5]
+payload = body.encode("utf-8")
+headers = [
+    f"{method} {path} HTTP/1.1",
+    "Host: llamacpp",
+    "Connection: close",
+]
+if payload:
+    headers.extend(
+        [
+            "Content-Type: application/json",
+            f"Content-Length: {len(payload)}",
+        ]
+    )
+request = ("\r\n".join(headers) + "\r\n\r\n").encode("utf-8") + payload
+with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+    client.settimeout(30)
+    client.connect(socket_path)
+    client.sendall(request)
+    chunks: list[bytes] = []
+    while True:
+        chunk = client.recv(65536)
+        if not chunk:
+            break
+        chunks.append(chunk)
+raw = b"".join(chunks)
+head, _, response_body = raw.partition(b"\r\n\r\n")
+try:
+    status = int(head.split(maxsplit=2)[1])
+except Exception:
+    print(raw.decode("utf-8", errors="replace"), file=sys.stderr)
+    raise SystemExit(1)
+text = response_body.decode("utf-8", errors="replace")
+print(text)
+if status < 200 or status >= 300:
+    raise SystemExit(1)
+try:
+    parsed = json.loads(text) if text else {}
+except Exception:
+    parsed = {}
+if isinstance(parsed, dict) and parsed.get("success") is False:
+    raise SystemExit(1)
+PY
+}
+
+wait_router() {
+  local deadline
+  deadline=$((SECONDS + ${LLAMACPP_VISION_READY_TIMEOUT_S:-240}))
+  while (( SECONDS < deadline )); do
+    if [[ -S "$LLAMACPP_VISION_SOCKET_PATH" ]] && uds_json_request GET /health >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "${LLAMACPP_VISION_READY_INTERVAL_S:-2}"
+  done
+  echo "llama.cpp vision router did not become reachable before timeout" >&2
+  return 1
+}
+
+load_model() {
+  wait_router
+  uds_json_request POST /models/load "{\"model\":\"$LLAMACPP_VISION_MODEL_ALIAS\"}" >/dev/null
+}
+
+model_status_value() {
+  "$PYTHON_BIN" - "$LLAMACPP_VISION_SOCKET_PATH" "$LLAMACPP_VISION_MODEL_ALIAS" <<'PY'
+from __future__ import annotations
+
+import json
+import socket
+import sys
+
+socket_path, model_id = sys.argv[1:3]
+request = b"GET /v1/models HTTP/1.1\r\nHost: llamacpp\r\nConnection: close\r\n\r\n"
+with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+    client.settimeout(5)
+    client.connect(socket_path)
+    client.sendall(request)
+    chunks: list[bytes] = []
+    while True:
+        chunk = client.recv(65536)
+        if not chunk:
+            break
+        chunks.append(chunk)
+raw = b"".join(chunks)
+_head, _sep, body = raw.partition(b"\r\n\r\n")
+try:
+    payload = json.loads(body.decode("utf-8")) if body else {}
+except Exception:
+    raise SystemExit(1)
+for item in payload.get("data") or []:
+    if not isinstance(item, dict) or str(item.get("id") or "").strip() != model_id:
+        continue
+    status = item.get("status")
+    if isinstance(status, dict):
+        print(str(status.get("value") or "").strip().lower())
+        raise SystemExit(0)
+    print("loaded")
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+wait_model_unloaded() {
+  local deadline status
+  deadline=$((SECONDS + ${LLAMACPP_VISION_UNLOAD_TIMEOUT_S:-30}))
+  while (( SECONDS < deadline )); do
+    status="$(model_status_value 2>/dev/null || true)"
+    if [[ "$status" == "unloaded" || -z "$status" ]]; then
+      return 0
+    fi
+    sleep "${LLAMACPP_VISION_READY_INTERVAL_S:-2}"
+  done
+  echo "llama.cpp vision model did not unload before timeout" >&2
+  return 1
+}
+
+unload_model() {
+  if [[ ! -S "$LLAMACPP_VISION_SOCKET_PATH" ]]; then
+    return 0
+  fi
+  uds_json_request POST /models/unload "{\"model\":\"$LLAMACPP_VISION_MODEL_ALIAS\"}" >/dev/null
+  wait_model_unloaded
 }
 
 health_probe() {
@@ -170,19 +341,24 @@ wait_ready() {
 case "${1:-}" in
   build)
     prepare_runtime_dirs
+    write_models_preset
     select_runtime
     compose pull
     ;;
   create)
     prepare_runtime_dirs
+    write_models_preset
     select_runtime
     compose up --no-start
     ;;
   start)
     prepare_runtime_dirs
-    rm -f "$LLAMACPP_VISION_SOCKET_PATH" "$LLAMACPP_VISION_HEALTH_SOCKET"
-    select_runtime
-    compose up -d --force-recreate
+    write_models_preset
+    if ! container_running; then
+      rm -f "$LLAMACPP_VISION_SOCKET_PATH" "$LLAMACPP_VISION_HEALTH_SOCKET"
+      select_runtime
+      compose up -d --force-recreate
+    fi
     start_health_wrapper
     ;;
   stop)
@@ -191,9 +367,7 @@ case "${1:-}" in
     rm -f "$LLAMACPP_VISION_SOCKET_PATH" "$LLAMACPP_VISION_HEALTH_SOCKET"
     ;;
   unload-model)
-    # llama.cpp server does not currently expose a model-residency unload operation for this runtime.
-    # Stop the container as the VRAM-freeing fallback while preserving one stable operator/API command.
-    "$0" stop
+    unload_model
     ;;
   restart)
     "$0" stop
@@ -210,6 +384,7 @@ case "${1:-}" in
     ;;
   ready)
     "$0" start
+    load_model
     wait_ready
     ;;
   *)

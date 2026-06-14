@@ -18,18 +18,13 @@ services:
       - ${LLAMACPP_VISION_CACHE_DIR:-./runtime/cache/llamacpp-vision}:/cache
       - ${LLAMACPP_VISION_SOCKET_DIR:-/run/hexe/ai-node}:/run/hexe/ai-node
     command:
-      - --hf-repo
-      - ${LLAMACPP_VISION_MODEL_HF:-ggml-org/Qwen2.5-VL-3B-Instruct-GGUF:Q4_K_M}
-      - --alias
-      - ${LLAMACPP_VISION_MODEL_ALIAS:-qwen2.5-vl-3b-instruct-q4_k_m}
+      - --models-preset
+      - ${LLAMACPP_VISION_MODELS_PRESET_PATH:-/cache/models.ini}
+      - --models-max
+      - ${LLAMACPP_VISION_MODELS_MAX:-1}
+      - --no-models-autoload
       - --host
       - ${LLAMACPP_VISION_SOCKET_PATH:-/run/hexe/ai-node/llamacpp-vision.sock}
-      - --ctx-size
-      - ${LLAMACPP_VISION_CTX_SIZE:-8192}
-      - --n-gpu-layers
-      - ${LLAMACPP_VISION_N_GPU_LAYERS:-99}
-      - --parallel
-      - ${LLAMACPP_VISION_PARALLEL:-1}
     healthcheck:
       test:
         - CMD-SHELL

@@ -119,14 +119,25 @@ class LlamaCppHealthHandler(BaseHTTPRequestHandler):
             timeout_s=self.timeout_s,
         )
         model_ids = []
+        model_statuses: dict[str, str] = {}
         data = models_payload.get("data") if isinstance(models_payload, dict) else []
         if isinstance(data, list):
-            model_ids = [
-                str(item.get("id") or "").strip()
-                for item in data
-                if isinstance(item, dict) and str(item.get("id") or "").strip()
-            ]
-        model_ready = self.model_id in model_ids if model_ids else models_code == 200
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                model_id = str(item.get("id") or "").strip()
+                if not model_id:
+                    continue
+                model_ids.append(model_id)
+                status = item.get("status")
+                if isinstance(status, dict):
+                    status_value = str(status.get("value") or "").strip().lower()
+                    if status_value:
+                        model_statuses[model_id] = status_value
+        if self.model_id in model_statuses:
+            model_ready = model_statuses[self.model_id] in {"loaded", "running", "ready"}
+        else:
+            model_ready = self.model_id in model_ids if model_ids else models_code == 200
         ready = models_code == 200 and model_ready
         blockers = []
         if health_error:
@@ -135,12 +146,15 @@ class LlamaCppHealthHandler(BaseHTTPRequestHandler):
             blockers.append(models_error or f"llamacpp_models_http_{models_code}")
         if model_ids and self.model_id not in model_ids:
             blockers.append("configured_model_not_listed")
+        if self.model_id in model_statuses and not model_ready:
+            blockers.append(f"configured_model_{model_statuses[self.model_id]}")
         payload = {
             "status": "ok" if ready else "degraded",
             "ready": ready,
             "service": "hexe-ai-node-llamacpp",
             "model_id": self.model_id,
             "model_ids": model_ids,
+            "model_statuses": model_statuses,
             "llamacpp_socket": self.llama_socket_path,
             "blockers": blockers,
             "gpu": _nvidia_smi_summary(),

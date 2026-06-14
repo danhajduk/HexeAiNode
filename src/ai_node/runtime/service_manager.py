@@ -1001,7 +1001,7 @@ class UserSystemdServiceManager:
         socket_ready = bool(self._vision_llm_socket and os.path.exists(self._vision_llm_socket))
         health_socket_ready = bool(self._vision_llm_health_socket and os.path.exists(self._vision_llm_health_socket))
         runtime_ready = socket_ready and health_socket_ready
-        model_loaded = self._vision_llm_default_model_id in set(active_models) if active_models else runtime_ready
+        model_loaded = self._vision_llm_default_model_id in set(active_models) if active_models else False
         if container_running and model_loaded:
             residency_state = "model_loaded"
         elif container_running and not runtime_ready:
@@ -1057,8 +1057,8 @@ class UserSystemdServiceManager:
             "sd_scripts_training_active": sd_scripts_training_active,
             "gpu_exclusive_blocked": gpu_exclusive_blocked,
             "gpu_exclusive_reasons": list(gpu_exclusive.get("reasons") or []),
-            "unload_model_supported": False,
-            "unload_model_mode": "container_stop_fallback",
+            "unload_model_supported": True,
+            "unload_model_mode": "router_api",
             "reason": reason,
         }
 
@@ -1115,9 +1115,9 @@ class UserSystemdServiceManager:
             "target": "vision_llm",
             "result": "model_unloaded",
             "unload_seconds": unload_seconds,
-            "unload_model_supported": False,
-            "unload_model_mode": "container_stop_fallback",
-            "reason": "llamacpp_server_model_unload_not_available",
+            "unload_model_supported": True,
+            "unload_model_mode": "router_api",
+            "reason": "llamacpp_router_model_unload",
             **status,
         }
 
@@ -1565,7 +1565,7 @@ class UserSystemdServiceManager:
             loaded_models=active_models or ([self._vision_llm_default_model_id] if model_loaded else []),
             observed_vram_mib=observed_vram_mib,
             can_load_model=True,
-            can_unload_model=False,
+            can_unload_model=True,
             unload_model_mode=str(payload.get("unload_model_mode") or "container_stop_fallback"),
             reason=payload.get("reason"),
         )
@@ -2360,6 +2360,11 @@ class UserSystemdServiceManager:
                 if not isinstance(entry, dict):
                     continue
                 model_id = str(entry.get("id") or entry.get("model") or entry.get("name") or "").strip()
+                status = entry.get("status")
+                if isinstance(status, dict):
+                    status_value = str(status.get("value") or "").strip().lower()
+                    if status_value and status_value not in {"loaded", "running", "ready"}:
+                        continue
                 if model_id and model_id not in out:
                     out.append(model_id)
         return out
