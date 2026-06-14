@@ -761,6 +761,46 @@ class ServiceManagerTests(unittest.TestCase):
 
         self.assertFalse(loaded)
 
+    def test_comfyui_gpu_vision_gate_blocks_vision_residency_reload(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "COMFYUI_GPU_VISION_GATE_ARTIFACT": str(Path(tmp) / "comfyui-gpu-vision-gate.json"),
+                "COMFYUI_GPU_VISION_GATE_TIMEOUT_S": "90",
+                "HEXE_VISION_LLM_ALWAYS_ON_ENABLED": "true",
+            },
+            clear=False,
+        ):
+            artifact = Path(tmp) / "comfyui-gpu-vision-gate.json"
+            artifact.write_text(
+                json.dumps(
+                    {
+                        "runtime": "comfyui-gpu",
+                        "status": "ok",
+                        "action": "unloading",
+                        "reason": "vision_unload_requested_for_gpu_comfyui",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+            with (
+                patch.object(manager, "_comfyui_gpu_model_loaded", return_value=False),
+                patch.object(manager, "_manual_comfyui_webui_active", return_value=False),
+                patch.object(manager, "_sd_scripts_training_active", return_value=False),
+                patch.object(manager, "_active_model_ids_for_socket", return_value=[]),
+                patch.object(manager, "_query_container_pid", return_value=4243),
+                patch("os.path.exists", return_value=True),
+            ):
+                status = manager.vision_runtime_status()
+
+        self.assertTrue(status["gpu_exclusive_blocked"])
+        self.assertFalse(status["start_due"])
+        self.assertTrue(status["comfyui_gpu_vision_gate_active"])
+        self.assertEqual(status["reason"], "blocked_by_comfyui_gpu_vision_gate")
+        self.assertIn("comfyui_gpu_vision_gate_active", status["gpu_exclusive_reasons"])
+
     def test_comfyui_webui_idle_close_closes_after_timeout(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             "os.environ",

@@ -291,7 +291,13 @@ unload_model() {
   if [[ ! -S "$LLAMACPP_VISION_SOCKET_PATH" ]]; then
     return 0
   fi
-  uds_json_request POST /models/unload "{\"model\":\"$LLAMACPP_VISION_MODEL_ALIAS\"}" >/dev/null
+  if [[ "$(model_status_value 2>/dev/null || true)" == "unloaded" ]]; then
+    return 0
+  fi
+  if ! uds_json_request POST /models/unload "{\"model\":\"$LLAMACPP_VISION_MODEL_ALIAS\"}" >/dev/null; then
+    [[ "$(model_status_value 2>/dev/null || true)" == "unloaded" ]]
+    return
+  fi
   wait_model_unloaded
 }
 

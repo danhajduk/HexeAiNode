@@ -71,6 +71,7 @@ COMFYUI_VISION_CONTROL_SCRIPT="${COMFYUI_VISION_CONTROL_SCRIPT:-$ROOT_DIR/script
 LLAMACPP_VISION_CONTAINER_NAME="${LLAMACPP_VISION_CONTAINER_NAME:-hexe-ai-node-llamacpp-vision}"
 LLAMACPP_VISION_SOCKET_PATH="${LLAMACPP_VISION_SOCKET_PATH:-/run/hexe/ai-node/llamacpp-vision.sock}"
 LLAMACPP_VISION_HEALTH_SOCKET="${LLAMACPP_VISION_HEALTH_SOCKET:-/run/hexe/ai-node/llamacpp-vision-health.sock}"
+LLAMACPP_VISION_MODEL_ALIAS="${LLAMACPP_VISION_MODEL_ALIAS:-qwen2.5-vl-3b-instruct-q4_k_m}"
 
 target="${1:-gpu}"
 command="${2:-}"
@@ -224,10 +225,52 @@ vision_runtime_present() {
   [[ "$(vision_container_pid)" != "0" ]]
 }
 
+vision_model_loaded() {
+  if [[ ! -S "$LLAMACPP_VISION_HEALTH_SOCKET" ]]; then
+    return 1
+  fi
+  "$PYTHON_BIN" - "$LLAMACPP_VISION_HEALTH_SOCKET" "$LLAMACPP_VISION_MODEL_ALIAS" <<'PY'
+from __future__ import annotations
+
+import json
+import socket
+import sys
+
+socket_path, model_id = sys.argv[1:3]
+request = b"GET /health HTTP/1.1\r\nHost: health\r\nConnection: close\r\n\r\n"
+try:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(3)
+        client.connect(socket_path)
+        client.sendall(request)
+        chunks: list[bytes] = []
+        while True:
+            chunk = client.recv(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+except OSError:
+    raise SystemExit(1)
+_head, _sep, body = b"".join(chunks).partition(b"\r\n\r\n")
+try:
+    payload = json.loads(body.decode("utf-8")) if body else {}
+except Exception:
+    raise SystemExit(1)
+statuses = payload.get("model_statuses") if isinstance(payload.get("model_statuses"), dict) else {}
+status = str(statuses.get(model_id) or "").strip().lower()
+if status:
+    raise SystemExit(0 if status in {"loaded", "running", "ready"} else 1)
+raise SystemExit(0 if payload.get("ready") is True else 1)
+PY
+}
+
 wait_vision_unloaded() {
   local deadline
   deadline=$((SECONDS + COMFYUI_GPU_VISION_GATE_TIMEOUT_S))
   while (( SECONDS < deadline )); do
+    if ! vision_model_loaded; then
+      return 0
+    fi
     if ! vision_runtime_present; then
       return 0
     fi
@@ -251,6 +294,7 @@ gate_gpu_on_vision_unload() {
     return 1
   fi
   local started_ms finished_ms unload_seconds
+  write_vision_gate_artifact "ok" "unloading" "" "vision_unload_requested_for_gpu_comfyui"
   started_ms="$(now_ms)"
   if ! "$COMFYUI_VISION_CONTROL_SCRIPT" unload-model; then
     write_vision_gate_artifact "rejected" "failed" "" "vision_unload_failed"

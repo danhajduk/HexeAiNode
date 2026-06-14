@@ -127,6 +127,13 @@ class UserSystemdServiceManager:
         self._comfyui_webui_session_file = str(
             os.environ.get("HEXE_COMFYUI_WEBUI_SESSION_FILE") or ".run/comfyui-webui-session.json"
         ).strip()
+        self._comfyui_gpu_vision_gate_artifact = str(
+            os.environ.get("COMFYUI_GPU_VISION_GATE_ARTIFACT") or ".run/comfyui-gpu-vision-gate.json"
+        ).strip()
+        self._comfyui_gpu_vision_gate_timeout_seconds = max(
+            _env_int("COMFYUI_GPU_VISION_GATE_TIMEOUT_S", default=90),
+            1,
+        )
         self._visual_training_client_idle_seconds = max(
             _env_int("HEXE_VISUAL_TRAINING_CLIENT_IDLE_SECONDS", default=VISUAL_TRAINING_CLIENT_IDLE_SECONDS),
             1,
@@ -989,6 +996,7 @@ class UserSystemdServiceManager:
         comfyui_gpu_model_loaded = bool(gpu_exclusive.get("comfyui_gpu_model_loaded"))
         comfyui_critical = bool(gpu_comfyui_critical_in_flight)
         manual_comfyui_webui_active = bool(gpu_exclusive.get("manual_comfyui_webui_active"))
+        comfyui_gpu_vision_gate_active = bool(gpu_exclusive.get("comfyui_gpu_vision_gate_active"))
         sd_scripts_training_active = bool(gpu_exclusive.get("sd_scripts_training_active"))
         gpu_exclusive_blocked = bool(gpu_exclusive.get("vision_llm_blocked") or comfyui_critical)
         active_models = (
@@ -1030,6 +1038,8 @@ class UserSystemdServiceManager:
             reason = "blocked_by_sd_scripts_training"
         elif manual_comfyui_webui_active and not model_loaded:
             reason = "blocked_by_manual_comfyui_webui"
+        elif comfyui_gpu_vision_gate_active and not model_loaded:
+            reason = "blocked_by_comfyui_gpu_vision_gate"
         elif comfyui_gpu_model_loaded and not model_loaded:
             reason = "blocked_by_comfyui_gpu_model"
         elif model_loaded:
@@ -1054,6 +1064,7 @@ class UserSystemdServiceManager:
             "comfyui_gpu_model_loaded": comfyui_gpu_model_loaded,
             "gpu_comfyui_critical_in_flight": comfyui_critical,
             "manual_comfyui_webui_active": manual_comfyui_webui_active,
+            "comfyui_gpu_vision_gate_active": comfyui_gpu_vision_gate_active,
             "sd_scripts_training_active": sd_scripts_training_active,
             "gpu_exclusive_blocked": gpu_exclusive_blocked,
             "gpu_exclusive_reasons": list(gpu_exclusive.get("reasons") or []),
@@ -2107,6 +2118,25 @@ class UserSystemdServiceManager:
             return False
         return self._comfyui_webui_status_without_session().get("state") == "running"
 
+    def _comfyui_gpu_vision_gate_active(self) -> bool:
+        path = Path(self._comfyui_gpu_vision_gate_artifact or ".run/comfyui-gpu-vision-gate.json")
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        try:
+            if not path.is_file():
+                return False
+            age_seconds = max(time.time() - path.stat().st_mtime, 0.0)
+            if age_seconds > self._comfyui_gpu_vision_gate_timeout_seconds + 60:
+                return False
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        if not isinstance(payload, dict):
+            return False
+        status = str(payload.get("status") or "").strip().lower()
+        action = str(payload.get("action") or "").strip().lower()
+        return bool(status == "ok" and action in {"unloading", "unloaded"})
+
     def _comfyui_webui_status_without_session(self) -> dict:
         pid = self._read_pid_file(self._comfyui_webui_pid_file)
         running = bool(
@@ -2223,11 +2253,12 @@ class UserSystemdServiceManager:
             }
         comfyui_gpu_model_loaded = self._comfyui_gpu_model_loaded()
         manual_comfyui_webui_active = self._manual_comfyui_webui_active()
+        comfyui_gpu_vision_gate_active = self._comfyui_gpu_vision_gate_active()
         sd_scripts_training_active = self._sd_scripts_training_active()
         vision_comfyui_active = bool(
             self._vision_llm_gpu_exclusive_blocker_enabled
             and self._vision_llm_gpu_exclusive_stop_for_comfyui
-            and (comfyui_gpu_model_loaded or manual_comfyui_webui_active)
+            and (comfyui_gpu_model_loaded or manual_comfyui_webui_active or comfyui_gpu_vision_gate_active)
         )
         vision_sd_scripts_active = bool(
             self._vision_llm_gpu_exclusive_blocker_enabled
@@ -2252,6 +2283,8 @@ class UserSystemdServiceManager:
             reasons.append("comfyui_gpu_model_loaded")
         if comfyui_active and manual_comfyui_webui_active:
             reasons.append("manual_comfyui_webui_active")
+        if comfyui_active and comfyui_gpu_vision_gate_active:
+            reasons.append("comfyui_gpu_vision_gate_active")
         if sd_scripts_active and sd_scripts_training_active:
             reasons.append("sd_scripts_training_active")
         vision_blocked = bool(vision_comfyui_active or vision_sd_scripts_active)
@@ -2262,6 +2295,7 @@ class UserSystemdServiceManager:
             "reasons": reasons,
             "comfyui_gpu_model_loaded": comfyui_gpu_model_loaded,
             "manual_comfyui_webui_active": manual_comfyui_webui_active,
+            "comfyui_gpu_vision_gate_active": comfyui_gpu_vision_gate_active,
             "sd_scripts_training_active": sd_scripts_training_active,
             "vision_llm_blocked": vision_blocked,
             "local_llm_blocked": local_blocked,
