@@ -14316,6 +14316,8 @@ class NodeControlState:
         gpu_comfyui_critical_in_flight = await self._gpu_comfyui_critical_work_pending()
         scheduler_status = self.local_scheduler_status().get("local_scheduler", {})
         components = scheduler_status.get("components") if isinstance(scheduler_status, dict) else []
+        if not isinstance(components, list):
+            components = []
         runtime_components = {
             str(component.get("component_id") or ""): component
             for component in components
@@ -14325,17 +14327,26 @@ class NodeControlState:
             component = runtime_components.get(component_id) or {}
             observed = str(component.get("observed_state") or "").strip().lower()
             desired = str(component.get("desired_state") or "").strip().lower()
-            if observed in {"running", "starting", "idle", "pausing", "unloading"} or desired in {
+            model_state = str(component.get("model_state") or "").strip().lower()
+            desired_model_state = str(component.get("desired_model_state") or "").strip().lower()
+            observed_model_active = (
+                observed in {"running", "starting", "idle", "pausing", "unloading"}
+                and model_state not in {"", "unloaded"}
+            )
+            desired_model_active = desired_model_state in {"loaded", "loading", "requested"} or desired in {
                 "requested",
                 "starting",
                 "running",
-            }:
+            }
+            if observed_model_active or desired_model_active:
                 return {
                     "status": "skipped",
                     "reason": f"{component_id}_owns_gpu_residency",
                     "component_id": component_id,
                     "observed_state": observed,
                     "desired_state": desired,
+                    "model_state": model_state,
+                    "desired_model_state": desired_model_state,
                 }
         result = await asyncio.to_thread(
             self._service_manager.request_local_scheduler_component,

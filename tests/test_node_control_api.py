@@ -2507,6 +2507,18 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.calls.append(payload)
             return {"started": False, **payload}
 
+        def request_local_scheduler_component(self, *, component_id: str, importance: str | None = None, request_metadata=None):
+            payload = {
+                "component_id": component_id,
+                "importance": importance,
+                "vision_local_in_flight": int((request_metadata or {}).get("local_in_flight") or 0),
+                "gpu_comfyui_critical_in_flight": bool(
+                    (request_metadata or {}).get("gpu_comfyui_critical_in_flight")
+                ),
+            }
+            self.calls.append(payload)
+            return {"status": "ok", **payload}
+
         def close_comfyui_webui_if_idle(self):
             payload = {"comfyui_webui_idle_close": True}
             self.calls.append(payload)
@@ -7183,6 +7195,90 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["status"], "ok")
             self.assertEqual(service_manager.calls[-1]["vision_local_in_flight"], 0)
             self.assertFalse(service_manager.calls[-1]["gpu_comfyui_critical_in_flight"])
+
+    async def test_vision_runtime_residency_job_allows_visual_container_with_unloaded_model(self):
+        class _WarmVisualServiceManager(self._FakeServiceManager):
+            def get_status(self):
+                return {
+                    "backend": "running",
+                    "frontend": "running",
+                    "node": "running",
+                    "local_scheduler": {
+                        "components": [
+                            {
+                                "component_id": "visual_gpu",
+                                "observed_state": "running",
+                                "desired_state": "unloaded",
+                                "desired_model_state": "unloaded",
+                                "model_state": "unloaded",
+                            },
+                            {
+                                "component_id": "visual_cpu",
+                                "observed_state": "running",
+                                "desired_state": "unloaded",
+                                "desired_model_state": "unloaded",
+                                "model_state": "unloaded",
+                            },
+                            {
+                                "component_id": "training_runtime",
+                                "observed_state": "unloaded",
+                                "desired_state": "unloaded",
+                                "desired_model_state": "unloaded",
+                                "model_state": "unloaded",
+                            },
+                        ]
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            service_manager = _WarmVisualServiceManager()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=service_manager,
+            )
+
+            result = await state._vision_runtime_residency_job_once()
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(service_manager.calls[-1]["component_id"], "vision_llm")
+
+    async def test_vision_runtime_residency_job_skips_visual_loaded_model(self):
+        class _LoadedVisualServiceManager(self._FakeServiceManager):
+            def get_status(self):
+                return {
+                    "backend": "running",
+                    "frontend": "running",
+                    "node": "running",
+                    "local_scheduler": {
+                        "components": [
+                            {
+                                "component_id": "visual_gpu",
+                                "observed_state": "running",
+                                "desired_state": "running",
+                                "desired_model_state": "loaded",
+                                "model_state": "loaded",
+                            },
+                        ]
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            service_manager = _LoadedVisualServiceManager()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=service_manager,
+            )
+
+            result = await state._vision_runtime_residency_job_once()
+
+            self.assertEqual(result["status"], "skipped")
+            self.assertEqual(result["reason"], "visual_gpu_owns_gpu_residency")
 
     async def test_comfyui_webui_idle_close_job_calls_service_manager(self):
         with tempfile.TemporaryDirectory() as tmp:
