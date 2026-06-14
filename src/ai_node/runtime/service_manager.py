@@ -1768,7 +1768,10 @@ class UserSystemdServiceManager:
     def comfyui_webui_session_status(self, *, include_queue: bool = True) -> dict:
         payload = self._read_comfyui_webui_session()
         state = str(payload.get("state") or "").strip().lower()
-        manual_active = state in {"starting", "active", "idle", "closing", "restoring"}
+        bridge_running = self._comfyui_webui_status_without_session().get("state") == "running"
+        manual_active = state in {"starting", "closing", "restoring"} or (
+            state in {"active", "idle"} and bridge_running
+        )
         queue_state = self._comfyui_queue_state() if include_queue and manual_active else {
             "queue_available": None,
             "queue_active": False,
@@ -2092,7 +2095,11 @@ class UserSystemdServiceManager:
         if self._comfyui_webui_session_file and os.path.exists(self._comfyui_webui_session_file):
             payload = self._read_comfyui_webui_session()
             state = str(payload.get("state") if isinstance(payload, dict) else "").strip().lower()
-            return state in {"starting", "active", "idle", "closing", "restoring"}
+            if state in {"starting", "closing", "restoring"}:
+                return True
+            if state in {"active", "idle"}:
+                return self._comfyui_webui_status_without_session().get("state") == "running"
+            return False
         return self._comfyui_webui_status_without_session().get("state") == "running"
 
     def _comfyui_webui_status_without_session(self) -> dict:
