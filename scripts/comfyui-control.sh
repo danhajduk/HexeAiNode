@@ -501,7 +501,7 @@ case "$command" in
     select_runtime gpu
     gate_gpu_on_vision_unload
     remove_legacy_split_containers
-    compose up -d --force-recreate comfyui
+    compose up -d comfyui
     ;;
   stop)
     compose stop comfyui

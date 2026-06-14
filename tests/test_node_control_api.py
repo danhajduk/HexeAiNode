@@ -7554,6 +7554,37 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(admission["allowed"])
             self.assertEqual(admission["reason"], "visual_gpu_executor_ready")
 
+    def test_execution_queue_visual_lane_admission_accepts_model_loaded_result(self):
+        class _VisualModelLoadedServiceManager:
+            def request_local_scheduler_component(self, *, component_id: str, importance: str | None = None, request_metadata=None):
+                return {
+                    "status": "ok",
+                    "component_id": component_id,
+                    "start_result": {"target": component_id, "result": "model_loaded"},
+                    "decision": {"decision": "allowed", "reason": "compatible"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+                service_manager=_VisualModelLoadedServiceManager(),
+            )
+
+            admission = state._execution_queue_lane_admission(
+                {
+                    "job_id": "visual-model-loaded",
+                    "importance": "normal",
+                    "runtime_lane": "visual_gpu",
+                    "request": {"task_id": "visual-model-loaded", "task_family": "task.image_generation"},
+                }
+            )
+
+            self.assertTrue(admission["allowed"])
+            self.assertEqual(admission["reason"], "visual_gpu_executor_ready")
+
     def test_execution_queue_visual_lane_admission_blocks_unready_runtime(self):
         class _VisualBlockedServiceManager:
             def request_local_scheduler_component(self, *, component_id: str, importance: str | None = None, request_metadata=None):
