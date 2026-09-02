@@ -82,7 +82,8 @@ cuda_smoke_check() {
 prepare_runtime_dirs() {
   mkdir -p "$LLAMACPP_MODEL_DIR"
   mkdir -p "$LLAMACPP_CACHE_DIR"
-  mkdir -p "$LLAMACPP_SOCKET_DIR"
+  "$ROOT_DIR/scripts/prepare-runtime-socket-dir.sh" \
+    "$LLAMACPP_SOCKET_DIR" "$LLAMACPP_UID" "$LLAMACPP_GID" "$LLAMACPP_IMAGE"
   mkdir -p "$ROOT_DIR/.run"
 }
 

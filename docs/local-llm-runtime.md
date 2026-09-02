@@ -322,6 +322,10 @@ The health wrapper socket defaults to `/run/hexe/ai-node/llamacpp-health.sock`.
 Downloaded model cache defaults to `runtime/cache/llamacpp` so Hugging Face downloads survive container recreation.
 The node service status resolves the llama.cpp container from `LLAMACPP_CONTAINER_NAME` (default `hexe-ai-node-llamacpp`) and reports its host PID, CPU percent, and memory percent under `services.local_llm`; supervisor registration and heartbeat payloads include the same service metadata.
 
+Both llama.cpp control scripts verify that the shared Unix-socket directory is writable by their configured runtime
+UID/GID before starting a container. If another root-owned runtime created the directory first, they use the configured
+llama.cpp image as a short-lived Docker helper to repair ownership and mode without running the model servers as root.
+
 The local text LLM is always-on by default. `HEXE_LOCAL_LLM_ALWAYS_ON_ENABLED=true` makes the node periodically check
 the llama.cpp sockets and start the configured default model when the runtime is not ready. Set
 `HEXE_LOCAL_LLM_ALWAYS_ON_ENABLED=false` for maintenance windows where the text LLM should remain offline. The check
