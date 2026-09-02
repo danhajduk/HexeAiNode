@@ -430,6 +430,90 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["provider_budget_limits"]["openai"]["max_cost_cents"], 2500)
             self.assertEqual(payload["provider_budget_limits"]["openai"]["period"], "weekly")
 
+    async def test_provider_selection_context_includes_task_model_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            preferences_path = Path(tmp) / "provider-task-model-preferences.json"
+            preferences_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "providers": {
+                            "openai": {
+                                "task_defaults": {
+                                    "task.classification": "gpt-5-nano",
+                                    "task.reasoning": "gpt-5.6-terra",
+                                }
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["openai"]),
+                provider_credentials_store=_CredentialsStore(),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                provider_task_model_preferences_path=str(preferences_path),
+            )
+
+            payload = runtime.provider_selection_context_payload()
+
+            self.assertEqual(
+                payload["task_default_model_by_provider"]["openai"]["task.classification"],
+                "gpt-5-nano",
+            )
+            self.assertEqual(
+                payload["task_default_model_by_provider"]["openai"]["task.reasoning"],
+                "gpt-5.6-terra",
+            )
+
+    async def test_refresh_preserves_selected_and_task_default_openai_models(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            preferences_path = Path(tmp) / "provider-task-model-preferences.json"
+            preferences_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "providers": {
+                            "openai": {
+                                "task_defaults": {
+                                    "task.chat": "gpt-5.6-luna",
+                                    "task.reasoning": "gpt-5.6-terra",
+                                }
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-runtime-test"),
+                provider_selection_store=_SelectionStore(enabled=["openai"]),
+                provider_credentials_store=_CredentialsStore(),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                provider_model_catalog_path=str(Path(tmp) / "provider_models.json"),
+                provider_model_capabilities_path=str(Path(tmp) / "provider_model_capabilities.json"),
+                provider_model_features_path=str(Path(tmp) / "provider_model_features.json"),
+                provider_enabled_models_path=str(Path(tmp) / "provider_enabled_models.json"),
+                provider_task_model_preferences_path=str(preferences_path),
+                node_capabilities_path=str(Path(tmp) / "node_capabilities.json"),
+            )
+            runtime._provider_enabled_models_store.save_enabled_model_ids(  # noqa: SLF001
+                model_ids=["gpt-5.6-luna"]
+            )
+
+            preserved = runtime._with_preserved_openai_models(  # noqa: SLF001
+                models=[ModelCapability(model_id="gpt-5-mini", display_name="gpt-5-mini", status="available")]
+            )
+            preserved_ids = {model.model_id for model in preserved}
+
+            self.assertIn("gpt-5-mini", preserved_ids)
+            self.assertIn("gpt-5.6-luna", preserved_ids)
+            self.assertIn("gpt-5.6-terra", preserved_ids)
+
     async def test_save_enabled_models_persists_node_capabilities(self):
         with tempfile.TemporaryDirectory() as tmp:
             graph_path = Path(tmp) / "task_graph.json"
@@ -621,6 +705,8 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 provider_model_catalog_path=str(Path(tmp) / "provider_models.json"),
                 provider_model_capabilities_path=str(Path(tmp) / "provider_model_capabilities.json"),
                 provider_model_features_path=str(Path(tmp) / "providers" / "openai" / "provider_model_features.json"),
+                provider_enabled_models_path=str(Path(tmp) / "provider_enabled_models.json"),
+                provider_task_model_preferences_path=str(Path(tmp) / "provider-task-model-preferences.json"),
             )
             runtime._build_adapter = lambda **_kwargs: _FakeOpenAIAdapter()  # noqa: SLF001
 

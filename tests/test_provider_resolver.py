@@ -119,6 +119,72 @@ class ProviderResolverTests(unittest.TestCase):
             self.assertEqual(result.provider_id, "local")
             self.assertEqual(result.model_id, "qwen3-8b-q4_k_m")
 
+    def test_resolve_uses_task_default_model_before_provider_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            preferences_path = Path(tmp) / "provider-task-model-preferences.json"
+            preferences_path.write_text(
+                """{
+                  "schema_version": "1.0",
+                  "providers": {
+                    "openai": {
+                      "task_defaults": {
+                        "task.classification": "gpt-5-nano",
+                        "task.reasoning": "gpt-5.6-terra"
+                      }
+                    }
+                  }
+                }""",
+                encoding="utf-8",
+            )
+            runtime = ProviderRuntimeManager(
+                logger=logging.getLogger("provider-resolver-test"),
+                provider_selection_store=_SelectionStore(enabled=["openai"]),
+                registry_path=str(Path(tmp) / "provider_registry.json"),
+                metrics_path=str(Path(tmp) / "provider_metrics.json"),
+                provider_task_model_preferences_path=str(preferences_path),
+            )
+            runtime._registry.set_provider_health(provider_id="openai", payload={"availability": "available"})  # noqa: SLF001
+            runtime._registry.set_models_for_provider(  # noqa: SLF001
+                provider_id="openai",
+                models=[
+                    ModelCapability(model_id="gpt-5.6-luna", display_name="gpt-5.6-luna", status="available"),
+                    ModelCapability(model_id="gpt-5.6-terra", display_name="gpt-5.6-terra", status="available"),
+                    ModelCapability(model_id="gpt-5-nano", display_name="gpt-5-nano", status="available"),
+                ],
+            )
+            runtime._provider_enabled_models_store.save_enabled_model_ids(  # noqa: SLF001
+                model_ids=["gpt-5-nano", "gpt-5.6-luna", "gpt-5.6-terra"]
+            )
+            runtime._provider_model_capabilities_store.save(  # noqa: SLF001
+                classification_model="deterministic_rules",
+                entries=[
+                    ProviderModelCapabilityEntry(model_id="gpt-5-nano", family="llm"),
+                    ProviderModelCapabilityEntry(model_id="gpt-5.6-luna", family="llm"),
+                    ProviderModelCapabilityEntry(model_id="gpt-5.6-terra", family="llm"),
+                ],
+            )
+            resolver = ProviderResolver(runtime_manager=runtime, logger=logging.getLogger("provider-resolver-test"))
+
+            classification = resolver.resolve(
+                request=ProviderResolutionRequest(
+                    task_family="task.classification",
+                    requested_provider="openai",
+                    timeout_s=60,
+                )
+            )
+            reasoning = resolver.resolve(
+                request=ProviderResolutionRequest(
+                    task_family="task.reasoning",
+                    requested_provider="openai",
+                    timeout_s=60,
+                )
+            )
+
+            self.assertTrue(classification.allowed)
+            self.assertEqual(classification.model_id, "gpt-5-nano")
+            self.assertTrue(reasoning.allowed)
+            self.assertEqual(reasoning.model_id, "gpt-5.6-terra")
+
     def test_resolve_preserves_explicit_local_model_override(self):
         with tempfile.TemporaryDirectory() as tmp:
             runtime = ProviderRuntimeManager(

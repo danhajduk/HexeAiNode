@@ -13696,6 +13696,11 @@ class NodeControlState:
             if isinstance(selection_context.get("default_model_by_provider"), dict)
             else {}
         )
+        task_default_model_by_provider = (
+            selection_context.get("task_default_model_by_provider")
+            if isinstance(selection_context.get("task_default_model_by_provider"), dict)
+            else {}
+        )
         usable_models_by_provider = (
             selection_context.get("usable_models_by_provider")
             if isinstance(selection_context.get("usable_models_by_provider"), dict)
@@ -13730,7 +13735,16 @@ class NodeControlState:
                 if str(item or "").strip()
             ]
             model_ids = usable_models or available_models or capability_models
-            default_model = str(default_model_by_provider.get(provider_id) or "").strip() or None
+            provider_task_defaults = (
+                task_default_model_by_provider.get(provider_id)
+                if isinstance(task_default_model_by_provider.get(provider_id), dict)
+                else {}
+            )
+            default_model = (
+                str(provider_task_defaults.get(canonical_task) or "").strip()
+                or str(default_model_by_provider.get(provider_id) or "").strip()
+                or None
+            )
             providers.append(
                 {
                     "provider_id": provider_id,

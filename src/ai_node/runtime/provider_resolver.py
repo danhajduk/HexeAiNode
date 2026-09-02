@@ -73,17 +73,29 @@ class ProviderResolver:
             )
 
         default_model_by_provider = context.get("default_model_by_provider") or {}
+        task_default_model_by_provider = context.get("task_default_model_by_provider") or {}
+        task_family = _normalize_string(request.task_family).lower()
         available_models_by_provider = context.get("available_models_by_provider") or {}
         requested_provider_id = _normalize_string(request.requested_provider)
         provider_id = None
         model_id = None
         for candidate_provider in decision.provider_order:
             candidate_provider_id = str(candidate_provider).strip()
+            provider_task_defaults = (
+                task_default_model_by_provider.get(candidate_provider_id)
+                if isinstance(task_default_model_by_provider, dict)
+                else None
+            )
+            task_default_model_id = (
+                provider_task_defaults.get(task_family)
+                if task_family and isinstance(provider_task_defaults, dict)
+                else None
+            )
             candidate_model_id = self._select_model_for_provider(
                 provider_id=candidate_provider_id,
                 allowlist=decision.model_allowlist_by_provider.get(candidate_provider_id) or [],
                 requested_model=request.requested_model if candidate_provider_id == requested_provider_id else None,
-                default_model_id=default_model_by_provider.get(candidate_provider_id),
+                default_model_id=task_default_model_id or default_model_by_provider.get(candidate_provider_id),
                 available_models=available_models_by_provider.get(candidate_provider_id) or [],
             )
             if candidate_model_id is None:
@@ -154,7 +166,7 @@ class ProviderResolver:
         default_model = _normalize_string(default_model_id)
         if default_model and allowed and default_model in set(allowed):
             return default_model
-        if default_model and not allowed and (not available or default_model in set(available)):
+        if default_model and not allowed and default_model in set(available):
             return default_model
         if allowed:
             return allowed[0]

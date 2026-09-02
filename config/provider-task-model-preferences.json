@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "providers": {
+    "openai": {
+      "task_defaults": {
+        "task.chat": "gpt-5.6-luna",
+        "task.classification": "gpt-5-nano",
+        "task.code_debugging": "gpt-5.6-terra",
+        "task.code_explanation": "gpt-5.6-luna",
+        "task.code_generation": "gpt-5.6-terra",
+        "task.code_review": "gpt-5.6-terra",
+        "task.image_generation": "gpt-image-2",
+        "task.information_extraction": "gpt-5-nano",
+        "task.moderation": "omni-moderation-2024-09-26",
+        "task.policy_check": "omni-moderation-2024-09-26",
+        "task.reasoning": "gpt-5.6-terra",
+        "task.sentiment_analysis": "gpt-5-nano",
+        "task.structured_extraction": "gpt-5.6-luna",
+        "task.summarization": "gpt-5.6-luna",
+        "task.task_planning": "gpt-5.6-terra",
+        "task.translation": "gpt-5.6-luna",
+        "task.workflow_reasoning": "gpt-5.6-terra"
+      }
+    }
+  }
+}

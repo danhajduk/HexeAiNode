@@ -24,7 +24,7 @@ from ai_node.providers.model_feature_catalog import (
 )
 from ai_node.runtime.capability_resolver import load_task_graph, resolve_node_capabilities
 from ai_node.providers.metrics import ProviderMetricsCollector
-from ai_node.providers.models import UnifiedExecutionRequest, UnifiedExecutionResponse
+from ai_node.providers.models import ModelCapability, UnifiedExecutionRequest, UnifiedExecutionResponse
 from ai_node.providers.openai_catalog import (
     DEFAULT_OPENAI_PRICING_CATALOG_PATH,
     DEFAULT_OPENAI_PRICING_MANUAL_CONFIG_PATH,
@@ -37,6 +37,7 @@ from ai_node.providers.openai_catalog import (
 from ai_node.providers.openai_model_catalog import (
     DEFAULT_OPENAI_PROVIDER_MODEL_CATALOG_PATH,
     OpenAIProviderModelCatalogStore,
+    classify_openai_model_family,
     select_representative_openai_model_ids,
 )
 from ai_node.config.provider_enabled_models_config import (
@@ -48,6 +49,34 @@ from ai_node.providers.provider_registry import ProviderRegistry
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+DEFAULT_PROVIDER_TASK_MODEL_PREFERENCES_PATH = "config/provider-task-model-preferences.json"
+
+
+def _normalize_task_model_preferences(payload: object) -> dict[str, dict[str, str]]:
+    if not isinstance(payload, dict):
+        return {}
+    providers = payload.get("providers")
+    if not isinstance(providers, dict):
+        return {}
+    normalized: dict[str, dict[str, str]] = {}
+    for provider_id, provider_payload in providers.items():
+        provider_key = str(provider_id or "").strip().lower()
+        if not provider_key or not isinstance(provider_payload, dict):
+            continue
+        task_defaults = provider_payload.get("task_defaults")
+        if not isinstance(task_defaults, dict):
+            continue
+        normalized_defaults: dict[str, str] = {}
+        for task_family, model_id in task_defaults.items():
+            task_key = str(task_family or "").strip().lower()
+            model_key = str(model_id or "").strip()
+            if task_key and model_key:
+                normalized_defaults[task_key] = model_key
+        if normalized_defaults:
+            normalized[provider_key] = normalized_defaults
+    return normalized
 
 
 class ProviderRuntimeManager:
@@ -67,6 +96,7 @@ class ProviderRuntimeManager:
         provider_model_capabilities_path: str = DEFAULT_PROVIDER_MODEL_CAPABILITIES_PATH,
         provider_model_features_path: str = DEFAULT_PROVIDER_MODEL_FEATURES_PATH,
         provider_enabled_models_path: str = DEFAULT_PROVIDER_ENABLED_MODELS_PATH,
+        provider_task_model_preferences_path: str = DEFAULT_PROVIDER_TASK_MODEL_PREFERENCES_PATH,
         node_capabilities_path: str = "runtime/node_capabilities.json",
         task_graph_path: str = "capabilities/task_graph.json",
     ) -> None:
@@ -103,6 +133,7 @@ class ProviderRuntimeManager:
             path=provider_enabled_models_path,
             logger=logger,
         )
+        self._provider_task_model_preferences_path = Path(provider_task_model_preferences_path)
         self._node_capabilities_path = Path(node_capabilities_path)
         self._task_graph_path = task_graph_path
         self._router = ProviderExecutionRouter(
@@ -141,11 +172,13 @@ class ProviderRuntimeManager:
             self._registry.set_provider_health(provider_id=provider_id, payload=health)
             models = await adapter.list_models()
             if provider_id == "openai" and self._pricing_catalog_service is not None:
+                models = self._with_preserved_openai_models(models=models)
                 model_catalog_snapshot = self._openai_model_catalog_store.save_from_model_ids(
                     model_ids=[getattr(model, "model_id", "") for model in models]
                 )
                 processing_model_ids = self._openai_processing_model_ids(
-                    catalog_model_ids=[entry.model_id for entry in model_catalog_snapshot.models]
+                    catalog_model_ids=[entry.model_id for entry in model_catalog_snapshot.models],
+                    preserve_model_ids=self._openai_preserved_model_ids(),
                 )
                 scoped_models = [
                     entry for entry in model_catalog_snapshot.models if entry.model_id in set(processing_model_ids)
@@ -452,6 +485,7 @@ class ProviderRuntimeManager:
         config = self._loader.load()
         enabled_providers = list(config.enabled_providers or [])
         default_model_by_provider: dict[str, str | None] = {}
+        task_default_model_by_provider = self._task_default_model_by_provider()
         provider_retry_count: dict[str, int] = {}
         provider_budget_limits: dict[str, dict[str, int | str]] = {}
         provider_health: dict[str, dict] = {}
@@ -506,6 +540,7 @@ class ProviderRuntimeManager:
             "enabled_providers": enabled_providers,
             "default_provider": config.default_provider,
             "default_model_by_provider": default_model_by_provider,
+            "task_default_model_by_provider": task_default_model_by_provider,
             "provider_retry_count": provider_retry_count,
             "provider_budget_limits": provider_budget_limits,
             "provider_health": provider_health,
@@ -561,6 +596,55 @@ class ProviderRuntimeManager:
             if model_id and model_id not in selected_ids:
                 selected_ids.append(model_id)
         return selected_ids
+
+    def _openai_preserved_model_ids(self) -> list[str]:
+        preserved_ids: list[str] = []
+        for model_id in self._openai_selected_model_ids():
+            normalized = str(model_id or "").strip().lower()
+            if normalized and normalized not in preserved_ids:
+                preserved_ids.append(normalized)
+        openai_task_defaults = self._task_default_model_by_provider().get("openai") or {}
+        if isinstance(openai_task_defaults, dict):
+            for model_id in openai_task_defaults.values():
+                normalized = str(model_id or "").strip().lower()
+                if normalized and normalized not in preserved_ids:
+                    preserved_ids.append(normalized)
+        return preserved_ids
+
+    def _with_preserved_openai_models(self, *, models: list) -> list:
+        merged_models = list(models or [])
+        model_ids = {
+            str(getattr(model, "model_id", "") or "").strip().lower()
+            for model in merged_models
+            if str(getattr(model, "model_id", "") or "").strip()
+        }
+        for model_id in self._openai_preserved_model_ids():
+            if model_id in model_ids or classify_openai_model_family(model_id) is None:
+                continue
+            merged_models.append(
+                ModelCapability(
+                    model_id=model_id,
+                    display_name=model_id,
+                    status="available",
+                )
+            )
+            model_ids.add(model_id)
+        return merged_models
+
+    def _task_default_model_by_provider(self) -> dict[str, dict[str, str]]:
+        path = self._provider_task_model_preferences_path
+        if not path.exists():
+            return {}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            if hasattr(self._logger, "warning"):
+                self._logger.warning(
+                    "[provider-task-model-preferences-invalid] %s",
+                    {"path": str(path), "error": str(exc).strip() or type(exc).__name__},
+                )
+            return {}
+        return _normalize_task_model_preferences(payload)
 
     def openai_resolved_capabilities_payload(self) -> dict:
         capabilities_snapshot = self._provider_model_capabilities_store.load()
@@ -695,10 +779,11 @@ class ProviderRuntimeManager:
         health = await adapter.health_check()
         self._registry.set_provider_health(provider_id="openai", payload=health)
         models = await adapter.list_models()
+        models = self._with_preserved_openai_models(models=models)
         model_catalog_snapshot = self._openai_model_catalog_store.save_from_model_ids(
             model_ids=[getattr(model, "model_id", "") for model in models]
         )
-        selected_model_ids = self._openai_selected_model_ids()
+        selected_model_ids = self._openai_preserved_model_ids()
         processing_model_ids = self._openai_processing_model_ids(
             catalog_model_ids=[entry.model_id for entry in model_catalog_snapshot.models],
             preserve_model_ids=selected_model_ids,

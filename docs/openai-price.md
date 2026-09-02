@@ -14,6 +14,18 @@ For the node's OpenAI fallback path, prefer the current GPT-5.6 family when avai
 
 GPT-5.6 Luna is the default cost/benefit choice because OpenAI positions it for cost-sensitive, high-volume workloads. GPT-5.6 Terra is the practical quality escalation because OpenAI positions it as the balanced intelligence/cost model. GPT-5.6 Sol is available as the flagship option but costs materially more, so the node should not prefer it automatically.
 
+## Node Task Defaults
+
+The node reads OpenAI per-task defaults from `config/provider-task-model-preferences.json`.
+
+| Task family | Default OpenAI model | Reason |
+| --- | --- | --- |
+| `task.classification`, `task.sentiment_analysis`, `task.information_extraction` | `gpt-5-nano` | Cheapest effective model for short structured classifier-style work, based on live replay cost checks. |
+| `task.chat`, `task.summarization`, `task.structured_extraction`, `task.translation`, `task.code_explanation` | `gpt-5.6-luna` | Best default cost/benefit GPT-5.6 model for general cloud fallback. |
+| `task.reasoning`, `task.workflow_reasoning`, `task.task_planning`, `task.code_generation`, `task.code_review`, `task.code_debugging` | `gpt-5.6-terra` | Quality escalation for harder reasoning/coding while avoiding Sol's higher default cost. |
+| `task.image_generation` | `gpt-image-2` | Current image-generation default. |
+| `task.moderation`, `task.policy_check` | `omni-moderation-2024-09-26` | Dedicated moderation/policy model. |
+
 ## Image Generation Pricing
 
 This table records OpenAI image generation prices per generated image in USD. Prices vary by model, quality, and output size.

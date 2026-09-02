@@ -826,7 +826,7 @@ class TaskExecutionService:
         if not request.requested_provider and routing.get("mode"):
             provider_reason = f"routing_policy_{routing.get('mode')}"
 
-        model_reason = "provider_default_or_first_allowed"
+        model_reason = "provider_task_default_or_provider_default"
         if request.requested_model:
             model_reason = "requested_model"
         elif authorization is not None and isinstance(getattr(authorization, "provider_preferences", None), dict):
