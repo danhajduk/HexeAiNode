@@ -92,12 +92,12 @@ class ProviderConfigLoader:
                 default_model_id=(
                     _first_non_empty_string(
                         str(os.environ.get("HEXE_OPENAI_DEFAULT_MODEL_ID") or "").strip() or None,
+                        stored_openai.get("default_model_id") if isinstance(stored_openai, dict) else None,
                         (
                             (stored_openai.get("selected_model_ids") or [None])
                             if isinstance(stored_openai, dict)
                             else [None]
                         )[0],
-                        stored_openai.get("default_model_id") if isinstance(stored_openai, dict) else None,
                     )
                 ),
                 base_url=str(os.environ.get("HEXE_OPENAI_BASE_URL") or "https://api.openai.com/v1").strip(),

@@ -35,23 +35,39 @@ models:
     Input: null
     Cached input: null
     Output: null
+  gpt-5.6-luna:
+    Input: 0.2
+    Cached input: 0.02
+    Output: 1.2
+  gpt-5.6-sol:
+    Input: 4
+    Cached input: 0.4
+    Output: 20
+  gpt-5.6-terra:
+    Input: 2
+    Cached input: 0.2
+    Output: 12
   gpt-image-1-mini:
     Input: 2.5
     Cached input: null
     Output: 8
   gpt-image-1.5:
     Input: 8
-    Cached input: 0
+    Cached input: 2
     Output: 32
   gpt-image-2:
-    Input: null
-    Cached input: null
-    Output: null
+    Input: 8
+    Cached input: 2
+    Output: 30
   gpt-realtime-1.5:
     Input: null
     Cached input: null
     Output: null
   gpt-realtime-2:
+    Input: null
+    Cached input: null
+    Output: null
+  gpt-realtime-2.1-mini:
     Input: null
     Cached input: null
     Output: null

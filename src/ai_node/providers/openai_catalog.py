@@ -92,7 +92,7 @@ _BASE_ALLOW_RE = re.compile(
     r"|o1(?:-pro)?"
     r"|o3(?:-(?:mini|pro))?"
     r"|o4-mini"
-    r"|gpt-image-(?:1|1-mini|1\.5)"
+    r"|gpt-image-(?:1|1-mini|1\.5|2)"
     r"|gpt-realtime-[a-z0-9.-]+"
     r"|whisper-[a-z0-9.-]+"
     r"|tts(?:-hd)?-[a-z0-9.-]+"
@@ -131,6 +131,7 @@ _DISPLAY_NAME_ALIASES = {
     "gpt image 1": "gpt-image-1",
     "gpt image 1 mini": "gpt-image-1-mini",
     "gpt image 1.5": "gpt-image-1.5",
+    "gpt image 2": "gpt-image-2",
 }
 _OPENAI_MANUAL_RATE_FALLBACKS = {
     "gpt-5.4": {"input_price": 2.50, "cached_input_price": 0.25, "output_price": 15.00},
@@ -139,6 +140,9 @@ _OPENAI_MANUAL_RATE_FALLBACKS = {
     "gpt-5.4-mini-2026-03-17": {"input_price": 0.75, "cached_input_price": 0.075, "output_price": 4.50},
     "gpt-5.4-nano": {"input_price": 0.20, "cached_input_price": 0.02, "output_price": 1.25},
     "gpt-5.4-nano-2026-03-17": {"input_price": 0.20, "cached_input_price": 0.02, "output_price": 1.25},
+    "gpt-5.6-sol": {"input_price": 4.00, "cached_input_price": 0.40, "output_price": 20.00},
+    "gpt-5.6-terra": {"input_price": 2.00, "cached_input_price": 0.20, "output_price": 12.00},
+    "gpt-5.6-luna": {"input_price": 0.20, "cached_input_price": 0.02, "output_price": 1.20},
 }
 
 
@@ -250,7 +254,7 @@ def _normalize_family(value: object, *, model_id: str) -> str:
 
 def _classify_family_from_model_id(model_id: str) -> str | None:
     normalized = _normalize_string(model_id).lower()
-    if normalized in {"gpt-image-1", "gpt-image-1-mini", "gpt-image-1.5"}:
+    if normalized in {"gpt-image-1", "gpt-image-1-mini", "gpt-image-1.5", "gpt-image-2"}:
         return "image_generation"
     if normalized.startswith("sora-"):
         return "video_generation"

@@ -107,6 +107,16 @@ class TaskExecutionService:
         return {"text": output_text}
 
     @staticmethod
+    def _resolution_used_fallback(resolution) -> bool:
+        provider_id = str(getattr(resolution, "provider_id", "") or "").strip()
+        provider_order = [
+            str(item or "").strip()
+            for item in list(getattr(resolution, "provider_order", []) or [])
+            if str(item or "").strip()
+        ]
+        return bool(provider_id and provider_order and provider_id != provider_order[0])
+
+    @staticmethod
     def _lifecycle_context_details(*, request: TaskExecutionRequest, extras: dict | None = None) -> dict:
         details = {
             "requested_by": request.requested_by,
@@ -213,7 +223,7 @@ class TaskExecutionService:
                 provider_id=resolution.provider_id,
                 model_id=resolution.model_id,
                 retries=resolution.retry_count,
-                fallback_used=bool(resolution.fallback_provider_ids),
+                fallback_used=self._resolution_used_fallback(resolution),
                 resolution_metadata=self._resolution_metadata(
                     request=request,
                     authorization=authorization,
@@ -230,7 +240,8 @@ class TaskExecutionService:
             model_id=resolution.model_id,
             details={"provider_order": list(resolution.provider_order)},
         )
-        if resolution.fallback_provider_ids:
+        fallback_used = self._resolution_used_fallback(resolution)
+        if fallback_used:
             await self._emit_execution_event(
                 event_type="provider_fallback",
                 request=request,
@@ -258,7 +269,7 @@ class TaskExecutionService:
                 provider_id=resolution.provider_id,
                 model_id=resolution.model_id,
                 retries=resolution.retry_count,
-                fallback_used=bool(resolution.fallback_provider_ids),
+                fallback_used=fallback_used,
                 resolution_metadata=self._resolution_metadata(
                     request=request,
                     authorization=authorization,
@@ -294,7 +305,7 @@ class TaskExecutionService:
                     provider_id=resolution.provider_id,
                     model_id=resolution.model_id,
                     retries=resolution.retry_count,
-                    fallback_used=bool(resolution.fallback_provider_ids),
+                    fallback_used=fallback_used,
                     resolution_metadata=self._resolution_metadata(
                         request=request,
                         authorization=authorization,
@@ -358,7 +369,7 @@ class TaskExecutionService:
                 provider_id=resolution.provider_id,
                 model_id=resolution.model_id,
                 retries=resolution.retry_count,
-                fallback_used=bool(resolution.fallback_provider_ids),
+                fallback_used=fallback_used,
                 resolution_metadata=self._resolution_metadata(
                     request=request,
                     authorization=authorization,
@@ -381,7 +392,7 @@ class TaskExecutionService:
                 provider_id=resolution.provider_id,
                 model_id=resolution.model_id,
                 retries=resolution.retry_count,
-                fallback_used=bool(resolution.fallback_provider_ids),
+                fallback_used=fallback_used,
                 resolution_metadata=self._resolution_metadata(
                     request=request,
                     authorization=authorization,
@@ -427,7 +438,7 @@ class TaskExecutionService:
                     "execution_duration_ms": round((time.perf_counter() - started) * 1000.0, 3),
                     "provider_latency_ms": response.latency_ms,
                     "retries": resolution.retry_count,
-                    "fallback_used": bool(resolution.fallback_provider_ids),
+                    "fallback_used": fallback_used,
                     "prompt_tokens": response.usage.prompt_tokens,
                     "cached_input_tokens": response.usage.cached_input_tokens,
                     "completion_tokens": response.usage.completion_tokens,

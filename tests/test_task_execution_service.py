@@ -1270,7 +1270,7 @@ class TaskExecutionServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.status, "degraded")
         self.assertEqual(result.error_code, "no_eligible_provider_available")
-        self.assertTrue(result.metrics.fallback_used)
+        self.assertFalse(result.metrics.fallback_used)
         self.assertEqual(result.metrics.retries, 1)
         self.assertEqual(result.metrics.provider_total_requests, 0)
 

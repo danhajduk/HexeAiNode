@@ -1,6 +1,20 @@
-# OpenAI Image Generation Pricing
+# OpenAI Pricing Notes
 
-Verified: 2026-05-10
+Verified: 2026-09-02
+
+## Cost/Benefit Text Model Defaults
+
+For the node's OpenAI fallback path, prefer the current GPT-5.6 family when available:
+
+| Model | Best node use | Input / 1M | Cached input / 1M | Output / 1M |
+| --- | --- | ---: | ---: | ---: |
+| gpt-5.6-luna | Default economical cloud fallback for general task chat, classification, and summaries | $0.20 | $0.02 | $1.20 |
+| gpt-5.6-terra | Escalation model when the local LLM or Luna is unlikely to complete a more complex coding/reasoning task | $2.00 | $0.20 | $12.00 |
+| gpt-5.6-sol | Highest-capability escalation; keep disabled by default unless the operator accepts the higher spend | $4.00 | $0.40 | $20.00 |
+
+GPT-5.6 Luna is the default cost/benefit choice because OpenAI positions it for cost-sensitive, high-volume workloads. GPT-5.6 Terra is the practical quality escalation because OpenAI positions it as the balanced intelligence/cost model. GPT-5.6 Sol is available as the flagship option but costs materially more, so the node should not prefer it automatically.
+
+## Image Generation Pricing
 
 This table records OpenAI image generation prices per generated image in USD. Prices vary by model, quality, and output size.
 
@@ -37,6 +51,8 @@ OpenAI also lists image model token rates separately on the pricing page.
 Sources:
 
 - OpenAI pricing page: https://developers.openai.com/api/docs/pricing
+- OpenAI models page: https://developers.openai.com/api/docs/models
+- OpenAI model comparison page: https://developers.openai.com/api/docs/models/compare
 - GPT Image 2 model page: https://developers.openai.com/api/docs/models/gpt-image-2
 - GPT Image 1.5 model page: https://developers.openai.com/api/docs/models/gpt-image-1.5
 - GPT Image 1 model page: https://developers.openai.com/api/docs/models/gpt-image-1

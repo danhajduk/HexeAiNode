@@ -16,6 +16,7 @@ OPENAI_IMAGE_GENERATION_MODEL_IDS = frozenset(
         "gpt-image-1",
         "gpt-image-1-mini",
         "gpt-image-1.5",
+        "gpt-image-2",
     }
 )
 

@@ -43,7 +43,7 @@ class OpenAIPricingCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(is_regular_openai_model_id("gpt-5.4-pro"))
         self.assertTrue(is_regular_openai_model_id("gpt-image-1.5"))
         self.assertTrue(is_regular_openai_model_id("gpt-image-1-mini"))
-        self.assertFalse(is_regular_openai_model_id("gpt-image-2"))
+        self.assertTrue(is_regular_openai_model_id("gpt-image-2"))
         self.assertFalse(is_regular_openai_model_id("gpt-5.3-chat-latest"))
         self.assertFalse(is_regular_openai_model_id("gpt-4o-realtime-preview"))
         self.assertFalse(is_regular_openai_model_id("gpt-4-0613"))
