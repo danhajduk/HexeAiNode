@@ -680,6 +680,7 @@ def run(
         task_capability_selection_store=task_capability_selection_store,
         node_id=node_identity["node_id"],
         node_software_version=node_software_version,
+        node_api_base_url=resolved_node_api_base_url,
         capability_state_store=capability_state_store,
         governance_state_store=governance_state_store,
         phase2_state_store=phase2_state_store,

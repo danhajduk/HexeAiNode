@@ -16,7 +16,7 @@ Backend runtime:
 - `HEXE_NODE_HOSTNAME` default local hostname
 - `HEXE_NODE_UI_ENDPOINT` optional absolute node UI URL sent during onboarding; when unset the node derives `http://<detected-ip>:<ui-port>/`
 - `HEXE_NODE_UI_PORT` default `8081`
-- `HEXE_NODE_API_BASE_URL` optional absolute node API base URL sent during onboarding; when unset the node derives `http://<detected-ip>:<api-port>`
+- `HEXE_NODE_API_BASE_URL` optional absolute node API base URL sent during onboarding; when unset the node derives `http://<detected-ip>:<api-port>` from the host's current outbound route and advertises task execution endpoints from that URL in capability declarations
 - `HEXE_TRUST_STATE_PATH` default `.run/trust_state.json`
 - `HEXE_NODE_IDENTITY_PATH` default `.run/node_identity.json`
 - `HEXE_PROVIDER_SELECTION_CONFIG_PATH` default `.run/provider_selection_config.json`

@@ -753,6 +753,38 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
             ["task.classification", "task.summarization"],
         )
 
+    async def test_submit_manifest_advertises_resolved_local_execution_url(self):
+        lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
+        lifecycle.transition_to(NodeLifecycleState.TRUSTED)
+        lifecycle.transition_to(NodeLifecycleState.CAPABILITY_SETUP_PENDING)
+        client = _FakeClientAcceptedCapture()
+        runner = CapabilityDeclarationRunner(
+            lifecycle=lifecycle,
+            logger=logging.getLogger("capability-runner-test"),
+            trust_store=_FakeTrustStore(),
+            provider_selection_store=_FakeProviderSelectionStore(),
+            task_capability_selection_store=_FakeTaskCapabilitySelectionStore(),
+            node_id=TEST_NODE_ID,
+            node_api_base_url="http://192.0.2.10:9002/",
+            capability_client=client,
+            governance_client=_FakeGovernanceClientSynced(),
+            operational_readiness_checker=_FakeOperationalReadinessReady(),
+            telemetry_publisher=_FakeTelemetryPublisher(),
+            phase2_state_store=_FakePhase2StateStore(),
+        )
+
+        await runner.submit_once()
+
+        self.assertEqual(
+            client.last_manifest["capability_endpoints"]["task.classification"],
+            {
+                "transport": "http",
+                "method": "POST",
+                "path": "/api/execution/direct",
+                "url": "http://192.0.2.10:9002/api/execution/direct",
+            },
+        )
+
     async def test_submit_manifest_uses_resolved_provider_task_capabilities_when_available(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
         lifecycle.transition_to(NodeLifecycleState.TRUSTED)

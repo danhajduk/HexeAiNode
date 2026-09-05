@@ -49,6 +49,30 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
         self.assertFalse(is_valid)
         self.assertEqual(error, "enabled_provider_not_supported")
 
+    def test_create_manifest_accepts_task_execution_endpoints(self):
+        manifest = create_capability_manifest(
+            node_id="node-6d1821d2-a838-4540-a6d5-a5183e59393e",
+            node_name="main-ai-node",
+            task_families=["task.chat"],
+            supported_providers=["openai"],
+            enabled_providers=["openai"],
+            environment_hints=self._valid_environment_hints(),
+            capability_endpoints={
+                "task.chat": {
+                    "transport": "http",
+                    "method": "POST",
+                    "path": "/api/execution/direct",
+                    "url": "http://192.0.2.10:9002/api/execution/direct",
+                }
+            },
+        )
+
+        self.assertEqual(
+            manifest["capability_endpoints"]["task.chat"]["url"],
+            "http://192.0.2.10:9002/api/execution/direct",
+        )
+        self.assertEqual(validate_capability_manifest(manifest), (True, None))
+
     def test_validate_rejects_missing_node_group(self):
         is_valid, error = validate_capability_manifest(
             {

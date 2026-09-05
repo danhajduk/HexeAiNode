@@ -24,6 +24,7 @@ _ROOT_ALLOWED_KEYS = {
     "node_features",
     "environment_hints",
     "provider_intelligence",
+    "capability_endpoints",
 }
 _NODE_ALLOWED_KEYS = {"node_id", "node_type", "node_name", "node_software_version"}
 _NODE_FEATURE_ALLOWED_KEYS = {"telemetry", "governance_refresh", "lifecycle_events", "provider_failover"}
@@ -119,6 +120,26 @@ def _normalize_provider_intelligence(value: object) -> list[dict]:
     return normalized_entries
 
 
+def _normalize_capability_endpoints(value: object, *, task_families: list[str]) -> dict[str, dict]:
+    if not isinstance(value, dict):
+        return {}
+    declared = set(task_families)
+    normalized: dict[str, dict] = {}
+    for raw_family, raw_endpoint in value.items():
+        family = str(raw_family or "").strip().lower()
+        if family not in declared or not isinstance(raw_endpoint, dict):
+            continue
+        endpoint = {
+            "transport": str(raw_endpoint.get("transport") or "").strip().lower(),
+            "method": str(raw_endpoint.get("method") or "").strip().upper(),
+            "path": str(raw_endpoint.get("path") or "").strip(),
+            "url": str(raw_endpoint.get("url") or "").strip(),
+        }
+        if all(endpoint.values()):
+            normalized[family] = endpoint
+    return normalized
+
+
 def create_capability_manifest(
     *,
     node_id: str,
@@ -131,6 +152,7 @@ def create_capability_manifest(
     node_features: list[str] | None = None,
     environment_hints: dict | None = None,
     provider_intelligence: list[dict] | None = None,
+    capability_endpoints: dict[str, dict] | None = None,
     provider_metadata: list[dict] | None = None,
     enabled_models: list[dict] | None = None,
     manifest_version: str = CAPABILITY_MANIFEST_SCHEMA_VERSION,
@@ -141,6 +163,7 @@ def create_capability_manifest(
     )
     feature_declarations = create_node_feature_declarations(node_features)
     feature_map = {str(item.get("name")): bool(item.get("enabled")) for item in feature_declarations if isinstance(item, dict)}
+    declared_task_families = _normalize_string_list(task_families or [])
     manifest = {
         "manifest_version": CAPABILITY_MANIFEST_SCHEMA_VERSION,
         "node": {
@@ -149,7 +172,7 @@ def create_capability_manifest(
             "node_name": str(node_name).strip(),
             "node_software_version": str(node_software_version).strip() or "0.1.0",
         },
-        "declared_task_families": _normalize_string_list(task_families or []),
+        "declared_task_families": declared_task_families,
         "supported_providers": _normalize_string_list(supported_providers or []),
         "enabled_providers": _normalize_string_list(enabled_providers or []),
         "node_features": {
@@ -165,6 +188,12 @@ def create_capability_manifest(
     normalized_provider_intelligence = _normalize_provider_intelligence(provider_intelligence)
     if normalized_provider_intelligence:
         manifest["provider_intelligence"] = normalized_provider_intelligence
+    normalized_capability_endpoints = _normalize_capability_endpoints(
+        capability_endpoints,
+        task_families=declared_task_families,
+    )
+    if normalized_capability_endpoints:
+        manifest["capability_endpoints"] = normalized_capability_endpoints
     if feature_map.get(PROMPT_GOVERNANCE_READY, False):
         manifest["node_features"]["governance_refresh"] = True
     is_valid, error = validate_capability_manifest(manifest)
@@ -244,6 +273,23 @@ def validate_capability_manifest(data: object) -> Tuple[bool, Optional[str]]:
             continue
         if not _is_non_empty_string(value) or len(str(value).strip()) > 64:
             return False, f"invalid_environment_hint_{key}"
+
+    if "capability_endpoints" in data:
+        capability_endpoints = data.get("capability_endpoints")
+        if not isinstance(capability_endpoints, dict):
+            return False, "invalid_capability_endpoints"
+        declared = set(task_families)
+        for family, endpoint in capability_endpoints.items():
+            if family not in declared:
+                return False, f"capability_endpoint_not_declared:{family}"
+            if not isinstance(endpoint, dict):
+                return False, f"invalid_capability_endpoint:{family}"
+            if endpoint.get("transport") != "http" or endpoint.get("method") != "POST":
+                return False, f"invalid_capability_endpoint_transport:{family}"
+            path = str(endpoint.get("path") or "").strip()
+            url = str(endpoint.get("url") or "").strip()
+            if not path.startswith("/") or not url.startswith(("http://", "https://")):
+                return False, f"invalid_capability_endpoint_url:{family}"
 
     if "provider_intelligence" in data:
         provider_intelligence = data.get("provider_intelligence")

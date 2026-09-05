@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urljoin
 
 from ai_node.capabilities.environment_hints import collect_environment_hints
 from ai_node.capabilities.manifest_schema import create_capability_manifest
@@ -42,6 +43,7 @@ class CapabilityDeclarationRunner:
         task_capability_selection_store=None,
         node_id: str,
         node_software_version: str = "0.1.0",
+        node_api_base_url: str | None = None,
         capability_state_store=None,
         governance_state_store=None,
         phase2_state_store=None,
@@ -69,6 +71,7 @@ class CapabilityDeclarationRunner:
         self._prompt_service_state_store = prompt_service_state_store
         self._node_id = str(node_id).strip()
         self._node_software_version = str(node_software_version).strip() or "0.1.0"
+        self._node_api_base_url = str(node_api_base_url or "").strip().rstrip("/")
         self._capability_client = capability_client or CapabilityDeclarationClient(logger=logger)
         self._governance_client = governance_client or GovernanceSyncClient(logger=logger)
         self._provider_intelligence_service = provider_intelligence_service or ProviderIntelligenceService(
@@ -454,6 +457,19 @@ class CapabilityDeclarationRunner:
                 else create_declared_task_family_capabilities(selected_task_families)
             )
         )
+        capability_endpoints = {}
+        if self._node_api_base_url:
+            execution_path = "/api/execution/direct"
+            execution_url = urljoin(f"{self._node_api_base_url}/", execution_path.lstrip("/"))
+            capability_endpoints = {
+                family: {
+                    "transport": "http",
+                    "method": "POST",
+                    "path": execution_path,
+                    "url": execution_url,
+                }
+                for family in manifest_task_families
+            }
         return create_capability_manifest(
             node_id=self._node_id,
             node_name=str(trust_state.get("node_name") or "ai-node").strip(),
@@ -464,6 +480,7 @@ class CapabilityDeclarationRunner:
             enabled_providers=providers.get("enabled"),
             node_features=create_node_feature_declarations(),
             environment_hints=collect_environment_hints(),
+            capability_endpoints=capability_endpoints,
         )
 
     async def submit_once(self) -> dict:
