@@ -14,6 +14,15 @@ This document summarizes how this node uses platform contracts without redefinin
 - bootstrap discovery uses anonymous MQTT through the bootstrap runner
 - trusted operational status uses `hexe/nodes/{node_id}/status`
 - trusted telemetry uses operational MQTT credentials from local trust state
+- node-originated domain events publish directly to `hexe/events/{domain}/{event_name}` using QoS 1 and `retain=false`
+
+### Direct Shared Domain Events
+
+`DomainEventPublisher` validates the canonical node-originated envelope before publishing. The path after `hexe/events/` must equal the dotted `event_type` with dots replaced by slashes. For example, `delivery.window.upserted` publishes to `hexe/events/delivery/window/upserted`.
+
+The publisher sets `source.node_id` from trusted local state, uses `event_id` for deduplication, and rejects payloads larger than 65,536 UTF-8 JSON bytes. It also rejects legacy Core-promotion fields and fields carrying secrets, credentials, tokens, attachments, raw message bodies, prompts, or other private raw content. Callers must publish only small, structured, non-private domain metadata in `subject` and `data`.
+
+This contract does not alter bootstrap, command, notification, telemetry, state, or `hexe/nodes/{node_id}/status` topics. This repository currently has no shared-domain-event consumer and therefore has no promotion envelope to unwrap.
 
 ## Capabilities Declared
 
