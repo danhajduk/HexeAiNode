@@ -1822,9 +1822,12 @@ class NodeControlState:
                         "role": "system",
                         "content": (
                             "/no_think You conduct a concise character-design interview for image generation. "
-                            "Ask exactly one friendly, concrete guiding question for the requested step. "
-                            "Use already supplied character details to avoid repetition. "
-                            "Return only JSON with keys question and guidance. Do not write the answer for the user."
+                            "You must assess whether the current answer has enough concrete visual detail for image generation. "
+                            "If review_answer is false, ask one friendly opening question. If it is true and important details "
+                            "are missing, ask exactly one focused follow-up about the most important omission. If the answer is "
+                            "sufficient, set complete to true and do not ask another question. Use supplied details to avoid "
+                            "repetition. Return only JSON with keys complete, question, guidance, and missing_details. "
+                            "missing_details must be a short array of visual details still needed. Do not invent answers."
                         ),
                     },
                     {
@@ -1834,6 +1837,8 @@ class NodeControlState:
                             "step": step_labels[step_id],
                             "character_brief": payload.character_brief if isinstance(payload.character_brief, dict) else {},
                             "current_answer": str(payload.current_answer or "").strip(),
+                            "review_answer": bool(payload.review_answer),
+                            "questions_asked": max(0, int(payload.questions_asked or 0)),
                         }, sort_keys=True),
                     },
                 ],
@@ -1848,9 +1853,24 @@ class NodeControlState:
         message = choices[0].get("message") if choices and isinstance(choices[0], dict) and isinstance(choices[0].get("message"), dict) else {}
         content = str(message.get("content") or message.get("reasoning_content") or "").strip()
         parsed = self._parse_manual_image_prompt_helper_content(content)
+        complete_value = parsed.get("complete")
+        complete = (
+            complete_value is True
+            or str(complete_value or "").strip().lower() in {"true", "yes", "complete"}
+        ) if payload.review_answer else False
         question = str(parsed.get("question") or content or f"How should the character's {step_labels[step_id]} look?").strip()
         guidance = str(parsed.get("guidance") or "Add concrete visual details that should stay consistent across future images.").strip()
-        return {"status": "ok", "provider": "local_llm", "model_id": model_id, "step_id": step_id, "question": question, "guidance": guidance}
+        missing_details = parsed.get("missing_details") if isinstance(parsed.get("missing_details"), list) else []
+        return {
+            "status": "ok",
+            "provider": "local_llm",
+            "model_id": model_id,
+            "step_id": step_id,
+            "complete": complete,
+            "question": "" if complete else question,
+            "guidance": guidance,
+            "missing_details": [str(item).strip() for item in missing_details if str(item).strip()][:5],
+        }
 
     def manual_image_pose_helper(self, *, payload: "ManualImagePoseHelperRequest") -> dict:
         pose_text = str(payload.pose_text or "").strip()
@@ -15164,6 +15184,8 @@ class CharacterInterviewQuestionRequest(BaseModel):
     step_id: str
     character_brief: dict | None = None
     current_answer: str | None = None
+    review_answer: bool = False
+    questions_asked: int = 0
 
 
 class ManualImagePoseHelperRequest(BaseModel):

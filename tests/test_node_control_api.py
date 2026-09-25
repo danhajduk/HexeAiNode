@@ -3558,21 +3558,30 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 service_manager=_InterviewServiceManager(),
             )
             llm_response = {"choices": [{"message": {"content": json.dumps({
+                "complete": False,
                 "question": "What facial features make this character immediately recognizable?",
                 "guidance": "Consider face shape, eyes, hair, and one signature detail.",
+                "missing_details": ["face shape", "eye color"],
             })}}]}
             with patch.object(state, "_uds_json_request", return_value=llm_response) as request:
                 result = state.character_interview_question(payload=CharacterInterviewQuestionRequest(
                     step_id="face_features",
                     character_brief={"name": "Nova", "concept": "space pilot"},
+                    review_answer=True,
+                    questions_asked=1,
                 ))
 
         self.assertEqual(result["provider"], "local_llm")
         self.assertIn("facial features", result["question"])
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["missing_details"], ["face shape", "eye color"])
         request.assert_called_once()
         self.assertEqual(request.call_args.kwargs["path"], "/v1/chat/completions")
         messages = request.call_args.kwargs["body"]["messages"]
         self.assertTrue(all("/no_think" in item["content"] for item in messages))
+        interview_payload = json.loads(messages[1]["content"].removeprefix("/no_think "))
+        self.assertTrue(interview_payload["review_answer"])
+        self.assertEqual(interview_payload["questions_asked"], 1)
 
     def test_manual_image_pose_helper_uses_local_llm_and_writes_pose_reference(self):
         class _PoseHelperServiceManager:

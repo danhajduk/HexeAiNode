@@ -92,6 +92,7 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Initial pose");
     expect(markup).toContain("Expression");
     expect(markup).toContain("Let the local LLM ask guiding questions");
+    expect(markup).toContain("Check answer with LLM");
     expect(markup).toContain("1 of 6");
   });
 });

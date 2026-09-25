@@ -119,6 +119,9 @@ export function ImageStudio({
   const [interviewLlmEnabled, setInterviewLlmEnabled] = useState(true);
   const [interviewQuestion, setInterviewQuestion] = useState(CHARACTER_INTERVIEW_STEPS[0].question);
   const [interviewGuidance, setInterviewGuidance] = useState("");
+  const [interviewMissingDetails, setInterviewMissingDetails] = useState([]);
+  const [interviewQuestionCounts, setInterviewQuestionCounts] = useState({});
+  const [completedInterviewSteps, setCompletedInterviewSteps] = useState({});
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -144,6 +147,9 @@ export function ImageStudio({
   const textResidency = textService.model_residency || {};
   const textModelLoaded = textResidency.model_state === "loaded" || textService.always_on?.default_model_loaded === true;
   const activeInterviewStep = CHARACTER_INTERVIEW_STEPS[interviewStep];
+  const currentInterviewAnswer = activeInterviewStep.id === "name_concept"
+    ? [characterBrief.name, characterBrief.concept].filter(Boolean).join(" — ")
+    : characterBrief[activeInterviewStep.field] || "";
 
   useEffect(() => {
     if (!interviewOpen) {
@@ -151,6 +157,7 @@ export function ImageStudio({
     }
     setInterviewQuestion(activeInterviewStep.question);
     setInterviewGuidance("");
+    setInterviewMissingDetails([]);
     if (!interviewLlmEnabled || !textModelLoaded) {
       return;
     }
@@ -158,9 +165,9 @@ export function ImageStudio({
     const request = onInterviewQuestion?.({
       step_id: activeInterviewStep.id,
       character_brief: characterBrief,
-      current_answer: activeInterviewStep.id === "name_concept"
-        ? [characterBrief.name, characterBrief.concept].filter(Boolean).join(" — ")
-        : characterBrief[activeInterviewStep.field] || "",
+      current_answer: currentInterviewAnswer,
+      review_answer: false,
+      questions_asked: interviewQuestionCounts[activeInterviewStep.id] || 0,
     });
     void request?.then((result) => {
       if (cancelled || !result) {
@@ -168,6 +175,7 @@ export function ImageStudio({
       }
       setInterviewQuestion(result.question || activeInterviewStep.question);
       setInterviewGuidance(result.guidance || "");
+      setInterviewMissingDetails(Array.isArray(result.missing_details) ? result.missing_details : []);
     });
     return () => { cancelled = true; };
   }, [interviewOpen, interviewStep, interviewLlmEnabled]);
@@ -219,6 +227,44 @@ export function ImageStudio({
   function moveCharacterInterview(direction) {
     const nextStep = Math.min(Math.max(interviewStep + direction, 0), CHARACTER_INTERVIEW_STEPS.length - 1);
     setInterviewStep(nextStep);
+  }
+
+  async function reviewCharacterInterviewAnswer() {
+    if (!currentInterviewAnswer.trim() || interviewBusy) {
+      return;
+    }
+    if (!interviewLlmEnabled || !textModelLoaded || !onInterviewQuestion) {
+      if (interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1) {
+        moveCharacterInterview(1);
+      } else {
+        setInterviewOpen(false);
+      }
+      return;
+    }
+    const questionsAsked = (interviewQuestionCounts[activeInterviewStep.id] || 0) + 1;
+    const result = await onInterviewQuestion({
+      step_id: activeInterviewStep.id,
+      character_brief: characterBrief,
+      current_answer: currentInterviewAnswer,
+      review_answer: true,
+      questions_asked: questionsAsked,
+    });
+    if (!result) {
+      return;
+    }
+    setInterviewQuestionCounts((current) => ({ ...current, [activeInterviewStep.id]: questionsAsked }));
+    setInterviewGuidance(result.guidance || "");
+    setInterviewMissingDetails(Array.isArray(result.missing_details) ? result.missing_details : []);
+    if (!result.complete) {
+      setInterviewQuestion(result.question || activeInterviewStep.question);
+      return;
+    }
+    setCompletedInterviewSteps((current) => ({ ...current, [activeInterviewStep.id]: true }));
+    if (interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1) {
+      moveCharacterInterview(1);
+    } else {
+      setInterviewOpen(false);
+    }
   }
 
   const choosingCharacterPath = creationType === "character" && !characterPath;
@@ -406,7 +452,7 @@ export function ImageStudio({
             </header>
             <div className="image-studio-interview-progress">
               {CHARACTER_INTERVIEW_STEPS.map((step, index) => (
-                <button className={index === interviewStep ? "is-active" : index < interviewStep ? "is-complete" : ""} type="button" key={step.id} onClick={() => setInterviewStep(index)}>
+                <button className={index === interviewStep ? "is-active" : completedInterviewSteps[step.id] ? "is-complete" : ""} type="button" key={step.id} onClick={() => setInterviewStep(index)}>
                   <span>{index + 1}</span><small>{step.title}</small>
                 </button>
               ))}
@@ -419,6 +465,7 @@ export function ImageStudio({
               <span>{interviewBusy ? "Local LLM is preparing the next question…" : interviewLlmEnabled && textModelLoaded ? "Local LLM asks" : "Guided question"}</span>
               <strong>{interviewQuestion}</strong>
               {interviewGuidance ? <p>{interviewGuidance}</p> : null}
+              {interviewMissingDetails.length ? <p>{`Still useful: ${interviewMissingDetails.join(", ")}`}</p> : null}
             </div>
             {activeInterviewStep.id === "name_concept" ? (
               <div className="image-studio-brief-grid">
@@ -434,11 +481,9 @@ export function ImageStudio({
             <footer>
               <button className="btn" type="button" onClick={() => moveCharacterInterview(-1)} disabled={interviewStep === 0}>Back</button>
               <span>{`${interviewStep + 1} of ${CHARACTER_INTERVIEW_STEPS.length}`}</span>
-              {interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1 ? (
-                <button className="btn btn-primary" type="button" onClick={() => moveCharacterInterview(1)}>Next question</button>
-              ) : (
-                <button className="btn btn-primary" type="button" onClick={() => setInterviewOpen(false)}>Finish interview</button>
-              )}
+              <button className="btn btn-primary" type="button" onClick={reviewCharacterInterviewAnswer} disabled={!currentInterviewAnswer.trim() || interviewBusy}>
+                {interviewBusy ? "Checking answer…" : interviewLlmEnabled && textModelLoaded ? "Check answer with LLM" : interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1 ? "Next question" : "Finish interview"}
+              </button>
             </footer>
           </section>
         </div>
