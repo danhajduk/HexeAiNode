@@ -2560,7 +2560,17 @@ export default function App() {
       },
     },
     manualImageGenerationProps: {
-      payload: manualImageGenerationPayload,
+      payload: {
+        ...(manualImageGenerationPayload || {}),
+        templates:
+          Array.isArray(manualImageGenerationPayload?.templates) && manualImageGenerationPayload.templates.length
+            ? manualImageGenerationPayload.templates
+            : (Array.isArray(comfyuiTemplateCatalogPayload?.templates) ? comfyuiTemplateCatalogPayload.templates : []).filter(
+                (template) =>
+                  String(template?.runtime_id || "") === "comfyui_gpu" &&
+                  ["normal", "manual", "normal_and_manual"].includes(String(template?.output_scope || ""))
+              ),
+      },
       busy: manualImageGenerationBusy,
       promptHelperBusy: manualImagePromptHelperBusy,
       poseHelperBusy: manualImagePoseHelperBusy,
