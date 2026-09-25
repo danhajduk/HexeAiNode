@@ -1791,6 +1791,67 @@ class NodeControlState:
             "negative_prompt": negative_prompt,
         }
 
+    def character_interview_question(self, *, payload: "CharacterInterviewQuestionRequest") -> dict:
+        step_id = str(payload.step_id or "").strip().lower()
+        step_labels = {
+            "name_concept": "name and core concept",
+            "face_features": "face and defining facial features",
+            "body_proportions": "body shape and proportions",
+            "initial_clothing": "initial clothing",
+            "initial_pose": "initial pose",
+            "expression": "facial expression",
+        }
+        if step_id not in step_labels:
+            raise ValueError("invalid_character_interview_step")
+        services = self.service_status_payload().get("services", {})
+        local_llm = services.get("local_llm") if isinstance(services, dict) else {}
+        socket_path = str(local_llm.get("socket_path") or "") if isinstance(local_llm, dict) else ""
+        model_id = str(local_llm.get("model_id") or local_llm.get("default_model_id") or "local").strip() if isinstance(local_llm, dict) else "local"
+        if not socket_path:
+            raise ValueError("local_llm_socket_unavailable")
+        if isinstance(local_llm, dict) and str(local_llm.get("state") or "").strip().lower() not in {"running", "healthy"}:
+            raise ValueError("local_llm_unavailable")
+        response = self._uds_json_request(
+            socket_path=socket_path,
+            method="POST",
+            path="/v1/chat/completions",
+            body={
+                "model": model_id,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "/no_think You conduct a concise character-design interview for image generation. "
+                            "Ask exactly one friendly, concrete guiding question for the requested step. "
+                            "Use already supplied character details to avoid repetition. "
+                            "Return only JSON with keys question and guidance. Do not write the answer for the user."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": "/no_think " + json.dumps({
+                            "step_id": step_id,
+                            "step": step_labels[step_id],
+                            "character_brief": payload.character_brief if isinstance(payload.character_brief, dict) else {},
+                            "current_answer": str(payload.current_answer or "").strip(),
+                        }, sort_keys=True),
+                    },
+                ],
+                "temperature": 0.65,
+                "max_tokens": 180,
+                "stream": False,
+            },
+            host="local-llm",
+            error_label="local_llm_character_interview_failed",
+        )
+        choices = response.get("choices") if isinstance(response.get("choices"), list) else []
+        message = choices[0].get("message") if choices and isinstance(choices[0], dict) and isinstance(choices[0].get("message"), dict) else {}
+        content = str(message.get("content") or message.get("reasoning_content") or "").strip()
+        parsed = self._parse_manual_image_prompt_helper_content(content)
+        question = str(parsed.get("question") or content or f"How should the character's {step_labels[step_id]} look?").strip()
+        guidance = str(parsed.get("guidance") or "Add concrete visual details that should stay consistent across future images.").strip()
+        return {"status": "ok", "provider": "local_llm", "model_id": model_id, "step_id": step_id, "question": question, "guidance": guidance}
+
     def manual_image_pose_helper(self, *, payload: "ManualImagePoseHelperRequest") -> dict:
         pose_text = str(payload.pose_text or "").strip()
         if not pose_text:
@@ -15099,6 +15160,12 @@ class ManualImagePromptHelperRequest(BaseModel):
     reference_image_provided: bool | None = False
 
 
+class CharacterInterviewQuestionRequest(BaseModel):
+    step_id: str
+    character_brief: dict | None = None
+    current_answer: str | None = None
+
+
 class ManualImagePoseHelperRequest(BaseModel):
     template_id: str | None = None
     pose_text: str
@@ -16071,6 +16138,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def post_manual_image_generation_prompt_helper(payload: ManualImagePromptHelperRequest):
         try:
             return state.manual_image_prompt_helper(payload=payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/image-studio/character-interview/question")
+    def post_character_interview_question(payload: CharacterInterviewQuestionRequest):
+        try:
+            return state.character_interview_question(payload=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

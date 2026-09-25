@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const CREATION_TYPES = [
   {
@@ -42,6 +42,15 @@ const CHARACTER_PATHS = [
   },
 ];
 
+const CHARACTER_INTERVIEW_STEPS = [
+  { id: "name_concept", title: "Name & concept", field: "concept", question: "What is the character's name, and what is the central idea that makes them distinctive?" },
+  { id: "face_features", title: "Face & features", field: "appearance", question: "How should the character's face, hair, eyes, and defining features look?" },
+  { id: "body_proportions", title: "Body & proportions", field: "body", question: "What body shape, proportions, height, and physical qualities should remain consistent?" },
+  { id: "initial_clothing", title: "Initial clothing", field: "clothing", question: "What should the character wear in their initial reference image?" },
+  { id: "initial_pose", title: "Initial pose", field: "pose", question: "What clear, neutral pose should establish the character's body and silhouette?" },
+  { id: "expression", title: "Expression", field: "expression", question: "What facial expression best establishes the character's personality?" },
+];
+
 function templateCreationType(template) {
   const domain = String(template?.metadata?.domain || "").trim().toLowerCase();
   const intent = String(template?.metadata?.edit_intent || "").trim().toLowerCase();
@@ -79,9 +88,12 @@ export function ImageStudio({
   initialCharacterPath = "",
   initialSelectedTemplateId = "",
   initialCreativeSetupOpen = false,
+  initialInterviewOpen = false,
   runtimeStatus = null,
   promptHelperBusy = false,
+  interviewBusy = false,
   onImprovePrompt,
+  onInterviewQuestion,
   onOpenLegacy,
   onClose,
 }) {
@@ -102,6 +114,11 @@ export function ImageStudio({
   });
   const [promptDraft, setPromptDraft] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("low quality, blurry, distorted face, extra limbs, malformed hands, watermark, text");
+  const [interviewOpen, setInterviewOpen] = useState(initialInterviewOpen);
+  const [interviewStep, setInterviewStep] = useState(0);
+  const [interviewLlmEnabled, setInterviewLlmEnabled] = useState(true);
+  const [interviewQuestion, setInterviewQuestion] = useState(CHARACTER_INTERVIEW_STEPS[0].question);
+  const [interviewGuidance, setInterviewGuidance] = useState("");
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -126,6 +143,34 @@ export function ImageStudio({
   const textService = runtimeStatus?.services?.local_llm || {};
   const textResidency = textService.model_residency || {};
   const textModelLoaded = textResidency.model_state === "loaded" || textService.always_on?.default_model_loaded === true;
+  const activeInterviewStep = CHARACTER_INTERVIEW_STEPS[interviewStep];
+
+  useEffect(() => {
+    if (!interviewOpen) {
+      return;
+    }
+    setInterviewQuestion(activeInterviewStep.question);
+    setInterviewGuidance("");
+    if (!interviewLlmEnabled || !textModelLoaded) {
+      return;
+    }
+    let cancelled = false;
+    const request = onInterviewQuestion?.({
+      step_id: activeInterviewStep.id,
+      character_brief: characterBrief,
+      current_answer: activeInterviewStep.id === "name_concept"
+        ? [characterBrief.name, characterBrief.concept].filter(Boolean).join(" — ")
+        : characterBrief[activeInterviewStep.field] || "",
+    });
+    void request?.then((result) => {
+      if (cancelled || !result) {
+        return;
+      }
+      setInterviewQuestion(result.question || activeInterviewStep.question);
+      setInterviewGuidance(result.guidance || "");
+    });
+    return () => { cancelled = true; };
+  }, [interviewOpen, interviewStep, interviewLlmEnabled]);
 
   function selectCreationType(type) {
     setCreationType(type);
@@ -164,6 +209,16 @@ export function ImageStudio({
     if (result?.negative_prompt) {
       setNegativePrompt(String(result.negative_prompt));
     }
+  }
+
+  function openCharacterInterview() {
+    setInterviewStep(0);
+    setInterviewOpen(true);
+  }
+
+  function moveCharacterInterview(direction) {
+    const nextStep = Math.min(Math.max(interviewStep + direction, 0), CHARACTER_INTERVIEW_STEPS.length - 1);
+    setInterviewStep(nextStep);
   }
 
   const choosingCharacterPath = creationType === "character" && !characterPath;
@@ -245,6 +300,14 @@ export function ImageStudio({
           <div className={`image-studio-llm-status ${textModelLoaded ? "is-ready" : ""}`}>
             <div><span>Prompt assistant</span><strong>{textModelLoaded ? "Local text LLM loaded" : "Local text LLM unavailable"}</strong></div>
             <code>{textResidency.loaded_model || textService.always_on?.default_model_id || "No resident model detected"}</code>
+          </div>
+
+          <div className="image-studio-interview-launch">
+            <div>
+              <strong>Prefer a guided conversation?</strong>
+              <p>Answer six focused questions instead of filling the whole brief at once.</p>
+            </div>
+            <button className="btn btn-primary" type="button" onClick={openCharacterInterview}>Start Character Interview</button>
           </div>
 
           <div className="image-studio-brief-grid">
@@ -330,6 +393,56 @@ export function ImageStudio({
           ) : null}
         </div>
       )}
+
+      {interviewOpen ? (
+        <div className="image-studio-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setInterviewOpen(false); }}>
+          <section className="image-studio-interview-modal" role="dialog" aria-modal="true" aria-labelledby="character-interview-title">
+            <header>
+              <div>
+                <span className="image-studio-eyebrow">Character interview</span>
+                <h2 id="character-interview-title">{activeInterviewStep.title}</h2>
+              </div>
+              <button className="btn" type="button" onClick={() => setInterviewOpen(false)}>Close</button>
+            </header>
+            <div className="image-studio-interview-progress">
+              {CHARACTER_INTERVIEW_STEPS.map((step, index) => (
+                <button className={index === interviewStep ? "is-active" : index < interviewStep ? "is-complete" : ""} type="button" key={step.id} onClick={() => setInterviewStep(index)}>
+                  <span>{index + 1}</span><small>{step.title}</small>
+                </button>
+              ))}
+            </div>
+            <label className="image-studio-llm-toggle">
+              <input type="checkbox" checked={interviewLlmEnabled} onChange={(event) => setInterviewLlmEnabled(event.target.checked)} disabled={!textModelLoaded} />
+              Let the local LLM ask guiding questions
+            </label>
+            <div className="image-studio-interview-question">
+              <span>{interviewBusy ? "Local LLM is preparing the next question…" : interviewLlmEnabled && textModelLoaded ? "Local LLM asks" : "Guided question"}</span>
+              <strong>{interviewQuestion}</strong>
+              {interviewGuidance ? <p>{interviewGuidance}</p> : null}
+            </div>
+            {activeInterviewStep.id === "name_concept" ? (
+              <div className="image-studio-brief-grid">
+                <label>Character name<input autoFocus value={characterBrief.name} onChange={(event) => updateCharacterBrief("name", event.target.value)} /></label>
+                <label>Character concept<input value={characterBrief.concept} onChange={(event) => updateCharacterBrief("concept", event.target.value)} /></label>
+              </div>
+            ) : (
+              <label className="image-studio-full-field">
+                Your answer
+                <textarea autoFocus rows={6} value={characterBrief[activeInterviewStep.field]} onChange={(event) => updateCharacterBrief(activeInterviewStep.field, event.target.value)} />
+              </label>
+            )}
+            <footer>
+              <button className="btn" type="button" onClick={() => moveCharacterInterview(-1)} disabled={interviewStep === 0}>Back</button>
+              <span>{`${interviewStep + 1} of ${CHARACTER_INTERVIEW_STEPS.length}`}</span>
+              {interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1 ? (
+                <button className="btn btn-primary" type="button" onClick={() => moveCharacterInterview(1)}>Next question</button>
+              ) : (
+                <button className="btn btn-primary" type="button" onClick={() => setInterviewOpen(false)}>Finish interview</button>
+              )}
+            </footer>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }

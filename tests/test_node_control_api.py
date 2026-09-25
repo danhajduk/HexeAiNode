@@ -33,6 +33,7 @@ from ai_node.runtime.node_control_api import (
     ManualImageGenerationRequest,
     ManualImagePoseHelperRequest,
     ManualImagePromptHelperRequest,
+    CharacterInterviewQuestionRequest,
     ManualImageReferenceUploadRequest,
     ManualImageVisionDescribeRequest,
     NodeControlState,
@@ -3542,6 +3543,33 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("cinematic mountain lake", result["prompt"])
         request.assert_called_once()
         self.assertEqual(request.call_args.kwargs["socket_path"], "/tmp/local-llm.sock")
+        self.assertEqual(request.call_args.kwargs["path"], "/v1/chat/completions")
+
+    def test_character_interview_question_uses_local_llm_socket(self):
+        class _InterviewServiceManager:
+            def get_status(self):
+                return {"local_llm": {"state": "running", "socket_path": "/tmp/local-llm.sock", "model_id": "qwen3-8b-q4_k_m"}}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_InterviewServiceManager(),
+            )
+            llm_response = {"choices": [{"message": {"content": json.dumps({
+                "question": "What facial features make this character immediately recognizable?",
+                "guidance": "Consider face shape, eyes, hair, and one signature detail.",
+            })}}]}
+            with patch.object(state, "_uds_json_request", return_value=llm_response) as request:
+                result = state.character_interview_question(payload=CharacterInterviewQuestionRequest(
+                    step_id="face_features",
+                    character_brief={"name": "Nova", "concept": "space pilot"},
+                ))
+
+        self.assertEqual(result["provider"], "local_llm")
+        self.assertIn("facial features", result["question"])
+        request.assert_called_once()
         self.assertEqual(request.call_args.kwargs["path"], "/v1/chat/completions")
         messages = request.call_args.kwargs["body"]["messages"]
         self.assertTrue(all("/no_think" in item["content"] for item in messages))

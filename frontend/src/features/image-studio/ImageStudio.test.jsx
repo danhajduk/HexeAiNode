@@ -65,4 +65,33 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Master prompt");
     expect(markup).toContain("Identity bootstrap required before generation");
   });
+
+  it("offers a six-step character interview with optional local LLM guidance", () => {
+    const template = {
+      template_id: "template.avatar_body_depth_reference_transparent.realvisxl.v1",
+      template_name: "Simple Avatar Generation",
+      metadata: { domain: "avatar", edit_intent: "avatar_body_depth_reference" },
+    };
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        templates={[template]}
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialSelectedTemplateId={template.template_id}
+        initialCreativeSetupOpen
+        initialInterviewOpen
+        runtimeStatus={{ services: { local_llm: { model_residency: { model_state: "loaded" } } } }}
+      />
+    );
+
+    expect(markup).toContain("Character interview");
+    expect(markup).toContain("Name &amp; concept");
+    expect(markup).toContain("Face &amp; features");
+    expect(markup).toContain("Body &amp; proportions");
+    expect(markup).toContain("Initial clothing");
+    expect(markup).toContain("Initial pose");
+    expect(markup).toContain("Expression");
+    expect(markup).toContain("Let the local LLM ask guiding questions");
+    expect(markup).toContain("1 of 6");
+  });
 });
