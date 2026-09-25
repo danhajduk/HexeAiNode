@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("starts with the three creation types", () => {
@@ -94,6 +94,11 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Let the local LLM ask guiding questions");
     expect(markup).toContain("Check answer with LLM");
     expect(markup).toContain("1 of 6");
+    expect(markup).toContain("Gender");
+    expect(markup).toContain("Non-binary");
+    expect(markup).toContain("Semi-realistic");
+    expect(markup).toContain("Adult (18+)");
+    expect(markup).toContain("NSFW — adults only");
   });
 
   it("provides rich selectable face and feature options", () => {
@@ -114,5 +119,13 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Distinctive features");
     expect(markup).toContain("facial cybernetics");
     expect(markup).toContain("Combined face description");
+  });
+
+  it("forces SFW when an adult character is changed to an under-18 age group", () => {
+    expect(applyCharacterFoundation(
+      { age_group: "adult (18+)", content_rating: "NSFW adult content" },
+      "age_group",
+      "teen (13-17)",
+    )).toEqual({ age_group: "teen (13-17)", content_rating: "SFW" });
   });
 });

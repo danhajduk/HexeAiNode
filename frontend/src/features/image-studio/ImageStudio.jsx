@@ -51,6 +51,29 @@ const CHARACTER_INTERVIEW_STEPS = [
   { id: "expression", title: "Expression", field: "expression", question: "What facial expression best establishes the character's personality?" },
 ];
 
+const CHARACTER_FOUNDATION_GROUPS = [
+  { id: "gender_identity", label: "Gender", options: [
+    { value: "male", label: "Male" },
+    { value: "female", label: "Female" },
+    { value: "non-binary", label: "Non-binary" },
+    { value: "unspecified", label: "Unspecified" },
+  ] },
+  { id: "visual_style", label: "Visual style", options: [
+    { value: "realistic", label: "Realistic" },
+    { value: "semi-realistic", label: "Semi-realistic" },
+    { value: "anime", label: "Anime" },
+  ] },
+  { id: "age_group", label: "Age group", options: [
+    { value: "adult (18+)", label: "Adult (18+)" },
+    { value: "teen (13-17)", label: "Teen (13–17)" },
+    { value: "child (under 13)", label: "Child (under 13)" },
+  ] },
+  { id: "content_rating", label: "Content rating", options: [
+    { value: "SFW", label: "SFW" },
+    { value: "NSFW adult content", label: "NSFW — adults only", adultOnly: true },
+  ] },
+];
+
 const FACE_FEATURE_OPTION_GROUPS = [
   { id: "apparent age", label: "Apparent age", options: ["teen", "young adult", "adult", "mature", "elderly"] },
   { id: "face shape", label: "Face shape", options: ["oval", "round", "square", "heart-shaped", "diamond", "oblong", "triangular", "soft angular"] },
@@ -76,6 +99,14 @@ function composeFaceDescription(selections, customDetails) {
   });
   const custom = String(customDetails || "").trim();
   return [...selectedDetails, ...(custom ? [custom] : [])].join("; ");
+}
+
+function applyCharacterFoundation(current, field, value) {
+  const next = { ...current, [field]: value };
+  if (field === "age_group" && value !== "adult (18+)" && next.content_rating === "NSFW adult content") {
+    next.content_rating = "SFW";
+  }
+  return next;
 }
 
 function templateCreationType(template) {
@@ -132,6 +163,10 @@ export function ImageStudio({
   const [characterBrief, setCharacterBrief] = useState({
     name: "",
     concept: "",
+    gender_identity: "",
+    visual_style: "",
+    age_group: "",
+    content_rating: "",
     appearance: "",
     body: "",
     clothing: "",
@@ -163,6 +198,10 @@ export function ImageStudio({
   );
   const selectedTemplate = matchingTemplates.find((template) => template.template_id === selectedTemplateId) || null;
   const composedCharacterPrompt = [
+    characterBrief.gender_identity && `${characterBrief.gender_identity} character`,
+    characterBrief.age_group,
+    characterBrief.visual_style && `${characterBrief.visual_style} visual style`,
+    characterBrief.content_rating,
     characterBrief.concept,
     characterBrief.appearance,
     characterBrief.body,
@@ -177,8 +216,14 @@ export function ImageStudio({
   const textResidency = textService.model_residency || {};
   const textModelLoaded = textResidency.model_state === "loaded" || textService.always_on?.default_model_loaded === true;
   const activeInterviewStep = CHARACTER_INTERVIEW_STEPS[interviewStep];
+  const characterFoundationComplete = CHARACTER_FOUNDATION_GROUPS.every((group) => Boolean(characterBrief[group.id]));
+  const nameConceptComplete = Boolean(characterBrief.name.trim() && characterBrief.concept.trim() && characterFoundationComplete);
   const currentInterviewAnswer = activeInterviewStep.id === "name_concept"
-    ? [characterBrief.name, characterBrief.concept].filter(Boolean).join(" — ")
+    ? [
+      characterBrief.name,
+      characterBrief.concept,
+      ...CHARACTER_FOUNDATION_GROUPS.map((group) => characterBrief[group.id]),
+    ].filter(Boolean).join(" — ")
     : characterBrief[activeInterviewStep.field] || "";
 
   useEffect(() => {
@@ -225,6 +270,11 @@ export function ImageStudio({
 
   function updateCharacterBrief(field, value) {
     setCharacterBrief((current) => ({ ...current, [field]: value }));
+    setPromptDraft("");
+  }
+
+  function selectCharacterFoundation(field, value) {
+    setCharacterBrief((current) => applyCharacterFoundation(current, field, value));
     setPromptDraft("");
   }
 
@@ -513,9 +563,40 @@ export function ImageStudio({
               {interviewMissingDetails.length ? <p>{`Still useful: ${interviewMissingDetails.join(", ")}`}</p> : null}
             </div>
             {activeInterviewStep.id === "name_concept" ? (
-              <div className="image-studio-brief-grid">
-                <label>Character name<input autoFocus value={characterBrief.name} onChange={(event) => updateCharacterBrief("name", event.target.value)} /></label>
-                <label>Character concept<input value={characterBrief.concept} onChange={(event) => updateCharacterBrief("concept", event.target.value)} /></label>
+              <div className="image-studio-foundation-builder">
+                <div className="image-studio-brief-grid">
+                  <label>Character name<input autoFocus value={characterBrief.name} onChange={(event) => updateCharacterBrief("name", event.target.value)} /></label>
+                  <label>Character concept<input value={characterBrief.concept} onChange={(event) => updateCharacterBrief("concept", event.target.value)} /></label>
+                </div>
+                <div className="image-studio-foundation-options">
+                  {CHARACTER_FOUNDATION_GROUPS.map((group) => (
+                    <fieldset key={group.id}>
+                      <legend>{group.label} <small>Required</small></legend>
+                      <div className="image-studio-option-chips">
+                        {group.options.map((option) => {
+                          const disabled = option.adultOnly && characterBrief.age_group !== "adult (18+)";
+                          const selected = characterBrief[group.id] === option.value;
+                          return (
+                            <button
+                              className={selected ? "is-selected" : ""}
+                              type="button"
+                              aria-pressed={selected}
+                              disabled={disabled}
+                              title={disabled ? "NSFW is available only when Age group is Adult (18+)." : ""}
+                              key={option.value}
+                              onClick={() => selectCharacterFoundation(group.id, option.value)}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  ))}
+                </div>
+                {characterBrief.age_group && characterBrief.age_group !== "adult (18+)" ? (
+                  <p className="image-studio-safety-note">Teen and child characters are restricted to SFW content.</p>
+                ) : null}
               </div>
             ) : activeInterviewStep.id === "face_features" ? (
               <div className="image-studio-face-builder">
@@ -561,7 +642,7 @@ export function ImageStudio({
             <footer>
               <button className="btn" type="button" onClick={() => moveCharacterInterview(-1)} disabled={interviewStep === 0}>Back</button>
               <span>{`${interviewStep + 1} of ${CHARACTER_INTERVIEW_STEPS.length}`}</span>
-              <button className="btn btn-primary" type="button" onClick={reviewCharacterInterviewAnswer} disabled={!currentInterviewAnswer.trim() || interviewBusy}>
+              <button className="btn btn-primary" type="button" onClick={reviewCharacterInterviewAnswer} disabled={(activeInterviewStep.id === "name_concept" ? !nameConceptComplete : !currentInterviewAnswer.trim()) || interviewBusy}>
                 {interviewBusy ? "Checking answer…" : interviewLlmEnabled && textModelLoaded ? "Check answer with LLM" : interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1 ? "Next question" : "Finish interview"}
               </button>
             </footer>
@@ -572,4 +653,4 @@ export function ImageStudio({
   );
 }
 
-export { templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, templateCharacterPath, templateCreationType };

@@ -140,6 +140,7 @@ Image creation is moving into a standalone workspace at `#/image-studio`.
 - Character then branches into Create New Character, Use Existing Character, or Edit Character Image before template selection
 - template selection is filtered by that creation type
 - Create New Character provides a structured identity brief, compiled master prompt, negative prompt, and a six-stage interview whose local text LLM checks each answer and asks focused follow-ups for missing visual details
+- the first interview stage requires gender, visual style, age group, and SFW/NSFW rating; NSFW is limited to characters explicitly marked Adult (18+)
 - the Face & Features interview stage provides grouped selectable traits for facial structure, skin, eyes, hair, facial hair, and distinctive details, plus a custom-details field and live combined description
 - final new-character generation remains gated until the required baseline face/body identity assets can be created or supplied
 - the existing Manual Images implementation remains available as `Manual Images (Legacy)` during migration
