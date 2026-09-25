@@ -2885,6 +2885,9 @@ export default function App() {
       ) : isOperationalMode && imageStudioOpen ? (
         <ImageStudio
           templates={Array.isArray(comfyuiTemplateCatalogPayload?.templates) ? comfyuiTemplateCatalogPayload.templates : []}
+          runtimeStatus={manualGenerationRuntimeStatus}
+          promptHelperBusy={manualImagePromptHelperBusy}
+          onImprovePrompt={onImproveManualImagePrompt}
           onOpenLegacy={() => { window.location.hash = buildOperationalRoute("manual_image"); }}
           onClose={() => {
             if (window.opener) {

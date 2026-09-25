@@ -73,10 +73,35 @@ function templateCharacterPath(template) {
   return "use_existing";
 }
 
-export function ImageStudio({ templates = [], initialCreationType = "", initialCharacterPath = "", onOpenLegacy, onClose }) {
+export function ImageStudio({
+  templates = [],
+  initialCreationType = "",
+  initialCharacterPath = "",
+  initialSelectedTemplateId = "",
+  initialCreativeSetupOpen = false,
+  runtimeStatus = null,
+  promptHelperBusy = false,
+  onImprovePrompt,
+  onOpenLegacy,
+  onClose,
+}) {
   const [creationType, setCreationType] = useState(initialCreationType);
   const [characterPath, setCharacterPath] = useState(initialCharacterPath);
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState(initialSelectedTemplateId);
+  const [creativeSetupOpen, setCreativeSetupOpen] = useState(initialCreativeSetupOpen);
+  const [characterBrief, setCharacterBrief] = useState({
+    name: "",
+    concept: "",
+    appearance: "",
+    body: "",
+    clothing: "",
+    pose: "",
+    expression: "",
+    background: "transparent background, isolated full-body character",
+    quality: "consistent identity, detailed face, natural hands, high quality",
+  });
+  const [promptDraft, setPromptDraft] = useState("");
+  const [negativePrompt, setNegativePrompt] = useState("low quality, blurry, distorted face, extra limbs, malformed hands, watermark, text");
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -87,23 +112,65 @@ export function ImageStudio({ templates = [], initialCreationType = "", initialC
     [characterPath, creationType, templates]
   );
   const selectedTemplate = matchingTemplates.find((template) => template.template_id === selectedTemplateId) || null;
+  const composedCharacterPrompt = [
+    characterBrief.concept,
+    characterBrief.appearance,
+    characterBrief.body,
+    characterBrief.clothing,
+    characterBrief.pose,
+    characterBrief.expression,
+    characterBrief.background,
+    characterBrief.quality,
+  ].map((value) => String(value || "").trim()).filter(Boolean).join(", ");
+  const effectiveCharacterPrompt = promptDraft || composedCharacterPrompt;
+  const textService = runtimeStatus?.services?.local_llm || {};
+  const textResidency = textService.model_residency || {};
+  const textModelLoaded = textResidency.model_state === "loaded" || textService.always_on?.default_model_loaded === true;
 
   function selectCreationType(type) {
     setCreationType(type);
     setCharacterPath("");
     setSelectedTemplateId("");
+    setCreativeSetupOpen(false);
   }
 
   function selectCharacterPath(path) {
     setCharacterPath(path);
     setSelectedTemplateId("");
+    setCreativeSetupOpen(false);
+  }
+
+  function updateCharacterBrief(field, value) {
+    setCharacterBrief((current) => ({ ...current, [field]: value }));
+    setPromptDraft("");
+  }
+
+  async function improveCharacterPrompt() {
+    if (!effectiveCharacterPrompt || promptHelperBusy || !selectedTemplate) {
+      return;
+    }
+    const result = await onImprovePrompt?.({
+      template_id: selectedTemplate.template_id,
+      mode: "txt2img",
+      prompt: effectiveCharacterPrompt,
+      negative_prompt: negativePrompt,
+      width: Number(selectedTemplate.defaults?.width || 768),
+      height: Number(selectedTemplate.defaults?.height || 1152),
+      reference_image_provided: false,
+    });
+    if (result?.prompt) {
+      setPromptDraft(String(result.prompt));
+    }
+    if (result?.negative_prompt) {
+      setNegativePrompt(String(result.negative_prompt));
+    }
   }
 
   const choosingCharacterPath = creationType === "character" && !characterPath;
   const studioSteps = creationType === "character"
     ? ["Creation type", "Character goal", "Template", "Creative setup", "Generate"]
     : ["Creation type", "Template", "Creative setup", "Generate"];
-  const activeStep = !creationType ? 0 : choosingCharacterPath ? 1 : creationType === "character" ? 2 : 1;
+  const activeStep = !creationType ? 0 : choosingCharacterPath ? 1 : creativeSetupOpen ? 3 : creationType === "character" ? 2 : 1;
 
   return (
     <section className="image-studio-shell">
@@ -164,6 +231,52 @@ export function ImageStudio({ templates = [], initialCreationType = "", initialC
             ))}
           </div>
         </div>
+      ) : creativeSetupOpen && creationType === "character" && characterPath === "create_new" ? (
+        <div className="image-studio-stage">
+          <div className="image-studio-stage-heading image-studio-stage-heading-row">
+            <div>
+              <span>Step 4</span>
+              <h2>Define the new character</h2>
+              <p>Create a reusable identity brief. The local text model can refine it into the final generation prompt.</p>
+            </div>
+            <button className="btn" type="button" onClick={() => setCreativeSetupOpen(false)}>← Change template</button>
+          </div>
+
+          <div className={`image-studio-llm-status ${textModelLoaded ? "is-ready" : ""}`}>
+            <div><span>Prompt assistant</span><strong>{textModelLoaded ? "Local text LLM loaded" : "Local text LLM unavailable"}</strong></div>
+            <code>{textResidency.loaded_model || textService.always_on?.default_model_id || "No resident model detected"}</code>
+          </div>
+
+          <div className="image-studio-brief-grid">
+            <label>Character name<input value={characterBrief.name} onChange={(event) => updateCharacterBrief("name", event.target.value)} placeholder="A reusable profile name" /></label>
+            <label>Core concept<input value={characterBrief.concept} onChange={(event) => updateCharacterBrief("concept", event.target.value)} placeholder="Who is this character?" /></label>
+            <label>Face, hair, and features<textarea rows={4} value={characterBrief.appearance} onChange={(event) => updateCharacterBrief("appearance", event.target.value)} /></label>
+            <label>Body and proportions<textarea rows={4} value={characterBrief.body} onChange={(event) => updateCharacterBrief("body", event.target.value)} /></label>
+            <label>Initial clothing<textarea rows={3} value={characterBrief.clothing} onChange={(event) => updateCharacterBrief("clothing", event.target.value)} /></label>
+            <label>Initial pose<textarea rows={3} value={characterBrief.pose} onChange={(event) => updateCharacterBrief("pose", event.target.value)} /></label>
+            <label>Expression<input value={characterBrief.expression} onChange={(event) => updateCharacterBrief("expression", event.target.value)} /></label>
+            <label>Background<input value={characterBrief.background} onChange={(event) => updateCharacterBrief("background", event.target.value)} /></label>
+          </div>
+
+          <label className="image-studio-full-field">
+            Master prompt
+            <textarea rows={7} value={effectiveCharacterPrompt} onChange={(event) => setPromptDraft(event.target.value)} />
+          </label>
+          <label className="image-studio-full-field">
+            Avoid
+            <textarea rows={3} value={negativePrompt} onChange={(event) => setNegativePrompt(event.target.value)} />
+          </label>
+          <div className="row">
+            <button className="btn btn-primary" type="button" onClick={improveCharacterPrompt} disabled={!effectiveCharacterPrompt || promptHelperBusy || !textModelLoaded}>
+              {promptHelperBusy ? "Drafting with local LLM..." : "Draft / Improve Master Prompt"}
+            </button>
+          </div>
+
+          <div className="image-studio-requirement-note">
+            <strong>Identity bootstrap required before generation</strong>
+            <p>The selected local workflow currently requires face and body references. The next studio increment will create or collect those baseline assets before enabling Generate.</p>
+          </div>
+        </div>
       ) : (
         <div className="image-studio-stage">
           <div className="image-studio-stage-heading image-studio-stage-heading-row">
@@ -185,7 +298,7 @@ export function ImageStudio({ templates = [], initialCreationType = "", initialC
                     className={`image-studio-template-card ${selected ? "is-selected" : ""}`}
                     type="button"
                     key={template.template_id}
-                    onClick={() => setSelectedTemplateId(template.template_id)}
+                    onClick={() => { setSelectedTemplateId(template.template_id); setCreativeSetupOpen(false); }}
                   >
                     <span>{template.metadata?.input_mode || "image generation"}</span>
                     <strong>{template.template_name || template.template_id}</strong>
@@ -205,7 +318,14 @@ export function ImageStudio({ templates = [], initialCreationType = "", initialC
           {selectedTemplate ? (
             <div className="image-studio-selection-bar">
               <div><span>Selected workflow</span><strong>{selectedTemplate.template_name || selectedTemplate.template_id}</strong></div>
-              <button className="btn btn-primary" type="button" disabled>Creative setup — coming next</button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={creationType !== "character" || characterPath !== "create_new"}
+                onClick={() => setCreativeSetupOpen(true)}
+              >
+                Continue to creative setup
+              </button>
             </div>
           ) : null}
         </div>

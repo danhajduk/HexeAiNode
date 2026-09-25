@@ -35,4 +35,34 @@ describe("ImageStudio", () => {
     expect(templateCharacterPath({ template_name: "Avatar Head LoRA Pose Control", metadata: { edit_intent: "avatar_head_lora_pose_dataset" } })).toBe("use_existing");
     expect(templateCharacterPath({ template_name: "Avatar Clothing Inpaint", metadata: { input_mode: "image" } })).toBe("edit_image");
   });
+
+  it("renders the new-character creative brief with resident text model status", () => {
+    const template = {
+      template_id: "template.avatar_body_depth_reference_transparent.realvisxl.v1",
+      template_name: "Simple Avatar Generation",
+      metadata: { domain: "avatar", edit_intent: "avatar_body_depth_reference" },
+    };
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        templates={[template]}
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialSelectedTemplateId={template.template_id}
+        initialCreativeSetupOpen
+        runtimeStatus={{
+          services: {
+            local_llm: {
+              model_residency: { model_state: "loaded", loaded_model: "qwen3-8b-q4_k_m" },
+            },
+          },
+        }}
+      />
+    );
+
+    expect(markup).toContain("Define the new character");
+    expect(markup).toContain("Local text LLM loaded");
+    expect(markup).toContain("Character name");
+    expect(markup).toContain("Master prompt");
+    expect(markup).toContain("Identity bootstrap required before generation");
+  });
 });
