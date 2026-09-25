@@ -51,6 +51,33 @@ const CHARACTER_INTERVIEW_STEPS = [
   { id: "expression", title: "Expression", field: "expression", question: "What facial expression best establishes the character's personality?" },
 ];
 
+const FACE_FEATURE_OPTION_GROUPS = [
+  { id: "apparent age", label: "Apparent age", options: ["teen", "young adult", "adult", "mature", "elderly"] },
+  { id: "face shape", label: "Face shape", options: ["oval", "round", "square", "heart-shaped", "diamond", "oblong", "triangular", "soft angular"] },
+  { id: "skin tone", label: "Skin tone", options: ["porcelain", "fair", "light", "light-medium", "medium", "olive", "tan", "brown", "deep brown", "ebony"] },
+  { id: "complexion", label: "Complexion", multiple: true, options: ["clear", "dewy", "matte", "sun-kissed", "freckled", "rosy cheeks", "weathered", "vitiligo"] },
+  { id: "eye shape", label: "Eye shape", options: ["almond", "round", "hooded", "monolid", "upturned", "downturned", "deep-set", "wide-set", "close-set"] },
+  { id: "eye color", label: "Eye color", options: ["dark brown", "brown", "hazel", "amber", "green", "blue", "gray", "violet", "heterochromia", "unnatural glowing"] },
+  { id: "eyebrows", label: "Eyebrows", options: ["straight", "softly arched", "high arched", "thick", "thin", "bushy", "defined", "scar through brow"] },
+  { id: "nose", label: "Nose", options: ["small", "straight", "button", "upturned", "broad", "aquiline", "Roman", "flat bridge", "prominent"] },
+  { id: "lips", label: "Lips", options: ["thin", "medium", "full", "wide", "small", "defined Cupid's bow", "soft Cupid's bow", "asymmetrical"] },
+  { id: "hair texture", label: "Hair texture", options: ["straight", "wavy", "curly", "coily", "kinky", "silky", "coarse", "shaved"] },
+  { id: "hair length", label: "Hair length", options: ["bald", "buzz cut", "short", "chin-length", "shoulder-length", "long", "waist-length"] },
+  { id: "hair color", label: "Hair color", options: ["black", "dark brown", "brown", "auburn", "copper", "red", "strawberry blonde", "blonde", "platinum", "gray", "white", "blue", "pink", "multicolored"] },
+  { id: "hairstyle", label: "Hairstyle", multiple: true, options: ["loose", "layered", "bob", "pixie cut", "pompadour", "undercut", "braids", "cornrows", "locs", "afro", "ponytail", "bun", "bangs", "side part"] },
+  { id: "distinctive features", label: "Distinctive features", multiple: true, options: ["dimples", "beauty mark", "facial freckles", "birthmark", "facial scar", "tattoo", "ear piercings", "nose piercing", "lip piercing", "pointed ears", "gap tooth", "prosthetic eye", "facial cybernetics"] },
+  { id: "facial hair", label: "Facial hair", multiple: true, options: ["clean-shaven", "stubble", "mustache", "goatee", "short beard", "full beard", "sideburns", "shaped beard"] },
+];
+
+function composeFaceDescription(selections, customDetails) {
+  const selectedDetails = FACE_FEATURE_OPTION_GROUPS.flatMap((group) => {
+    const values = selections[group.id] || [];
+    return values.length ? [`${group.id}: ${values.join(", ")}`] : [];
+  });
+  const custom = String(customDetails || "").trim();
+  return [...selectedDetails, ...(custom ? [custom] : [])].join("; ");
+}
+
 function templateCreationType(template) {
   const domain = String(template?.metadata?.domain || "").trim().toLowerCase();
   const intent = String(template?.metadata?.edit_intent || "").trim().toLowerCase();
@@ -89,6 +116,7 @@ export function ImageStudio({
   initialSelectedTemplateId = "",
   initialCreativeSetupOpen = false,
   initialInterviewOpen = false,
+  initialInterviewStep = 0,
   runtimeStatus = null,
   promptHelperBusy = false,
   interviewBusy = false,
@@ -115,13 +143,15 @@ export function ImageStudio({
   const [promptDraft, setPromptDraft] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("low quality, blurry, distorted face, extra limbs, malformed hands, watermark, text");
   const [interviewOpen, setInterviewOpen] = useState(initialInterviewOpen);
-  const [interviewStep, setInterviewStep] = useState(0);
+  const [interviewStep, setInterviewStep] = useState(initialInterviewStep);
   const [interviewLlmEnabled, setInterviewLlmEnabled] = useState(true);
   const [interviewQuestion, setInterviewQuestion] = useState(CHARACTER_INTERVIEW_STEPS[0].question);
   const [interviewGuidance, setInterviewGuidance] = useState("");
   const [interviewMissingDetails, setInterviewMissingDetails] = useState([]);
   const [interviewQuestionCounts, setInterviewQuestionCounts] = useState({});
   const [completedInterviewSteps, setCompletedInterviewSteps] = useState({});
+  const [faceFeatureSelections, setFaceFeatureSelections] = useState({});
+  const [faceCustomDetails, setFaceCustomDetails] = useState("");
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -196,6 +226,21 @@ export function ImageStudio({
   function updateCharacterBrief(field, value) {
     setCharacterBrief((current) => ({ ...current, [field]: value }));
     setPromptDraft("");
+  }
+
+  function toggleFaceFeature(group, option) {
+    const selected = faceFeatureSelections[group.id] || [];
+    const nextValues = group.multiple
+      ? selected.includes(option) ? selected.filter((item) => item !== option) : [...selected, option]
+      : selected.includes(option) ? [] : [option];
+    const next = { ...faceFeatureSelections, [group.id]: nextValues };
+    setFaceFeatureSelections(next);
+    updateCharacterBrief("appearance", composeFaceDescription(next, faceCustomDetails));
+  }
+
+  function updateFaceCustomDetails(value) {
+    setFaceCustomDetails(value);
+    updateCharacterBrief("appearance", composeFaceDescription(faceFeatureSelections, value));
   }
 
   async function improveCharacterPrompt() {
@@ -471,6 +516,41 @@ export function ImageStudio({
               <div className="image-studio-brief-grid">
                 <label>Character name<input autoFocus value={characterBrief.name} onChange={(event) => updateCharacterBrief("name", event.target.value)} /></label>
                 <label>Character concept<input value={characterBrief.concept} onChange={(event) => updateCharacterBrief("concept", event.target.value)} /></label>
+              </div>
+            ) : activeInterviewStep.id === "face_features" ? (
+              <div className="image-studio-face-builder">
+                <p>Select the traits that should stay consistent. Choose one per group unless the group allows multiple.</p>
+                <div className="image-studio-face-options">
+                  {FACE_FEATURE_OPTION_GROUPS.map((group) => (
+                    <fieldset key={group.id}>
+                      <legend>{group.label}{group.multiple ? <small> Select any</small> : null}</legend>
+                      <div className="image-studio-option-chips">
+                        {group.options.map((option) => {
+                          const selected = (faceFeatureSelections[group.id] || []).includes(option);
+                          return (
+                            <button
+                              className={selected ? "is-selected" : ""}
+                              type="button"
+                              aria-pressed={selected}
+                              key={option}
+                              onClick={() => toggleFaceFeature(group, option)}
+                            >
+                              {option}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  ))}
+                </div>
+                <label className="image-studio-full-field">
+                  Additional face details
+                  <textarea rows={3} value={faceCustomDetails} onChange={(event) => updateFaceCustomDetails(event.target.value)} placeholder="Add features not covered above or expand on a selection." />
+                </label>
+                <div className="image-studio-face-summary">
+                  <span>Combined face description</span>
+                  <p>{characterBrief.appearance || "Choose options or add custom details to build the face description."}</p>
+                </div>
               </div>
             ) : (
               <label className="image-studio-full-field">

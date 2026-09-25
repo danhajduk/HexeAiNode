@@ -95,4 +95,24 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Check answer with LLM");
     expect(markup).toContain("1 of 6");
   });
+
+  it("provides rich selectable face and feature options", () => {
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialCreativeSetupOpen
+        initialInterviewOpen
+        initialInterviewStep={1}
+      />
+    );
+
+    expect(markup).toContain("Face &amp; features");
+    expect(markup).toContain("Face shape");
+    expect(markup).toContain("Eye color");
+    expect(markup).toContain("Hair texture");
+    expect(markup).toContain("Distinctive features");
+    expect(markup).toContain("facial cybernetics");
+    expect(markup).toContain("Combined face description");
+  });
 });
