@@ -130,3 +130,13 @@ Admin actions:
 - `warning`: degraded, pending, bootstrap/setup transitional states
 - `danger`: failed, blocked, offline, disconnected
 - `meta`: configured, selected, available, informational labels
+
+## Image Studio
+
+Image creation is moving into a standalone workspace at `#/image-studio`.
+
+- the operational navigation opens Image Studio in a separate named browser window
+- creation begins by choosing Character, Location, or Scene
+- template selection is filtered by that creation type
+- the existing Manual Images implementation remains available as `Manual Images (Legacy)` during migration
+- existing runtime references, profiles, and generated outputs are not migrated or deleted by the new shell

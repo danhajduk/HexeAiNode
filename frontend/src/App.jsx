@@ -8,18 +8,21 @@ import { BackendUnavailableScreen } from "./features/node-ui/BackendUnavailableS
 import { resolveUiMode } from "./features/node-ui/uiModeResolver";
 import {
   buildOperationalRoute,
+  buildImageStudioRoute,
   buildAvatarGenerationProfileRoute,
   buildSetupRoute,
   resolveDefaultRouteHashForMode,
   resolveAvatarGenerationDetailTab,
   resolveAvatarGenerationProfileId,
   resolveOperationalSection,
+  isImageStudioRoute,
   shouldArmSetupCompletionRedirect,
   shouldAutoRedirectCompletedSetup,
 } from "./features/node-ui/uiRoutes";
 import { SetupModeView } from "./features/setup/SetupModeView";
 import { buildSetupFlowModel } from "./features/setup/setupFlowModel";
 import { OperationalDashboard } from "./features/operational/OperationalDashboard";
+import { ImageStudio } from "./features/image-studio/ImageStudio";
 import { normalizeClientUsagePayload } from "./features/operational/clientUsageSummary";
 import {
   formatModelFamily,
@@ -2418,6 +2421,7 @@ export default function App() {
   const setupActions = buildSetupActions();
   const enabledProviderSummary = uiState.capabilitySummary.enabledProviders.join(", ");
   const currentOperationalSection = resolveOperationalSection(routeHash);
+  const imageStudioOpen = isImageStudioRoute(routeHash);
   const avatarGenerationProfileId = resolveAvatarGenerationProfileId(routeHash);
   const avatarGenerationDetailTab = resolveAvatarGenerationDetailTab(routeHash);
   const operationalSections = [
@@ -2425,7 +2429,8 @@ export default function App() {
     ["capabilities", "Capabilities"],
     ["runtime", "Runtime"],
     ["jobs_queue", "Jobs Queue"],
-    ["manual_image", "Manual Images"],
+    ["image_studio", "Image Studio ↗"],
+    ["manual_image", "Manual Images (Legacy)"],
     ["avatar_generation", "Avatar Generation"],
     ["activity", "Activity"],
     ["clients", "Clients"],
@@ -2436,6 +2441,10 @@ export default function App() {
     id,
     label,
     onClick: () => {
+      if (id === "image_studio") {
+        window.open(`${window.location.origin}${window.location.pathname}${buildImageStudioRoute()}`, "hexe-image-studio", "noopener,noreferrer");
+        return;
+      }
       window.location.hash = buildOperationalRoute(id);
     },
   }));
@@ -2872,6 +2881,18 @@ export default function App() {
           secondaryActions={setupActions.secondaryActions}
           dangerActions={setupActions.dangerActions}
           completionState={completionState}
+        />
+      ) : isOperationalMode && imageStudioOpen ? (
+        <ImageStudio
+          templates={Array.isArray(comfyuiTemplateCatalogPayload?.templates) ? comfyuiTemplateCatalogPayload.templates : []}
+          onOpenLegacy={() => { window.location.hash = buildOperationalRoute("manual_image"); }}
+          onClose={() => {
+            if (window.opener) {
+              window.close();
+            } else {
+              window.location.hash = buildOperationalRoute();
+            }
+          }}
         />
       ) : isOperationalMode ? (
         <OperationalDashboard {...operationalDashboardProps} />

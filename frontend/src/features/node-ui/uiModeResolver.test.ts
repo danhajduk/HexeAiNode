@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import { resolveUiMode, resolveUiRouteIntent } from "./uiModeResolver";
 import {
   buildAvatarGenerationProfileRoute,
+  buildImageStudioRoute,
   buildOperationalRoute,
   buildSetupRoute,
   isProviderSetupRoute,
+  isImageStudioRoute,
   isSetupRoute,
   resolveAvatarGenerationDetailTab,
   resolveAvatarGenerationProfileId,
@@ -96,6 +98,7 @@ describe("uiRoutes", () => {
     expect(buildAvatarGenerationProfileRoute("Jane Avatar")).toBe("#/dashboard/avatar_generation/Jane%20Avatar");
     expect(buildAvatarGenerationProfileRoute("Hexe", "head_face")).toBe("#/dashboard/avatar_generation/Hexe/Face");
     expect(buildOperationalRoute("diagnostics")).toBe("#/dashboard/diagnostics");
+    expect(buildImageStudioRoute()).toBe("#/image-studio");
   });
 
   it("resolves operational sections and setup helpers", () => {
@@ -117,6 +120,8 @@ describe("uiRoutes", () => {
     expect(isSetupRoute("#/setup/provider/local")).toBe(true);
     expect(isProviderSetupRoute("#/setup/provider/openai")).toBe(true);
     expect(isProviderSetupRoute("#/setup/provider/local")).toBe(true);
+    expect(isImageStudioRoute("#/image-studio")).toBe(true);
+    expect(isImageStudioRoute("#/dashboard/manual_image")).toBe(false);
   });
 
   it("defaults operational lifecycle roots to dashboard", () => {

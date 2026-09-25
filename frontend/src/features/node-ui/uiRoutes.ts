@@ -72,6 +72,15 @@ export function buildOperationalRoute(section?: OperationalSection | null): stri
   return `#/dashboard/${section}`;
 }
 
+export function buildImageStudioRoute(): string {
+  return "#/image-studio";
+}
+
+export function isImageStudioRoute(routeHash?: string | null): boolean {
+  const normalized = String(routeHash || "").trim().toLowerCase();
+  return normalized === buildImageStudioRoute() || normalized.startsWith(`${buildImageStudioRoute()}/`);
+}
+
 export function buildAvatarGenerationProfileRoute(
   profileId: string,
   detailTab?: AvatarGenerationDetailTab | null,
