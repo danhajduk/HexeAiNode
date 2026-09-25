@@ -231,6 +231,13 @@ const DEFAULT_AVATAR_POSE_PROMPT =
 const DEFAULT_AVATAR_QUALITY_PROMPT =
   "transparent background, isolated character cutout, clean alpha edge, studio character reference, sharp face detail, sharp hands, detailed hair strands, consistent identity, consistent body shape, high quality";
 
+const IMAGE_GENERATION_STEPS = [
+  { id: "workflow", label: "Workflow", description: "Choose a generation template." },
+  { id: "references", label: "References", description: "Add the images required by the workflow." },
+  { id: "prompt", label: "Prompt & Settings", description: "Describe and configure the image." },
+  { id: "review", label: "Review & Generate", description: "Confirm the job before submitting it." },
+];
+
 function joinPromptSections(sections) {
   return sections.map((section) => String(section || "").trim()).filter(Boolean).join(", ");
 }
@@ -287,6 +294,7 @@ export function ManualImageGenerationCard({
   const [visionDescription, setVisionDescription] = useState("");
   const [poseHelperText, setPoseHelperText] = useState(DEFAULT_AVATAR_POSE_PROMPT);
   const [poseHelperResult, setPoseHelperResult] = useState(null);
+  const [wizardStep, setWizardStep] = useState(0);
   const outputs = asArray(payload?.outputs);
   const references = asArray(payload?.references);
   const avatarReferences = references.filter(isAvatarReference);
@@ -399,6 +407,13 @@ export function ManualImageGenerationCard({
     sceneReferenceReady &&
     !busy;
   const helperDisabled = busy || promptHelperBusy;
+  const referencesReady = sourceImageReady && faceReferenceReady && bodyReferenceReady && sceneReferenceReady;
+  const stepReady = [Boolean(effectiveTemplate), referencesReady, Boolean(composedPrompt.trim()), canSubmit];
+
+  function goToWizardStep(nextStep) {
+    const boundedStep = Math.min(Math.max(nextStep, 0), IMAGE_GENERATION_STEPS.length - 1);
+    setWizardStep(boundedStep);
+  }
 
   useEffect(() => {
     if (!selectedTemplateId && templates[0]?.template_id) {
@@ -707,6 +722,27 @@ export function ManualImageGenerationCard({
     </article>
 
     <form className="setup-form manual-generation-card-stack operational-card-full-span" onSubmit={handleSubmit}>
+      <nav className="manual-generation-stepper" aria-label="Image generation steps">
+        {IMAGE_GENERATION_STEPS.map((step, index) => (
+          <button
+            className={`manual-generation-step ${wizardStep === index ? "is-active" : ""} ${index < wizardStep ? "is-complete" : ""}`}
+            type="button"
+            key={step.id}
+            onClick={() => goToWizardStep(index)}
+            disabled={busy || (index > wizardStep && !stepReady.slice(wizardStep, index).every(Boolean))}
+            aria-current={wizardStep === index ? "step" : undefined}
+          >
+            <span>{index + 1}</span>
+            <strong>{step.label}</strong>
+          </button>
+        ))}
+      </nav>
+      <div className="manual-generation-step-intro">
+        <span>{`Step ${wizardStep + 1} of ${IMAGE_GENERATION_STEPS.length}`}</span>
+        <p>{IMAGE_GENERATION_STEPS[wizardStep].description}</p>
+      </div>
+
+      {wizardStep === 0 ? (
       <article className="card manual-generation-card-wide">
         <CardHeader title="Template" subtitle="Select the visual workflow for this manual job." />
         <div className="form-grid two-column-form-grid">
@@ -753,7 +789,10 @@ export function ManualImageGenerationCard({
           <code>{`${width || "?"} x ${height || "?"}`}</code>
         </div>
       </article>
+      ) : null}
 
+      {wizardStep === 1 ? (
+      <>
       {needsSourceImage ? (
         <article className="card">
           <CardHeader title="Source Image" subtitle="Image used as the direct img2img source for this template." />
@@ -1048,7 +1087,10 @@ export function ManualImageGenerationCard({
           </div>
         ) : null}
       </article>
+      </>
+      ) : null}
 
+      {wizardStep === 2 ? (
       <article className="card manual-generation-card-wide">
         <CardHeader title="Prompt" subtitle="Prompt text and template settings for the selected workflow." />
         {showAvatarPromptStructure ? (
@@ -1180,15 +1222,49 @@ export function ManualImageGenerationCard({
             })}
           </div>
         ) : null}
-        <div className="row">
-          <button className="btn btn-primary" type="submit" disabled={!canSubmit}>
-            {busy ? "Generating..." : batchCountNumber > 1 ? `Queue ${batchCountNumber} Images` : "Generate"}
-          </button>
-          <button className="btn" type="button" onClick={onRefresh} disabled={busy}>
-            Refresh Outputs
-          </button>
-        </div>
       </article>
+      ) : null}
+
+      {wizardStep === 3 ? (
+        <article className="card manual-generation-card-wide">
+          <CardHeader title="Review & Generate" subtitle="Confirm the workflow, inputs, and output settings before submitting." />
+          <div className="manual-generation-review-grid">
+            <div><span>Workflow</span><strong>{effectiveTemplate?.template_name || effectiveTemplate?.template_id || "Not selected"}</strong></div>
+            <div><span>Mode</span><strong>{effectiveMode}</strong></div>
+            <div><span>References</span><strong>{referencesReady ? "Ready" : "Required input missing"}</strong></div>
+            <div><span>Output size</span><strong>{`${width} × ${height}`}</strong></div>
+            <div><span>Images</span><strong>{batchCountNumber}</strong></div>
+            <div><span>Seed</span><strong>{randomizeSeed ? "Randomized" : seed || "Template default"}</strong></div>
+            <div><span>Sampling</span><strong>{`${steps} steps · CFG ${cfg}`}</strong></div>
+            <div><span>Prompt</span><strong>{composedPrompt.trim() ? "Ready" : "Missing"}</strong></div>
+          </div>
+          {!canSubmit && !busy ? (
+            <p className="manual-generation-step-warning">Complete the missing prompt or reference inputs before generating.</p>
+          ) : null}
+          <div className="row manual-generation-review-actions">
+            <button className="btn btn-primary" type="submit" disabled={!canSubmit}>
+              {busy ? "Generating..." : batchCountNumber > 1 ? `Queue ${batchCountNumber} Images` : "Generate Image"}
+            </button>
+            <button className="btn" type="button" onClick={onRefresh} disabled={busy}>Refresh Status & Outputs</button>
+          </div>
+        </article>
+      ) : null}
+
+      <div className="manual-generation-step-actions">
+        <button className="btn" type="button" onClick={() => goToWizardStep(wizardStep - 1)} disabled={wizardStep === 0 || busy}>
+          Back
+        </button>
+        {wizardStep < IMAGE_GENERATION_STEPS.length - 1 ? (
+          <button
+            className="btn btn-primary"
+            type="button"
+            onClick={() => goToWizardStep(wizardStep + 1)}
+            disabled={!stepReady[wizardStep] || busy}
+          >
+            Continue
+          </button>
+        ) : null}
+      </div>
     </form>
 
     <article className="card operational-card-full-span">
