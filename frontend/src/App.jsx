@@ -249,6 +249,12 @@ export default function App() {
       })
     );
 
+    const comfyuiTemplatesRequest = apiGet("/api/comfyui/templates");
+    void comfyuiTemplatesRequest.then(
+      (catalog) => setComfyuiTemplateCatalogPayload(catalog),
+      () => {}
+    );
+
     const [
       governanceResult,
       providerResult,
@@ -288,7 +294,7 @@ export default function App() {
       apiGet("/api/usage/clients"),
       apiGet("/api/prompts/services"),
       apiGet("/api/image-templates"),
-      apiGet("/api/comfyui/templates"),
+      comfyuiTemplatesRequest,
       apiGet("/api/manual-image-generation"),
       apiGet("/api/avatar-generation"),
       apiGet("/api/execution/queues"),
