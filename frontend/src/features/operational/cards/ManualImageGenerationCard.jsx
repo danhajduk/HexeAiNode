@@ -323,7 +323,13 @@ export function ManualImageGenerationCard({
   const generationSession = objectValue(generationStatus.session || service.session);
   const generationProgress = objectValue(generationStatus.progress);
   const latestJob = objectValue(payload?.latest_job);
-  const displayedLatestJob = latestJob.prompt_id || latestJob.status ? latestJob : objectValue(result);
+  const submittedJob = objectValue(result);
+  const submittedJobIsNewer = Boolean(submittedJob.prompt_id) && submittedJob.prompt_id !== latestJob.prompt_id;
+  const displayedLatestJob = submittedJobIsNewer
+    ? { ...latestJob, ...submittedJob }
+    : latestJob.prompt_id || latestJob.status
+      ? latestJob
+      : submittedJob;
   const latestJobProgress = objectValue(displayedLatestJob.progress);
   const progressDetail = objectValue(displayedLatestJob.progress_detail || generationStatus.progress_detail);
   const progressDetailRows = progressDetailItems(progressDetail, generationSession);

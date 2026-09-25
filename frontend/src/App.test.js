@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildComfyuiWebuiBrowserUrl } from "./App";
+import { buildComfyuiWebuiBrowserUrl, resolveManualGenerationTracking } from "./App";
 import { buildDashboardUiState } from "./uiStateModel";
 
 describe("buildComfyuiWebuiBrowserUrl", () => {
@@ -48,5 +48,25 @@ describe("buildDashboardUiState", () => {
     });
 
     expect(uiState.capabilitySummary.enabledProviders).toEqual(["local", "openai"]);
+  });
+});
+
+describe("resolveManualGenerationTracking", () => {
+  it("keeps tracking a newly submitted prompt when the observed payload is stale", () => {
+    expect(
+      resolveManualGenerationTracking({
+        result: { prompt_id: "new-prompt", status: "submitted" },
+        payload: { latest_job: { prompt_id: "old-prompt", status: "completed" } },
+      })
+    ).toEqual({ status: "submitted", active: true });
+  });
+
+  it("stops tracking when the submitted prompt is observed as completed", () => {
+    expect(
+      resolveManualGenerationTracking({
+        result: { prompt_id: "new-prompt", status: "submitted" },
+        payload: { latest_job: { prompt_id: "new-prompt", status: "completed" } },
+      })
+    ).toEqual({ status: "completed", active: false });
   });
 });

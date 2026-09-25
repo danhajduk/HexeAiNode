@@ -110,6 +110,20 @@ export function buildComfyuiWebuiBrowserUrl(rawUrl, locationObject = window.loca
   }
 }
 
+export function resolveManualGenerationTracking({ busy = false, result = null, payload = null } = {}) {
+  const submittedPromptId = String(result?.prompt_id || "").trim();
+  const observedPromptId = String(payload?.latest_job?.prompt_id || "").trim();
+  const status = String(
+    submittedPromptId && submittedPromptId !== observedPromptId
+      ? result?.status
+      : payload?.latest_job?.status || result?.status || ""
+  ).toLowerCase();
+  return {
+    status,
+    active: Boolean(busy) || ["submitted", "queued", "running"].includes(status),
+  };
+}
+
 function ThemeToggle() {
   const [theme, setLocalTheme] = useState(getTheme());
 
@@ -209,6 +223,11 @@ export default function App() {
       partialFailures: ["node_status_unavailable"],
     })
   );
+  const manualGenerationTracking = resolveManualGenerationTracking({
+    busy: manualImageGenerationBusy,
+    result: manualImageGenerationResult,
+    payload: manualImageGenerationPayload,
+  }).active;
 
   async function loadStatus() {
     const lastUpdatedAt = new Date().toISOString();
@@ -512,38 +531,42 @@ export default function App() {
     return () => window.clearInterval(intervalId);
   }, [routeHash]);
 
+  async function refreshManualGenerationActivity() {
+    const [generationResult, servicesResult] = await Promise.allSettled([
+      apiGet("/api/manual-image-generation"),
+      apiGet("/api/services/status"),
+    ]);
+    if (generationResult.status === "fulfilled") {
+      setManualImageGenerationPayload(generationResult.value);
+    }
+    if (servicesResult.status === "fulfilled") {
+      setManualGenerationRuntimeStatus(servicesResult.value);
+    }
+  }
+
   useEffect(() => {
-    if (!manualImageGenerationBusy) {
+    if (!manualGenerationTracking) {
       return undefined;
     }
     let cancelled = false;
     let timeoutId;
 
-    async function refreshGenerationActivity() {
-      const [generationResult, servicesResult] = await Promise.allSettled([
-        apiGet("/api/manual-image-generation"),
-        apiGet("/api/services/status"),
-      ]);
+    async function pollGenerationActivity() {
+      await refreshManualGenerationActivity();
       if (cancelled) {
         return;
       }
-      if (generationResult.status === "fulfilled") {
-        setManualImageGenerationPayload(generationResult.value);
-      }
-      if (servicesResult.status === "fulfilled") {
-        setManualGenerationRuntimeStatus(servicesResult.value);
-      }
-      timeoutId = window.setTimeout(refreshGenerationActivity, 2500);
+      timeoutId = window.setTimeout(pollGenerationActivity, 2500);
     }
 
-    void refreshGenerationActivity();
+    void pollGenerationActivity();
     return () => {
       cancelled = true;
       if (timeoutId) {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [manualImageGenerationBusy]);
+  }, [manualGenerationTracking]);
 
   async function onRetryBackendConnection() {
     if (retryingBackend) {
@@ -1041,7 +1064,6 @@ export default function App() {
     try {
       const result = await apiPost("/api/manual-image-generation", payload);
       setManualImageGenerationResult(result);
-      await loadStatus();
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
       setError(message);
