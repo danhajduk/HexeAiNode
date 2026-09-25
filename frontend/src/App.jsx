@@ -189,6 +189,7 @@ export default function App() {
   const [imageTemplatePayload, setImageTemplatePayload] = useState(null);
   const [comfyuiTemplateCatalogPayload, setComfyuiTemplateCatalogPayload] = useState(null);
   const [manualImageGenerationPayload, setManualImageGenerationPayload] = useState(null);
+  const [manualGenerationRuntimeStatus, setManualGenerationRuntimeStatus] = useState(null);
   const [manualImageGenerationBusy, setManualImageGenerationBusy] = useState(false);
   const [manualImageGenerationResult, setManualImageGenerationResult] = useState(null);
   const [manualImagePromptHelperBusy, setManualImagePromptHelperBusy] = useState(false);
@@ -413,6 +414,7 @@ export default function App() {
     setImageTemplatePayload(imageTemplatesPayload);
     setComfyuiTemplateCatalogPayload(comfyuiTemplatesPayload);
     setManualImageGenerationPayload(manualImageGenerationPayload);
+    setManualGenerationRuntimeStatus(servicePayload);
     setAvatarGenerationPayload(avatarGenerationPayload);
     setGovernanceStatusPayload(governancePayload);
     setBudgetStatePayload(budgetPayload);
@@ -509,6 +511,39 @@ export default function App() {
     }, EXECUTION_QUEUE_REFRESH_INTERVAL_MS);
     return () => window.clearInterval(intervalId);
   }, [routeHash]);
+
+  useEffect(() => {
+    if (!manualImageGenerationBusy) {
+      return undefined;
+    }
+    let cancelled = false;
+    let timeoutId;
+
+    async function refreshGenerationActivity() {
+      const [generationResult, servicesResult] = await Promise.allSettled([
+        apiGet("/api/manual-image-generation"),
+        apiGet("/api/services/status"),
+      ]);
+      if (cancelled) {
+        return;
+      }
+      if (generationResult.status === "fulfilled") {
+        setManualImageGenerationPayload(generationResult.value);
+      }
+      if (servicesResult.status === "fulfilled") {
+        setManualGenerationRuntimeStatus(servicesResult.value);
+      }
+      timeoutId = window.setTimeout(refreshGenerationActivity, 2500);
+    }
+
+    void refreshGenerationActivity();
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [manualImageGenerationBusy]);
 
   async function onRetryBackendConnection() {
     if (retryingBackend) {
@@ -2578,6 +2613,7 @@ export default function App() {
               ),
       },
       busy: manualImageGenerationBusy,
+      runtimeStatus: manualGenerationRuntimeStatus,
       promptHelperBusy: manualImagePromptHelperBusy,
       poseHelperBusy: manualImagePoseHelperBusy,
       visionBusy: manualImageVisionBusy,

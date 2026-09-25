@@ -445,6 +445,25 @@ describe("OperationalDashboard", () => {
                 },
               ],
             },
+            runtimeStatus: {
+              services: {
+                comfyui_gpu: {
+                  state: "running",
+                  vram_mib: 2312,
+                  model_residency_status: { container_state: "running", model_state: "loaded", observed_vram_mib: 2312 },
+                },
+                vision_llm: {
+                  state: "running",
+                  model_residency: { container_state: "running", model_state: "unloaded", reason: "blocked_by_comfyui_gpu_vision_gate" },
+                },
+                local_llm: {
+                  state: "running",
+                  model_residency: { container_state: "running", model_state: "loaded", loaded_model: "qwen3-8b-q4_k_m" },
+                },
+                gpu_exclusive: { active: true, reasons: ["comfyui_gpu_model_loaded"] },
+                gpu_resources: { memory_used_mib: 7800, memory_total_mib: 12288 },
+              },
+            },
           },
         })}
       />
@@ -458,6 +477,12 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("25.0%");
     expect(markup).toContain("Sampling (#14, KSampler)");
     expect(markup).toContain("Sampling step 1 of 4.");
+    expect(markup).toContain("Generation activity");
+    expect(markup).toContain("ComfyUI GPU");
+    expect(markup).toContain("Vision model");
+    expect(markup).toContain("blocked by comfyui gpu vision gate");
+    expect(markup).toContain("2312 MiB VRAM");
+    expect(markup).toContain("7800 / 12288 MiB");
     expect(markup).toContain("Template");
     expect(markup).toContain("Transparent avatar workflow that uses PuLID");
     expect(markup).toContain("Default Size");

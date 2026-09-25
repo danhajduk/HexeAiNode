@@ -26,6 +26,21 @@ function serviceState(value) {
   return value || "unknown";
 }
 
+function modelActivity(service, fallbackLabel) {
+  const normalizedService = objectValue(service);
+  const residency = objectValue(normalizedService.model_residency_status || normalizedService.model_residency || normalizedService.residency);
+  const modelState = String(residency.model_state || residency.residency_state || "unknown").replaceAll("_", " ");
+  const loadedModel = residency.loaded_model || asArray(residency.loaded_models)[0] || asArray(normalizedService.active_model_ids)[0] || null;
+  return {
+    label: fallbackLabel,
+    containerState: residency.container_state || normalizedService.state || "unknown",
+    modelState,
+    loadedModel,
+    reason: residency.reason || normalizedService.reason || null,
+    vramMib: residency.observed_vram_mib ?? normalizedService.vram_mib ?? null,
+  };
+}
+
 function variableNames(template) {
   return asArray(template?.variables).map((variable) => String(variable?.name || "").trim()).filter(Boolean);
 }
@@ -244,6 +259,7 @@ function joinPromptSections(sections) {
 
 export function ManualImageGenerationCard({
   payload = null,
+  runtimeStatus = null,
   busy = false,
   promptHelperBusy = false,
   poseHelperBusy = false,
@@ -300,6 +316,8 @@ export function ManualImageGenerationCard({
   const avatarReferences = references.filter(isAvatarReference);
   const sceneReferences = references.filter(isSceneReference);
   const service = payload?.service || {};
+  const services = objectValue(runtimeStatus?.services);
+  const schedulerComponents = asArray(services?.local_scheduler?.components);
   const runtimeService = objectValue(payload?.runtime_service);
   const generationStatus = objectValue(payload?.generation_status);
   const generationSession = objectValue(generationStatus.session || service.session);
@@ -346,6 +364,16 @@ export function ManualImageGenerationCard({
   const manualPaths = payload?.manual_paths || {};
   const progressPercent = Number(effectiveProgress.percent);
   const displayedProgressPercent = Number.isFinite(progressPercent) ? progressPercent : latestJobStatus === "completed" ? 100 : null;
+  const modelActivities = [
+    modelActivity(services.comfyui_gpu || runtimeService, "ComfyUI GPU"),
+    modelActivity(services.vision_llm, "Vision model"),
+    modelActivity(services.local_llm, "Text model"),
+  ];
+  const schedulerActivity = schedulerComponents.filter((component) =>
+    ["text_llm", "vision_llm", "visual_gpu", "visual_cpu"].includes(String(component?.component_id || ""))
+  );
+  const gpuResources = objectValue(services.gpu_resources);
+  const gpuExclusive = objectValue(services.gpu_exclusive);
   const selectedTemplate = useMemo(
     () => templates.find((template) => template?.template_id === selectedTemplateId) || templates[0] || null,
     [templates, selectedTemplateId]
@@ -719,6 +747,43 @@ export function ManualImageGenerationCard({
           </p>
         ) : null}
       </div>
+      <section className="manual-generation-activity-panel" aria-label="Generation runtime activity">
+        <div className="manual-generation-activity-heading">
+          <div>
+            <span>Generation activity</span>
+            <strong>{progressDetail.label || effectiveProgress.fallback_status || latestJobStatus}</strong>
+          </div>
+          <code>{generationSession.queue_active ? "Queue active" : "Queue idle"}</code>
+        </div>
+        <div className="manual-generation-model-grid">
+          {modelActivities.map((activity) => (
+            <div className="manual-generation-model-card" key={activity.label}>
+              <span>{activity.label}</span>
+              <div><small>Container</small><StatusBadge value={activity.containerState} /></div>
+              <div><small>Model</small><StatusBadge value={activity.modelState} /></div>
+              <code>{String(activity.loadedModel || activity.reason || "No model loaded").replaceAll("_", " ")}</code>
+              {activity.vramMib !== null ? <small>{`${activity.vramMib} MiB VRAM`}</small> : null}
+            </div>
+          ))}
+          <div className="manual-generation-model-card">
+            <span>GPU coordination</span>
+            <div><small>Exclusive</small><StatusBadge value={gpuExclusive.active ? "active" : "idle"} /></div>
+            <div><small>Memory</small><strong>{gpuResources.memory_used_mib !== undefined ? `${gpuResources.memory_used_mib} / ${gpuResources.memory_total_mib} MiB` : "n/a"}</strong></div>
+            <code>{asArray(gpuExclusive.reasons).join(", ").replaceAll("_", " ") || "No unload/load coordination active"}</code>
+          </div>
+        </div>
+        {schedulerActivity.length ? (
+          <div className="manual-generation-transition-list">
+            {schedulerActivity.map((component) => (
+              <div key={component.component_id}>
+                <span>{component.display_name || component.component_id}</span>
+                <code>{`${String(component.phase || component.observed_state || "unknown").replaceAll("_", " ")} · model ${String(component.model_state || "unknown").replaceAll("_", " ")}`}</code>
+                {component.last_transition?.action ? <small>{`${component.last_transition.action}: ${component.last_transition.result?.reason || component.last_transition.decision?.reason || "completed"}`.replaceAll("_", " ")}</small> : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
     </article>
 
     <form className="setup-form manual-generation-card-stack operational-card-full-span" onSubmit={handleSubmit}>
