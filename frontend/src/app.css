@@ -2522,6 +2522,10 @@
   gap: 8px;
 }
 
+.image-studio-progress.has-five-steps {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .image-studio-progress > div {
   display: flex;
   align-items: center;
@@ -3654,6 +3658,10 @@ h2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .image-studio-progress.has-five-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
 
   .app-header-top,
   .app-header-bottom {
@@ -3728,6 +3736,10 @@ h2 {
   }
 
   .image-studio-progress {
+    grid-template-columns: 1fr;
+  }
+
+  .image-studio-progress.has-five-steps {
     grid-template-columns: 1fr;
   }
 

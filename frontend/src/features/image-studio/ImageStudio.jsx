@@ -21,6 +21,27 @@ const CREATION_TYPES = [
   },
 ];
 
+const CHARACTER_PATHS = [
+  {
+    id: "create_new",
+    title: "Create New Character",
+    description: "Define a new reusable identity, appearance, body, and initial character reference from scratch.",
+    icon: "+",
+  },
+  {
+    id: "use_existing",
+    title: "Use Existing Character",
+    description: "Select a saved character and create a new pose, expression, outfit, or camera view.",
+    icon: "◎",
+  },
+  {
+    id: "edit_image",
+    title: "Edit Character Image",
+    description: "Modify an existing character image with inpainting or image-to-image workflows.",
+    icon: "✎",
+  },
+];
+
 function templateCreationType(template) {
   const domain = String(template?.metadata?.domain || "").trim().toLowerCase();
   const intent = String(template?.metadata?.edit_intent || "").trim().toLowerCase();
@@ -37,19 +58,52 @@ function templateCreationType(template) {
   return "unclassified";
 }
 
-export function ImageStudio({ templates = [], onOpenLegacy, onClose }) {
-  const [creationType, setCreationType] = useState("");
+function templateCharacterPath(template) {
+  const name = String(template?.template_name || "").trim().toLowerCase();
+  const domain = String(template?.metadata?.domain || "").trim().toLowerCase();
+  const intent = String(template?.metadata?.edit_intent || "").trim().toLowerCase();
+  const inputMode = String(template?.metadata?.input_mode || "").trim().toLowerCase();
+  const searchable = `${name} ${domain} ${intent} ${inputMode}`;
+  if (/simple avatar generation|body_depth_reference|create.new|from.scratch/.test(searchable)) {
+    return "create_new";
+  }
+  if (/inpaint|img2img|image.to.image|clothing|unclothed/.test(searchable) || inputMode === "image") {
+    return "edit_image";
+  }
+  return "use_existing";
+}
+
+export function ImageStudio({ templates = [], initialCreationType = "", initialCharacterPath = "", onOpenLegacy, onClose }) {
+  const [creationType, setCreationType] = useState(initialCreationType);
+  const [characterPath, setCharacterPath] = useState(initialCharacterPath);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const matchingTemplates = useMemo(
-    () => templates.filter((template) => templateCreationType(template) === creationType),
-    [creationType, templates]
+    () => templates.filter((template) => {
+      if (templateCreationType(template) !== creationType) {
+        return false;
+      }
+      return creationType !== "character" || (characterPath && templateCharacterPath(template) === characterPath);
+    }),
+    [characterPath, creationType, templates]
   );
   const selectedTemplate = matchingTemplates.find((template) => template.template_id === selectedTemplateId) || null;
 
   function selectCreationType(type) {
     setCreationType(type);
+    setCharacterPath("");
     setSelectedTemplateId("");
   }
+
+  function selectCharacterPath(path) {
+    setCharacterPath(path);
+    setSelectedTemplateId("");
+  }
+
+  const choosingCharacterPath = creationType === "character" && !characterPath;
+  const studioSteps = creationType === "character"
+    ? ["Creation type", "Character goal", "Template", "Creative setup", "Generate"]
+    : ["Creation type", "Template", "Creative setup", "Generate"];
+  const activeStep = !creationType ? 0 : choosingCharacterPath ? 1 : creationType === "character" ? 2 : 1;
 
   return (
     <section className="image-studio-shell">
@@ -65,11 +119,10 @@ export function ImageStudio({ templates = [], onOpenLegacy, onClose }) {
         </div>
       </header>
 
-      <div className="image-studio-progress" aria-label="Image Studio steps">
-        <div className="is-active"><span>1</span><strong>Creation type</strong></div>
-        <div className={creationType ? "is-active" : ""}><span>2</span><strong>Template</strong></div>
-        <div><span>3</span><strong>Creative setup</strong></div>
-        <div><span>4</span><strong>Generate</strong></div>
+      <div className={`image-studio-progress ${studioSteps.length === 5 ? "has-five-steps" : ""}`} aria-label="Image Studio steps">
+        {studioSteps.map((step, index) => (
+          <div className={index <= activeStep ? "is-active" : ""} key={step}><span>{index + 1}</span><strong>{step}</strong></div>
+        ))}
       </div>
 
       {!creationType ? (
@@ -90,15 +143,38 @@ export function ImageStudio({ templates = [], onOpenLegacy, onClose }) {
             ))}
           </div>
         </div>
-      ) : (
+      ) : choosingCharacterPath ? (
         <div className="image-studio-stage">
           <div className="image-studio-stage-heading image-studio-stage-heading-row">
             <div>
               <span>Step 2</span>
+              <h2>What would you like to do with the character?</h2>
+              <p>Your answer determines which workflows and reference inputs the studio will offer.</p>
+            </div>
+            <button className="btn" type="button" onClick={() => selectCreationType("")}>← Change type</button>
+          </div>
+          <div className="image-studio-type-grid">
+            {CHARACTER_PATHS.map((path) => (
+              <button className="image-studio-type-card" type="button" key={path.id} onClick={() => selectCharacterPath(path.id)}>
+                <span className="image-studio-type-icon">{path.icon}</span>
+                <strong>{path.title}</strong>
+                <p>{path.description}</p>
+                <span className="image-studio-card-action">Choose {path.title} →</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="image-studio-stage">
+          <div className="image-studio-stage-heading image-studio-stage-heading-row">
+            <div>
+              <span>{`Step ${creationType === "character" ? 3 : 2}`}</span>
               <h2>{`Choose a ${creationType} template`}</h2>
               <p>Templates define the required references, model workflow, and available controls.</p>
             </div>
-            <button className="btn" type="button" onClick={() => selectCreationType("")}>← Change type</button>
+            <button className="btn" type="button" onClick={() => creationType === "character" ? selectCharacterPath("") : selectCreationType("")}>
+              {creationType === "character" ? "← Change character goal" : "← Change type"}
+            </button>
           </div>
           {matchingTemplates.length ? (
             <div className="image-studio-template-grid">
@@ -138,4 +214,4 @@ export function ImageStudio({ templates = [], onOpenLegacy, onClose }) {
   );
 }
 
-export { templateCreationType };
+export { templateCharacterPath, templateCreationType };

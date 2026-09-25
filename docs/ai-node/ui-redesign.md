@@ -137,6 +137,7 @@ Image creation is moving into a standalone workspace at `#/image-studio`.
 
 - the operational navigation opens Image Studio in a separate named browser window
 - creation begins by choosing Character, Location, or Scene
+- Character then branches into Create New Character, Use Existing Character, or Edit Character Image before template selection
 - template selection is filtered by that creation type
 - the existing Manual Images implementation remains available as `Manual Images (Legacy)` during migration
 - existing runtime references, profiles, and generated outputs are not migrated or deleted by the new shell
