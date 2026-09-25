@@ -144,6 +144,7 @@ Image creation is moving into a standalone workspace at `#/image-studio`.
 - the first interview stage requires gender, visual style, age group, and SFW/NSFW rating; NSFW is limited to characters explicitly marked Adult (18+)
 - the Face & Features interview stage provides grouped selectable traits for facial structure, skin, eyes, hair, facial hair, and distinctive details, plus a custom-details field and live combined description
 - interview selectors use compact pictograms and color swatches inside a wide desktop dialog, with a responsive single-column layout on narrow screens
+- face shape, eye shape, nose, and lip groups also show larger locally generated visual reference boards that open full-size without replacing the authoritative text labels
 - final new-character generation remains gated until the required baseline face/body identity assets can be created or supplied
 - the existing Manual Images implementation remains available as `Manual Images (Legacy)` during migration
 - existing runtime references, profiles, and generated outputs are not migrated or deleted by the new shell

@@ -131,6 +131,13 @@ const GROUP_PICTOGRAMS = {
   "distinctive features": "✦", "facial hair": "🧔", "eye shape": "◉",
 };
 
+const FACE_FEATURE_VISUAL_GUIDES = {
+  "face shape": { src: "/image-studio/guides/face-shapes.webp", alt: "Examples of varied face shapes" },
+  "eye shape": { src: "/image-studio/guides/eye-shapes.webp", alt: "Examples of varied eye shapes" },
+  nose: { src: "/image-studio/guides/nose-shapes.webp", alt: "Examples of varied nose shapes" },
+  lips: { src: "/image-studio/guides/lip-shapes.webp", alt: "Examples of varied lip shapes" },
+};
+
 function OptionVisual({ groupId, value }) {
   const swatch = OPTION_COLOR_SWATCHES[groupId]?.[value];
   if (swatch) {
@@ -658,6 +665,12 @@ export function ImageStudio({
                   {FACE_FEATURE_OPTION_GROUPS.map((group) => (
                     <fieldset key={group.id}>
                       <legend>{group.label}{group.multiple ? <small> Select any</small> : null}</legend>
+                      {FACE_FEATURE_VISUAL_GUIDES[group.id] ? (
+                        <a className="image-studio-visual-guide" href={FACE_FEATURE_VISUAL_GUIDES[group.id].src} target="_blank" rel="noreferrer" title="Open the full-size visual guide">
+                          <img loading="lazy" src={FACE_FEATURE_VISUAL_GUIDES[group.id].src} alt={FACE_FEATURE_VISUAL_GUIDES[group.id].alt} />
+                          <span>Visual examples · click to enlarge</span>
+                        </a>
+                      ) : null}
                       <div className="image-studio-option-chips">
                         {group.options.map((option) => {
                           const selected = (faceFeatureSelections[group.id] || []).includes(option);
