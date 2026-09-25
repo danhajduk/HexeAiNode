@@ -92,6 +92,53 @@ const FACE_FEATURE_OPTION_GROUPS = [
   { id: "facial hair", label: "Facial hair", multiple: true, options: ["clean-shaven", "stubble", "mustache", "goatee", "short beard", "full beard", "sideburns", "shaped beard"] },
 ];
 
+const OPTION_COLOR_SWATCHES = {
+  "skin tone": {
+    porcelain: "#f6dfd0", fair: "#edc8ad", light: "#dfb090", "light-medium": "#c9906b",
+    medium: "#ad7654", olive: "#9a7651", tan: "#98603f", brown: "#75452f",
+    "deep brown": "#4d2c22", ebony: "#261713",
+  },
+  "eye color": {
+    "dark brown": "#3c2418", brown: "#704526", hazel: "#8d793f", amber: "#c88924",
+    green: "#4f7b52", blue: "#4f83bd", gray: "#89939c", violet: "#7555a3",
+    heterochromia: "linear-gradient(90deg, #4f83bd 0 50%, #8d793f 50%)",
+    "unnatural glowing": "#62f4ed",
+  },
+  "hair color": {
+    black: "#17171a", "dark brown": "#3b261d", brown: "#704629", auburn: "#79402e",
+    copper: "#b75d32", red: "#a62f2f", "strawberry blonde": "#d9976a", blonde: "#d9bd72",
+    platinum: "#e9e5dc", gray: "#8c9198", white: "#f5f5f2", blue: "#3a6fc4",
+    pink: "#df78a8", multicolored: "linear-gradient(90deg, #e65b5b, #e1c85e, #56a87a, #5c7edc, #b45fbd)",
+  },
+};
+
+const OPTION_PICTOGRAMS = {
+  male: "♂", female: "♀", "non-binary": "⚧", unspecified: "○",
+  realistic: "📷", "semi-realistic": "🎨", anime: "✨",
+  "adult (18+)": "🧑", "teen (13-17)": "🧒", "child (under 13)": "👦",
+  SFW: "🛡", "NSFW adult content": "18+",
+  teen: "🧑", "young adult": "🧑", adult: "👤", mature: "🧔", elderly: "👵",
+  oval: "⬭", round: "●", square: "■", "heart-shaped": "♥", diamond: "◆", oblong: "▯", triangular: "▲", "soft angular": "⬡",
+  clear: "◌", dewy: "✦", matte: "●", "sun-kissed": "☀", freckled: "⠿", "rosy cheeks": "❀", weathered: "≋", vitiligo: "◐",
+  almond: "◒", hooded: "◓", monolid: "━", upturned: "⌃", downturned: "⌄", "deep-set": "◉", "wide-set": "◉  ◉", "close-set": "◉◉",
+  straight: "━", "softly arched": "⌒", "high arched": "︿", thick: "▬", thin: "─", bushy: "〰", defined: "⌁", "scar through brow": "╱",
+  bald: "◯", "buzz cut": "▦", short: "▰", "chin-length": "◒", "shoulder-length": "◫", long: "▯", "waist-length": "▥",
+};
+
+const GROUP_PICTOGRAMS = {
+  gender_identity: "⚧", visual_style: "◈", age_group: "◷", content_rating: "◆",
+  eyebrows: "⌒", nose: "👃", lips: "👄", "hair texture": "〰", hairstyle: "💇",
+  "distinctive features": "✦", "facial hair": "🧔", "eye shape": "◉",
+};
+
+function OptionVisual({ groupId, value }) {
+  const swatch = OPTION_COLOR_SWATCHES[groupId]?.[value];
+  if (swatch) {
+    return <span className="image-studio-option-visual is-swatch" style={{ background: swatch }} aria-hidden="true" />;
+  }
+  return <span className="image-studio-option-visual" aria-hidden="true">{OPTION_PICTOGRAMS[value] || GROUP_PICTOGRAMS[groupId] || "◇"}</span>;
+}
+
 function composeFaceDescription(selections, customDetails) {
   const selectedDetails = FACE_FEATURE_OPTION_GROUPS.flatMap((group) => {
     const values = selections[group.id] || [];
@@ -591,6 +638,7 @@ export function ImageStudio({
                               key={option.value}
                               onClick={() => selectCharacterFoundation(group.id, option.value)}
                             >
+                              <OptionVisual groupId={group.id} value={option.value} />
                               {option.label}
                             </button>
                           );
@@ -621,6 +669,7 @@ export function ImageStudio({
                               key={option}
                               onClick={() => toggleFaceFeature(group, option)}
                             >
+                              <OptionVisual groupId={group.id} value={option} />
                               {option}
                             </button>
                           );

@@ -120,6 +120,8 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Distinctive features");
     expect(markup).toContain("facial cybernetics");
     expect(markup).toContain("Combined face description");
+    expect(markup).toContain("image-studio-option-visual");
+    expect(markup).toContain("background:#4f83bd");
   });
 
   it("forces SFW when an adult character is changed to an under-18 age group", () => {

@@ -143,6 +143,7 @@ Image creation is moving into a standalone workspace at `#/image-studio`.
 - LLM review is stage-scoped and advisory: each stage also provides Continue anyway so model failure or an unwanted follow-up cannot block the interview
 - the first interview stage requires gender, visual style, age group, and SFW/NSFW rating; NSFW is limited to characters explicitly marked Adult (18+)
 - the Face & Features interview stage provides grouped selectable traits for facial structure, skin, eyes, hair, facial hair, and distinctive details, plus a custom-details field and live combined description
+- interview selectors use compact pictograms and color swatches inside a wide desktop dialog, with a responsive single-column layout on narrow screens
 - final new-character generation remains gated until the required baseline face/body identity assets can be created or supplied
 - the existing Manual Images implementation remains available as `Manual Images (Legacy)` during migration
 - existing runtime references, profiles, and generated outputs are not migrated or deleted by the new shell
