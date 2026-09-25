@@ -93,6 +93,7 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Expression");
     expect(markup).toContain("Let the local LLM ask guiding questions");
     expect(markup).toContain("Check answer with LLM");
+    expect(markup).toContain("Continue anyway");
     expect(markup).toContain("1 of 6");
     expect(markup).toContain("Gender");
     expect(markup).toContain("Non-binary");

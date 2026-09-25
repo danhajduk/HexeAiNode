@@ -324,6 +324,15 @@ export function ImageStudio({
     setInterviewStep(nextStep);
   }
 
+  function completeCurrentInterviewStep() {
+    setCompletedInterviewSteps((current) => ({ ...current, [activeInterviewStep.id]: true }));
+    if (interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1) {
+      moveCharacterInterview(1);
+    } else {
+      setInterviewOpen(false);
+    }
+  }
+
   async function reviewCharacterInterviewAnswer() {
     if (!currentInterviewAnswer.trim() || interviewBusy) {
       return;
@@ -345,6 +354,7 @@ export function ImageStudio({
       questions_asked: questionsAsked,
     });
     if (!result) {
+      completeCurrentInterviewStep();
       return;
     }
     setInterviewQuestionCounts((current) => ({ ...current, [activeInterviewStep.id]: questionsAsked }));
@@ -354,12 +364,7 @@ export function ImageStudio({
       setInterviewQuestion(result.question || activeInterviewStep.question);
       return;
     }
-    setCompletedInterviewSteps((current) => ({ ...current, [activeInterviewStep.id]: true }));
-    if (interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1) {
-      moveCharacterInterview(1);
-    } else {
-      setInterviewOpen(false);
-    }
+    completeCurrentInterviewStep();
   }
 
   const choosingCharacterPath = creationType === "character" && !characterPath;
@@ -642,9 +647,16 @@ export function ImageStudio({
             <footer>
               <button className="btn" type="button" onClick={() => moveCharacterInterview(-1)} disabled={interviewStep === 0}>Back</button>
               <span>{`${interviewStep + 1} of ${CHARACTER_INTERVIEW_STEPS.length}`}</span>
-              <button className="btn btn-primary" type="button" onClick={reviewCharacterInterviewAnswer} disabled={(activeInterviewStep.id === "name_concept" ? !nameConceptComplete : !currentInterviewAnswer.trim()) || interviewBusy}>
-                {interviewBusy ? "Checking answer…" : interviewLlmEnabled && textModelLoaded ? "Check answer with LLM" : interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1 ? "Next question" : "Finish interview"}
-              </button>
+              <div className="row">
+                {interviewLlmEnabled && textModelLoaded ? (
+                  <button className="btn" type="button" onClick={completeCurrentInterviewStep} disabled={(activeInterviewStep.id === "name_concept" ? !nameConceptComplete : !currentInterviewAnswer.trim()) || interviewBusy}>
+                    {interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1 ? "Continue anyway" : "Finish anyway"}
+                  </button>
+                ) : null}
+                <button className="btn btn-primary" type="button" onClick={reviewCharacterInterviewAnswer} disabled={(activeInterviewStep.id === "name_concept" ? !nameConceptComplete : !currentInterviewAnswer.trim()) || interviewBusy}>
+                  {interviewBusy ? "Checking answer…" : interviewLlmEnabled && textModelLoaded ? "Check answer with LLM" : interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1 ? "Next question" : "Finish interview"}
+                </button>
+              </div>
             </footer>
           </section>
         </div>

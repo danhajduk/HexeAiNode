@@ -1801,6 +1801,14 @@ class NodeControlState:
             "initial_pose": "initial pose",
             "expression": "facial expression",
         }
+        step_criteria = {
+            "name_concept": "Require a name and a concise core role, archetype, theme, or story concept. Do not ask about appearance, body, clothing, pose, or expression; those are later steps.",
+            "face_features": "Assess face, hair, eyes, skin, and identity-defining facial traits only. Do not ask about body, clothing, pose, or expression.",
+            "body_proportions": "Assess height, build, silhouette, and body proportions only. Do not ask about clothing, pose, or expression.",
+            "initial_clothing": "Assess the initial outfit, materials, colors, footwear, and key accessories only.",
+            "initial_pose": "Assess body position, limb placement, stance, and camera-facing direction only.",
+            "expression": "Assess facial emotion, gaze, and mouth or brow expression only.",
+        }
         if step_id not in step_labels:
             raise ValueError("invalid_character_interview_step")
         services = self.service_status_payload().get("services", {})
@@ -1835,6 +1843,7 @@ class NodeControlState:
                         "content": "/no_think " + json.dumps({
                             "step_id": step_id,
                             "step": step_labels[step_id],
+                            "completion_criteria": step_criteria[step_id],
                             "character_brief": payload.character_brief if isinstance(payload.character_brief, dict) else {},
                             "current_answer": str(payload.current_answer or "").strip(),
                             "review_answer": bool(payload.review_answer),

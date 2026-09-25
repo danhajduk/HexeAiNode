@@ -3582,6 +3582,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         interview_payload = json.loads(messages[1]["content"].removeprefix("/no_think "))
         self.assertTrue(interview_payload["review_answer"])
         self.assertEqual(interview_payload["questions_asked"], 1)
+        self.assertIn("face, hair, eyes", interview_payload["completion_criteria"])
 
     def test_manual_image_pose_helper_uses_local_llm_and_writes_pose_reference(self):
         class _PoseHelperServiceManager:
