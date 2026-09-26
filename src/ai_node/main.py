@@ -24,6 +24,7 @@ from ai_node.runtime.budget_manager import BudgetManager
 from ai_node.runtime.capability_declaration_runner import CapabilityDeclarationRunner
 from ai_node.runtime.internal_scheduler import InternalScheduler
 from ai_node.runtime.operational_mqtt_recovery_store import OperationalMqttRecoveryStore
+from ai_node.runtime.user_message_publisher import UserMessagePublisher
 from ai_node.runtime.node_control_api import NodeControlState, create_node_control_app
 from ai_node.runtime.onboarding_runtime import OnboardingRuntime
 from ai_node.runtime.service_manager import UserSystemdServiceManager
@@ -736,6 +737,7 @@ def run(
         operational_mqtt_restart_max_attempts=operational_mqtt_restart_max_attempts,
         startup_mode=startup_mode,
         trusted_runtime_context=trusted_runtime_context,
+        user_message_publisher=UserMessagePublisher(logger=LOGGER),
     )
     onboarding_runtime.set_node_identity_changed_callback(control_state.handle_node_identity_change)
     app = create_node_control_app(state=control_state, logger=LOGGER)

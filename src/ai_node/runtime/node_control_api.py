@@ -56,6 +56,7 @@ from ai_node.runtime.execution_telemetry import ExecutionTelemetryPublisher
 from ai_node.runtime.execution_queue import ExecutionQueueService
 from ai_node.runtime.prompt_construction import render_prompt_template
 from ai_node.runtime.task_execution_service import TaskExecutionService
+from ai_node.runtime.user_message_publisher import preview_completed_user_message
 from ai_node.runtime.capability_declaration_runner import (
     STATUS_HEARTBEAT_INTERVAL_SECONDS,
     STATUS_TELEMETRY_INTERVAL_SECONDS,
@@ -780,6 +781,7 @@ class NodeControlState:
         direct_execution_admission_guard: DirectExecutionAdmissionGuard | None = None,
         direct_execution_admission_config: DirectExecutionAdmissionConfig | None = None,
         execution_queue: ExecutionQueueService | None = None,
+        user_message_publisher=None,
     ) -> None:
         self._lifecycle = lifecycle
         self._config_path = Path(config_path)
@@ -858,6 +860,7 @@ class NodeControlState:
             ),
             max_pending_per_client=max(_env_int("HEXE_EXECUTION_QUEUE_MAX_PENDING_PER_CLIENT", 20), 0),
         )
+        self._user_message_publisher = user_message_publisher
         self._local_preferred_spillover_enabled = _env_bool("HEXE_LOCAL_PREFERRED_SPILLOVER_ENABLED", True)
         self._local_preferred_spillover_critical_pending = max(
             _env_int("HEXE_LOCAL_PREFERRED_SPILLOVER_CRITICAL_PENDING", 2),
@@ -8687,6 +8690,41 @@ class NodeControlState:
         (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return updated_metadata
 
+    def _publish_avatar_preview_completed_event(
+        self,
+        *,
+        preview: dict,
+        profile_id: str,
+        profile_name: str,
+    ) -> dict:
+        if preview.get("completion_event_published_at") or self._user_message_publisher is None:
+            return preview
+        preview_id = self._safe_filename_component(
+            preview.get("preview_id") or preview.get("prompt_id") or f"preview-{uuid.uuid4()}"
+        )
+        payload = preview_completed_user_message(
+            node_id=str(self._node_id or self._trusted_runtime_context.get("node_id") or "unknown"),
+            profile_id=profile_id,
+            profile_name=profile_name,
+            preview_id=preview_id,
+        )
+        published, error = self._user_message_publisher.publish(
+            trust_state=self._trust_state_payload(),
+            payload=payload,
+        )
+        if published:
+            return {
+                **preview,
+                "completion_event_id": payload["event_id"],
+                "completion_event_published_at": payload["occurred_at"],
+            }
+        if hasattr(self._logger, "warning"):
+            self._logger.warning(
+                "[image-studio-preview-event-failed] %s",
+                {"preview_id": preview_id, "error": error},
+            )
+        return preview
+
     def _refresh_avatar_head_face_preview_outputs(self, *, profile_dir: Path, metadata: dict) -> dict:
         workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
         raw_preview_history = list(workspace.get("preview_history") or [])
@@ -8763,8 +8801,14 @@ class NodeControlState:
                     "input_image": expected_input,
                     "url": expected_url,
                 }
-                if str(preview.get("status") or "").strip() not in {"completed", "completed_with_fallback"}:
+                was_completed = str(preview.get("status") or "").strip() in {"completed", "completed_with_fallback"}
+                if not was_completed:
                     repaired_preview["status"] = "completed"
+                    repaired_preview = self._publish_avatar_preview_completed_event(
+                        preview=repaired_preview,
+                        profile_id=profile_id,
+                        profile_name=str(metadata.get("name") or profile_dir.name),
+                    )
                 if (
                     repaired_preview.get("status") != preview.get("status")
                     or str(preview.get("input_image") or "") != expected_input
@@ -8878,8 +8922,7 @@ class NodeControlState:
                 json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
-            updated_history.append(
-                {
+            completed_preview = {
                     **preview,
                     "status": "completed_with_fallback" if rgb_fallback and not skip_background_removal else "completed",
                     "filename": filename,
@@ -8893,7 +8936,12 @@ class NodeControlState:
                     "source_output": sidecar["source_output"],
                     "rgb_cleanup": rgb_cleanup,
                 }
+            completed_preview = self._publish_avatar_preview_completed_event(
+                preview=completed_preview,
+                profile_id=profile_id,
+                profile_name=str(metadata.get("name") or profile_dir.name),
             )
+            updated_history.append(completed_preview)
             changed = True
         dispatch: dict = {}
         if seed_batch:

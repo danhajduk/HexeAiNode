@@ -5672,6 +5672,14 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         request.assert_not_called()
 
     def test_avatar_generation_records_head_preview_history(self):
+        class _UserMessagePublisher:
+            def __init__(self):
+                self.calls = []
+
+            def publish(self, **kwargs):
+                self.calls.append(kwargs)
+                return True, None
+
         class _AvatarProfileServiceManager:
             def __init__(self, input_dir: str, output_dir: str):
                 self.input_dir = input_dir
@@ -5688,6 +5696,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 }
 
         with tempfile.TemporaryDirectory() as tmp:
+            user_message_publisher = _UserMessagePublisher()
             input_dir = Path(tmp) / "manual-input"
             output_dir = Path(tmp) / "manual-output"
             state = NodeControlState(
@@ -5695,7 +5704,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 config_path=str(Path(tmp) / "bootstrap_config.json"),
                 logger=logging.getLogger("node-control-api-test"),
                 service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+                user_message_publisher=user_message_publisher,
             )
+            state._node_id = "node-test"
             state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
 
             async def _submit_manual_image_generation(*, payload):
@@ -5746,6 +5757,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             rgb_preview_output.with_suffix(".txt").write_text("rgb caption\n", encoding="utf-8")
             rgb_preview_output.with_suffix(".json").write_text("{}\n", encoding="utf-8")
             refreshed = state.avatar_generation_status()["profiles"][0]
+            state.avatar_generation_status()
             refreshed_history = refreshed["prompt_workspaces"]["head_face"]["preview_history"]
             imported_preview = refreshed_history[-1]
             imported_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "preview" / imported_preview["filename"]
@@ -5792,6 +5804,12 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(imported_preview["background_removed"])
         self.assertFalse(imported_preview["rgb_fallback"])
         self.assertTrue(imported_preview["background_removal_skipped"])
+        self.assertEqual(len(user_message_publisher.calls), 1)
+        event_call = user_message_publisher.calls[0]
+        self.assertEqual(event_call["payload"]["event_type"], "user.message")
+        self.assertEqual(event_call["payload"]["source"]["node_id"], "node-test")
+        self.assertEqual(event_call["payload"]["data"]["endpoint_id"], "Jane_Avatar")
+        self.assertIn("completion_event_published_at", imported_preview)
 
     def test_avatar_generation_imports_head_preview_rgb_without_background_removal(self):
         class _AvatarProfileServiceManager:
