@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildFacePreviewPrompt, characterDraftBrief, composeFaceDescription, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildFacePreviewPrompt, characterDraftBrief, composeFaceDescription, faceFeaturePromptDescription, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -29,6 +29,30 @@ describe("ImageStudio", () => {
     expect(composeFaceDescription({ "eye shape": ["wide-set"] }, "")).toContain(
       "greater than one eye-width of space between the inner corners"
     );
+  });
+
+  it("expands every face-feature group into descriptive prompt language", () => {
+    const examples = {
+      "apparent age": "mature",
+      "face shape": "heart-shaped",
+      "skin tone": "olive",
+      complexion: "freckled",
+      "eye color": "hazel",
+      eyebrows: "softly arched",
+      nose: "aquiline",
+      lips: "defined Cupid's bow",
+      "hair texture": "coily",
+      "hair length": "shoulder-length",
+      "hair color": "auburn",
+      hairstyle: "cornrows",
+      "distinctive features": "facial scar",
+      "facial hair": "short beard",
+    };
+    Object.entries(examples).forEach(([group, value]) => {
+      const description = faceFeaturePromptDescription(group, value);
+      expect(description).not.toBe(value);
+      expect(description.length).toBeGreaterThan(value.length + 10);
+    });
   });
   it("starts with the three creation types", () => {
     const markup = renderToStaticMarkup(<ImageStudio />);
