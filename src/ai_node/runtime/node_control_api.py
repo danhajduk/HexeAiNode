@@ -1799,7 +1799,7 @@ class NodeControlState:
                 },
             ],
             "temperature": 0.7,
-            "max_tokens": 350,
+            "max_tokens": 1200,
             "stream": False,
         }
         response = self._uds_json_request(
@@ -1816,7 +1816,9 @@ class NodeControlState:
             message = choices[0].get("message") if isinstance(choices[0].get("message"), dict) else {}
             content = str(message.get("content") or message.get("reasoning_content") or choices[0].get("text") or "").strip()
         parsed = self._parse_manual_image_prompt_helper_content(content)
-        prompt = str(parsed.get("prompt") or content or payload.prompt or "").strip()
+        prompt = str(parsed.get("prompt") or "").strip()
+        if not prompt:
+            raise ValueError("local_llm_prompt_helper_invalid_response")
         negative_prompt = str(parsed.get("negative_prompt") or payload.negative_prompt or "").strip()
         return {
             "status": "ok",

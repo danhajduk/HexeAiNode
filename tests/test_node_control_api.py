@@ -3577,6 +3577,39 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.call_args.kwargs["path"], "/v1/chat/completions")
         request_payload = json.loads(request.call_args.kwargs["body"]["messages"][1]["content"].removeprefix("/no_think "))
         self.assertEqual(request_payload["adjustment_instruction"], "preserve composition and make the sunrise warmer")
+        self.assertEqual(request.call_args.kwargs["body"]["max_tokens"], 1200)
+
+    def test_manual_image_prompt_helper_rejects_truncated_json(self):
+        class _PromptHelperServiceManager:
+            def get_status(self):
+                return {
+                    "local_llm": {
+                        "state": "running",
+                        "socket_path": "/tmp/local-llm.sock",
+                        "model_id": "qwen3-8b-q4_k_m",
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_PromptHelperServiceManager(),
+            )
+            llm_response = {"choices": [{"message": {"content": '{"prompt":"blonde portrait'}}]}
+            with patch.object(state, "_uds_json_request", return_value=llm_response):
+                with self.assertRaisesRegex(ValueError, "local_llm_prompt_helper_invalid_response"):
+                    state.manual_image_prompt_helper(
+                        payload=ManualImagePromptHelperRequest(
+                            mode="txt2img",
+                            prompt="blonde portrait",
+                            negative_prompt="brown hair",
+                            width=512,
+                            height=512,
+                            instruction="make the jaw rounder",
+                        )
+                    )
 
     def test_character_interview_question_uses_local_llm_socket(self):
         class _InterviewServiceManager:
