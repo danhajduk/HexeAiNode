@@ -7957,6 +7957,30 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             ),
             (1536, 1024),
         )
+
+    def test_direct_visual_runtime_reports_effective_prompt_routing_mode(self):
+        state = NodeControlState(
+            lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+            config_path="runtime/test-bootstrap-config.json",
+            logger=logging.getLogger("node-control-test"),
+        )
+        state._direct_execution_authorization_snapshot = lambda **_: type(
+            "Authorization",
+            (),
+            {
+                "prompt_constraints": {"routing_policy": {"mode": "local_only"}},
+                "privacy_class": "internal",
+            },
+        )()
+        request = TaskExecutionRequest(
+            task_id="direct-routing-mode",
+            task_family="task.image_generation",
+            requested_by="test",
+            inputs={"prompt": "gray cube"},
+            trace_id="trace-direct-routing-mode",
+        )
+
+        self.assertEqual(state._direct_visual_runtime_routing_mode(request=request), "local_only")
         self.assertEqual(
             NodeControlState._direct_visual_runtime_dimensions(
                 inputs={"target_width": 1672, "target_height": 941}

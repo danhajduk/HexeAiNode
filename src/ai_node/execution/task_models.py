@@ -321,4 +321,25 @@ class TaskExecutionResult(BaseModel):
             raise ValueError("accepted_status_cannot_have_completed_at")
         if self.status in terminal_statuses and self.completed_at is None:
             raise ValueError("completed_at_required_for_terminal_status")
+        if self.status == "completed" and isinstance(self.resolution_metadata, dict):
+            routing_mode = str(self.resolution_metadata.get("routing_policy_mode") or "").strip().lower()
+            if routing_mode == "local_only":
+                required_local_evidence = {
+                    "provider_class": "local",
+                    "execution_location": "local",
+                    "cloud_used": False,
+                }
+                if any(self.resolution_metadata.get(key) != expected for key, expected in required_local_evidence.items()):
+                    raise ValueError("local_only_resolution_evidence_required")
+        if self.status == "completed" and isinstance(self.output, dict) and "images" in self.output:
+            images = self.output.get("images")
+            if not isinstance(images, list) or not images:
+                raise ValueError("completed_image_artifact_required")
+            for image in images:
+                if not isinstance(image, dict) or not str(image.get("url") or "").strip():
+                    raise ValueError("completed_image_artifact_url_required")
+                for field_name in ("width", "height", "size_bytes"):
+                    value = image.get(field_name)
+                    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                        raise ValueError(f"completed_image_artifact_{field_name}_required")
         return self

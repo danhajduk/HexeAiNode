@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai-v2/execution-job-cancel.v2.request.schema.json",
+  "title": "Execution Job Cancellation Request V2",
+  "description": "Optional JSON body for DELETE /api/execution/jobs/{job_id}.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "reason": {
+      "type": ["string", "null"],
+      "maxLength": 512,
+      "description": "Caller-readable cancellation reason. It is recorded as the cancelled job error message."
+    }
+  }
+}

@@ -24,7 +24,7 @@
     "queued_at": {"type": ["string", "null"], "format": "date-time"},
     "started_at": {"type": ["string", "null"], "format": "date-time"},
     "completed_at": {"type": ["string", "null"], "format": "date-time"},
-    "expires_at": {"type": ["string", "null"], "format": "date-time"},
+    "expires_at": {"type": ["string", "null"], "format": "date-time", "description": "Configured status-record TTL metadata. It does not cancel running work and automatic record deletion is not currently implemented."},
     "result": {
       "anyOf": [
         {"$ref": "execution-response.v2.schema.json"},

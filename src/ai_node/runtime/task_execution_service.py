@@ -833,9 +833,16 @@ class TaskExecutionService:
             if authorization.provider_preferences.get("default_model"):
                 model_reason = "prompt_default_model"
 
+        selected_provider = str(getattr(resolution, "provider_id", None) or "").strip().lower()
+        is_local_provider = selected_provider in {"local", "local_vision"}
+
         payload = {
             "selected_provider": getattr(resolution, "provider_id", None),
             "selected_model": getattr(resolution, "model_id", None),
+            "provider_class": "local" if is_local_provider else ("cloud" if selected_provider else None),
+            "concrete_executor": getattr(resolution, "provider_id", None),
+            "execution_location": "local" if is_local_provider else ("cloud" if selected_provider else None),
+            "cloud_used": False if is_local_provider else (True if selected_provider else None),
             "provider_selection_reason": provider_reason,
             "model_selection_reason": model_reason,
             "requested_provider": request.requested_provider,

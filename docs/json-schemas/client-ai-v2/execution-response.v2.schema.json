@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hexe.local/schemas/client-ai-v2/execution-response.v2.schema.json",
   "title": "Execution Response V2",
-  "description": "Canonical terminal response returned directly or in an execution job result.",
+  "description": "Canonical terminal response returned directly or in a completed execution job result. Queued acknowledgements use execution-job.v2.",
   "type": "object",
   "additionalProperties": true,
   "required": ["task_id", "status", "output", "provider_used", "model_used", "resolution_metadata"],
@@ -10,7 +10,7 @@
     "task_id": {"type": "string", "minLength": 1, "maxLength": 128},
     "status": {
       "type": "string",
-      "enum": ["accepted", "completed", "failed", "rejected", "degraded", "unsupported"]
+      "enum": ["completed", "failed", "rejected", "degraded", "unsupported"]
     },
     "output": {
       "type": ["object", "null"],
@@ -31,6 +31,7 @@
     "resolution_metadata": {
       "type": ["object", "null"],
       "additionalProperties": true,
+      "description": "Provider-resolution evidence. It may be null only when execution ended before provider resolution.",
       "properties": {
         "provider_class": {"type": ["string", "null"], "enum": ["local", "cloud", null]},
         "execution_location": {"type": ["string", "null"], "enum": ["local", "cloud", null]},
@@ -45,6 +46,33 @@
     "completed_at": {"type": ["string", "null"], "format": "date-time"}
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {"const": "completed"},
+          "resolution_metadata": {
+            "type": "object",
+            "properties": {"routing_policy_mode": {"const": "local_only"}},
+            "required": ["routing_policy_mode"]
+          }
+        },
+        "required": ["status", "resolution_metadata"]
+      },
+      "then": {
+        "properties": {
+          "resolution_metadata": {
+            "type": "object",
+            "required": ["provider_class", "execution_location", "cloud_used", "routing_policy_mode"],
+            "properties": {
+              "provider_class": {"const": "local"},
+              "execution_location": {"const": "local"},
+              "cloud_used": {"const": false},
+              "routing_policy_mode": {"const": "local_only"}
+            }
+          }
+        }
+      }
+    },
     {
       "if": {
         "properties": {"provider_used": {"const": "visual_runtime"}},
@@ -94,12 +122,12 @@
       "additionalProperties": false,
       "required": ["url", "relative_path", "mime_type", "width", "height", "size_bytes"],
       "properties": {
-        "url": {"type": ["string", "null"]},
+        "url": {"type": "string", "minLength": 1, "description": "Retrieval path. Relative paths are resolved against provider_api_base_url; current local artifact URLs require no route authentication."},
         "relative_path": {"type": ["string", "null"]},
         "mime_type": {"type": "string", "pattern": "^image/"},
-        "width": {"type": ["integer", "null"], "minimum": 1},
-        "height": {"type": ["integer", "null"], "minimum": 1},
-        "size_bytes": {"type": ["integer", "null"], "minimum": 0}
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "size_bytes": {"type": "integer", "minimum": 1}
       }
     }
   }

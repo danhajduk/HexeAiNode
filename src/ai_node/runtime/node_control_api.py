@@ -12151,12 +12151,38 @@ class NodeControlState:
             timeout_s = min(timeout_s, max(int(max_timeout_s), 1))
         return timeout_s
 
-    @staticmethod
-    def _direct_visual_runtime_routing_mode(*, request: TaskExecutionRequest) -> str | None:
+    def _direct_visual_runtime_routing_mode(self, *, request: TaskExecutionRequest) -> str | None:
         constraints = request.constraints if isinstance(request.constraints, dict) else {}
         routing_policy = constraints.get("routing_policy") if isinstance(constraints.get("routing_policy"), dict) else {}
-        mode = str(routing_policy.get("mode") or "").strip().lower()
-        return mode or None
+        request_mode = TaskExecutionService._normalize_routing_policy_mode(routing_policy.get("mode"))
+        authorization = self._direct_execution_authorization_snapshot(request=request)
+        prompt_constraints = (
+            authorization.prompt_constraints
+            if authorization is not None and isinstance(authorization.prompt_constraints, dict)
+            else {}
+        )
+        prompt_routing = (
+            prompt_constraints.get("routing_policy")
+            if isinstance(prompt_constraints.get("routing_policy"), dict)
+            else {}
+        )
+        prompt_mode = TaskExecutionService._normalize_routing_policy_mode(prompt_routing.get("mode"))
+        privacy_mode = (
+            TaskExecutionService._authorization_privacy_routing_mode(authorization=authorization)
+            if authorization is not None
+            else None
+        )
+        prompt_boundary, privacy_conflict = TaskExecutionService._merge_routing_policy_modes(
+            prompt_mode=privacy_mode,
+            request_mode=prompt_mode,
+        )
+        effective_mode, request_conflict = TaskExecutionService._merge_routing_policy_modes(
+            prompt_mode=prompt_boundary,
+            request_mode=request_mode,
+        )
+        if privacy_conflict or request_conflict:
+            raise ValueError("prompt_routing_policy_conflict")
+        return effective_mode
 
     @staticmethod
     def _direct_visual_runtime_canonical_image(

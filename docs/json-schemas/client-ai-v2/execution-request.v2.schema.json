@@ -15,7 +15,8 @@
     "task_id": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 128
+      "maxLength": 128,
+      "description": "Caller-assigned logical execution identifier. It is not an idempotency key; a repeated submission creates new work."
     },
     "prompt_id": {
       "type": [
@@ -38,7 +39,8 @@
     "requested_by": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 255
+      "maxLength": 255,
+      "description": "Caller principal, normally the Core node ID carried by the service-token subject. AI Node does not yet validate this value against the token."
     },
     "service_id": {
       "type": [
@@ -46,7 +48,8 @@
         "null"
       ],
       "minLength": 1,
-      "maxLength": 128
+      "maxLength": 128,
+      "description": "Caller's logical service principal used for prompt authorization and budget selection. Defaults to requested_by; it is not the prompt owner or selected executor."
     },
     "customer_id": {
       "type": [
@@ -62,7 +65,8 @@
         "null"
       ],
       "minLength": 1,
-      "maxLength": 128
+      "maxLength": 128,
+      "description": "Core-authorized provider class requested by the caller, for example local or openai. Local concrete executors such as visual_runtime are not valid Core provider classes."
     },
     "requested_model": {
       "type": [
@@ -122,12 +126,14 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 3600,
-      "default": 60
+      "default": 60,
+      "description": "Provider execution budget in seconds. The effective value is min(timeout_s, prompt constraints.max_timeout_s); it excludes queue wait, client HTTP timeout, and job-record lifetime."
     },
     "trace_id": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 128
+      "maxLength": 128,
+      "description": "Caller-assigned correlation identifier. It may equal task_id, is not an idempotency key, and should be unique within the caller's telemetry retention window."
     },
     "lease_id": {
       "type": [
@@ -162,7 +168,7 @@
             "cloud_only",
             "cloud_fallback"
           ],
-          "description": "Per-request routing mode. The request may narrow a V3 prompt routing boundary but must not broaden it."
+          "description": "Per-request routing mode. The request may narrow the selected prompt version's constraints.routing_policy boundary but must not broaden it. Conflicts fail with prompt_routing_policy_conflict."
         }
       }
     },

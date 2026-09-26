@@ -231,6 +231,48 @@ class TaskExecutionResultTests(unittest.TestCase):
         self.assertEqual(payload.status, "accepted")
         self.assertIsNone(payload.completed_at)
 
+    def test_requires_normative_local_only_resolution_evidence(self):
+        with self.assertRaises(ValidationError) as context:
+            TaskExecutionResult.model_validate(
+                {
+                    "task_id": "task-local-001",
+                    "status": "completed",
+                    "output": {"text": "ok"},
+                    "provider_used": "visual_runtime",
+                    "resolution_metadata": {
+                        "routing_policy_mode": "local_only",
+                        "provider_class": "local",
+                        "execution_location": "local",
+                        "cloud_used": True,
+                    },
+                    "completed_at": "2026-03-19T17:00:00Z",
+                }
+            )
+
+        self.assertIn("local_only_resolution_evidence_required", str(context.exception))
+
+    def test_requires_retrievable_complete_image_artifact(self):
+        with self.assertRaises(ValidationError) as context:
+            TaskExecutionResult.model_validate(
+                {
+                    "task_id": "task-image-001",
+                    "status": "completed",
+                    "output": {
+                        "images": [
+                            {
+                                "url": None,
+                                "width": 1024,
+                                "height": 1024,
+                                "size_bytes": 100,
+                            }
+                        ]
+                    },
+                    "completed_at": "2026-03-19T17:00:00Z",
+                }
+            )
+
+        self.assertIn("completed_image_artifact_url_required", str(context.exception))
+
     def test_rejects_failed_result_without_error_code(self):
         with self.assertRaises(ValidationError) as context:
             TaskExecutionResult.model_validate(

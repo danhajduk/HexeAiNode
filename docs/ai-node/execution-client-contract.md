@@ -2,138 +2,112 @@
 
 Status: Partially implemented
 
-This is the canonical local contract for nodes that resolve Hexe AI Node through Core and call its execution API. Code remains authoritative where a behavior is marked not developed.
+This is the canonical contract for clients that resolve Hexe AI Node through Core. Code is authoritative where behavior is marked not developed.
 
 ## Identity and service discovery
 
-`requested_by` is the trusted caller principal, normally the Core node ID from the service-token subject. A stable logical client ID remains accepted for deployments that do not yet enforce service tokens.
+`requested_by` is the caller principal, normally the Core node ID carried by the service-token subject. Execution-request `service_id` is the caller's logical service principal used for prompt access and budget selection; it defaults to `requested_by`. It is not the selected Core catalog service, prompt owner, executor, billing principal, or customer. `customer_id`, when present, selects the customer/budget context.
 
-Execution-request `service_id` is the caller's logical service principal used for prompt access and budget selection. It is not the selected Core catalog service and it is not the prompt record's identity. If omitted, budget enforcement falls back to `requested_by`. For Interaction weather calls the correct value is `hexe-interaction`; `hexe-interaction.weather-backgrounds` is appropriate only if Core and prompt access policy recognize it as a separate caller service.
+Prompt records separately use `service_id` and `owner_service` for the prompt-owning service. AI Node currently validates identity fields only as bounded non-empty strings. Token-to-identity validation is not developed.
 
-Prompt records separately contain `service_id` and `owner_service`; those fields identify the prompt-owning service.
+Clients use Core resolution's `provider_api_base_url` plus the advertised execution path. Hard-coded example hostnames must not override Core resolution.
 
-Callers must use Core resolution's `provider_api_base_url` plus the advertised execution path. Hostnames such as `http://hexe-ai:9002` are illustrative and must not override Core resolution.
+## Provider identity and mapping
 
-## Provider identity
+Provider identity has two levels: Core/provider classes such as `local` and `openai`, and concrete executors such as `visual_runtime`, `vision_runtime`, and `openai`.
 
-Provider identity has two levels:
+| Core/request concept | AI Node field | Meaning |
+| --- | --- | --- |
+| requested candidate | `requested_provider` | Optional caller preference inside Core authorization and prompt policy. |
+| authorized/resolved class | `resolution_metadata.provider_class`, `resolution_metadata.selected_provider` | `local` or the authorized cloud provider ID. |
+| actual runtime | `provider_used`, `resolution_metadata.concrete_executor` | Executor that performed the work. |
+| locality | `resolution_metadata.execution_location` | `local` or `cloud`. |
 
-- `local` and cloud provider IDs are routing/provider classes used by Core resolution, Core authorization, and request `requested_provider`.
-- `provider_used` is the concrete executor that completed the work, such as `visual_runtime`, `vision_runtime`, or `openai`.
-
-For local image execution, clients prove that cloud was not used by requiring all of:
-
-- request effective routing policy is `local_only`
-- terminal `resolution_metadata.provider_class` is `local`
-- terminal `resolution_metadata.execution_location` is `local`
-- terminal `resolution_metadata.cloud_used` is `false`
-- terminal `provider_used` is `visual_runtime`
-
-Core candidates and authorization therefore use `provider=local`; they must not use `visual_runtime` as the Core provider ID.
-
-## Routing-policy precedence
-
-Core governance is the outer boundary. Prompt policy is the prompt-owned boundary. A request may narrow that boundary but cannot broaden it. The AI Node merges these constraints and rejects a conflict; the provider runtime receives only the resulting route. For a local-only prompt, a request cannot enable cloud fallback.
-
-## Image inputs
-
-The canonical schema is `GET /api/schemas/client-ai/v2/image-generation-inputs.v1.schema.json`.
-
-`image_type` is optional in the global image-input contract. Prompt-specific schemas may require it. The weather contract at `GET /api/schemas/client-ai/v2/weather-scenery-inputs.v1.schema.json` requires `image_type=scenery`, `condition`, and `day_night`. The value is semantic input owned by the caller. `image_type=scenery` selects the generic local scenery template only when neither an explicit request template nor a governed prompt template binding exists.
-
-Canonical controls are:
-
-- `output_format`: `png` for the local visual runtime
-- `quality`: portable `low|medium|high` hint; local execution maps it to 4, 6, or 8 steps when `steps` is absent
-- `width` and `height`: requested generation dimensions, normalized to the nearest multiple of 8 in the range 256–4096
-- `steps`, `cfg`, `denoise`, and `seed`: optional advanced generation controls
-
-Compatibility controls:
-
-- `size=WIDTHxHEIGHT` supplies generation dimensions only when `width` or `height` is absent
-- `target_width` and `target_height` fall back to generation dimensions
-- no distinct post-generation resize stage is implemented, so target dimensions do not describe a second output size
-
-Prompt-specific schemas may set `additionalProperties: false`; the global image schema remains extensible because templates and cloud providers have additional controls.
-
-## Prompt versions and schema association
-
-Prompt versions are immutable entries. Updating a prompt with a new version appends it and makes it current. Existing versions coexist and remain selectable when version pinning is allowed. Reusing a version returns `duplicate_prompt_version`. `GET /api/prompts/services/{prompt_id}` exposes `current_version` and all stored versions. Callers that require stable queued behavior must send `prompt_version`; an unpinned queued request may resolve the then-current prompt when it starts.
-
-Prompt-version metadata associates an input contract without binding the prompt to a node-owned template:
+For completed `local_only` work, the response schema normatively requires:
 
 ```json
 {
-  "input_schema_id": "https://hexe.local/schemas/client-ai-v2/weather-scenery-inputs.v1.schema.json",
+  "provider_class": "local",
+  "execution_location": "local",
+  "cloud_used": false,
+  "routing_policy_mode": "local_only"
+}
+```
+
+Local image execution additionally returns `provider_used=visual_runtime`. `resolution_metadata` may be null only when a request ends before provider resolution.
+
+## Routing-policy precedence
+
+Core authorization is the outer boundary. The selected prompt version's `constraints.routing_policy.mode` is the prompt-owned boundary. Request `constraints.routing_policy.mode` may narrow but cannot broaden it. Queue policy may further restrict the result and provider availability is evaluated last; neither may add a provider excluded earlier.
+
+The effective provider set is the intersection of Core, prompt, request, and queue policy. AI Node enforces the prompt/request merge before provider selection. An empty intersection fails with `prompt_routing_policy_conflict`; it never silently falls back. “Prompt boundary” refers to that selected prompt-version policy, not to a V3 prompt version.
+
+## Image inputs and weather strictness
+
+The shared schema is `GET /api/schemas/client-ai/v2/image-generation-inputs.v1.schema.json`. It intentionally permits additional properties for template/provider controls. The weather schema requires `image_type=scenery`, `condition`, and `day_night`, and uses Draft 2020-12 `unevaluatedProperties: false` to reject unknown properties after shared properties are evaluated.
+
+Canonical controls are `output_format=png`, `quality=low|medium|high`, `width`, `height`, `steps`, `cfg`, `denoise`, and `seed`. Local quality maps to 4, 6, or 8 steps when `steps` is absent. Dimensions are normalized to multiples of 8 within 256–4096. `size`, `target_width`, and `target_height` are compatibility inputs; no separate resize stage exists.
+
+## Prompt versions and input schemas
+
+Prompt versions are immutable and coexist. Creation adds the first version. `PUT /api/prompts/services/{prompt_id}` appends a version when `definition` or `version` is supplied; it never replaces an existing version. Reuse fails with `duplicate_prompt_version`. `GET /api/prompts/services/{prompt_id}` exposes `current_version` and all versions.
+
+Queued requests pinned with `prompt_version` continue using it. Unpinned work resolves the current version at execution time, so reproducible clients must pin. A metadata-only update changes prompt-level metadata and does not mutate an existing version.
+
+Each immutable version may associate its input schema in metadata:
+
+```json
+{
+  "input_schema_id": "https://hexe.local/schemas/client-ai/v2/weather-scenery-inputs.v1.schema.json",
   "input_schema_url": "/api/schemas/client-ai/v2/weather-scenery-inputs.v1.schema.json"
 }
 ```
 
-Schema-reference persistence is implemented through version metadata. Automatic JSON Schema validation of prompt inputs is not developed; callers and prompt owners must currently validate against the referenced schema.
+Persistence and discovery are implemented. Automatic server-side validation against the referenced schema is not developed; callers and prompt owners currently validate inputs.
 
-## Direct and queued execution
+## Direct, queued, and accepted responses
 
-`POST /api/execution/direct` is deterministic by `response_mode`:
+`POST /api/execution/direct` is deterministic by `response_mode`: `sync` waits for a terminal execution result; `async_if_queued` creates a job and returns an `execution-job.v2` queued acknowledgement. It does not switch modes based on capacity.
 
-- `sync`: holds the connection until terminal execution or an execution timeout/error
-- `async_if_queued`: always creates a queue job and immediately returns a queued acknowledgement
+`accepted` is not terminal and is excluded from published `execution-response.v2`. Async clients continue by polling the acknowledgement's `status_url`. The internal Python result model still accepts `accepted` for legacy callers, but it is outside the V2 terminal contract.
 
-It does not dynamically switch modes based on capacity.
-
-Queued flow:
-
-1. Submit with `response_mode=async_if_queued`.
-2. Read `job_id`, `status_url`, `check_after_seconds`, queue information, and `expires_at`.
-3. Poll `GET /api/execution/jobs/{job_id}` no faster than `check_after_seconds`.
-4. Terminal job statuses are `completed`, `failed`, `cancelled`, and `expired_wait_budget`.
-5. On `completed`, consume the terminal execution envelope from `result`.
-6. On failure or cancellation, consume `error.code` and `error.message`.
-7. Cancel queued work with `DELETE /api/execution/jobs/{job_id}` and optional `{"reason":"..."}`. Running jobs currently return HTTP 409 and are not cancellable.
-
-`expires_at` currently records the configured queue-job TTL. Automatic terminal-record deletion at that timestamp is not developed, so clients must not treat it as a guaranteed deletion instant.
-
-Task-ID idempotent replay is not developed. Repeating `POST /api/execution/direct` creates another execution or queue job even when `task_id` is reused. Clients must avoid automatic POST retries unless they can establish that the first request was not accepted.
+Queued clients poll no faster than `check_after_seconds`. Terminal statuses are `completed`, `failed`, `cancelled`, and `expired_wait_budget`; completed jobs put the execution envelope in `result`.
 
 ## Timeout ownership
 
-`timeout_s` is the caller's provider/execution budget. Prompt `constraints.max_timeout_s` is a ceiling, so the effective execution timeout is the smaller positive value. Queue waiting is separate and is controlled by `queue.max_wait_seconds` and `queue.deadline_at`. The HTTP client deadline is caller-owned and should exceed the effective timeout for synchronous calls. For queued calls, the client polling deadline is caller-owned and independent of provider execution timeout.
+The effective provider budget is `min(request.timeout_s, prompt.constraints.max_timeout_s)` when both exist, so the prompt ceiling wins over a larger request value. Queue wait is separate: its boundary is the earliest of `queue.deadline_at` and enqueue time plus `queue.max_wait_seconds`. Exhaustion before dispatch yields terminal `expired_wait_budget` and consumes no provider execution budget.
 
-The queue job TTL controls status-record metadata; it is not a provider timeout. Core service-token expiry controls authorization validity and is also separate.
+The caller owns its HTTP timeout. For sync calls it should exceed the effective provider budget; for polling it should be short and repeatable. A client timeout does not cancel server work. Job `expires_at` is record-TTL metadata, not an execution deadline or guaranteed deletion time.
 
-## Canonical results and images
+## Canonical images and artifact lifetime
 
-Terminal results use `GET /api/schemas/client-ai/v2/execution-response.v2.schema.json`. Queued responses and job status use `GET /api/schemas/client-ai/v2/execution-job.v2.schema.json`.
+Clients consume `output.images[]`. Every completed image artifact guarantees a non-empty `url`, positive `width`, `height`, and `size_bytes`, plus an image MIME type. `relative_path` is informational and may be null. A relative URL is resolved against Core's `provider_api_base_url`; clients must use `url` instead of constructing filesystem paths.
 
-The canonical image representation is:
+Local artifact routes currently have no route authentication, URL signature, or URL-specific expiration. Files live under configured runtime output storage, survive API restarts, and remain until operator/runtime cleanup. No retention duration is implemented. Clients needing durable ownership should download promptly. Retry a failed artifact retrieval as GET only; do not automatically regenerate unless duplicates are acceptable.
 
-```json
-{
-  "output": {
-    "images": [
-      {
-        "url": "/api/manual-image-generation/outputs/hexe/scenery/example.png",
-        "relative_path": "hexe/scenery/example.png",
-        "mime_type": "image/png",
-        "width": 1344,
-        "height": 768,
-        "size_bytes": 123456
-      }
-    ]
-  }
-}
-```
+Legacy `output.image` and `output.text` on visual results are compatibility fields and may be deprecated. Inline image bytes are not canonical.
 
-Clients must consume `output.images[]`. `image_base64`, `b64_json`, nested provider `images[].b64_json`, and JSON embedded in `output.text` are not canonical. Existing `output.image` and `output.text` values on local visual results are compatibility fields and may be deprecated after clients migrate. Image bytes are retrieved with the artifact `url`; the execution response does not inline image bytes.
+## Authentication
 
-## Authentication status
+Core resolution and authorization require Core contracts and credentials. AI Node HTTP route token verification is not developed for prompt lookup/create/update, direct execution, route preview, job polling/cancellation, or artifact retrieval. The live OpenAPI therefore declares no security scheme. Deployments must keep these routes behind a trusted network boundary.
 
-Core resolution and authorization require the Core contracts and Core-issued credentials. On the current AI Node implementation, prompt lookup/update, direct execution, queue status/cancellation, and generated-image retrieval do not enforce the Core-issued service token at the HTTP route layer. They rely on the deployment network boundary and prompt-access fields.
+## Identifier, retry, and restart semantics
 
-Per-route service-token verification is **Not developed**. Clients must not assume that presenting the Core token is currently verified by AI Node, and operators must not expose these routes to an untrusted network. A future authentication implementation must apply the same accepted token to execution, its job status/cancellation, and artifact retrieval while keeping administrative tokens separate.
+`task_id` and `trace_id` are non-empty UTF-8 strings up to 128 characters. UUIDs or caller-namespaced IDs are recommended. `task_id` identifies caller work; `trace_id` correlates telemetry and may equal `task_id`. Uniqueness is caller-scoped for the caller's retention window; AI Node supplies no separate retention guarantee and does not reject collisions.
 
-## Identifiers
+Neither ID is an idempotency key. Repeated submission creates new work. On an ambiguous POST result, use a received `job_id`; otherwise retry only if duplicates are acceptable. Polling may resume after client timeout/network loss. Persisted terminal records remain pollable after API restart while present, but in-memory queued/running work may be lost. `expired_wait_budget` requires a new request.
 
-`task_id` identifies the caller's logical execution. `trace_id` correlates that execution with logs and upstream work; it may equal `task_id` but does not have to. Both are non-empty strings and should be globally unique for the caller's retention window. Neither field is currently an idempotency key. `job_id` is generated by AI Node for each queued submission.
+## Cancellation and expiration
+
+Cancellation schemas are `execution-job-cancel.v2.request.schema.json` and `execution-job-cancel.v2.response.schema.json`. `DELETE /api/execution/jobs/{job_id}` cancels queued work. Success returns HTTP 200 with terminal `cancelled`. If dispatch wins the race or the job is terminal, HTTP 409 returns `cancellable=false` and `cancel_rejected_reason`; running provider work is not stopped.
+
+`expired_wait_budget` means dispatch did not start before the queue boundary and no provider work continues for that job. `expires_at` only describes configured record TTL; automatic deletion at that time is not developed and it never cancels work.
+
+## Core publication
+
+AI Node publishes a Core capability manifest containing supported task families, supported/enabled provider classes, and per-task `capability_endpoints` with direct execution method, path, and absolute URL. Core derives `provider_api_base_url` from the registered node API base. Direct execution is `/api/execution/direct`, polling is `/api/execution/jobs/{job_id}`, and local artifacts use `/api/manual-image-generation/outputs/`.
+
+The current Core declaration does not have separate polling/artifact-base fields or concrete-executor IDs. Clients derive those paths from this contract; terminal `provider_used` and `resolution_metadata.concrete_executor` are authoritative for the executor. Dedicated Core fields require a coordinated Core contract change and are not implemented here.
 
 ## APIs
 
@@ -143,6 +117,8 @@ Per-route service-token verification is **Not developed**. Clients must not assu
 - `GET /api/schemas/client-ai/v2/weather-scenery-inputs.v1.schema.json`
 - `GET /api/schemas/client-ai/v2/execution-response.v2.schema.json`
 - `GET /api/schemas/client-ai/v2/execution-job.v2.schema.json`
+- `GET /api/schemas/client-ai/v2/execution-job-cancel.v2.request.schema.json`
+- `GET /api/schemas/client-ai/v2/execution-job-cancel.v2.response.schema.json`
 - `POST /api/execution/route-preview`
 - `POST /api/execution/direct`
 - `GET /api/execution/jobs/{job_id}`

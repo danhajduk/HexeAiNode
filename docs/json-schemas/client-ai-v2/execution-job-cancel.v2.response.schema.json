@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai-v2/execution-job-cancel.v2.response.schema.json",
+  "title": "Execution Job Cancellation Response V2",
+  "description": "Cancellation result. HTTP 200 returns a cancelled job; HTTP 409 returns the rejection form when queued-to-running or terminal-state races make cancellation too late.",
+  "oneOf": [
+    {
+      "allOf": [
+        {"$ref": "execution-job.v2.schema.json"},
+        {"type": "object", "properties": {"status": {"const": "cancelled"}}, "required": ["status"]}
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["job_id", "status", "cancellable", "cancel_rejected_reason"],
+      "properties": {
+        "job_id": {"type": "string"},
+        "status": {"type": "string"},
+        "cancellable": {"const": false},
+        "cancel_rejected_reason": {
+          "type": "string",
+          "pattern": "^job_already_[a-z0-9_]+$",
+          "description": "Current values include job_already_running and job_already_<terminal-status>."
+        }
+      }
+    }
+  ]
+}

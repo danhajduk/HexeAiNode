@@ -24,6 +24,8 @@ V2+ keeps the AI Node as an execution proxy:
 - [execution-request.v2.schema.json](./execution-request.v2.schema.json): normal task-family execution request
 - [execution-response.v2.schema.json](./execution-response.v2.schema.json): canonical terminal execution result
 - [execution-job.v2.schema.json](./execution-job.v2.schema.json): queued acknowledgement and job status
+- [execution-job-cancel.v2.request.schema.json](./execution-job-cancel.v2.request.schema.json): optional queued-job cancellation body
+- [execution-job-cancel.v2.response.schema.json](./execution-job-cancel.v2.response.schema.json): successful and race-rejected cancellation results
 - [image-generation-inputs.v1.schema.json](./image-generation-inputs.v1.schema.json): shared image-generation input controls
 - [weather-scenery-inputs.v1.schema.json](./weather-scenery-inputs.v1.schema.json): strict Interaction weather-scenery prompt inputs
 - [benchmark-execution-request.v2.schema.json](./benchmark-execution-request.v2.schema.json): multi-target execution-only benchmark request
