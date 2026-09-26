@@ -4,9 +4,11 @@ Status: Partially implemented.
 
 This guide explains how a client node should communicate with the AI Node using the V2 client AI contract.
 
-Important implementation note: the schema catalog includes proposed V2+ schemas as well as implemented contracts.
-`execution-request.v2.schema.json` tracks the implemented direct execution request model for fields used by
+Important implementation note: the schema catalog publishes implemented V2+ contracts.
+`execution-request.v2.schema.json` tracks the direct execution request model for fields used by
 `POST /api/execution/direct`.
+The canonical response, queued-job, and image-input contracts are documented in
+`docs/ai-node/execution-client-contract.md` and published through the same schema API.
 
 ## Implemented Route Summary
 
@@ -1356,9 +1358,9 @@ Fetch this guide:
 GET /api/schemas/client-ai/v2/communication.md
 ```
 
-Schema caveat: `execution-request.v2.schema.json` documents a proposed V2+ direct execution shape. Until the direct
-execution route is migrated to that schema, client nodes should follow the implemented `/api/execution/direct`
-contract described above.
+`execution-request.v2.schema.json` documents the implemented direct-execution envelope. Task-specific `inputs`
+remain extensible; image-generation clients should additionally validate against
+`image-generation-inputs.v1.schema.json`.
 
 ## Legacy Benchmark Compatibility
 

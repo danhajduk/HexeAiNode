@@ -696,6 +696,9 @@ Execution behavior:
 - validates against the existing broader declared/accepted task families
 - resolves provider/model from current local usable provider state
 - applies governance before and after provider resolution
+- `response_mode=sync` executes inline; `response_mode=async_if_queued` always returns a queued job acknowledgement
+- canonical request/result/job and image-input schemas are served by the Client AI V2 schema API
+- identity, provider, timeout, queue, image-artifact, and current authentication semantics are defined in [execution-client-contract.md](execution-client-contract.md)
 
 ### V2 execution-only benchmark request
 

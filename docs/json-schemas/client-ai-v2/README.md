@@ -1,10 +1,13 @@
 # Client AI V2 Schemas
 
-Status: Partially implemented
+Status: Implemented
 
 This folder defines the V2+ client-facing AI contracts for benchmark-capable prompts and execution-only benchmark requests.
 
 These schemas track the migration covered by Tasks 916-925. Schema discovery, V2 prompt metadata passthrough, and execution-only benchmark requests are implemented. Broader client migration and prompt-tuning consumers remain pending.
+
+Cross-node execution semantics, compatibility rules, and known authentication and idempotency gaps are defined in
+[the AI Node execution client contract](../../ai-node/execution-client-contract.md).
 
 ## Contract Direction
 
@@ -19,9 +22,13 @@ V2+ keeps the AI Node as an execution proxy:
 
 - [prompt-register.v2.request.schema.json](./prompt-register.v2.request.schema.json): prompt registration with benchmark-capable V2 metadata
 - [execution-request.v2.schema.json](./execution-request.v2.schema.json): normal task-family execution request
+- [execution-response.v2.schema.json](./execution-response.v2.schema.json): canonical terminal execution result
+- [execution-job.v2.schema.json](./execution-job.v2.schema.json): queued acknowledgement and job status
+- [image-generation-inputs.v1.schema.json](./image-generation-inputs.v1.schema.json): shared image-generation input controls
+- [weather-scenery-inputs.v1.schema.json](./weather-scenery-inputs.v1.schema.json): strict Interaction weather-scenery prompt inputs
 - [benchmark-execution-request.v2.schema.json](./benchmark-execution-request.v2.schema.json): multi-target execution-only benchmark request
 - [benchmark-execution-response.v2.schema.json](./benchmark-execution-response.v2.schema.json): unified response containing target outputs and metadata
-- [schema-catalog.v2.response.schema.json](./schema-catalog.v2.response.schema.json): proposed schema discovery response for client developers
+- [schema-catalog.v2.response.schema.json](./schema-catalog.v2.response.schema.json): implemented schema discovery response for client developers
 - [communication.md](./communication.md): V2 client communication guide for developers
 
 ## Schema Discovery
