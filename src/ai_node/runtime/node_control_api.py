@@ -2275,6 +2275,11 @@ class NodeControlState:
             "visual_style": str(payload.visual_style or "").strip(),
             "initial_data": str(payload.initial_data or "").strip(),
             "nsfw": bool(payload.nsfw) if payload.nsfw is not None else bool(existing.get("nsfw", False)),
+            "completion_status": (
+                str(payload.completion_status or "").strip().lower()
+                or str(existing.get("completion_status") or "").strip().lower()
+                or "complete"
+            ),
             "created_at": existing.get("created_at") or now,
             "updated_at": now,
         }
@@ -15239,6 +15244,7 @@ class AvatarProfileSaveRequest(BaseModel):
     visual_style: str | None = None
     initial_data: str | None = None
     nsfw: bool | None = None
+    completion_status: str | None = None
     face_image_filename: str | None = None
     face_image_data_base64: str | None = None
     body_image_filename: str | None = None

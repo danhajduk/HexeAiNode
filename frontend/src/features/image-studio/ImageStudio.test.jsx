@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, characterDraftBrief, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("starts with the three creation types", () => {
@@ -135,5 +135,27 @@ describe("ImageStudio", () => {
       "age_group",
       "teen (13-17)",
     )).toEqual({ age_group: "teen (13-17)", content_rating: "SFW" });
+  });
+
+  it("lists saved incomplete characters on step 3 with a continue action", () => {
+    const brief = { name: "Nova", concept: "space pilot", appearance: "" };
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        characterProfiles={[{
+          profile_id: "Nova",
+          name: "Nova",
+          description: "space pilot",
+          completion_status: "incomplete",
+          initial_data: JSON.stringify({ source: "image_studio", character_brief: brief }),
+        }]}
+      />
+    );
+
+    expect(markup).toContain("Incomplete characters");
+    expect(markup).toContain("Continue character");
+    expect(characterDraftBrief({ initial_data: JSON.stringify({ source: "image_studio", character_brief: brief }) })).toEqual(brief);
+    expect(nextIncompleteInterviewStep(brief)).toBe(1);
   });
 });

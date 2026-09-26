@@ -3928,6 +3928,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     visual_style="stylized-realistic",
                     initial_data="reserved, observant, late twenties",
                     nsfw=True,
+                    completion_status="incomplete",
                 )
             )
 
@@ -3944,6 +3945,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(profile["visual_style"], "stylized-realistic")
         self.assertEqual(profile["initial_data"], "reserved, observant, late twenties")
         self.assertTrue(profile["nsfw"])
+        self.assertEqual(profile["completion_status"], "incomplete")
         self.assertIn("stylized realistic", profile["general_prompt"])
         self.assertIn("female", profile["general_prompt"])
         self.assertIn("black hair", profile["general_prompt"])

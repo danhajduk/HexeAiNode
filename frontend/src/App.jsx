@@ -2906,8 +2906,11 @@ export default function App() {
           runtimeStatus={manualGenerationRuntimeStatus}
           promptHelperBusy={manualImagePromptHelperBusy}
           interviewBusy={characterInterviewBusy}
+          characterProfiles={Array.isArray(avatarGenerationPayload?.profiles) ? avatarGenerationPayload.profiles : []}
+          characterSaveBusy={avatarGenerationBusy}
           onImprovePrompt={onImproveManualImagePrompt}
           onInterviewQuestion={onCharacterInterviewQuestion}
+          onSaveCharacterDraft={onSaveAvatarProfile}
           onOpenLegacy={() => { window.location.hash = buildOperationalRoute("manual_image"); }}
           onClose={() => {
             if (window.opener) {

@@ -142,6 +142,7 @@ Image creation is moving into a standalone workspace at `#/image-studio`.
 - Create New Character provides a structured identity brief, compiled master prompt, negative prompt, and a six-stage interview whose local text LLM checks each answer and asks focused follow-ups for missing visual details
 - LLM review is stage-scoped and advisory: each stage also provides Continue anyway so model failure or an unwanted follow-up cannot block the interview
 - the first interview stage requires gender, visual style, age group, and SFW/NSFW rating; NSFW is limited to characters explicitly marked Adult (18+)
+- the first interview stage can persist its identity data as an incomplete avatar profile; Step 3 lists these drafts as clickable cards and resumes each at its first unfinished interview section
 - the Face & Features interview stage provides grouped selectable traits for facial structure, skin, eyes, hair, facial hair, and distinctive details, plus a custom-details field and live combined description
 - interview selectors use compact pictograms and color swatches inside a wide desktop dialog, with a responsive single-column layout on narrow screens
 - face shape, eye shape, nose, and lip groups also show larger locally generated visual reference boards that open full-size without replacing the authoritative text labels

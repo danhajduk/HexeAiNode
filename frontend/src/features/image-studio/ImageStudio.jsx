@@ -163,6 +163,25 @@ function applyCharacterFoundation(current, field, value) {
   return next;
 }
 
+function characterDraftBrief(profile) {
+  try {
+    const initialData = JSON.parse(String(profile?.initial_data || ""));
+    return initialData?.source === "image_studio" && initialData.character_brief && typeof initialData.character_brief === "object"
+      ? initialData.character_brief
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function nextIncompleteInterviewStep(brief) {
+  if (!brief?.appearance) return 1;
+  if (!brief?.body) return 2;
+  if (!brief?.clothing) return 3;
+  if (!brief?.pose) return 4;
+  return 5;
+}
+
 function templateCreationType(template) {
   const domain = String(template?.metadata?.domain || "").trim().toLowerCase();
   const intent = String(template?.metadata?.edit_intent || "").trim().toLowerCase();
@@ -205,8 +224,11 @@ export function ImageStudio({
   runtimeStatus = null,
   promptHelperBusy = false,
   interviewBusy = false,
+  characterProfiles = [],
+  characterSaveBusy = false,
   onImprovePrompt,
   onInterviewQuestion,
+  onSaveCharacterDraft,
   onOpenLegacy,
   onClose,
 }) {
@@ -241,6 +263,7 @@ export function ImageStudio({
   const [completedInterviewSteps, setCompletedInterviewSteps] = useState({});
   const [faceFeatureSelections, setFaceFeatureSelections] = useState({});
   const [faceCustomDetails, setFaceCustomDetails] = useState("");
+  const [draftSaveMessage, setDraftSaveMessage] = useState("");
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -249,6 +272,10 @@ export function ImageStudio({
       return creationType !== "character" || (characterPath && templateCharacterPath(template) === characterPath);
     }),
     [characterPath, creationType, templates]
+  );
+  const incompleteCharacterProfiles = useMemo(
+    () => characterProfiles.filter((profile) => profile?.completion_status === "incomplete"),
+    [characterProfiles]
   );
   const selectedTemplate = matchingTemplates.find((template) => template.template_id === selectedTemplateId) || null;
   const composedCharacterPrompt = [
@@ -345,6 +372,50 @@ export function ImageStudio({
   function updateFaceCustomDetails(value) {
     setFaceCustomDetails(value);
     updateCharacterBrief("appearance", composeFaceDescription(faceFeatureSelections, value));
+  }
+
+  async function saveIncompleteCharacter() {
+    if (!nameConceptComplete || characterSaveBusy || !onSaveCharacterDraft) {
+      return;
+    }
+    setDraftSaveMessage("");
+    const result = await onSaveCharacterDraft({
+      name: characterBrief.name,
+      description: characterBrief.concept,
+      gender: characterBrief.gender_identity,
+      character_type: characterBrief.age_group,
+      visual_style: characterBrief.visual_style,
+      nsfw: characterBrief.content_rating === "NSFW adult content",
+      completion_status: "incomplete",
+      initial_data: JSON.stringify({
+        schema_version: "1.0",
+        source: "image_studio",
+        character_brief: characterBrief,
+      }),
+    });
+    if (!result?.profile) {
+      return;
+    }
+    setDraftSaveMessage("Saved as an incomplete character.");
+    setInterviewOpen(false);
+    setCreativeSetupOpen(false);
+  }
+
+  function continueIncompleteCharacter(profile) {
+    const savedBrief = characterDraftBrief(profile);
+    if (!savedBrief) {
+      return;
+    }
+    const candidateTemplate = selectedTemplate || matchingTemplates[0];
+    if (candidateTemplate) {
+      setSelectedTemplateId(candidateTemplate.template_id);
+    }
+    setCharacterBrief((current) => ({ ...current, ...savedBrief }));
+    setPromptDraft("");
+    setInterviewStep(nextIncompleteInterviewStep(savedBrief));
+    setCreativeSetupOpen(true);
+    setInterviewOpen(true);
+    setDraftSaveMessage("");
   }
 
   async function improveCharacterPrompt() {
@@ -552,6 +623,26 @@ export function ImageStudio({
               {creationType === "character" ? "← Change character goal" : "← Change type"}
             </button>
           </div>
+          {creationType === "character" && characterPath === "create_new" && incompleteCharacterProfiles.length ? (
+            <section className="image-studio-draft-section">
+              <div>
+                <span>Saved progress</span>
+                <h3>Incomplete characters</h3>
+                <p>Continue a saved character or choose a template for a new one.</p>
+              </div>
+              <div className="image-studio-draft-grid">
+                {incompleteCharacterProfiles.map((profile) => (
+                  <button className="image-studio-draft-card" type="button" key={profile.profile_id} onClick={() => continueIncompleteCharacter(profile)}>
+                    <span>Incomplete</span>
+                    <strong>{profile.name || profile.profile_id}</strong>
+                    <p>{profile.description || "Character identity saved; visual details are still in progress."}</p>
+                    <small>{[profile.gender, profile.character_type, profile.visual_style].filter(Boolean).join(" · ")}</small>
+                    <b>Continue character →</b>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
           {matchingTemplates.length ? (
             <div className="image-studio-template-grid">
               {matchingTemplates.map((template) => {
@@ -657,6 +748,16 @@ export function ImageStudio({
                 {characterBrief.age_group && characterBrief.age_group !== "adult (18+)" ? (
                   <p className="image-studio-safety-note">Teen and child characters are restricted to SFW content.</p>
                 ) : null}
+                <div className="image-studio-draft-save">
+                  <div>
+                    <strong>Save your progress</strong>
+                    <p>This stores the identity as an incomplete character and returns to Step 3.</p>
+                  </div>
+                  <button className="btn" type="button" onClick={saveIncompleteCharacter} disabled={!nameConceptComplete || characterSaveBusy}>
+                    {characterSaveBusy ? "Saving character…" : "Save incomplete character"}
+                  </button>
+                </div>
+                {draftSaveMessage ? <p className="success">{draftSaveMessage}</p> : null}
               </div>
             ) : activeInterviewStep.id === "face_features" ? (
               <div className="image-studio-face-builder">
@@ -727,4 +828,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, characterDraftBrief, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };

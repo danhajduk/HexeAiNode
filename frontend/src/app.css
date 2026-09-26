@@ -2693,6 +2693,70 @@
   gap: 4px;
 }
 
+.image-studio-draft-section {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid hsl(var(--sx-warning) / 0.5);
+  border-radius: var(--sx-radius-md);
+  background: hsl(var(--sx-warning) / 0.07);
+}
+
+.image-studio-draft-section > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.image-studio-draft-section h3,
+.image-studio-draft-section p,
+.image-studio-draft-card p {
+  margin: 0;
+}
+
+.image-studio-draft-section > div:first-child > span,
+.image-studio-draft-card > span {
+  color: hsl(var(--sx-warning));
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.image-studio-draft-section p,
+.image-studio-draft-card p,
+.image-studio-draft-card small {
+  color: hsl(var(--sx-text-muted));
+}
+
+.image-studio-draft-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.image-studio-draft-card {
+  display: grid;
+  justify-items: start;
+  gap: 7px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-panel));
+  color: hsl(var(--sx-text));
+  text-align: left;
+}
+
+.image-studio-draft-card:hover {
+  border-color: hsl(var(--sx-accent));
+  background: hsl(var(--sx-accent) / 0.08);
+}
+
+.image-studio-draft-card b {
+  color: hsl(var(--sx-accent));
+  font-size: 12px;
+}
+
 .image-studio-llm-status {
   display: flex;
   align-items: center;
@@ -2872,6 +2936,26 @@
 .image-studio-foundation-builder {
   display: grid;
   gap: 16px;
+}
+
+.image-studio-draft-save {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px dashed hsl(var(--sx-border));
+  border-radius: var(--sx-radius-sm);
+}
+
+.image-studio-draft-save > div {
+  display: grid;
+  gap: 3px;
+}
+
+.image-studio-draft-save p {
+  margin: 0;
+  color: hsl(var(--sx-text-muted));
 }
 
 .image-studio-foundation-options {
@@ -3099,6 +3183,15 @@
 
   .image-studio-foundation-options {
     grid-template-columns: 1fr;
+  }
+
+  .image-studio-draft-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .image-studio-draft-save {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 
