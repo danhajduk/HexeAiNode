@@ -3535,6 +3535,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                         negative_prompt="low quality",
                         width=1280,
                         height=720,
+                        instruction="preserve composition and make the sunrise warmer",
                     )
                 )
 
@@ -3544,6 +3545,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         request.assert_called_once()
         self.assertEqual(request.call_args.kwargs["socket_path"], "/tmp/local-llm.sock")
         self.assertEqual(request.call_args.kwargs["path"], "/v1/chat/completions")
+        request_payload = json.loads(request.call_args.kwargs["body"]["messages"][1]["content"].removeprefix("/no_think "))
+        self.assertEqual(request_payload["adjustment_instruction"], "preserve composition and make the sunrise warmer")
 
     def test_character_interview_question_uses_local_llm_socket(self):
         class _InterviewServiceManager:

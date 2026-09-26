@@ -150,6 +150,7 @@ Image creation is moving into a standalone workspace at `#/image-studio`.
 - face shape, eye shape, nose, and lip choices use locally generated image thumbnails inside each option button; the face interview uses a two-column feature-and-preview workspace
 - every character-interview screen can save the incomplete profile; Check, Continue, and Finish persist the current answers before advancing
 - the face workspace can submit a real head/face preview and shows the resulting image with live generation, queue, node, runtime, model, VRAM, prompt, and seed status
+- face previews use a structured identity-reference prompt; after a preview returns, its seed can be locked and the local text LLM can apply a targeted prompt adjustment before regenerating with that same seed
 - final new-character generation remains gated until the required baseline face/body identity assets can be created or supplied
 - the existing Manual Images implementation remains available as `Manual Images (Legacy)` during migration
 - existing runtime references, profiles, and generated outputs are not migrated or deleted by the new shell

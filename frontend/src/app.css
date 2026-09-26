@@ -3157,6 +3157,36 @@
   text-align: right;
 }
 
+.image-studio-seed-controls,
+.image-studio-face-tweak {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-bg) / 0.4);
+}
+
+.image-studio-seed-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 750;
+}
+
+.image-studio-seed-controls p {
+  margin: 0;
+  color: hsl(var(--sx-text-muted));
+  font-size: 11px;
+}
+
+.image-studio-face-tweak label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .image-studio-option-visual {
   display: inline-grid;
   flex: 0 0 auto;

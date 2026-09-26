@@ -178,6 +178,26 @@ function composeFaceDescription(selections, customDetails) {
   return [...selectedDetails, ...(custom ? [custom] : [])].join("; ");
 }
 
+const FACE_PREVIEW_NEGATIVE_PROMPT = [
+  "profile view", "three-quarter view", "tilted head", "cropped forehead", "cropped chin",
+  "closed eyes", "asymmetrical eyes", "distorted face", "duplicate features", "exaggerated expression",
+  "heavy makeup", "dramatic lighting", "harsh shadows", "accessories covering the face",
+  "text", "watermark", "blurry", "low detail", "child", "teen", "underage",
+].join(", ");
+
+function buildFacePreviewPrompt(brief) {
+  const identity = [brief?.age_group, brief?.gender_identity].filter(Boolean).join(" ");
+  return [
+    `Character identity reference portrait of ${brief?.name || "an unnamed character"}${identity ? `, ${identity}` : ""}.`,
+    brief?.concept ? `Character concept: ${brief.concept}.` : "",
+    brief?.appearance ? `Face and hair: ${brief.appearance}.` : "",
+    brief?.expression ? `Expression: ${brief.expression}.` : "Expression: neutral and relaxed.",
+    "Front-facing head-and-shoulders composition, eyes looking directly at camera, symmetrical neutral pose, centered face, entire head visible.",
+    "Realistic facial proportions, detailed natural skin texture, soft even studio lighting, plain neutral-gray background, identity reference sheet, sharp focus.",
+    brief?.visual_style ? `Visual style: ${brief.visual_style}.` : "",
+  ].filter(Boolean).join("\n");
+}
+
 function applyCharacterFoundation(current, field, value) {
   const next = { ...current, [field]: value };
   if (field === "age_group" && value !== "adult (18+)" && next.content_rating === "NSFW adult content") {
@@ -296,6 +316,9 @@ export function ImageStudio({
   const [faceCustomDetails, setFaceCustomDetails] = useState("");
   const [draftSaveMessage, setDraftSaveMessage] = useState("");
   const [characterProfileId, setCharacterProfileId] = useState("");
+  const [facePromptDraft, setFacePromptDraft] = useState("");
+  const [faceTweakInstruction, setFaceTweakInstruction] = useState("");
+  const [faceSeedLocked, setFaceSeedLocked] = useState(false);
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -542,25 +565,41 @@ export function ImageStudio({
     completeCurrentInterviewStep();
   }
 
-  async function generateFacePreview() {
+  async function generateFacePreview({ promptOverride = "", forceLockedSeed = false } = {}) {
     if (!characterBrief.appearance.trim() || characterSaveBusy || facePreviewTracking || !onGenerateFacePreview) return;
     const savedProfile = await saveCharacterProgress();
     const profileId = savedProfile?.profile_id || characterProfileId;
     if (!profileId) return;
     setDraftSaveMessage("Character saved. Submitting face preview…");
+    const locked = forceLockedSeed || faceSeedLocked;
+    const seed = facePreview?.seed;
     const result = await onGenerateFacePreview(profileId, {
-      prompt: [
-        "head and shoulders character portrait, front-facing, neutral studio background",
-        characterBrief.visual_style && `${characterBrief.visual_style} style`,
-        characterBrief.gender_identity,
-        characterBrief.age_group,
-        characterBrief.appearance,
-        characterBrief.expression,
-      ].filter(Boolean).join(", "),
-      negative_prompt: negativePrompt,
-      lock_seed: false,
+      prompt: promptOverride || facePromptDraft || buildFacePreviewPrompt(characterBrief),
+      negative_prompt: FACE_PREVIEW_NEGATIVE_PROMPT,
+      seed: locked && seed !== undefined && seed !== null ? seed : null,
+      lock_seed: locked && seed !== undefined && seed !== null,
     });
     if (result) setDraftSaveMessage("Face preview submitted.");
+  }
+
+  async function refineAndRegenerateFacePreview() {
+    if (!faceTweakInstruction.trim() || facePreview?.seed === undefined || facePreview?.seed === null || promptHelperBusy || facePreviewTracking) return;
+    const currentPrompt = facePromptDraft || facePreview.prompt || buildFacePreviewPrompt(characterBrief);
+    const refined = await onImprovePrompt?.({
+      template_id: "template.avatar_head_face_preview.realvisxl.v1",
+      mode: "txt2img",
+      prompt: currentPrompt,
+      negative_prompt: FACE_PREVIEW_NEGATIVE_PROMPT,
+      width: 512,
+      height: 512,
+      reference_image_provided: false,
+      instruction: faceTweakInstruction.trim(),
+    });
+    if (!refined?.prompt) return;
+    setFacePromptDraft(String(refined.prompt));
+    setFaceSeedLocked(true);
+    setFaceTweakInstruction("");
+    await generateFacePreview({ promptOverride: String(refined.prompt), forceLockedSeed: true });
   }
 
   const choosingCharacterPath = creationType === "character" && !characterPath;
@@ -889,6 +928,34 @@ export function ImageStudio({
                     <div><span>VRAM</span><code>{comfyService.vram_mib !== undefined ? `${comfyService.vram_mib} MiB` : "—"}</code></div>
                     <div><span>Seed</span><code>{facePreview?.seed ?? "—"}</code></div>
                   </div>
+                  {facePreview?.seed !== undefined && facePreview?.seed !== null ? (
+                    <div className="image-studio-seed-controls">
+                      <label>
+                        <input type="checkbox" checked={faceSeedLocked} onChange={(event) => setFaceSeedLocked(event.target.checked)} />
+                        Lock seed <code>{facePreview.seed}</code>
+                      </label>
+                      <p>Locking preserves the starting noise so prompt adjustments can be compared more directly.</p>
+                    </div>
+                  ) : null}
+                  <div className="image-studio-face-tweak">
+                    <label>
+                      Refine this result with the local LLM
+                      <textarea
+                        rows={3}
+                        value={faceTweakInstruction}
+                        onChange={(event) => setFaceTweakInstruction(event.target.value)}
+                        placeholder="For example: slightly narrower jaw, softer eyebrows, preserve everything else."
+                      />
+                    </label>
+                    <button
+                      className="btn"
+                      type="button"
+                      onClick={refineAndRegenerateFacePreview}
+                      disabled={!faceTweakInstruction.trim() || facePreview?.seed === undefined || facePreview?.seed === null || promptHelperBusy || facePreviewTracking || characterSaveBusy}
+                    >
+                      {promptHelperBusy ? "Refining prompt…" : "Refine & regenerate same seed"}
+                    </button>
+                  </div>
                 </aside>
                 </div>
             ) : (
@@ -922,4 +989,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, characterDraftBrief, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, buildFacePreviewPrompt, characterDraftBrief, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };

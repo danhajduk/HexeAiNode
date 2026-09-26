@@ -1741,6 +1741,7 @@ class NodeControlState:
                         "/no_think You help draft concise SDXL/ComfyUI image prompts. "
                         "Return only JSON with keys prompt and negative_prompt. "
                         "Keep the user's intent, add visual detail, subject, setting, lighting, composition, and quality terms. "
+                        "When adjustment_instruction is present, apply it while preserving all unrelated identity and composition details. "
                         "Do not include explanations or markdown."
                     ),
                 },
@@ -1754,6 +1755,7 @@ class NodeControlState:
                                 "template_id": payload.template_id,
                                 "current_prompt": str(payload.prompt or "").strip(),
                                 "current_negative_prompt": str(payload.negative_prompt or "").strip(),
+                                "adjustment_instruction": str(payload.instruction or "").strip(),
                                 "width": payload.width,
                                 "height": payload.height,
                                 "reference_image_provided": bool(payload.reference_image_provided),
@@ -15192,6 +15194,7 @@ class ManualImagePromptHelperRequest(BaseModel):
     width: int | None = None
     height: int | None = None
     reference_image_provided: bool | None = False
+    instruction: str | None = None
 
 
 class CharacterInterviewQuestionRequest(BaseModel):

@@ -1,9 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, characterDraftBrief, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildFacePreviewPrompt, characterDraftBrief, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
+  it("builds a structured face identity reference prompt", () => {
+    const prompt = buildFacePreviewPrompt({
+      name: "Nova",
+      age_group: "adult (18+)",
+      gender_identity: "female",
+      concept: "space pilot",
+      appearance: "oval face; green eyes; short black hair",
+      expression: "quiet confidence",
+      visual_style: "semi-realistic",
+    });
+    expect(prompt).toContain("Character identity reference portrait of Nova, adult (18+) female.");
+    expect(prompt).toContain("Character concept: space pilot.");
+    expect(prompt).toContain("Face and hair: oval face; green eyes; short black hair.");
+    expect(prompt).toContain("eyes looking directly at camera");
+    expect(prompt).toContain("plain neutral-gray background");
+    expect(prompt).not.toContain("Body and proportions");
+  });
   it("starts with the three creation types", () => {
     const markup = renderToStaticMarkup(<ImageStudio />);
 
@@ -134,6 +151,8 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Status");
     expect(markup).toContain("Runtime");
     expect(markup).toContain("Model");
+    expect(markup).toContain("Refine this result with the local LLM");
+    expect(markup).toContain("Refine &amp; regenerate same seed");
   });
 
   it("forces SFW when an adult character is changed to an under-18 age group", () => {
