@@ -58,7 +58,7 @@ def preview_completed_user_message(*, node_id: str, profile_id: str, profile_nam
             "record_id": preview_id,
         },
         "data": {
-            "endpoint_id": profile_id,
+            "endpoint_id": "all",
             "title": "Image preview completed",
             "text": f'The image preview for "{profile_name}" is ready.',
         },

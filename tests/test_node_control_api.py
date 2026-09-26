@@ -5808,7 +5808,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         event_call = user_message_publisher.calls[0]
         self.assertEqual(event_call["payload"]["event_type"], "user.message")
         self.assertEqual(event_call["payload"]["source"]["node_id"], "node-test")
-        self.assertEqual(event_call["payload"]["data"]["endpoint_id"], "Jane_Avatar")
+        self.assertEqual(event_call["payload"]["data"]["endpoint_id"], "all")
         self.assertIn("completion_event_published_at", imported_preview)
 
     def test_avatar_generation_imports_head_preview_rgb_without_background_removal(self):
