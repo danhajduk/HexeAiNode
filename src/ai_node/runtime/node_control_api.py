@@ -13213,6 +13213,26 @@ class NodeControlState:
             "version": "v2",
             "generated_at": local_now_iso(),
             "schemas": schemas,
+            "documents": [
+                {
+                    "name": "execution-client-contract.md",
+                    "title": "AI Node Execution Client Contract",
+                    "status": "Partially implemented",
+                    "api_path": "/api/schemas/client-ai/v2/execution-client-contract.md",
+                },
+                {
+                    "name": "communication.md",
+                    "title": "Client AI V2 Communication Guide",
+                    "status": "Implemented",
+                    "api_path": "/api/schemas/client-ai/v2/communication.md",
+                },
+                {
+                    "name": "README.md",
+                    "title": "Client AI V2 Schema Index",
+                    "status": "Implemented",
+                    "api_path": "/api/schemas/client-ai/v2/README.md",
+                },
+            ],
         }
 
     def client_ai_v2_schema_document(self, *, schema_name: str) -> dict:
@@ -13228,11 +13248,23 @@ class NodeControlState:
             raise ValueError("schema_invalid") from exc
         return payload if isinstance(payload, dict) else {}
 
-    def client_ai_v2_communication_markdown(self) -> str:
-        path = self._client_ai_v2_schema_dir() / "communication.md"
+    def client_ai_v2_markdown_document(self, *, document_name: str) -> str:
+        normalized = str(document_name or "").strip()
+        documents = {
+            "communication.md": self._client_ai_v2_schema_dir() / "communication.md",
+            "README.md": self._client_ai_v2_schema_dir() / "README.md",
+            "execution-client-contract.md": Path(__file__).resolve().parents[3]
+            / "docs/ai-node/execution-client-contract.md",
+        }
+        path = documents.get(normalized)
+        if path is None:
+            raise ValueError("schema_guide_not_found")
         if not path.exists() or not path.is_file():
             raise ValueError("schema_guide_not_found")
         return path.read_text(encoding="utf-8")
+
+    def client_ai_v2_communication_markdown(self) -> str:
+        return self.client_ai_v2_markdown_document(document_name="communication.md")
 
     @staticmethod
     def _parse_output_payload(output_text: object, *, expected_schema: dict | None = None):
@@ -16050,6 +16082,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/image-templates/{template_id}/review",
                 "/api/schemas/client-ai/v2",
                 "/api/schemas/client-ai/v2/communication.md",
+                "/api/schemas/client-ai/v2/README.md",
+                "/api/schemas/client-ai/v2/execution-client-contract.md",
                 "/api/schemas/client-ai/v2/{schema_name}",
                 "/api/execution/authorize",
                 "/api/execution/admission",
@@ -16093,6 +16127,26 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         try:
             return Response(
                 content=state.client_ai_v2_communication_markdown(),
+                media_type="text/markdown; charset=utf-8",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/schemas/client-ai/v2/README.md")
+    def get_client_ai_v2_readme_markdown():
+        try:
+            return Response(
+                content=state.client_ai_v2_markdown_document(document_name="README.md"),
+                media_type="text/markdown; charset=utf-8",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/schemas/client-ai/v2/execution-client-contract.md")
+    def get_client_ai_v2_execution_contract_markdown():
+        try:
+            return Response(
+                content=state.client_ai_v2_markdown_document(document_name="execution-client-contract.md"),
                 media_type="text/markdown; charset=utf-8",
             )
         except ValueError as exc:

@@ -41,3 +41,5 @@ Current implemented behavior:
 - `GET /api/schemas/client-ai/v2` returns the schema catalog
 - `GET /api/schemas/client-ai/v2/{schema_name}` returns an individual schema document
 - `GET /api/schemas/client-ai/v2/communication.md` returns the V2 communication guide as Markdown
+- `GET /api/schemas/client-ai/v2/execution-client-contract.md` returns the canonical cross-node execution contract
+- `GET /api/schemas/client-ai/v2/README.md` returns this remotely discoverable schema index

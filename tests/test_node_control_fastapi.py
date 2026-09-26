@@ -515,6 +515,7 @@ class NodeControlFastApiTests(unittest.TestCase):
 
             self.assertEqual(catalog_response.status_code, 200)
             schema_names = [item["name"] for item in catalog_response.json()["schemas"]]
+            document_names = [item["name"] for item in catalog_response.json()["documents"]]
             self.assertIn("benchmark-execution-request.v2.schema.json", schema_names)
             self.assertIn("execution-response.v2.schema.json", schema_names)
             self.assertIn("execution-job.v2.schema.json", schema_names)
@@ -522,6 +523,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertIn("execution-job-cancel.v2.response.schema.json", schema_names)
             self.assertIn("image-generation-inputs.v1.schema.json", schema_names)
             self.assertIn("weather-scenery-inputs.v1.schema.json", schema_names)
+            self.assertEqual(
+                document_names,
+                ["execution-client-contract.md", "communication.md", "README.md"],
+            )
 
             schema_response = client.get("/api/schemas/client-ai/v2/prompt-register.v2.request.schema.json")
 
@@ -534,6 +539,15 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertIn("text/markdown", guide_response.headers["content-type"])
             self.assertIn("Client AI V2 Communication Guide", guide_response.text)
             self.assertNotIn("/api/benchmarks/local-llm", guide_response.text)
+
+            contract_response = client.get("/api/schemas/client-ai/v2/execution-client-contract.md")
+            index_response = client.get("/api/schemas/client-ai/v2/README.md")
+
+            self.assertEqual(contract_response.status_code, 200)
+            self.assertIn("text/markdown", contract_response.headers["content-type"])
+            self.assertIn("AI Node Execution Client Contract", contract_response.text)
+            self.assertEqual(index_response.status_code, 200)
+            self.assertIn("Client AI V2 Schemas", index_response.text)
 
             prompt_response = client.post(
                 "/api/prompts/services",

@@ -8,7 +8,8 @@
   "required": [
     "schema_family",
     "version",
-    "schemas"
+    "schemas",
+    "documents"
   ],
   "properties": {
     "schema_family": {
@@ -68,6 +69,23 @@
               "null"
             ]
           }
+        }
+      }
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "title", "status", "api_path"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[A-Za-z0-9._-]+\\.md$"},
+          "title": {"type": "string", "minLength": 1},
+          "status": {
+            "type": "string",
+            "enum": ["Implemented", "Partially implemented"]
+          },
+          "api_path": {"type": "string", "minLength": 1}
         }
       }
     }
