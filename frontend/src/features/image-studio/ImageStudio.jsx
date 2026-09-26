@@ -131,11 +131,11 @@ const GROUP_PICTOGRAMS = {
   "distinctive features": "✦", "facial hair": "🧔", "eye shape": "◉",
 };
 
-const FACE_FEATURE_VISUAL_GUIDES = {
-  "face shape": { src: "/image-studio/guides/face-shapes.webp", alt: "Examples of varied face shapes" },
-  "eye shape": { src: "/image-studio/guides/eye-shapes.webp", alt: "Examples of varied eye shapes" },
-  nose: { src: "/image-studio/guides/nose-shapes.webp", alt: "Examples of varied nose shapes" },
-  lips: { src: "/image-studio/guides/lip-shapes.webp", alt: "Examples of varied lip shapes" },
+const FACE_FEATURE_OPTION_SPRITES = {
+  "face shape": { src: "/image-studio/guides/face-shape-options-v2.webp", columns: 4, rows: 2 },
+  "eye shape": { src: "/image-studio/guides/eye-shape-options-v2.webp", columns: 3, rows: 3 },
+  nose: { src: "/image-studio/guides/nose-shape-options-v2.webp", columns: 3, rows: 3 },
+  lips: { src: "/image-studio/guides/lip-shape-options-v2.webp", columns: 4, rows: 2 },
 };
 
 function OptionVisual({ groupId, value }) {
@@ -144,6 +144,29 @@ function OptionVisual({ groupId, value }) {
     return <span className="image-studio-option-visual is-swatch" style={{ background: swatch }} aria-hidden="true" />;
   }
   return <span className="image-studio-option-visual" aria-hidden="true">{OPTION_PICTOGRAMS[value] || GROUP_PICTOGRAMS[groupId] || "◇"}</span>;
+}
+
+function FaceFeatureOptionVisual({ group, option }) {
+  const sprite = FACE_FEATURE_OPTION_SPRITES[group.id];
+  const optionIndex = group.options.indexOf(option);
+  if (!sprite || optionIndex < 0) {
+    return <OptionVisual groupId={group.id} value={option} />;
+  }
+  const column = optionIndex % sprite.columns;
+  const row = Math.floor(optionIndex / sprite.columns);
+  const x = sprite.columns === 1 ? 0 : (column / (sprite.columns - 1)) * 100;
+  const y = sprite.rows === 1 ? 0 : (row / (sprite.rows - 1)) * 100;
+  return (
+    <span
+      className="image-studio-feature-option-image"
+      style={{
+        backgroundImage: `url(${sprite.src})`,
+        backgroundPosition: `${x}% ${y}%`,
+        backgroundSize: `${sprite.columns * 100}% ${sprite.rows * 100}%`,
+      }}
+      aria-hidden="true"
+    />
+  );
 }
 
 function composeFaceDescription(selections, customDetails) {
@@ -771,47 +794,54 @@ export function ImageStudio({
                 {draftSaveMessage ? <p className="success">{draftSaveMessage}</p> : null}
               </div>
             ) : activeInterviewStep.id === "face_features" ? (
-              <div className="image-studio-face-builder">
-                <p>Select the traits that should stay consistent. Choose one per group unless the group allows multiple.</p>
-                <div className="image-studio-face-options">
-                  {FACE_FEATURE_OPTION_GROUPS.map((group) => (
-                    <fieldset key={group.id}>
-                      <legend>{group.label}{group.multiple ? <small> Select any</small> : null}</legend>
-                      {FACE_FEATURE_VISUAL_GUIDES[group.id] ? (
-                        <a className="image-studio-visual-guide" href={FACE_FEATURE_VISUAL_GUIDES[group.id].src} target="_blank" rel="noreferrer" title="Open the full-size visual guide">
-                          <img loading="lazy" src={FACE_FEATURE_VISUAL_GUIDES[group.id].src} alt={FACE_FEATURE_VISUAL_GUIDES[group.id].alt} />
-                          <span>Visual examples · click to enlarge</span>
-                        </a>
-                      ) : null}
-                      <div className="image-studio-option-chips">
-                        {group.options.map((option) => {
-                          const selected = (faceFeatureSelections[group.id] || []).includes(option);
-                          return (
-                            <button
-                              className={selected ? "is-selected" : ""}
-                              type="button"
-                              aria-pressed={selected}
-                              key={option}
-                              onClick={() => toggleFaceFeature(group, option)}
-                            >
-                              <OptionVisual groupId={group.id} value={option} />
-                              {option}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </fieldset>
-                  ))}
+              <div className="image-studio-face-workspace">
+                <div className="image-studio-face-builder">
+                  <p>Select the traits that should stay consistent. Choose one per group unless the group allows multiple.</p>
+                  <div className="image-studio-face-options">
+                    {FACE_FEATURE_OPTION_GROUPS.map((group) => (
+                      <fieldset key={group.id}>
+                        <legend>{group.label}{group.multiple ? <small> Select any</small> : null}</legend>
+                        <div className={`image-studio-option-chips ${FACE_FEATURE_OPTION_SPRITES[group.id] ? "has-feature-images" : ""}`}>
+                          {group.options.map((option) => {
+                            const selected = (faceFeatureSelections[group.id] || []).includes(option);
+                            return (
+                              <button
+                                className={selected ? "is-selected" : ""}
+                                type="button"
+                                aria-pressed={selected}
+                                key={option}
+                                onClick={() => toggleFaceFeature(group, option)}
+                              >
+                                <FaceFeatureOptionVisual group={group} option={option} />
+                                <span>{option}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
+                    ))}
+                  </div>
+                  <label className="image-studio-full-field">
+                    Additional face details
+                    <textarea rows={3} value={faceCustomDetails} onChange={(event) => updateFaceCustomDetails(event.target.value)} placeholder="Add features not covered above or expand on a selection." />
+                  </label>
+                  <div className="image-studio-face-summary">
+                    <span>Combined face description</span>
+                    <p>{characterBrief.appearance || "Choose options or add custom details to build the face description."}</p>
+                  </div>
                 </div>
-                <label className="image-studio-full-field">
-                  Additional face details
-                  <textarea rows={3} value={faceCustomDetails} onChange={(event) => updateFaceCustomDetails(event.target.value)} placeholder="Add features not covered above or expand on a selection." />
-                </label>
-                <div className="image-studio-face-summary">
-                  <span>Combined face description</span>
-                  <p>{characterBrief.appearance || "Choose options or add custom details to build the face description."}</p>
+                <aside className="image-studio-face-preview">
+                  <span className="image-studio-eyebrow">Rendered preview</span>
+                  <div className="image-studio-face-preview-canvas">
+                    <span>Portrait preview</span>
+                    <p>Your selected face traits will be rendered here.</p>
+                  </div>
+                  <button className="btn btn-primary" type="button" disabled title="CPU preview generation will be connected in the next generation step">
+                    Generate face preview
+                  </button>
+                  <small>CPU preview workflow connection is the next step.</small>
+                </aside>
                 </div>
-              </div>
             ) : (
               <label className="image-studio-full-field">
                 Your answer
