@@ -129,6 +129,11 @@ describe("ImageStudio", () => {
     expect(markup).toContain("image-studio-feature-option-image");
     expect(markup).toContain("Rendered preview");
     expect(markup).toContain("Generate face preview");
+    expect(markup).toContain("Save progress");
+    expect(markup).toContain("image-studio-face-preview-status");
+    expect(markup).toContain("Status");
+    expect(markup).toContain("Runtime");
+    expect(markup).toContain("Model");
   });
 
   it("forces SFW when an adult character is changed to an under-18 age group", () => {

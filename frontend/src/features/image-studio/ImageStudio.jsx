@@ -245,6 +245,10 @@ export function ImageStudio({
   initialInterviewOpen = false,
   initialInterviewStep = 0,
   runtimeStatus = null,
+  generationActivity = null,
+  facePreviewResult = null,
+  facePreviewTracking = false,
+  apiBase = "",
   dataLoading = false,
   dataError = "",
   promptHelperBusy = false,
@@ -254,6 +258,7 @@ export function ImageStudio({
   onImprovePrompt,
   onInterviewQuestion,
   onSaveCharacterDraft,
+  onGenerateFacePreview,
   onRefreshData,
   onOpenLegacy,
   onClose,
@@ -290,6 +295,7 @@ export function ImageStudio({
   const [faceFeatureSelections, setFaceFeatureSelections] = useState({});
   const [faceCustomDetails, setFaceCustomDetails] = useState("");
   const [draftSaveMessage, setDraftSaveMessage] = useState("");
+  const [characterProfileId, setCharacterProfileId] = useState("");
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -332,6 +338,15 @@ export function ImageStudio({
       ...CHARACTER_FOUNDATION_GROUPS.map((group) => characterBrief[group.id]),
     ].filter(Boolean).join(" — ")
     : characterBrief[activeInterviewStep.field] || "";
+  const facePreview = facePreviewResult?.preview || null;
+  const generationProgress = generationActivity?.generation_status?.progress || {};
+  const generationSession = generationActivity?.generation_status?.session || generationActivity?.service?.session || {};
+  const generationJob = generationActivity?.latest_job || {};
+  const comfyService = runtimeStatus?.services?.comfyui_gpu || {};
+  const comfyResidency = comfyService?.model_residency_status || comfyService?.model_residency || {};
+  const previewStatus = String(facePreview?.status || generationJob?.status || (facePreviewTracking ? "submitted" : "not started"));
+  const previewPercent = Number(generationProgress?.percent ?? generationJob?.progress?.percent);
+  const previewImageUrl = facePreview?.url ? `${apiBase}${facePreview.url}` : "";
 
   useEffect(() => {
     if (!interviewOpen) {
@@ -400,9 +415,9 @@ export function ImageStudio({
     updateCharacterBrief("appearance", composeFaceDescription(faceFeatureSelections, value));
   }
 
-  async function saveIncompleteCharacter() {
+  async function saveCharacterProgress({ closeAfter = false } = {}) {
     if (!nameConceptComplete || characterSaveBusy || !onSaveCharacterDraft) {
-      return;
+      return null;
     }
     setDraftSaveMessage("");
     const result = await onSaveCharacterDraft({
@@ -420,11 +435,15 @@ export function ImageStudio({
       }),
     });
     if (!result?.profile) {
-      return;
+      return null;
     }
+    setCharacterProfileId(result.profile.profile_id || characterProfileId);
     setDraftSaveMessage("Saved as an incomplete character.");
-    setInterviewOpen(false);
-    setCreativeSetupOpen(false);
+    if (closeAfter) {
+      setInterviewOpen(false);
+      setCreativeSetupOpen(false);
+    }
+    return result.profile;
   }
 
   function continueIncompleteCharacter(profile) {
@@ -437,6 +456,7 @@ export function ImageStudio({
       setSelectedTemplateId(candidateTemplate.template_id);
     }
     setCharacterBrief((current) => ({ ...current, ...savedBrief }));
+    setCharacterProfileId(profile.profile_id || "");
     setPromptDraft("");
     setInterviewStep(nextIncompleteInterviewStep(savedBrief));
     setCreativeSetupOpen(true);
@@ -475,7 +495,9 @@ export function ImageStudio({
     setInterviewStep(nextStep);
   }
 
-  function completeCurrentInterviewStep() {
+  async function completeCurrentInterviewStep() {
+    const savedProfile = await saveCharacterProgress();
+    if (!savedProfile) return;
     setCompletedInterviewSteps((current) => ({ ...current, [activeInterviewStep.id]: true }));
     if (interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1) {
       moveCharacterInterview(1);
@@ -488,6 +510,8 @@ export function ImageStudio({
     if (!currentInterviewAnswer.trim() || interviewBusy) {
       return;
     }
+    const savedProfile = await saveCharacterProgress();
+    if (!savedProfile) return;
     if (!interviewLlmEnabled || !textModelLoaded || !onInterviewQuestion) {
       if (interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1) {
         moveCharacterInterview(1);
@@ -516,6 +540,27 @@ export function ImageStudio({
       return;
     }
     completeCurrentInterviewStep();
+  }
+
+  async function generateFacePreview() {
+    if (!characterBrief.appearance.trim() || characterSaveBusy || facePreviewTracking || !onGenerateFacePreview) return;
+    const savedProfile = await saveCharacterProgress();
+    const profileId = savedProfile?.profile_id || characterProfileId;
+    if (!profileId) return;
+    setDraftSaveMessage("Character saved. Submitting face preview…");
+    const result = await onGenerateFacePreview(profileId, {
+      prompt: [
+        "head and shoulders character portrait, front-facing, neutral studio background",
+        characterBrief.visual_style && `${characterBrief.visual_style} style`,
+        characterBrief.gender_identity,
+        characterBrief.age_group,
+        characterBrief.appearance,
+        characterBrief.expression,
+      ].filter(Boolean).join(", "),
+      negative_prompt: negativePrompt,
+      lock_seed: false,
+    });
+    if (result) setDraftSaveMessage("Face preview submitted.");
   }
 
   const choosingCharacterPath = creationType === "character" && !characterPath;
@@ -782,16 +827,6 @@ export function ImageStudio({
                 {characterBrief.age_group && characterBrief.age_group !== "adult (18+)" ? (
                   <p className="image-studio-safety-note">Teen and child characters are restricted to SFW content.</p>
                 ) : null}
-                <div className="image-studio-draft-save">
-                  <div>
-                    <strong>Save your progress</strong>
-                    <p>This stores the identity as an incomplete character and returns to Step 3.</p>
-                  </div>
-                  <button className="btn" type="button" onClick={saveIncompleteCharacter} disabled={!nameConceptComplete || characterSaveBusy}>
-                    {characterSaveBusy ? "Saving character…" : "Save incomplete character"}
-                  </button>
-                </div>
-                {draftSaveMessage ? <p className="success">{draftSaveMessage}</p> : null}
               </div>
             ) : activeInterviewStep.id === "face_features" ? (
               <div className="image-studio-face-workspace">
@@ -833,13 +868,27 @@ export function ImageStudio({
                 <aside className="image-studio-face-preview">
                   <span className="image-studio-eyebrow">Rendered preview</span>
                   <div className="image-studio-face-preview-canvas">
-                    <span>Portrait preview</span>
-                    <p>Your selected face traits will be rendered here.</p>
+                    {previewImageUrl ? (
+                      <img src={previewImageUrl} alt={`Generated face preview for ${characterBrief.name || "character"}`} />
+                    ) : (
+                      <><span>Portrait preview</span><p>Your selected face traits will be rendered here.</p></>
+                    )}
                   </div>
-                  <button className="btn btn-primary" type="button" disabled title="CPU preview generation will be connected in the next generation step">
-                    Generate face preview
+                  <button className="btn btn-primary" type="button" onClick={generateFacePreview} disabled={!nameConceptComplete || !characterBrief.appearance.trim() || characterSaveBusy || facePreviewTracking}>
+                    {facePreviewTracking ? "Generating preview…" : previewImageUrl ? "Generate another preview" : "Generate face preview"}
                   </button>
-                  <small>CPU preview workflow connection is the next step.</small>
+                  <div className="image-studio-face-preview-status" aria-live="polite">
+                    <div><span>Status</span><strong>{previewStatus}</strong></div>
+                    <div><span>Progress</span><strong>{Number.isFinite(previewPercent) ? `${previewPercent.toFixed(1)}%` : facePreviewTracking ? "Working…" : "—"}</strong></div>
+                    <div><span>Stage</span><code>{generationProgress.stage || generationJob.stage || "—"}</code></div>
+                    <div><span>Node</span><code>{generationProgress.node || generationProgress.node_name || "—"}</code></div>
+                    <div><span>Queue</span><code>{generationSession.queue_state || generationSession.state || "—"}</code></div>
+                    <div><span>Prompt</span><code>{facePreview?.prompt_id || generationProgress.prompt_id || "—"}</code></div>
+                    <div><span>Runtime</span><code>{comfyService.state || "unknown"}</code></div>
+                    <div><span>Model</span><code>{comfyResidency.loaded_model || comfyResidency.model_state || "unloaded"}</code></div>
+                    <div><span>VRAM</span><code>{comfyService.vram_mib !== undefined ? `${comfyService.vram_mib} MiB` : "—"}</code></div>
+                    <div><span>Seed</span><code>{facePreview?.seed ?? "—"}</code></div>
+                  </div>
                 </aside>
                 </div>
             ) : (
@@ -852,6 +901,9 @@ export function ImageStudio({
               <button className="btn" type="button" onClick={() => moveCharacterInterview(-1)} disabled={interviewStep === 0}>Back</button>
               <span>{`${interviewStep + 1} of ${CHARACTER_INTERVIEW_STEPS.length}`}</span>
               <div className="row">
+                <button className="btn" type="button" onClick={() => saveCharacterProgress()} disabled={!nameConceptComplete || characterSaveBusy}>
+                  {characterSaveBusy ? "Saving…" : "Save progress"}
+                </button>
                 {interviewLlmEnabled && textModelLoaded ? (
                   <button className="btn" type="button" onClick={completeCurrentInterviewStep} disabled={(activeInterviewStep.id === "name_concept" ? !nameConceptComplete : !currentInterviewAnswer.trim()) || interviewBusy}>
                     {interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1 ? "Continue anyway" : "Finish anyway"}
@@ -862,6 +914,7 @@ export function ImageStudio({
                 </button>
               </div>
             </footer>
+            {draftSaveMessage ? <p className="image-studio-interview-save-status success">{draftSaveMessage}</p> : null}
           </section>
         </div>
       ) : null}

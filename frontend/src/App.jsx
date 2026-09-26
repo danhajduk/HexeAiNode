@@ -224,6 +224,8 @@ export default function App() {
   const [avatarGenerationBusy, setAvatarGenerationBusy] = useState(false);
   const [avatarGenerationResult, setAvatarGenerationResult] = useState(null);
   const [imageStudioDataLoading, setImageStudioDataLoading] = useState(false);
+  const [imageStudioFacePreviewResult, setImageStudioFacePreviewResult] = useState(null);
+  const [imageStudioFacePreviewTracking, setImageStudioFacePreviewTracking] = useState(false);
   const [runningAdminAction, setRunningAdminAction] = useState("");
   const [adminActionState, setAdminActionState] = useState("");
   const [uiState, setUiState] = useState(() =>
@@ -520,6 +522,79 @@ export default function App() {
       }
     } finally {
       setImageStudioDataLoading(false);
+    }
+  }
+
+  async function refreshImageStudioFacePreviewActivity() {
+    const [profilesResult, generationResult, servicesResult] = await Promise.allSettled([
+      apiGet("/api/avatar-generation"),
+      apiGet("/api/manual-image-generation"),
+      apiGet("/api/services/status"),
+    ]);
+    if (profilesResult.status === "fulfilled") {
+      setAvatarGenerationPayload(profilesResult.value);
+      const promptId = String(imageStudioFacePreviewResult?.preview?.prompt_id || "").trim();
+      const previews = (profilesResult.value?.profiles || []).flatMap(
+        (profile) => profile?.prompt_workspaces?.head_face?.preview_history || []
+      );
+      const preview = previews.find((item) => String(item?.prompt_id || "") === promptId);
+      if (preview) {
+        setImageStudioFacePreviewResult((current) => ({ ...(current || {}), preview }));
+        if (["completed", "completed_with_fallback", "failed", "error", "cancelled"].includes(String(preview.status || "").toLowerCase())) {
+          setImageStudioFacePreviewTracking(false);
+        }
+      }
+    }
+    if (generationResult.status === "fulfilled") {
+      setManualImageGenerationPayload(generationResult.value);
+      const status = String(generationResult.value?.latest_job?.status || "").toLowerCase();
+      if (["failed", "error", "cancelled"].includes(status)) {
+        setImageStudioFacePreviewTracking(false);
+      }
+    }
+    if (servicesResult.status === "fulfilled") {
+      setManualGenerationRuntimeStatus(servicesResult.value);
+    }
+  }
+
+  useEffect(() => {
+    if (!imageStudioOpen || !imageStudioFacePreviewTracking) {
+      return undefined;
+    }
+    let cancelled = false;
+    let timeoutId;
+    async function poll() {
+      await refreshImageStudioFacePreviewActivity();
+      if (!cancelled) {
+        timeoutId = window.setTimeout(poll, 2000);
+      }
+    }
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [imageStudioOpen, imageStudioFacePreviewTracking, imageStudioFacePreviewResult?.preview?.prompt_id]);
+
+  async function onCreateImageStudioFacePreview(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) return null;
+    setAvatarGenerationBusy(true);
+    setError("");
+    try {
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodeURIComponent(normalized)}/head-face/previews`, payload);
+      setImageStudioFacePreviewResult(result);
+      setImageStudioFacePreviewTracking(true);
+      if (Array.isArray(result?.profiles)) {
+        setAvatarGenerationPayload((current) => ({ ...(current || {}), profiles: result.profiles }));
+      }
+      return result;
+    } catch (err) {
+      setError(String(err?.message || err).replace(/^request failed \(\d+\):\s*/, ""));
+      setImageStudioFacePreviewTracking(false);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
     }
   }
 
@@ -2929,6 +3004,10 @@ export default function App() {
         <ImageStudio
           templates={Array.isArray(comfyuiTemplateCatalogPayload?.templates) ? comfyuiTemplateCatalogPayload.templates : []}
           runtimeStatus={manualGenerationRuntimeStatus}
+          generationActivity={manualImageGenerationPayload}
+          facePreviewResult={imageStudioFacePreviewResult}
+          facePreviewTracking={imageStudioFacePreviewTracking}
+          apiBase={getApiBase()}
           dataLoading={imageStudioDataLoading}
           dataError={error}
           promptHelperBusy={manualImagePromptHelperBusy}
@@ -2939,6 +3018,7 @@ export default function App() {
           onImprovePrompt={onImproveManualImagePrompt}
           onInterviewQuestion={onCharacterInterviewQuestion}
           onSaveCharacterDraft={onSaveAvatarProfile}
+          onGenerateFacePreview={onCreateImageStudioFacePreview}
           onOpenLegacy={() => { window.location.hash = buildOperationalRoute("manual_image"); }}
           onClose={() => {
             if (window.opener) {
