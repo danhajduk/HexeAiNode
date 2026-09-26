@@ -529,6 +529,10 @@ export function ImageStudio({
     }),
     [characterPath, creationType, templates]
   );
+  const facePreviewTemplate = useMemo(
+    () => templates.find((template) => template?.template_id === "template.avatar_head_face_preview.realvisxl.v1") || null,
+    [templates]
+  );
   const incompleteCharacterProfiles = useMemo(
     () => characterProfiles.filter((profile) => profile?.completion_status === "incomplete"),
     [characterProfiles]
@@ -567,10 +571,55 @@ export function ImageStudio({
   const generationProgress = generationActivity?.generation_status?.progress || {};
   const generationSession = generationActivity?.generation_status?.session || generationActivity?.service?.session || {};
   const generationJob = generationActivity?.latest_job || {};
+  const previewPromptId = String(facePreview?.prompt_id || "").trim();
+  const jobPromptIds = [generationJob?.prompt_id, ...(generationJob?.prompt_ids || [])].map((value) => String(value || "").trim()).filter(Boolean);
+  const activityMatchesPreview = Boolean(previewPromptId && jobPromptIds.includes(previewPromptId));
+  const progressDetail = activityMatchesPreview ? (generationJob?.progress_detail || {}) : {};
   const comfyService = runtimeStatus?.services?.comfyui_gpu || {};
   const comfyResidency = comfyService?.model_residency_status || comfyService?.model_residency || {};
-  const previewStatus = String(facePreview?.status || generationJob?.status || (facePreviewTracking ? "submitted" : "not started"));
-  const previewPercent = Number(generationProgress?.percent ?? generationJob?.progress?.percent);
+  const previewStatus = String(
+    progressDetail?.status
+      || (activityMatchesPreview ? generationJob?.status : "")
+      || facePreview?.status
+      || (facePreviewTracking ? "preparing" : "not started")
+  );
+  const previewPercent = Number(progressDetail?.percent ?? (activityMatchesPreview ? generationProgress?.percent : undefined));
+  const progressValue = Number(progressDetail?.value ?? (activityMatchesPreview ? generationProgress?.value : undefined));
+  const progressMax = Number(progressDetail?.max ?? (activityMatchesPreview ? generationProgress?.max : undefined));
+  const queueRunning = Number(generationSession?.running_count || generationJob?.running_count || 0);
+  const queuePending = Number(generationSession?.pending_count || generationJob?.pending_count || 0);
+  const modelName = facePreviewTemplate?.model_requirements?.checkpoint || comfyResidency.loaded_model || "Image model";
+  const modelState = String(comfyResidency.model_state || "unloaded");
+  const previewFailed = ["failed", "error", "cancelled"].includes(previewStatus.toLowerCase());
+  const previewCompleted = ["completed", "completed_with_fallback"].includes(previewStatus.toLowerCase());
+  let currentGenerationOperation = "Ready to generate";
+  if (previewFailed) {
+    currentGenerationOperation = "Generation failed";
+  } else if (previewCompleted) {
+    currentGenerationOperation = "Preview completed and imported";
+  } else if (facePreviewTracking) {
+    if (String(comfyService.state || "").toLowerCase() !== "running") {
+      currentGenerationOperation = "Starting the ComfyUI runtime";
+    } else if (modelState !== "loaded") {
+      currentGenerationOperation = `Loading ${modelName} into VRAM`;
+    } else if (queuePending > 0 && queueRunning === 0) {
+      currentGenerationOperation = `Waiting in the ComfyUI queue (${queuePending} pending)`;
+    } else if (Number.isFinite(progressValue) && Number.isFinite(progressMax) && progressMax > 0 && progressValue < progressMax) {
+      currentGenerationOperation = `Rendering image — step ${progressValue} of ${progressMax}`;
+    } else if (Number.isFinite(previewPercent) && previewPercent >= 100) {
+      currentGenerationOperation = "Saving and importing the completed preview";
+    } else if (queueRunning > 0) {
+      currentGenerationOperation = "ComfyUI is processing the workflow";
+    } else {
+      currentGenerationOperation = "Preparing the workflow and image model";
+    }
+  }
+  const generationMessage = String(
+    progressDetail?.message
+      || progressDetail?.failure_detail
+      || progressDetail?.failure_reason
+      || (facePreviewTracking ? "Live status refreshes automatically." : "Generate a preview to see live model and rendering details.")
+  );
   const previewImageUrl = facePreview?.url ? `${apiBase}${facePreview.url}` : "";
 
   useEffect(() => {
@@ -1150,16 +1199,26 @@ export function ImageStudio({
                     {facePreviewTracking ? "Generating preview…" : previewImageUrl ? "Generate another preview" : "Generate face preview"}
                   </button>
                   <div className="image-studio-face-preview-status" aria-live="polite">
-                    <div><span>Status</span><strong>{previewStatus}</strong></div>
-                    <div><span>Progress</span><strong>{Number.isFinite(previewPercent) ? `${previewPercent.toFixed(1)}%` : facePreviewTracking ? "Working…" : "—"}</strong></div>
-                    <div><span>Stage</span><code>{generationProgress.stage || generationJob.stage || "—"}</code></div>
-                    <div><span>Node</span><code>{generationProgress.node || generationProgress.node_name || "—"}</code></div>
-                    <div><span>Queue</span><code>{generationSession.queue_state || generationSession.state || "—"}</code></div>
-                    <div><span>Prompt</span><code>{facePreview?.prompt_id || generationProgress.prompt_id || "—"}</code></div>
+                    <div className={`image-studio-generation-summary ${previewFailed ? "is-error" : previewCompleted ? "is-complete" : ""}`}>
+                      <span>Current operation</span>
+                      <strong>{currentGenerationOperation}</strong>
+                      <small>{generationMessage}</small>
+                    </div>
+                    <div className="image-studio-generation-progress" aria-label={`Generation progress ${Number.isFinite(previewPercent) ? previewPercent : 0}%`}>
+                      <i style={{ width: `${Math.max(0, Math.min(100, Number.isFinite(previewPercent) ? previewPercent : 0))}%` }} />
+                    </div>
+                    <div><span>Status</span><strong>{previewStatus.replaceAll("_", " ")}</strong></div>
+                    <div><span>Progress</span><strong>{Number.isFinite(previewPercent) ? `${previewPercent.toFixed(1)}%${Number.isFinite(progressValue) && Number.isFinite(progressMax) ? ` (${progressValue}/${progressMax})` : ""}` : facePreviewTracking ? "Preparing…" : "—"}</strong></div>
+                    <div><span>Stage</span><code>{progressDetail.label || progressDetail.phase || "—"}</code></div>
+                    <div><span>Active node</span><code>{progressDetail.node_class ? `${progressDetail.node_class} (#${progressDetail.node_id || "?"})` : generationProgress.node || "—"}</code></div>
+                    <div><span>Queue</span><code>{queueRunning ? `${queueRunning} running` : queuePending ? `${queuePending} pending` : "Idle"}</code></div>
+                    <div><span>Elapsed</span><code>{Number.isFinite(Number(progressDetail.elapsed_seconds)) ? `${Number(progressDetail.elapsed_seconds).toFixed(1)} s` : "—"}</code></div>
                     <div><span>Runtime</span><code>{comfyService.state || "unknown"}</code></div>
-                    <div><span>Model</span><code>{comfyResidency.loaded_model || comfyResidency.model_state || "unloaded"}</code></div>
+                    <div><span>Model state</span><code>{modelState}</code></div>
+                    <div className="image-studio-status-wide"><span>Model</span><code title={modelName}>{modelName}</code></div>
                     <div><span>VRAM</span><code>{comfyService.vram_mib !== undefined ? `${comfyService.vram_mib} MiB` : "—"}</code></div>
                     <div><span>Seed</span><code>{facePreviewSeed ?? "—"}</code></div>
+                    <div className="image-studio-status-wide"><span>Prompt ID</span><code title={previewPromptId || generationProgress.prompt_id || ""}>{previewPromptId || generationProgress.prompt_id || "—"}</code></div>
                   </div>
                   {facePreviewSeed !== undefined && facePreviewSeed !== null ? (
                     <div className="image-studio-seed-controls">

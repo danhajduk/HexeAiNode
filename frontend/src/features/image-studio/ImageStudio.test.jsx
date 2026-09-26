@@ -209,6 +209,45 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Refine &amp; regenerate same seed");
   });
 
+  it("shows matched live generation details instead of the stale submitted state", () => {
+    const template = {
+      template_id: "template.avatar_head_face_preview.realvisxl.v1",
+      template_name: "Avatar Head Face Preview",
+      metadata: { domain: "avatar_profile", edit_intent: "avatar_head_face_preview" },
+      model_requirements: { checkpoint: "RealVisXL_V5.0_fp16.safetensors" },
+    };
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        templates={[template]}
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialSelectedTemplateId={template.template_id}
+        initialCreativeSetupOpen
+        initialInterviewOpen
+        initialInterviewStep={1}
+        facePreviewTracking
+        facePreviewResult={{ preview: { status: "submitted", prompt_id: "prompt-live", seed_text: "123456" } }}
+        runtimeStatus={{ services: { comfyui_gpu: { state: "running", vram_mib: 5030, model_residency_status: { model_state: "loaded" } } } }}
+        generationActivity={{
+          generation_status: { session: { running_count: 1, pending_count: 0 }, progress: { prompt_id: "prompt-live", value: 2, max: 4, percent: 50 } },
+          latest_job: {
+            prompt_id: "prompt-live",
+            status: "running",
+            progress_detail: { status: "running", phase: "sampling", label: "Sampling", message: "Rendering sampler steps.", node_class: "KSampler", node_id: "6", value: 2, max: 4, percent: 50, elapsed_seconds: 12.4 },
+          },
+        }}
+      />
+    );
+
+    expect(markup).toContain("Rendering image — step 2 of 4");
+    expect(markup).toContain("Rendering sampler steps.");
+    expect(markup).toContain("50.0% (2/4)");
+    expect(markup).toContain("KSampler (#6)");
+    expect(markup).toContain("12.4 s");
+    expect(markup).toContain("RealVisXL_V5.0_fp16.safetensors");
+    expect(markup).not.toContain("<strong>submitted</strong>");
+  });
+
   it("forces SFW when an adult character is changed to an under-18 age group", () => {
     expect(applyCharacterFoundation(
       { age_group: "adult (18+)", content_rating: "NSFW adult content" },

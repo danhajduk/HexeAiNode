@@ -3136,6 +3136,53 @@
   min-width: 0;
 }
 
+.image-studio-face-preview-status .image-studio-generation-summary,
+.image-studio-face-preview-status .image-studio-generation-progress,
+.image-studio-face-preview-status .image-studio-status-wide {
+  grid-column: 1 / -1;
+}
+
+.image-studio-generation-summary {
+  padding: 8px;
+  border-left: 3px solid hsl(var(--sx-accent));
+  border-radius: 5px;
+  background: hsl(var(--sx-accent) / 0.08);
+}
+
+.image-studio-generation-summary.is-complete {
+  border-left-color: hsl(145 70% 45%);
+}
+
+.image-studio-generation-summary.is-error {
+  border-left-color: hsl(0 75% 58%);
+}
+
+.image-studio-generation-summary strong {
+  font-size: 13px;
+  white-space: normal;
+}
+
+.image-studio-generation-summary small {
+  color: hsl(var(--sx-text-muted));
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.image-studio-generation-progress {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: hsl(var(--sx-border));
+}
+
+.image-studio-generation-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: hsl(var(--sx-accent));
+  transition: width 180ms ease;
+}
+
 .image-studio-face-preview-status span {
   color: hsl(var(--sx-text-muted));
   font-size: 10px;

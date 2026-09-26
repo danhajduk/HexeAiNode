@@ -580,11 +580,12 @@ export default function App() {
     const normalized = String(profileId || "").trim();
     if (!normalized || avatarGenerationBusy) return null;
     setAvatarGenerationBusy(true);
+    setImageStudioFacePreviewTracking(true);
+    setImageStudioFacePreviewResult(null);
     setError("");
     try {
       const result = await apiPost(`/api/avatar-generation/profiles/${encodeURIComponent(normalized)}/head-face/previews`, payload);
       setImageStudioFacePreviewResult(result);
-      setImageStudioFacePreviewTracking(true);
       if (Array.isArray(result?.profiles)) {
         setAvatarGenerationPayload((current) => ({ ...(current || {}), profiles: result.profiles }));
       }
