@@ -7885,6 +7885,84 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(state.submitted_payload.template_id, "template.avatar_head_face_preview.realvisxl.v1")
             self.assertEqual(state.submitted_payload.scheduler_request_metadata["idle_policy"], "client_job")
 
+    async def test_direct_local_scenery_generation_uses_generic_scenery_template(self):
+        class _VisualExecutionState(NodeControlState):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.submitted_payload = None
+
+            async def submit_manual_image_generation(self, *, payload):
+                self.submitted_payload = payload
+                return {
+                    "status": "submitted",
+                    "template_id": payload.template_id,
+                    "prompt_id": "prompt-scenery",
+                    "prompt_ids": ["prompt-scenery"],
+                    "submitted_count": 1,
+                }
+
+            def manual_image_generation_status(self):
+                return {
+                    "latest_job": {
+                        "status": "completed",
+                        "prompt_id": "prompt-scenery",
+                        "prompt_ids": ["prompt-scenery"],
+                        "completed_output_count": 1,
+                        "latest_output": {"relative_path": "hexe/scenery/test.png", "filename": "test.png"},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = _VisualExecutionState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+            )
+            request = TaskExecutionRequest(
+                task_id="direct-scenery",
+                task_family="task.image_generation",
+                requested_by="test",
+                requested_provider="local",
+                inputs={"prompt": "a rainy mountain valley", "image_type": "scenery"},
+                constraints={"routing_policy": {"mode": "local_only"}},
+                response_mode="async_if_queued",
+                trace_id="trace-direct-scenery",
+            )
+
+            result = await state._execute_direct_now(request=request)
+
+            self.assertEqual(result["output"]["template_id"], "template.scenery_landscape.realvisxl.v1")
+            self.assertEqual(state.submitted_payload.template_id, "template.scenery_landscape.realvisxl.v1")
+            self.assertIsNone(state.submitted_payload.negative_prompt)
+            self.assertIsNone(state.submitted_payload.width)
+            self.assertIsNone(state.submitted_payload.height)
+            self.assertIsNone(state.submitted_payload.seed)
+            self.assertIsNone(state.submitted_payload.steps)
+            self.assertIsNone(state.submitted_payload.cfg)
+            self.assertIsNone(state.submitted_payload.denoise)
+
+    def test_explicit_visual_template_takes_priority_over_image_type(self):
+        inputs = {
+            "template_id": "template.caller_selected.v1",
+            "image_type": "scenery",
+        }
+        resolved_template = {"template_id": "template.prompt_governed.v1"}
+
+        template_id = NodeControlState._direct_visual_runtime_requested_template_id(
+            inputs=inputs,
+            resolved_template=resolved_template,
+        )
+
+        self.assertEqual(template_id, "template.caller_selected.v1")
+
+        governed_template_id = NodeControlState._direct_visual_runtime_requested_template_id(
+            inputs={"image_type": "scenery"},
+            resolved_template=resolved_template,
+        )
+
+        self.assertEqual(governed_template_id, "template.prompt_governed.v1")
+
     def test_direct_local_image_generation_reuses_registered_prompt_template(self):
         class _PromptVisualExecutionState(NodeControlState):
             def _direct_execution_authorization_snapshot(self, *, request):

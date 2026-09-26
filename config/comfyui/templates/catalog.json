@@ -2,6 +2,106 @@
   "schema_version": "1.0",
   "templates": [
     {
+      "template_id": "template.scenery_landscape.realvisxl.v1",
+      "template_name": "Landscape Scenery",
+      "description": "Reusable text-to-image RealVisXL SDXL workflow for wide scenery, environmental backgrounds, location plates, and weather landscapes.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "scenery-landscape-realvisxl/api_workflow.json",
+      "variables": [
+        {
+          "name": "positive_prompt",
+          "type": "string",
+          "required": true,
+          "description": "Rendered description of the scenery or environmental background."
+        },
+        {
+          "name": "negative_prompt",
+          "type": "string",
+          "required": false,
+          "description": "Prompt terms to suppress."
+        },
+        {
+          "name": "output_name",
+          "type": "string",
+          "required": false,
+          "description": "Filesystem-safe output name used in generated filenames."
+        },
+        {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width."
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height."
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler seed. Use null for runtime randomization."
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Sampler step count."
+        },
+        {
+          "name": "cfg",
+          "type": "number",
+          "required": false,
+          "description": "Classifier-free guidance scale."
+        },
+        {
+          "name": "denoise",
+          "type": "number",
+          "required": false,
+          "description": "Sampler denoise strength."
+        }
+      ],
+      "defaults": {
+        "negative_prompt": "people, person, portrait, character, close-up subject, text, letters, numbers, caption, sign, label, logo, watermark, user interface, icon, infographic, frame, border, low quality, blurry, distorted, oversaturated",
+        "output_name": "landscape_scenery",
+        "width": 1344,
+        "height": 768,
+        "seed": null,
+        "steps": 4,
+        "cfg": 1.2,
+        "denoise": 1
+      },
+      "model_requirements": {
+        "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "loras": ["sdxl_lightning_4step_lora.safetensors"],
+        "vae": null,
+        "controlnets": [],
+        "other": {
+          "nodes": [
+            "CheckpointLoaderSimple",
+            "LoraLoader",
+            "CLIPTextEncode",
+            "EmptyLatentImage",
+            "KSampler",
+            "VAEDecode",
+            "SaveImage"
+          ]
+        }
+      },
+      "output_scope": "normal",
+      "metadata": {
+        "preset_family": "realvisxl_lightning",
+        "domain": "scenery",
+        "input_mode": "text",
+        "edit_intent": "generic_landscape_scenery_generation",
+        "image_types": ["scenery", "environment", "background", "location", "weather"],
+        "reference_roles": [],
+        "transparent_background": false
+      }
+    },
+    {
       "template_id": "template.avatar_head_face_preview.realvisxl.v1",
       "template_name": "Avatar Head Face Preview",
       "description": "Text-only RealVisXL SDXL RGB preview workflow for an avatar profile's head and face prompt workspace. The node submits background removal as a second pass after unloading generation models.",

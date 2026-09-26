@@ -248,6 +248,14 @@ OpenAI image-generation adapter, then falls back to request `prompt`, `text`, or
 
 The default ComfyUI template catalog contains GPU avatar templates for profile prompt previews, final profile-aware generation, body-reference testing, and masked inpaint passes. `Avatar Head Face Preview`
 (`template.avatar_head_face_preview.realvisxl.v1`) is a text-only RealVisXL SDXL portrait workflow used by the Avatar Generation profile detail page to submit head/face prompt previews and record the resulting prompt id in preview history. `Simple Avatar Generation`
+
+Direct local `task.image_generation` requests may include the optional routing hint
+`inputs.image_type: "scenery"`. When neither `inputs.template_id` nor a governed
+prompt template binding selects a template, the node uses
+`template.scenery_landscape.realvisxl.v1`. The caller-owned prompt still supplies
+the image description; the node does not modify or bind that prompt. Generation
+settings are optional: the scenery template provides defaults for the negative
+prompt, output name, dimensions, seed behavior, steps, CFG, and denoise.
 (`template.avatar_body_depth_reference_transparent.realvisxl.v1`) applies PuLID face identity to the model, resizes and
 pads the body reference to the output aspect ratio, extracts a Depth Anything V2 depth map, and applies the SDXL depth
 ControlNet before sampling from an empty latent. `Avatar Profile Generation`

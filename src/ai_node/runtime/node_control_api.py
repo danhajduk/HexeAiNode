@@ -11884,7 +11884,10 @@ class NodeControlState:
         prompt = self._direct_visual_runtime_prompt(request=request)
         if not prompt:
             raise ValueError("image_generation_prompt_required")
-        template_id = str(inputs.get("template_id") or resolved_template.get("template_id") or "").strip()
+        template_id = self._direct_visual_runtime_requested_template_id(
+            inputs=inputs,
+            resolved_template=resolved_template,
+        )
         if not template_id:
             template_id = self._direct_visual_runtime_template_id()
         started = time.perf_counter()
@@ -12053,6 +12056,30 @@ class NodeControlState:
         if not candidates:
             return AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID
         return sorted(candidates, key=lambda item: (-item[0], item[1]))[0][1]
+
+    @staticmethod
+    def _direct_visual_runtime_template_id_for_image_type(*, image_type: object) -> str:
+        normalized_image_type = str(image_type or "").strip().lower()
+        if normalized_image_type == "scenery":
+            return "template.scenery_landscape.realvisxl.v1"
+        return ""
+
+    @classmethod
+    def _direct_visual_runtime_requested_template_id(
+        cls,
+        *,
+        inputs: dict,
+        resolved_template: dict,
+    ) -> str:
+        explicit_template_id = str(inputs.get("template_id") or "").strip()
+        if explicit_template_id:
+            return explicit_template_id
+        governed_template_id = str(resolved_template.get("template_id") or "").strip()
+        if governed_template_id:
+            return governed_template_id
+        return cls._direct_visual_runtime_template_id_for_image_type(
+            image_type=inputs.get("image_type")
+        )
 
     async def _enqueue_direct_execution(self, *, request: TaskExecutionRequest) -> dict:
         request_copy = self._resolve_image_generation_template_request(request=request)

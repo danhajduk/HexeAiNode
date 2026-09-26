@@ -15,8 +15,15 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
 
         self.assertTrue(payload["configured"])
         self.assertEqual(payload["schema_version"], "1.0")
-        self.assertEqual(len(payload["templates"]), 6)
+        self.assertGreaterEqual(len(payload["templates"]), 7)
         templates_by_id = {template["template_id"]: template for template in payload["templates"]}
+        scenery_template = templates_by_id["template.scenery_landscape.realvisxl.v1"]
+        self.assertEqual(scenery_template["template_name"], "Landscape Scenery")
+        self.assertEqual(scenery_template["metadata"]["domain"], "scenery")
+        self.assertEqual(scenery_template["defaults"]["width"], 1344)
+        self.assertEqual(scenery_template["defaults"]["height"], 768)
+        self.assertEqual(scenery_template["defaults"]["steps"], 4)
+        self.assertTrue(scenery_template["validation"]["valid"])
         head_face_template = templates_by_id["template.avatar_head_face_preview.realvisxl.v1"]
         self.assertEqual(head_face_template["template_name"], "Avatar Head Face Preview")
         self.assertEqual(head_face_template["runtime_id"], "comfyui_gpu")
