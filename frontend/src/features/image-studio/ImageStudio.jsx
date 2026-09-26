@@ -904,9 +904,13 @@ export function ImageStudio({
     }
     setInterviewOpen(false);
     setFaceSeedReviewOpen(true);
-    if (!faceSeedBatch || faceSeedBatchPreviews.length !== 15) {
+    const sourcePreviewId = String(facePreview?.preview_id || "");
+    const batchMatchesSavedPreview = sourcePreviewId
+      && String(faceSeedBatch?.anchor_source_preview_id || "") === sourcePreviewId;
+    if (!faceSeedBatch || faceSeedBatchPreviews.length !== 15 || !batchMatchesSavedPreview) {
       setDraftSaveMessage("Starting 15 identity seeds. The saved face seed is slot 1.");
       const result = await onCreateFaceSeedBatch?.(profileId, {
+        anchor_preview_id: sourcePreviewId,
         anchor_seed: facePreviewSeed,
         batch_size: 15,
         preserve_existing: false,

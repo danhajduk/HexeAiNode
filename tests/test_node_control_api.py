@@ -4681,15 +4681,36 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
             )
             state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Jane Avatar"))
+            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
+            profile_metadata = json.loads(profile_path.read_text(encoding="utf-8"))
+            profile_metadata["prompt_workspaces"]["head_face"]["preview_history"] = [{
+                "preview_id": "saved-face-preview",
+                "seed": 424242,
+                "status": "completed",
+                "prompt": "exact detailed saved face prompt",
+                "prompt_parts": {"general": "generic structured parts"},
+                "locked_prompt_parts": {"hair": True},
+                "negative_prompt": "exact saved negative prompt",
+                "width": 640,
+                "height": 640,
+                "steps": 6,
+                "cfg": 1.5,
+                "denoise": 0.9,
+                "template_variables": {"source_marker": "saved-preview"},
+            }]
+            profile_path.write_text(json.dumps(profile_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             first = asyncio.run(
                 state.create_avatar_profile_head_seed_batch(
                     profile_id="Jane_Avatar",
-                    payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=4, anchor_seed=424242),
+                    payload=AvatarProfileHeadSeedBatchRequest(
+                        batch_size=4,
+                        anchor_preview_id="saved-face-preview",
+                        anchor_seed=424242,
+                    ),
                 )
             )
             kept_id = first["batch"]["previews"][1]["preview_id"]
             kept_seed = first["batch"]["previews"][1]["seed"]
-            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
             metadata = json.loads(profile_path.read_text(encoding="utf-8"))
             previews = metadata["prompt_workspaces"]["head_face"]["seed_batch"]["previews"]
             for preview in previews:
@@ -4718,6 +4739,13 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(first["batch"]["previews"][0]["identity_anchor"])
         self.assertTrue(first["batch"]["previews"][0]["kept"])
         self.assertEqual(len({preview["seed"] for preview in first["batch"]["previews"]}), 4)
+        self.assertEqual(first["batch"]["anchor_source_preview_id"], "saved-face-preview")
+        self.assertEqual(first["batch"]["prompt"], "exact detailed saved face prompt")
+        self.assertEqual(first["batch"]["negative_prompt"], "exact saved negative prompt")
+        self.assertEqual(first["batch"]["previews"][0]["steps"], 6)
+        self.assertEqual(first["batch"]["previews"][0]["cfg"], 1.5)
+        self.assertEqual(first["batch"]["previews"][0]["denoise"], 0.9)
+        self.assertEqual(first["batch"]["previews"][0]["template_variables"]["source_marker"], "saved-preview")
         self.assertEqual(first["batch"]["remaining_count"], 4)
         self.assertTrue(all(preview["seed"] for preview in first["batch"]["previews"]))
         self.assertEqual(len(second["batch"]["previews"]), 4)

@@ -2750,6 +2750,7 @@ class NodeControlState:
             "negative_prompt": negative_prompt,
             "catalog_id": compiled_catalog_prompt.get("catalog_id") if isinstance(compiled_catalog_prompt, dict) else None,
             "catalog_modified_ns": compiled_catalog_prompt.get("catalog_modified_ns") if isinstance(compiled_catalog_prompt, dict) else None,
+            "template_variables": {"avatar_name": avatar_name},
             "skip_background_removal": True,
             "submitted_at": submitted_at,
             "created_at": now,
@@ -2890,30 +2891,78 @@ class NodeControlState:
         if not metadata:
             raise ValueError("avatar_profile_not_found")
         workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
+        anchor_seed = self._coerce_manual_image_seed(payload.anchor_seed) if payload.anchor_seed is not None else None
+        anchor_preview_id = str(payload.anchor_preview_id or "").strip()
+        preview_history = [item for item in list(workspace.get("preview_history") or []) if isinstance(item, dict)]
+        anchor_source_preview = next(
+            (
+                preview
+                for preview in reversed(preview_history)
+                if anchor_preview_id and str(preview.get("preview_id") or "").strip() == anchor_preview_id
+            ),
+            None,
+        )
+        if anchor_source_preview is None and anchor_seed is not None:
+            anchor_source_preview = next(
+                (
+                    preview
+                    for preview in reversed(preview_history)
+                    if self._coerce_manual_image_seed(preview.get("seed")) == anchor_seed
+                    and str(preview.get("status") or "").strip() in {"completed", "completed_with_fallback"}
+                ),
+                None,
+            )
+        if isinstance(anchor_source_preview, dict):
+            anchor_seed = self._coerce_manual_image_seed(anchor_source_preview.get("seed"))
+        source_prompt_parts = (
+            anchor_source_preview.get("prompt_parts")
+            if isinstance(anchor_source_preview, dict) and isinstance(anchor_source_preview.get("prompt_parts"), dict)
+            else workspace.get("prompt_parts")
+        )
         prompt_parts = self._avatar_profile_normalized_head_prompt_parts(
             profile=metadata,
-            prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
+            prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else source_prompt_parts,
             fallback_prompt=str(payload.prompt or workspace.get("prompt") or "").strip(),
         )
         locked_prompt_parts = self._avatar_profile_normalized_head_prompt_locks(
-            payload.locked_prompt_parts if isinstance(payload.locked_prompt_parts, dict) else workspace.get("locked_prompt_parts")
+            payload.locked_prompt_parts
+            if isinstance(payload.locked_prompt_parts, dict)
+            else anchor_source_preview.get("locked_prompt_parts")
+            if isinstance(anchor_source_preview, dict)
+            else workspace.get("locked_prompt_parts")
         )
-        prompt = str(payload.prompt or "").strip() or self._avatar_profile_head_prompt_from_parts(
+        prompt = str(
+            payload.prompt
+            or (anchor_source_preview or {}).get("prompt")
+            or workspace.get("prompt")
+            or ""
+        ).strip() or self._avatar_profile_head_prompt_from_parts(
             prompt_parts=prompt_parts,
             profile=metadata,
         )
         if not prompt:
             prompt = self._avatar_profile_default_head_prompt(profile=metadata)
-        negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
-        template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID)["template"]
+        negative_prompt = str(
+            payload.negative_prompt
+            or (anchor_source_preview or {}).get("negative_prompt")
+            or workspace.get("negative_prompt")
+            or ""
+        ).strip()
+        template_id = str((anchor_source_preview or {}).get("template_id") or AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID).strip()
+        template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
         defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
         if not negative_prompt:
             negative_prompt = str(defaults.get("negative_prompt") or "").strip()
-        width = int(defaults.get("width") or 512)
-        height = int(defaults.get("height") or 512)
-        steps = int(defaults.get("steps") or 4)
-        cfg = float(defaults.get("cfg") or 1.2)
-        denoise = float(defaults.get("denoise") or 1.0)
+        width = int((anchor_source_preview or {}).get("width") or defaults.get("width") or 512)
+        height = int((anchor_source_preview or {}).get("height") or defaults.get("height") or 512)
+        steps = int((anchor_source_preview or {}).get("steps") or defaults.get("steps") or 4)
+        cfg = float((anchor_source_preview or {}).get("cfg") if (anchor_source_preview or {}).get("cfg") is not None else defaults.get("cfg") or 1.2)
+        denoise = float((anchor_source_preview or {}).get("denoise") if (anchor_source_preview or {}).get("denoise") is not None else defaults.get("denoise") or 1.0)
+        template_variables = (
+            dict(anchor_source_preview.get("template_variables") or {})
+            if isinstance(anchor_source_preview, dict)
+            else {}
+        )
         target_count = min(max(int(payload.batch_size or 20), 1), 20)
         seed_batch = workspace.get("seed_batch") if isinstance(workspace.get("seed_batch"), dict) else {}
         existing_previews = [item for item in list(seed_batch.get("previews") or []) if isinstance(item, dict)]
@@ -2944,12 +2993,15 @@ class NodeControlState:
                 and self._avatar_head_face_seed_batch_preview_is_usable(preview=preview)
             ][:target_count]
         now = datetime.now(timezone.utc).isoformat()
-        batch_id = str(seed_batch.get("batch_id") or f"head_face_seed_batch_{int(time.time())}")
+        batch_id = str(
+            seed_batch.get("batch_id")
+            if seed_batch and (preserve_existing or keep_ids or payload.manual_seed_preview_id)
+            else f"head_face_seed_batch_{int(time.time())}"
+        )
         requested_selected_preview_id = str(payload.selected_preview_id or "").strip()
         selected_preview_id = requested_selected_preview_id or str(seed_batch.get("selected_preview_id") or "").strip()
         manual_seed_preview_id = str(payload.manual_seed_preview_id or "").strip()
         manual_seed = self._coerce_manual_image_seed(payload.manual_seed) if payload.manual_seed is not None else None
-        anchor_seed = self._coerce_manual_image_seed(payload.anchor_seed) if payload.anchor_seed is not None else None
         if manual_seed_preview_id and manual_seed is None:
             raise ValueError("avatar_head_seed_batch_manual_seed_required")
 
@@ -3007,6 +3059,8 @@ class NodeControlState:
                         now=now,
                         slot_index=1,
                         anchor_seed=anchor_seed,
+                        template_variables=template_variables,
+                        template_id=template_id,
                     ),
                     "kept": True,
                     "identity_anchor": True,
@@ -3037,6 +3091,8 @@ class NodeControlState:
                     denoise=denoise,
                     now=now,
                     slot_index=len(previews) + 1,
+                    template_variables=template_variables,
+                    template_id=template_id,
                 )
             )
         previews = [
@@ -3080,6 +3136,7 @@ class NodeControlState:
             "negative_prompt": negative_prompt,
             "selected_preview_id": selected_preview_id,
             "selected_seed": selected_preview.get("seed") if isinstance(selected_preview, dict) else None,
+            "anchor_source_preview_id": str((anchor_source_preview or {}).get("preview_id") or "").strip() or None,
             "previews": previews,
             "updated_at": now,
         }
@@ -15543,6 +15600,7 @@ class AvatarProfileHeadSeedBatchRequest(BaseModel):
     selected_preview_id: str | None = None
     manual_seed_preview_id: str | None = None
     manual_seed: int | str | None = None
+    anchor_preview_id: str | None = None
     anchor_seed: int | str | None = None
     batch_size: int | None = 20
 
