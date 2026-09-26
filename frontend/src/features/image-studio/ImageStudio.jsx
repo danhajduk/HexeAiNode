@@ -222,6 +222,8 @@ export function ImageStudio({
   initialInterviewOpen = false,
   initialInterviewStep = 0,
   runtimeStatus = null,
+  dataLoading = false,
+  dataError = "",
   promptHelperBusy = false,
   interviewBusy = false,
   characterProfiles = [],
@@ -229,6 +231,7 @@ export function ImageStudio({
   onImprovePrompt,
   onInterviewQuestion,
   onSaveCharacterDraft,
+  onRefreshData,
   onOpenLegacy,
   onClose,
 }) {
@@ -511,6 +514,14 @@ export function ImageStudio({
           <button className="btn" type="button" onClick={onClose}>Close Studio</button>
         </div>
       </header>
+
+      {dataLoading ? <div className="image-studio-data-state">Loading Image Studio data…</div> : null}
+      {dataError ? (
+        <div className="image-studio-data-state is-error">
+          <span>{dataError}</span>
+          <button className="btn" type="button" onClick={onRefreshData}>Retry</button>
+        </div>
+      ) : null}
 
       <div className={`image-studio-progress ${studioSteps.length === 5 ? "has-five-steps" : ""}`} aria-label="Image Studio steps">
         {studioSteps.map((step, index) => (

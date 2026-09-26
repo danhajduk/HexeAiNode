@@ -127,6 +127,12 @@ export function resolveManualGenerationTracking({ busy = false, result = null, p
   };
 }
 
+export const IMAGE_STUDIO_DATA_ENDPOINTS = [
+  "/api/comfyui/templates",
+  "/api/services/status",
+  "/api/avatar-generation",
+];
+
 function ThemeToggle() {
   const [theme, setLocalTheme] = useState(getTheme());
 
@@ -146,6 +152,7 @@ function ThemeToggle() {
 export default function App() {
   const setupCompletionRedirectArmedRef = useRef(false);
   const [routeHash, setRouteHash] = useState(() => window.location.hash || "#/");
+  const imageStudioOpen = isImageStudioRoute(routeHash);
   const [backendStatus, setBackendStatus] = useState("loading");
   const [pendingApprovalUrl, setPendingApprovalUrl] = useState("");
   const [nodeId, setNodeId] = useState("");
@@ -216,6 +223,7 @@ export default function App() {
   const [avatarGenerationPayload, setAvatarGenerationPayload] = useState(null);
   const [avatarGenerationBusy, setAvatarGenerationBusy] = useState(false);
   const [avatarGenerationResult, setAvatarGenerationResult] = useState(null);
+  const [imageStudioDataLoading, setImageStudioDataLoading] = useState(false);
   const [runningAdminAction, setRunningAdminAction] = useState("");
   const [adminActionState, setAdminActionState] = useState("");
   const [uiState, setUiState] = useState(() =>
@@ -484,6 +492,37 @@ export default function App() {
     );
   }
 
+  async function loadImageStudioData() {
+    setImageStudioDataLoading(true);
+    setError("");
+    try {
+      const [templatesResult, servicesResult, profilesResult] = await Promise.allSettled(
+        IMAGE_STUDIO_DATA_ENDPOINTS.map((endpoint) => apiGet(endpoint))
+      );
+      const failures = [];
+      if (templatesResult.status === "fulfilled") {
+        setComfyuiTemplateCatalogPayload(templatesResult.value);
+      } else {
+        failures.push("templates");
+      }
+      if (servicesResult.status === "fulfilled") {
+        setManualGenerationRuntimeStatus(servicesResult.value);
+      } else {
+        failures.push("runtime status");
+      }
+      if (profilesResult.status === "fulfilled") {
+        setAvatarGenerationPayload(profilesResult.value);
+      } else {
+        failures.push("character profiles");
+      }
+      if (failures.length) {
+        setError(`Image Studio could not load: ${failures.join(", ")}.`);
+      }
+    } finally {
+      setImageStudioDataLoading(false);
+    }
+  }
+
   async function loadExecutionQueueDiagnostics() {
     try {
       const executionQueuePayload = await apiGet("/api/execution/queues");
@@ -494,6 +533,10 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (imageStudioOpen) {
+      void loadImageStudioData();
+      return undefined;
+    }
     let cancelled = false;
     let timeoutId;
 
@@ -522,7 +565,7 @@ export default function App() {
         window.clearTimeout(timeoutId);
       }
     };
-  }, []);
+  }, [imageStudioOpen]);
 
   useEffect(() => {
     const operationalSection = resolveOperationalSection(routeHash);
@@ -2445,7 +2488,6 @@ export default function App() {
   const setupActions = buildSetupActions();
   const enabledProviderSummary = uiState.capabilitySummary.enabledProviders.join(", ");
   const currentOperationalSection = resolveOperationalSection(routeHash);
-  const imageStudioOpen = isImageStudioRoute(routeHash);
   const avatarGenerationProfileId = resolveAvatarGenerationProfileId(routeHash);
   const avatarGenerationDetailTab = resolveAvatarGenerationDetailTab(routeHash);
   const operationalSections = [
@@ -2759,7 +2801,7 @@ export default function App() {
       uiState,
     },
   };
-  const isBackendUnavailable = !uiState.meta.apiReachable;
+  const isBackendUnavailable = !uiState.meta.apiReachable && !imageStudioOpen;
 
   return (
     <div className="shell">
@@ -2837,7 +2879,7 @@ export default function App() {
           </article>
         </section>
       ) : null}
-      {!isProviderSetupRoute ? (
+      {!isProviderSetupRoute && !imageStudioOpen ? (
         <section className="card app-header">
           <div className="app-header-top">
             <div>
@@ -2883,7 +2925,30 @@ export default function App() {
         </section>
       ) : null}
 
-      {isIdentityMode ? (
+      {imageStudioOpen ? (
+        <ImageStudio
+          templates={Array.isArray(comfyuiTemplateCatalogPayload?.templates) ? comfyuiTemplateCatalogPayload.templates : []}
+          runtimeStatus={manualGenerationRuntimeStatus}
+          dataLoading={imageStudioDataLoading}
+          dataError={error}
+          promptHelperBusy={manualImagePromptHelperBusy}
+          interviewBusy={characterInterviewBusy}
+          characterProfiles={Array.isArray(avatarGenerationPayload?.profiles) ? avatarGenerationPayload.profiles : []}
+          characterSaveBusy={avatarGenerationBusy}
+          onRefreshData={loadImageStudioData}
+          onImprovePrompt={onImproveManualImagePrompt}
+          onInterviewQuestion={onCharacterInterviewQuestion}
+          onSaveCharacterDraft={onSaveAvatarProfile}
+          onOpenLegacy={() => { window.location.hash = buildOperationalRoute("manual_image"); }}
+          onClose={() => {
+            if (window.opener) {
+              window.close();
+            } else {
+              window.location.hash = buildOperationalRoute();
+            }
+          }}
+        />
+      ) : isIdentityMode ? (
         <IdentityScreen
           nodeId={nodeId}
           mqttHost={mqttHost}
@@ -2905,26 +2970,6 @@ export default function App() {
           secondaryActions={setupActions.secondaryActions}
           dangerActions={setupActions.dangerActions}
           completionState={completionState}
-        />
-      ) : isOperationalMode && imageStudioOpen ? (
-        <ImageStudio
-          templates={Array.isArray(comfyuiTemplateCatalogPayload?.templates) ? comfyuiTemplateCatalogPayload.templates : []}
-          runtimeStatus={manualGenerationRuntimeStatus}
-          promptHelperBusy={manualImagePromptHelperBusy}
-          interviewBusy={characterInterviewBusy}
-          characterProfiles={Array.isArray(avatarGenerationPayload?.profiles) ? avatarGenerationPayload.profiles : []}
-          characterSaveBusy={avatarGenerationBusy}
-          onImprovePrompt={onImproveManualImagePrompt}
-          onInterviewQuestion={onCharacterInterviewQuestion}
-          onSaveCharacterDraft={onSaveAvatarProfile}
-          onOpenLegacy={() => { window.location.hash = buildOperationalRoute("manual_image"); }}
-          onClose={() => {
-            if (window.opener) {
-              window.close();
-            } else {
-              window.location.hash = buildOperationalRoute();
-            }
-          }}
         />
       ) : isOperationalMode ? (
         <OperationalDashboard {...operationalDashboardProps} />

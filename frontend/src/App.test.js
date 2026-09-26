@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { buildComfyuiWebuiBrowserUrl, resolveManualGenerationTracking } from "./App";
+import { IMAGE_STUDIO_DATA_ENDPOINTS, buildComfyuiWebuiBrowserUrl, resolveManualGenerationTracking } from "./App";
 import { buildDashboardUiState } from "./uiStateModel";
+
+describe("Image Studio data boundary", () => {
+  it("loads only templates, runtime status, and character profiles", () => {
+    expect(IMAGE_STUDIO_DATA_ENDPOINTS).toEqual([
+      "/api/comfyui/templates",
+      "/api/services/status",
+      "/api/avatar-generation",
+    ]);
+  });
+});
 
 describe("buildComfyuiWebuiBrowserUrl", () => {
   it("opens localhost bridge URLs on the current node UI hostname", () => {

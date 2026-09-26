@@ -4184,6 +4184,22 @@ h2 {
   }
 }
 
+.image-studio-data-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid hsl(var(--sx-accent) / 0.5);
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-accent) / 0.08);
+}
+
+.image-studio-data-state.is-error {
+  border-color: hsl(var(--sx-danger) / 0.55);
+  background: hsl(var(--sx-danger) / 0.08);
+}
+
 @media (max-width: 640px) {
   .app-frame {
     padding: 12px;
