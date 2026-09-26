@@ -572,7 +572,16 @@ case "$command" in
     compose logs --tail "${COMFYUI_LOG_TAIL:-100}" comfyui
     ;;
   ready)
-    "$0" "$target" start
+    needs_start=false
+    for runtime in $(each_target); do
+      if ! health_probe "$runtime" >/dev/null 2>&1; then
+        needs_start=true
+        break
+      fi
+    done
+    if [[ "$needs_start" == "true" ]]; then
+      "$0" "$target" start
+    fi
     for runtime in $(each_target); do
       wait_ready "$runtime"
     done
