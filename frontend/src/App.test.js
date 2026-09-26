@@ -4,11 +4,12 @@ import { IMAGE_STUDIO_DATA_ENDPOINTS, buildComfyuiWebuiBrowserUrl, resolveManual
 import { buildDashboardUiState } from "./uiStateModel";
 
 describe("Image Studio data boundary", () => {
-  it("loads only templates, runtime status, and character profiles", () => {
+  it("loads only templates, runtime status, character profiles, and the face catalog", () => {
     expect(IMAGE_STUDIO_DATA_ENDPOINTS).toEqual([
       "/api/comfyui/templates",
       "/api/services/status",
       "/api/avatar-generation",
+      "/api/image-studio/face-feature-catalog",
     ]);
   });
 });

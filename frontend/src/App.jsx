@@ -131,6 +131,7 @@ export const IMAGE_STUDIO_DATA_ENDPOINTS = [
   "/api/comfyui/templates",
   "/api/services/status",
   "/api/avatar-generation",
+  "/api/image-studio/face-feature-catalog",
 ];
 
 function ThemeToggle() {
@@ -221,6 +222,7 @@ export default function App() {
   const [manualImagePoseHelperBusy, setManualImagePoseHelperBusy] = useState(false);
   const [manualImageVisionBusy, setManualImageVisionBusy] = useState(false);
   const [avatarGenerationPayload, setAvatarGenerationPayload] = useState(null);
+  const [imageStudioFaceFeatureCatalog, setImageStudioFaceFeatureCatalog] = useState(null);
   const [avatarGenerationBusy, setAvatarGenerationBusy] = useState(false);
   const [avatarGenerationResult, setAvatarGenerationResult] = useState(null);
   const [imageStudioDataLoading, setImageStudioDataLoading] = useState(false);
@@ -498,7 +500,7 @@ export default function App() {
     setImageStudioDataLoading(true);
     setError("");
     try {
-      const [templatesResult, servicesResult, profilesResult] = await Promise.allSettled(
+      const [templatesResult, servicesResult, profilesResult, faceCatalogResult] = await Promise.allSettled(
         IMAGE_STUDIO_DATA_ENDPOINTS.map((endpoint) => apiGet(endpoint))
       );
       const failures = [];
@@ -516,6 +518,11 @@ export default function App() {
         setAvatarGenerationPayload(profilesResult.value);
       } else {
         failures.push("character profiles");
+      }
+      if (faceCatalogResult.status === "fulfilled") {
+        setImageStudioFaceFeatureCatalog(faceCatalogResult.value);
+      } else {
+        failures.push("face feature catalog");
       }
       if (failures.length) {
         setError(`Image Studio could not load: ${failures.join(", ")}.`);
@@ -3004,6 +3011,7 @@ export default function App() {
       {imageStudioOpen ? (
         <ImageStudio
           templates={Array.isArray(comfyuiTemplateCatalogPayload?.templates) ? comfyuiTemplateCatalogPayload.templates : []}
+          faceFeatureCatalog={imageStudioFaceFeatureCatalog}
           runtimeStatus={manualGenerationRuntimeStatus}
           generationActivity={manualImageGenerationPayload}
           facePreviewResult={imageStudioFacePreviewResult}

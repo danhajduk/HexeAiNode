@@ -246,11 +246,28 @@ function faceFeaturePromptDescription(groupId, value) {
   return FACE_FEATURE_PROMPT_DESCRIPTIONS[groupId]?.[value] || value;
 }
 
-function inferFaceFeatureSelections(appearance) {
+function faceFeatureGroupsFromCatalog(catalog) {
+  if (!Array.isArray(catalog?.groups)) return FACE_FEATURE_OPTION_GROUPS;
+  return catalog.groups.map((group) => ({
+    id: String(group?.id || ""),
+    label: String(group?.label || group?.id || ""),
+    multiple: Boolean(group?.multiple),
+    options: Object.keys(group?.options && typeof group.options === "object" ? group.options : {}),
+    optionDefinitions: group?.options && typeof group.options === "object" ? group.options : {},
+  })).filter((group) => group.id && group.options.length);
+}
+
+function catalogFeaturePromptDescription(catalog, groupId, value) {
+  const group = Array.isArray(catalog?.groups) ? catalog.groups.find((item) => item?.id === groupId) : null;
+  return String(group?.options?.[value]?.description || faceFeaturePromptDescription(groupId, value));
+}
+
+function inferFaceFeatureSelections(appearance, catalog = null) {
   const text = String(appearance || "").toLowerCase();
-  return FACE_FEATURE_OPTION_GROUPS.reduce((selections, group) => {
+  const groups = faceFeatureGroupsFromCatalog(catalog);
+  return groups.reduce((selections, group) => {
     const matches = group.options.filter((value) => {
-      const description = faceFeaturePromptDescription(group.id, value).toLowerCase();
+      const description = catalogFeaturePromptDescription(catalog, group.id, value).toLowerCase();
       return text.includes(description) || text.includes(`${group.id}: ${value}`);
     });
     return matches.length ? { ...selections, [group.id]: group.multiple ? matches : matches.slice(0, 1) } : selections;
@@ -334,10 +351,10 @@ function FaceFeatureOptionVisual({ group, option }) {
   );
 }
 
-function composeFaceDescription(selections, customDetails) {
-  const selectedDetails = FACE_FEATURE_OPTION_GROUPS.flatMap((group) => {
+function composeFaceDescription(selections, customDetails, catalog = null) {
+  const selectedDetails = faceFeatureGroupsFromCatalog(catalog).flatMap((group) => {
     const values = selections[group.id] || [];
-    const descriptions = values.map((value) => faceFeaturePromptDescription(group.id, value));
+    const descriptions = values.map((value) => catalogFeaturePromptDescription(catalog, group.id, value));
     return descriptions.length ? [`${group.id}: ${descriptions.join(", ")}`] : [];
   });
   const custom = String(customDetails || "").trim();
@@ -504,6 +521,7 @@ function templateCharacterPath(template) {
 
 export function ImageStudio({
   templates = [],
+  faceFeatureCatalog = null,
   initialCreationType = "",
   initialCharacterPath = "",
   initialSelectedTemplateId = "",
@@ -576,6 +594,7 @@ export function ImageStudio({
     }),
     [characterPath, creationType, templates]
   );
+  const faceFeatureGroups = useMemo(() => faceFeatureGroupsFromCatalog(faceFeatureCatalog), [faceFeatureCatalog]);
   const facePreviewTemplate = useMemo(
     () => templates.find((template) => template?.template_id === "template.avatar_head_face_preview.realvisxl.v1") || null,
     [templates]
@@ -728,12 +747,12 @@ export function ImageStudio({
       : selected.includes(option) ? [] : [option];
     const next = { ...faceFeatureSelections, [group.id]: nextValues };
     setFaceFeatureSelections(next);
-    updateCharacterBrief("appearance", composeFaceDescription(next, faceCustomDetails));
+    updateCharacterBrief("appearance", composeFaceDescription(next, faceCustomDetails, faceFeatureCatalog));
   }
 
   function updateFaceCustomDetails(value) {
     setFaceCustomDetails(value);
-    updateCharacterBrief("appearance", composeFaceDescription(faceFeatureSelections, value));
+    updateCharacterBrief("appearance", composeFaceDescription(faceFeatureSelections, value, faceFeatureCatalog));
   }
 
   async function saveCharacterProgress({ closeAfter = false } = {}) {
@@ -785,7 +804,7 @@ export function ImageStudio({
       setSelectedTemplateId(candidateTemplate.template_id);
     }
     setCharacterBrief((current) => ({ ...current, ...savedBrief }));
-    setFaceFeatureSelections(savedFeatures?.selections || inferFaceFeatureSelections(savedBrief.appearance));
+    setFaceFeatureSelections(savedFeatures?.selections || inferFaceFeatureSelections(savedBrief.appearance, faceFeatureCatalog));
     setFaceCustomDetails(savedFeatures?.custom_details || "");
     setFacePromptDraft(savedFeatures?.llm_refinement || "");
     setCharacterProfileId(profile.profile_id || "");
@@ -884,8 +903,7 @@ export function ImageStudio({
     const seed = facePreview?.seed_text || facePreview?.seed;
     const refinement = promptOverride || facePromptDraft;
     const result = await onGenerateFacePreview(profileId, {
-      prompt: buildFacePreviewPrompt(characterBrief, faceFeatureSelections, refinement),
-      negative_prompt: buildFacePreviewNegativePrompt(faceFeatureSelections),
+      refinement,
       seed: locked && seed !== undefined && seed !== null ? seed : null,
       lock_seed: locked && seed !== undefined && seed !== null,
     });
@@ -897,12 +915,12 @@ export function ImageStudio({
     if (!faceTweakInstruction.trim() || facePreviewSeed === undefined || facePreviewSeed === null || promptHelperBusy || facePreviewTracking) return;
     setFaceRefinementError("");
     setFaceRefinementStatus("Asking the local text LLM to refine the prompt…");
-    const currentPrompt = buildFacePreviewPrompt(characterBrief, faceFeatureSelections, facePromptDraft);
+    const currentPrompt = String(facePreview?.prompt || characterBrief.appearance || "").trim();
     const refined = await onImprovePrompt?.({
       template_id: "template.avatar_head_face_preview.realvisxl.v1",
       mode: "txt2img",
       prompt: currentPrompt,
-      negative_prompt: buildFacePreviewNegativePrompt(faceFeatureSelections),
+      negative_prompt: String(facePreview?.negative_prompt || ""),
       width: 512,
       height: 512,
       reference_image_provided: false,
@@ -1200,7 +1218,7 @@ export function ImageStudio({
                 <div className="image-studio-face-builder">
                   <p>Select the traits that should stay consistent. Choose one per group unless the group allows multiple.</p>
                   <div className="image-studio-face-options">
-                    {FACE_FEATURE_OPTION_GROUPS.map((group) => (
+                    {faceFeatureGroups.map((group) => (
                       <fieldset key={group.id}>
                         <legend>{group.label}{group.multiple ? <small> Select any</small> : null}</legend>
                         <div className={`image-studio-option-chips ${FACE_FEATURE_OPTION_SPRITES[group.id] ? "has-feature-images" : ""}`}>
@@ -1212,7 +1230,7 @@ export function ImageStudio({
                                 type="button"
                                 aria-pressed={selected}
                                 key={option}
-                                title={faceFeaturePromptDescription(group.id, option)}
+                                title={catalogFeaturePromptDescription(faceFeatureCatalog, group.id, option)}
                                 onClick={() => toggleFaceFeature(group, option)}
                               >
                                 <FaceFeatureOptionVisual group={group} option={option} />
