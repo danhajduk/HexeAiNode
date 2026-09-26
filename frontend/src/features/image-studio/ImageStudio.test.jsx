@@ -41,6 +41,21 @@ describe("ImageStudio", () => {
     expect(negative).toContain("black hair");
   });
 
+  it("makes selected hair length a primary requirement and rejects conflicting lengths", () => {
+    const prompt = buildFacePreviewPrompt(
+      { name: "Hexe", appearance: "shoulder-length blonde hair", visual_style: "realistic" },
+      { "hair length": ["shoulder-length"] },
+    );
+    const negative = buildFacePreviewNegativePrompt({ "hair length": ["shoulder-length"] });
+
+    expect(prompt).toContain("PRIMARY HAIR LENGTH REQUIREMENT");
+    expect(prompt).toContain("shoulder-length hair ending at the shoulders:1.40");
+    expect(prompt).toContain("full hair silhouette and its endpoints visible in frame");
+    expect(negative).toContain("short hair");
+    expect(negative).toContain("chin-length hair");
+    expect(negative).toContain("hair extending below the shoulders");
+  });
+
   it("drops a truncated JSON refinement instead of adding it to the prompt", () => {
     const prompt = buildFacePreviewPrompt(
       { name: "Hexe", appearance: "blonde hair" },

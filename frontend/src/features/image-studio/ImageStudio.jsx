@@ -360,6 +360,8 @@ function buildFacePreviewPrompt(brief, selections = {}, refinement = "") {
   const faceShapeDescription = faceShape ? faceFeaturePromptDescription("face shape", faceShape) : "";
   const hairColor = selections["hair color"]?.[0];
   const hairColorDescription = hairColor ? faceFeaturePromptDescription("hair color", hairColor) : "";
+  const hairLength = selections["hair length"]?.[0];
+  const hairLengthDescription = hairLength ? faceFeaturePromptDescription("hair length", hairLength) : "";
   let safeRefinement = String(refinement || "").trim();
   if (safeRefinement.startsWith("{")) {
     try {
@@ -375,6 +377,7 @@ function buildFacePreviewPrompt(brief, selections = {}, refinement = "") {
     brief?.concept ? `Character concept: ${brief.concept}.` : "",
     faceShapeDescription ? `PRIMARY FACE SHAPE REQUIREMENT: (${faceShapeDescription}:1.35). The facial silhouette must be unmistakably ${faceShape}.` : "",
     hairColorDescription ? `PRIMARY HAIR COLOR REQUIREMENT: (${hairColorDescription}:1.45). The hair must read clearly and unmistakably as ${hairColor}, including at the roots and in shadow.` : "",
+    hairLengthDescription ? `PRIMARY HAIR LENGTH REQUIREMENT: (${hairLengthDescription}:1.40). The visible hair ends must unmistakably match ${hairLength}; keep the full hair silhouette and its endpoints visible in frame.` : "",
     brief?.appearance ? `Face and hair: ${brief.appearance}.` : "",
     brief?.expression ? `Expression: ${brief.expression}.` : "Expression: neutral and relaxed.",
     "Front-facing head-and-shoulders composition, eyes looking directly at camera, symmetrical neutral pose, centered face, entire head visible.",
@@ -387,6 +390,7 @@ function buildFacePreviewPrompt(brief, selections = {}, refinement = "") {
 function buildFacePreviewNegativePrompt(selections = {}) {
   const faceShape = selections["face shape"]?.[0];
   const hairColor = selections["hair color"]?.[0];
+  const hairLength = selections["hair length"]?.[0];
   const conflictingShapes = {
     round: ["square face", "long face", "oblong face", "angular jaw", "narrow face", "pointed chin"],
     oval: ["square face", "extremely round face", "very long face", "angular jaw"],
@@ -413,10 +417,20 @@ function buildFacePreviewNegativePrompt(selections = {}) {
     pink: ["blonde hair", "brown hair", "black hair", "red hair", "natural hair color"],
     multicolored: ["single-color hair", "uniform hair color", "monochrome hair"],
   };
+  const conflictingHairLengths = {
+    bald: ["visible head hair", "long hair", "short hair", "hair strands"],
+    "buzz cut": ["bald head", "long hair", "chin-length hair", "shoulder-length hair", "hair covering ears"],
+    short: ["bald head", "buzz cut", "chin-length hair", "shoulder-length hair", "long hair", "waist-length hair"],
+    "chin-length": ["bald head", "buzz cut", "pixie cut", "cropped short hair", "shoulder-length hair", "long hair", "waist-length hair"],
+    "shoulder-length": ["bald head", "buzz cut", "pixie cut", "cropped hair", "short hair", "chin-length hair", "long hair", "waist-length hair", "hair ending above the jaw", "hair extending below the shoulders"],
+    long: ["bald head", "buzz cut", "pixie cut", "cropped hair", "short hair", "chin-length hair", "shoulder-length hair", "waist-length hair"],
+    "waist-length": ["bald head", "buzz cut", "pixie cut", "cropped hair", "short hair", "chin-length hair", "shoulder-length hair", "mid-back hair"],
+  };
   return [
     ...FACE_PREVIEW_NEGATIVE_PROMPT.split(", "),
     ...(conflictingShapes[faceShape] || []),
     ...(conflictingHairColors[hairColor] || []),
+    ...(conflictingHairLengths[hairLength] || []),
   ].join(", ");
 }
 
