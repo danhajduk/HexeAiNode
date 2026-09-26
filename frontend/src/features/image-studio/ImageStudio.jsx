@@ -92,6 +92,24 @@ const FACE_FEATURE_OPTION_GROUPS = [
   { id: "facial hair", label: "Facial hair", multiple: true, options: ["clean-shaven", "stubble", "mustache", "goatee", "short beard", "full beard", "sideburns", "shaped beard"] },
 ];
 
+const FACE_FEATURE_PROMPT_DESCRIPTIONS = {
+  "eye shape": {
+    almond: "almond-shaped eyes, gently tapered inner and outer corners, softly curved eyelids, balanced proportions, iris partially covered by the upper and lower lids",
+    round: "round eyes, visibly curved upper and lower lids, open circular appearance, more sclera visible above and below the iris",
+    hooded: "hooded eyes, upper eyelid fold descending over and partially concealing the natural crease, softly shaded lid space",
+    monolid: "monolid eyes, smooth upper eyelids without a prominent visible crease, clean uninterrupted lid contour",
+    upturned: "upturned eyes, outer corners sitting slightly higher than the inner corners, gently rising lower lash line",
+    downturned: "downturned eyes, outer corners sitting slightly lower than the inner corners, softly descending outer lash line",
+    "deep-set": "deep-set eyes positioned beneath a prominent brow ridge, recessed eyelids with natural shadow around the eye socket",
+    "wide-set": "wide-set eyes with greater than one eye-width of space between the inner corners, balanced symmetrical placement",
+    "close-set": "close-set eyes with less than one eye-width of space between the inner corners, balanced symmetrical placement",
+  },
+};
+
+function faceFeaturePromptDescription(groupId, value) {
+  return FACE_FEATURE_PROMPT_DESCRIPTIONS[groupId]?.[value] || value;
+}
+
 const OPTION_COLOR_SWATCHES = {
   "skin tone": {
     porcelain: "#f6dfd0", fair: "#edc8ad", light: "#dfb090", "light-medium": "#c9906b",
@@ -172,7 +190,8 @@ function FaceFeatureOptionVisual({ group, option }) {
 function composeFaceDescription(selections, customDetails) {
   const selectedDetails = FACE_FEATURE_OPTION_GROUPS.flatMap((group) => {
     const values = selections[group.id] || [];
-    return values.length ? [`${group.id}: ${values.join(", ")}`] : [];
+    const descriptions = values.map((value) => faceFeaturePromptDescription(group.id, value));
+    return descriptions.length ? [`${group.id}: ${descriptions.join(", ")}`] : [];
   });
   const custom = String(customDetails || "").trim();
   return [...selectedDetails, ...(custom ? [custom] : [])].join("; ");
@@ -884,6 +903,7 @@ export function ImageStudio({
                                 type="button"
                                 aria-pressed={selected}
                                 key={option}
+                                title={faceFeaturePromptDescription(group.id, option)}
                                 onClick={() => toggleFaceFeature(group, option)}
                               >
                                 <FaceFeatureOptionVisual group={group} option={option} />
@@ -989,4 +1009,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, buildFacePreviewPrompt, characterDraftBrief, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, buildFacePreviewPrompt, characterDraftBrief, composeFaceDescription, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };

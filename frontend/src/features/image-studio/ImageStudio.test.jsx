@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildFacePreviewPrompt, characterDraftBrief, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildFacePreviewPrompt, characterDraftBrief, composeFaceDescription, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -20,6 +20,15 @@ describe("ImageStudio", () => {
     expect(prompt).toContain("eyes looking directly at camera");
     expect(prompt).toContain("plain neutral-gray background");
     expect(prompt).not.toContain("Body and proportions");
+  });
+
+  it("expands eye-shape selections into structural prompt language", () => {
+    expect(composeFaceDescription({ "eye shape": ["almond"] }, "")).toContain(
+      "almond-shaped eyes, gently tapered inner and outer corners, softly curved eyelids, balanced proportions, iris partially covered by the upper and lower lids"
+    );
+    expect(composeFaceDescription({ "eye shape": ["wide-set"] }, "")).toContain(
+      "greater than one eye-width of space between the inner corners"
+    );
   });
   it("starts with the three creation types", () => {
     const markup = renderToStaticMarkup(<ImageStudio />);
