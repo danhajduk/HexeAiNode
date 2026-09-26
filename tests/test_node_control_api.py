@@ -842,7 +842,9 @@ class NodeControlApiTests(unittest.TestCase):
                 self.assertEqual(preview["local_runtime_assignment"]["lora"], "sdxl_lightning_4step_lora.safetensors")
                 self.assertTrue(preview["would_execute"])
                 self.assertTrue(preview["provider_resolution"]["allowed"])
-                self.assertEqual(preview["provider_resolution"]["selected_provider"], "local_image")
+                self.assertEqual(preview["provider_resolution"]["selected_provider"], "local")
+                self.assertEqual(preview["provider_resolution"]["resolution_metadata"]["concrete_executor"], "visual_runtime")
+                self.assertFalse(preview["provider_resolution"]["resolution_metadata"]["cloud_used"])
                 self.assertEqual(preview["provider_resolution"]["selected_model"], "comfyui_gpu")
 
         asyncio.run(run_scenario())
@@ -7933,14 +7935,58 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             result = await state._execute_direct_now(request=request)
 
             self.assertEqual(result["output"]["template_id"], "template.scenery_landscape.realvisxl.v1")
+            self.assertEqual(result["output"]["images"][0]["mime_type"], "image/png")
+            self.assertEqual(result["output"]["images"][0]["width"], 1344)
+            self.assertEqual(result["output"]["images"][0]["height"], 768)
+            self.assertEqual(result["resolution_metadata"]["provider_class"], "local")
+            self.assertEqual(result["resolution_metadata"]["execution_location"], "local")
+            self.assertFalse(result["resolution_metadata"]["cloud_used"])
             self.assertEqual(state.submitted_payload.template_id, "template.scenery_landscape.realvisxl.v1")
             self.assertIsNone(state.submitted_payload.negative_prompt)
-            self.assertIsNone(state.submitted_payload.width)
-            self.assertIsNone(state.submitted_payload.height)
+            self.assertEqual(state.submitted_payload.width, 1344)
+            self.assertEqual(state.submitted_payload.height, 768)
             self.assertIsNone(state.submitted_payload.seed)
-            self.assertIsNone(state.submitted_payload.steps)
+            self.assertEqual(state.submitted_payload.steps, 4)
             self.assertIsNone(state.submitted_payload.cfg)
             self.assertIsNone(state.submitted_payload.denoise)
+
+    def test_direct_local_image_controls_normalize_legacy_dimensions(self):
+        self.assertEqual(
+            NodeControlState._direct_visual_runtime_dimensions(
+                inputs={"size": "1536x1024", "target_width": 1672, "target_height": 941}
+            ),
+            (1536, 1024),
+        )
+        self.assertEqual(
+            NodeControlState._direct_visual_runtime_dimensions(
+                inputs={"target_width": 1672, "target_height": 941}
+            ),
+            (1672, 944),
+        )
+        self.assertEqual(NodeControlState._direct_visual_runtime_quality_steps(quality="low"), 4)
+        self.assertEqual(NodeControlState._direct_visual_runtime_quality_steps(quality="medium"), 6)
+        self.assertEqual(NodeControlState._direct_visual_runtime_quality_steps(quality="high"), 8)
+
+    def test_direct_local_image_timeout_respects_prompt_ceiling(self):
+        class _PromptBoundState(NodeControlState):
+            def _direct_execution_authorization_snapshot(self, *, request):
+                return SimpleNamespace(prompt_constraints={"max_timeout_s": 120})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = _PromptBoundState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+            )
+            request = TaskExecutionRequest(
+                task_id="direct-timeout",
+                task_family="task.image_generation",
+                requested_by="test",
+                timeout_s=180,
+                trace_id="trace-direct-timeout",
+            )
+
+            self.assertEqual(state._direct_visual_runtime_timeout_s(request=request), 120)
 
     def test_explicit_visual_template_takes_priority_over_image_type(self):
         inputs = {

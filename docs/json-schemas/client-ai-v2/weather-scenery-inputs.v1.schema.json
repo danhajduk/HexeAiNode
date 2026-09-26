@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai-v2/weather-scenery-inputs.v1.schema.json",
+  "title": "Weather Scenery Inputs V1",
+  "description": "Strict prompt-input contract for Interaction-owned weather background scenery prompts.",
+  "allOf": [
+    {"$ref": "image-generation-inputs.v1.schema.json"},
+    {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["image_type", "condition", "day_night"],
+      "properties": {
+        "image_type": {"const": "scenery"},
+        "condition": {"type": "string", "minLength": 1},
+        "day_night": {"type": "string", "enum": ["day", "night"]},
+        "location_context": {"type": "string"},
+        "visual_guidance": {"type": "string"},
+        "scene_recipe": {"type": "string"}
+      }
+    }
+  ]
+}

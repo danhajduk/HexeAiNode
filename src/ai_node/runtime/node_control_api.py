@@ -11707,7 +11707,7 @@ class NodeControlState:
             )
             selected = str(assignment.get("status") or "").strip().lower() == "selected"
             runtime_id = str(assignment.get("runtime_id") or "").strip() or None
-            provider_id = str(assignment.get("provider_id") or "local_image").strip() or "local_image"
+            provider_id = "local"
             return {
                 "allowed": selected,
                 "selected_provider": provider_id if selected else None,
@@ -11721,6 +11721,10 @@ class NodeControlState:
                 "resolution_metadata": {
                     "selected_provider": provider_id if selected else None,
                     "selected_model": runtime_id if selected else None,
+                    "provider_class": "local" if selected else None,
+                    "concrete_executor": "visual_runtime" if selected else None,
+                    "execution_location": "local" if selected else None,
+                    "cloud_used": False if selected else None,
                     "provider_selection_reason": "local_visual_runtime_assignment",
                     "runtime_lane": assignment.get("queue"),
                     "rejection_reason": None if selected else "visual_runtime_unavailable",
@@ -11840,8 +11844,13 @@ class NodeControlState:
             "provider_used": "vision_runtime",
             "model_used": model_id,
             "resolution_metadata": {
-                "selected_provider": "vision_runtime",
+                "selected_provider": "local",
                 "selected_model": model_id,
+                "provider_class": "local",
+                "concrete_executor": "vision_runtime",
+                "execution_location": "local",
+                "cloud_used": False,
+                "routing_policy_mode": self._direct_visual_runtime_routing_mode(request=request),
                 "runtime_lane": "vision_llm",
             },
             "completed_at": datetime.now(timezone.utc).isoformat(),
@@ -11884,24 +11893,40 @@ class NodeControlState:
         prompt = self._direct_visual_runtime_prompt(request=request)
         if not prompt:
             raise ValueError("image_generation_prompt_required")
+        width, height = self._direct_visual_runtime_dimensions(inputs=inputs)
+        output_format = str(inputs.get("output_format") or "png").strip().lower()
+        if output_format != "png":
+            raise ValueError("local_visual_runtime_output_format_unsupported")
+        steps = inputs.get("steps")
+        if steps is None:
+            steps = self._direct_visual_runtime_quality_steps(quality=inputs.get("quality"))
         template_id = self._direct_visual_runtime_requested_template_id(
             inputs=inputs,
             resolved_template=resolved_template,
         )
         if not template_id:
             template_id = self._direct_visual_runtime_template_id()
+        try:
+            template_payload = self.get_comfyui_template_catalog_entry(template_id=template_id)
+            template = template_payload.get("template") if isinstance(template_payload.get("template"), dict) else {}
+        except ValueError:
+            template = {}
+        template_defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+        width = width if width is not None else template_defaults.get("width")
+        height = height if height is not None else template_defaults.get("height")
+        steps = steps if steps is not None else template_defaults.get("steps")
         started = time.perf_counter()
-        timeout_s = max(int(request.timeout_s or 180), 180)
+        timeout_s = self._direct_visual_runtime_timeout_s(request=request)
         await self._wait_for_manual_comfyui_takeover_ready(timeout_s=timeout_s)
         payload = ManualImageGenerationRequest(
             template_id=template_id,
             mode=str(inputs.get("mode") or "txt2img").strip() or "txt2img",
             prompt=prompt,
             negative_prompt=inputs.get("negative_prompt"),
-            width=inputs.get("width"),
-            height=inputs.get("height"),
+            width=width,
+            height=height,
             seed=inputs.get("seed"),
-            steps=inputs.get("steps"),
+            steps=steps,
             cfg=inputs.get("cfg") if inputs.get("cfg") is not None else inputs.get("cfg_scale"),
             denoise=inputs.get("denoise"),
             batch_count=inputs.get("batch_count") or 1,
@@ -11947,12 +11972,18 @@ class NodeControlState:
             raise TimeoutError("visual_runtime_generation_timeout")
 
         latest_output = latest_job.get("latest_output") if isinstance(latest_job.get("latest_output"), dict) else None
+        canonical_image = self._direct_visual_runtime_canonical_image(
+            image=latest_output,
+            width=width,
+            height=height,
+        )
         return {
             "task_id": request.task_id,
             "status": "completed",
             "output": {
                 "text": latest_output.get("relative_path") if isinstance(latest_output, dict) else None,
                 "image": latest_output,
+                "images": [canonical_image] if canonical_image is not None else [],
                 "prompt_id": submission.get("prompt_id"),
                 "prompt_ids": submission.get("prompt_ids") or [],
                 "template_id": submission.get("template_id"),
@@ -11967,8 +11998,13 @@ class NodeControlState:
             "provider_used": "visual_runtime",
             "model_used": "comfyui_gpu",
             "resolution_metadata": {
-                "selected_provider": "visual_runtime",
+                "selected_provider": "local",
                 "selected_model": "comfyui_gpu",
+                "provider_class": "local",
+                "concrete_executor": "visual_runtime",
+                "execution_location": "local",
+                "cloud_used": False,
+                "routing_policy_mode": self._direct_visual_runtime_routing_mode(request=request),
                 "runtime_lane": str(getattr(request.queue, "runtime_lane", "") or "visual_gpu"),
                 "template_id": submission.get("template_id"),
                 "prompt_id": submission.get("prompt_id"),
@@ -12063,6 +12099,88 @@ class NodeControlState:
         if normalized_image_type == "scenery":
             return "template.scenery_landscape.realvisxl.v1"
         return ""
+
+    @staticmethod
+    def _direct_visual_runtime_quality_steps(*, quality: object) -> int | None:
+        normalized = str(quality or "").strip().lower()
+        return {"low": 4, "medium": 6, "high": 8}.get(normalized)
+
+    @classmethod
+    def _direct_visual_runtime_dimensions(cls, *, inputs: dict) -> tuple[int | None, int | None]:
+        width = inputs.get("width")
+        height = inputs.get("height")
+        size = str(inputs.get("size") or "").strip().lower()
+        if (width is None or height is None) and "x" in size:
+            size_width, _, size_height = size.partition("x")
+            try:
+                width = width if width is not None else int(size_width)
+                height = height if height is not None else int(size_height)
+            except ValueError:
+                raise ValueError("image_generation_size_invalid") from None
+        if width is None:
+            width = inputs.get("target_width")
+        if height is None:
+            height = inputs.get("target_height")
+        return (
+            cls._direct_visual_runtime_dimension(value=width, field_name="width"),
+            cls._direct_visual_runtime_dimension(value=height, field_name="height"),
+        )
+
+    @staticmethod
+    def _direct_visual_runtime_dimension(*, value: object, field_name: str) -> int | None:
+        if value is None:
+            return None
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"image_generation_{field_name}_invalid") from None
+        if parsed < 256 or parsed > 4096:
+            raise ValueError(f"image_generation_{field_name}_out_of_range")
+        return max(256, min(4096, int(round(parsed / 8.0) * 8)))
+
+    def _direct_visual_runtime_timeout_s(self, *, request: TaskExecutionRequest) -> int:
+        timeout_s = max(int(request.timeout_s or 60), 1)
+        authorization = self._direct_execution_authorization_snapshot(request=request)
+        prompt_constraints = (
+            authorization.prompt_constraints
+            if authorization is not None and isinstance(authorization.prompt_constraints, dict)
+            else {}
+        )
+        max_timeout_s = prompt_constraints.get("max_timeout_s")
+        if max_timeout_s is not None:
+            timeout_s = min(timeout_s, max(int(max_timeout_s), 1))
+        return timeout_s
+
+    @staticmethod
+    def _direct_visual_runtime_routing_mode(*, request: TaskExecutionRequest) -> str | None:
+        constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        routing_policy = constraints.get("routing_policy") if isinstance(constraints.get("routing_policy"), dict) else {}
+        mode = str(routing_policy.get("mode") or "").strip().lower()
+        return mode or None
+
+    @staticmethod
+    def _direct_visual_runtime_canonical_image(
+        *,
+        image: dict | None,
+        width: int | None,
+        height: int | None,
+    ) -> dict | None:
+        if not isinstance(image, dict):
+            return None
+        relative_path = str(image.get("relative_path") or "").strip()
+        url = str(image.get("url") or "").strip()
+        if not url and relative_path:
+            url = f"/api/manual-image-generation/outputs/{relative_path}"
+        suffix = Path(relative_path or str(image.get("filename") or "")).suffix.lower()
+        mime_type = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}.get(suffix, "image/png")
+        return {
+            "url": url or None,
+            "relative_path": relative_path or None,
+            "mime_type": mime_type,
+            "width": width,
+            "height": height,
+            "size_bytes": image.get("size_bytes"),
+        }
 
     @classmethod
     def _direct_visual_runtime_requested_template_id(
@@ -13059,7 +13177,7 @@ class NodeControlState:
                     {
                         "name": path.name,
                         "schema_id": f"https://hexe.local/schemas/client-ai-v2/{path.name}",
-                        "status": "Partially implemented",
+                        "status": "Implemented",
                         "path": str(path),
                         "api_path": f"/api/schemas/client-ai/v2/{path.name}",
                     }

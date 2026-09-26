@@ -2,15 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hexe.local/schemas/client-ai-v2/execution-request.v2.schema.json",
   "title": "Execution Request V2",
-  "description": "Proposed V2+ normal AI execution request. Not implemented yet.",
+  "description": "Implemented request contract for POST /api/execution/direct and /api/execution/route-preview.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "task_id",
     "task_family",
     "requested_by",
-    "trace_id",
-    "inputs"
+    "trace_id"
   ],
   "properties": {
     "task_id": {
@@ -31,7 +30,7 @@
         "string",
         "null"
       ],
-      "pattern": "^v[0-9]+\\.[0-9]+$"
+      "pattern": "^v[0-9]+(?:\\.[0-9]+){0,2}$"
     },
     "task_family": {
       "$ref": "#/$defs/taskFamily"
@@ -76,9 +75,6 @@
     "inputs": {
       "type": "object",
       "additionalProperties": true
-    },
-    "output_contract": {
-      "$ref": "#/$defs/outputContract"
     },
     "constraints": {
       "type": "object",
@@ -145,44 +141,8 @@
   "$defs": {
     "taskFamily": {
       "type": "string",
-      "enum": [
-        "task.classification",
-        "task.summarization",
-        "task.information_extraction",
-        "task.structured_extraction",
-        "task.translation",
-        "task.sentiment_analysis",
-        "task.reasoning",
-        "task.chat"
-      ]
-    },
-    "outputContract": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "format": {
-          "type": "string",
-          "enum": [
-            "text",
-            "json"
-          ],
-          "default": "json"
-        },
-        "json_schema": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": true
-        },
-        "parse_json_output": {
-          "type": "boolean",
-          "default": true
-        }
-      }
+      "pattern": "^task\\.[a-z0-9][a-z0-9._/-]{1,122}$",
+      "description": "Must be a task family accepted by the live node capability taxonomy."
     },
     "requestRoutingPolicy": {
       "type": [

@@ -516,6 +516,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(catalog_response.status_code, 200)
             schema_names = [item["name"] for item in catalog_response.json()["schemas"]]
             self.assertIn("benchmark-execution-request.v2.schema.json", schema_names)
+            self.assertIn("execution-response.v2.schema.json", schema_names)
+            self.assertIn("execution-job.v2.schema.json", schema_names)
+            self.assertIn("image-generation-inputs.v1.schema.json", schema_names)
+            self.assertIn("weather-scenery-inputs.v1.schema.json", schema_names)
 
             schema_response = client.get("/api/schemas/client-ai/v2/prompt-register.v2.request.schema.json")
 

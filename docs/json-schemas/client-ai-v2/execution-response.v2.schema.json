@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai-v2/execution-response.v2.schema.json",
+  "title": "Execution Response V2",
+  "description": "Canonical terminal response returned directly or in an execution job result.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["task_id", "status", "output", "provider_used", "model_used", "resolution_metadata"],
+  "properties": {
+    "task_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "status": {
+      "type": "string",
+      "enum": ["accepted", "completed", "failed", "rejected", "degraded", "unsupported"]
+    },
+    "output": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "properties": {
+        "text": {"type": ["string", "null"]},
+        "images": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/imageArtifact"}
+        }
+      }
+    },
+    "metrics": {"type": "object", "additionalProperties": true},
+    "error_code": {"type": ["string", "null"]},
+    "error_message": {"type": ["string", "null"]},
+    "provider_used": {"type": ["string", "null"]},
+    "model_used": {"type": ["string", "null"]},
+    "resolution_metadata": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "properties": {
+        "provider_class": {"type": ["string", "null"], "enum": ["local", "cloud", null]},
+        "execution_location": {"type": ["string", "null"], "enum": ["local", "cloud", null]},
+        "cloud_used": {"type": ["boolean", "null"]},
+        "routing_policy_mode": {"type": ["string", "null"]},
+        "selected_provider": {"type": ["string", "null"]},
+        "concrete_executor": {"type": ["string", "null"]},
+        "selected_model": {"type": ["string", "null"]},
+        "runtime_lane": {"type": ["string", "null"]}
+      }
+    },
+    "completed_at": {"type": ["string", "null"], "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"provider_used": {"const": "visual_runtime"}},
+        "required": ["provider_used"]
+      },
+      "then": {
+        "properties": {
+          "resolution_metadata": {
+            "type": "object",
+            "required": ["provider_class", "execution_location", "cloud_used", "selected_provider", "concrete_executor"],
+            "properties": {
+              "provider_class": {"const": "local"},
+              "execution_location": {"const": "local"},
+              "cloud_used": {"const": false},
+              "selected_provider": {"const": "local"},
+              "concrete_executor": {"const": "visual_runtime"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"provider_used": {"const": "vision_runtime"}},
+        "required": ["provider_used"]
+      },
+      "then": {
+        "properties": {
+          "resolution_metadata": {
+            "type": "object",
+            "required": ["provider_class", "execution_location", "cloud_used", "selected_provider", "concrete_executor"],
+            "properties": {
+              "provider_class": {"const": "local"},
+              "execution_location": {"const": "local"},
+              "cloud_used": {"const": false},
+              "selected_provider": {"const": "local"},
+              "concrete_executor": {"const": "vision_runtime"}
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "imageArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "relative_path", "mime_type", "width", "height", "size_bytes"],
+      "properties": {
+        "url": {"type": ["string", "null"]},
+        "relative_path": {"type": ["string", "null"]},
+        "mime_type": {"type": "string", "pattern": "^image/"},
+        "width": {"type": ["integer", "null"], "minimum": 1},
+        "height": {"type": ["integer", "null"], "minimum": 1},
+        "size_bytes": {"type": ["integer", "null"], "minimum": 0}
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hexe.local/schemas/client-ai-v2/schema-catalog.v2.response.schema.json",
   "title": "Schema Catalog V2 Response",
-  "description": "Proposed response for schema discovery. Not implemented yet.",
+  "description": "Implemented response for GET /api/schemas/client-ai/v2.",
   "type": "object",
   "additionalProperties": false,
   "required": [

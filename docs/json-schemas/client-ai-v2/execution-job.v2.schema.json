@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai-v2/execution-job.v2.schema.json",
+  "title": "Execution Job V2",
+  "description": "Queued acknowledgement and GET /api/execution/jobs/{job_id} status payload.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["status", "job_id", "check_after_seconds"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["queued", "running", "completed", "failed", "cancelled", "expired_wait_budget"]
+    },
+    "job_id": {"type": "string", "pattern": "^job-[a-f0-9]+$"},
+    "job_name": {"type": ["string", "null"]},
+    "status_url": {"type": ["string", "null"]},
+    "check_after_seconds": {"type": "integer", "minimum": 1},
+    "queue": {"type": ["string", "null"]},
+    "runtime_lane": {"type": ["string", "null"]},
+    "queue_position": {"type": ["integer", "null"], "minimum": 1},
+    "eta": {"type": ["object", "null"], "additionalProperties": true},
+    "queue_state": {"type": ["object", "null"], "additionalProperties": true},
+    "created_at": {"type": ["string", "null"], "format": "date-time"},
+    "queued_at": {"type": ["string", "null"], "format": "date-time"},
+    "started_at": {"type": ["string", "null"], "format": "date-time"},
+    "completed_at": {"type": ["string", "null"], "format": "date-time"},
+    "expires_at": {"type": ["string", "null"], "format": "date-time"},
+    "result": {
+      "anyOf": [
+        {"$ref": "execution-response.v2.schema.json"},
+        {"type": "null"}
+      ]
+    },
+    "error": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {"type": "string"},
+        "message": {"type": "string"}
+      }
+    }
+  }
+}

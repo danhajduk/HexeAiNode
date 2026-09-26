@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai-v2/image-generation-inputs.v1.schema.json",
+  "title": "Image Generation Inputs V1",
+  "description": "Canonical shared task.image_generation controls. Prompt-specific schemas may require a subset such as image_type=scenery.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "image_type": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional prompt-owned semantic image category. Prompt-specific contracts may require it. The local scenery selector recognizes scenery."
+    },
+    "prompt": {"type": "string", "minLength": 1},
+    "negative_prompt": {"type": "string"},
+    "template_id": {"type": "string", "minLength": 1},
+    "output_format": {
+      "type": "string",
+      "enum": ["png"],
+      "default": "png",
+      "description": "Canonical local visual-runtime output format. Cloud providers may expose other values through provider-specific contracts."
+    },
+    "quality": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Portable quality hint. For the local visual runtime it maps to 4, 6, or 8 steps unless steps is supplied."
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 256,
+      "maximum": 4096,
+      "description": "Requested generation width. The local visual runtime normalizes it to the nearest multiple of 8."
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 256,
+      "maximum": 4096,
+      "description": "Requested generation height. The local visual runtime normalizes it to the nearest multiple of 8."
+    },
+    "size": {
+      "type": "string",
+      "pattern": "^[0-9]+x[0-9]+$",
+      "deprecated": true,
+      "description": "Compatibility alias for width and height. Explicit width and height take precedence."
+    },
+    "target_width": {
+      "type": "integer",
+      "minimum": 256,
+      "maximum": 4096,
+      "deprecated": true,
+      "description": "Compatibility fallback for width. No separate post-generation resize stage is currently implemented."
+    },
+    "target_height": {
+      "type": "integer",
+      "minimum": 256,
+      "maximum": 4096,
+      "deprecated": true,
+      "description": "Compatibility fallback for height. No separate post-generation resize stage is currently implemented."
+    },
+    "seed": {"type": ["integer", "string", "null"]},
+    "steps": {"type": "integer", "minimum": 1},
+    "cfg": {"type": "number", "minimum": 0},
+    "cfg_scale": {"type": "number", "minimum": 0, "deprecated": true},
+    "denoise": {"type": "number", "minimum": 0, "maximum": 1},
+    "batch_count": {"type": "integer", "minimum": 1, "maximum": 25},
+    "randomize_seed": {"type": "boolean"},
+    "template_variables": {"type": "object", "additionalProperties": true}
+  }
+}
