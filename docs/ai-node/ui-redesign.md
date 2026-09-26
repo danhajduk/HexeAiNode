@@ -150,7 +150,8 @@ Image creation is moving into a standalone workspace at `#/image-studio`.
 - face shape, eye shape, nose, and lip choices use locally generated image thumbnails inside each option button; the face interview uses a two-column feature-and-preview workspace
 - every character-interview screen can save the incomplete profile; Check, Continue, and Finish persist the current answers before advancing
 - the face workspace can submit a real head/face preview and shows the resulting image with live generation, queue, node, runtime, model, VRAM, prompt, and seed status
-- after Face & Features is saved, Image Studio creates a 15-image identity seed review: the batch copies the exact saved preview prompt, negative prompt, generation settings, and template variables; slot 1 reuses and locks that preview's seed, while the user selects every other result that still looks like the same character before continuing to Body & Proportions
+- Face & Features saves one approved preview and one face seed; multi-image face-angle and pose datasets are deferred to a later identity-strengthening stage
+- Body & Proportions uses structured height, build, shoulder, torso, waist, hip, limb, and musculature selections, then requires one neutral 768×1152 body-foundation preview and saves its body seed before continuing
 - when Image Studio opens, the face workspace restores the newest completed saved preview; a newly submitted job keeps that prior image visible until its replacement is ready
 - face previews use a structured identity-reference prompt; after a preview returns, its seed can be locked and the local text LLM can apply a targeted prompt adjustment before regenerating with that same seed
 - all face-feature buttons retain short labels in the UI but save descriptive prompt language for age, facial structure, skin, eyes, brows, nose, lips, hair, distinctive features, and facial hair

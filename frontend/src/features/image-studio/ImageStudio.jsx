@@ -74,6 +74,35 @@ const CHARACTER_FOUNDATION_GROUPS = [
   ] },
 ];
 
+const BODY_FEATURE_GROUPS = [
+  { id: "height", label: "Height", options: ["short", "below average", "average", "tall", "very tall"] },
+  { id: "build", label: "Overall build", options: ["slender", "lean", "average", "athletic", "curvy", "stocky", "heavyset"] },
+  { id: "shoulders", label: "Shoulders", options: ["narrow", "balanced", "broad", "softly rounded", "angular"] },
+  { id: "torso", label: "Torso", options: ["short torso", "balanced torso", "long torso", "straight torso", "tapered torso"] },
+  { id: "waist", label: "Waist", options: ["subtle waist", "defined waist", "narrow waist", "straight waist", "broad waist"] },
+  { id: "hips", label: "Hips", options: ["narrow hips", "balanced hips", "wide hips", "rounded hips", "angular hips"] },
+  { id: "limbs", label: "Limb proportions", options: ["short limbs", "balanced limbs", "long legs", "long arms", "long limbs"] },
+  { id: "musculature", label: "Musculature", options: ["soft definition", "lightly toned", "athletic definition", "muscular", "strongly muscular"] },
+];
+
+function composeBodyDescription(selections = {}, customDetails = "") {
+  const parts = BODY_FEATURE_GROUPS.flatMap((group) => (selections[group.id] || []).map((value) => `${group.label.toLowerCase()}: ${value}`));
+  if (String(customDetails || "").trim()) parts.push(String(customDetails).trim());
+  return parts.join("; ");
+}
+
+function buildBodyPreviewPrompt(characterBrief) {
+  return [
+    "EXACTLY ONE ADULT PERSON. Single centered neutral body reference, never a collage or character sheet.",
+    `Character: ${characterBrief.name}, ${characterBrief.age_group} ${characterBrief.gender_identity}.`,
+    `Face identity traits: ${characterBrief.appearance}.`,
+    `BODY PROPORTIONS: ${characterBrief.body}.`,
+    "Full body visible from head to feet, neutral standing body-reference posture, shoulders level, arms relaxed and separated from torso, legs and proportions clearly visible.",
+    "Simple close-fitting neutral bodysuit, no loose layers, clean studio background, even lighting, realistic anatomy.",
+    `Visual style: ${characterBrief.visual_style}.`,
+  ].filter(Boolean).join("\n");
+}
+
 const FACE_FEATURE_OPTION_GROUPS = [
   { id: "apparent age", label: "Apparent age", options: ["teen", "young adult", "adult", "mature", "elderly"] },
   { id: "face shape", label: "Face shape", options: ["oval", "round", "square", "heart-shaped", "diamond", "oblong", "triangular", "soft angular"] },
@@ -552,6 +581,8 @@ export function ImageStudio({
   generationActivity = null,
   facePreviewResult = null,
   facePreviewTracking = false,
+  bodyPreviewResult = null,
+  bodyPreviewTracking = false,
   faceSeedBatchResult = null,
   faceSeedBatchTracking = false,
   apiBase = "",
@@ -565,6 +596,7 @@ export function ImageStudio({
   onInterviewQuestion,
   onSaveCharacterDraft,
   onGenerateFacePreview,
+  onGenerateBodyPreview,
   onCreateFaceSeedBatch,
   onRefreshData,
   onOpenLegacy,
@@ -608,6 +640,8 @@ export function ImageStudio({
   const [faceSeedLocked, setFaceSeedLocked] = useState(false);
   const [faceRefinementStatus, setFaceRefinementStatus] = useState("");
   const [faceRefinementError, setFaceRefinementError] = useState("");
+  const [bodyFeatureSelections, setBodyFeatureSelections] = useState({});
+  const [bodyCustomDetails, setBodyCustomDetails] = useState("");
   const [faceSeedReviewOpen, setFaceSeedReviewOpen] = useState(initialFaceSeedReviewOpen);
   const [faceSeedReviewSelections, setFaceSeedReviewSelections] = useState([]);
   const [faceSeedReviewBatchId, setFaceSeedReviewBatchId] = useState("");
@@ -673,6 +707,12 @@ export function ImageStudio({
     (preview) => ["completed", "completed_with_fallback"].includes(String(preview?.status || "").toLowerCase()) && preview?.url
   ).length;
   const faceSeedBatchComplete = faceSeedBatchPreviews.length === 15 && Number(faceSeedBatch?.remaining_count || 0) === 0;
+  const savedBodyPreview = activeCharacterProfile?.prompt_workspaces?.upper_torso?.preview_history?.slice(-1)[0] || null;
+  const bodyPreview = bodyPreviewResult?.preview || savedBodyPreview;
+  const bodyPreviewSeed = bodyPreview?.seed_text || bodyPreview?.seed;
+  const bodyPreviewStatus = String(bodyPreview?.status || (bodyPreviewTracking ? "preparing" : "not started"));
+  const bodyPreviewCompleted = ["completed", "completed_with_fallback"].includes(bodyPreviewStatus.toLowerCase());
+  const bodyPreviewImageUrl = bodyPreview?.url ? `${apiBase}${bodyPreview.url}` : "";
   const facePreviewSeed = facePreview?.seed_text || facePreview?.seed;
   const generationProgress = generationActivity?.generation_status?.progress || {};
   const generationSession = generationActivity?.generation_status?.session || generationActivity?.service?.session || {};
@@ -800,6 +840,17 @@ export function ImageStudio({
     updateCharacterBrief("appearance", composeFaceDescription(next, faceCustomDetails, faceFeatureCatalog));
   }
 
+  function selectBodyFeature(group, option) {
+    const next = { ...bodyFeatureSelections, [group.id]: [option] };
+    setBodyFeatureSelections(next);
+    updateCharacterBrief("body", composeBodyDescription(next, bodyCustomDetails));
+  }
+
+  function updateBodyCustomDetails(value) {
+    setBodyCustomDetails(value);
+    updateCharacterBrief("body", composeBodyDescription(bodyFeatureSelections, value));
+  }
+
   function updateFaceCustomDetails(value) {
     setFaceCustomDetails(value);
     updateCharacterBrief("appearance", composeFaceDescription(faceFeatureSelections, value, faceFeatureCatalog));
@@ -828,6 +879,16 @@ export function ImageStudio({
           custom_details: faceCustomDetails,
           expanded_description: characterBrief.appearance,
           llm_refinement: facePromptDraft,
+        },
+        body_feature_catalog: {
+          schema_version: "1.0",
+          selections: bodyFeatureSelections,
+          custom_details: bodyCustomDetails,
+          expanded_description: characterBrief.body,
+        },
+        identity_seeds: {
+          face: facePreviewSeed ?? null,
+          body: bodyPreviewSeed ?? null,
         },
       }),
     });
@@ -954,8 +1015,8 @@ export function ImageStudio({
   async function completeCurrentInterviewStep() {
     const savedProfile = await saveCharacterProgress();
     if (!savedProfile) return;
-    if (activeInterviewStep.id === "face_features") {
-      await openFaceSeedReview(savedProfile);
+    if (activeInterviewStep.id === "body_proportions" && !bodyPreviewCompleted) {
+      setDraftSaveMessage("Generate and finish a body reference preview before continuing.");
       return;
     }
     setCompletedInterviewSteps((current) => ({ ...current, [activeInterviewStep.id]: true }));
@@ -1013,6 +1074,24 @@ export function ImageStudio({
       lock_seed: locked && seed !== undefined && seed !== null,
     });
     if (result) setDraftSaveMessage("Face preview submitted.");
+    return result;
+  }
+
+  async function generateBodyPreview() {
+    if (!characterBrief.body.trim() || characterSaveBusy || bodyPreviewTracking || !onGenerateBodyPreview) return null;
+    const savedProfile = await saveCharacterProgress();
+    const profileId = savedProfile?.profile_id || characterProfileId;
+    if (!profileId) return null;
+    setDraftSaveMessage("Character saved. Submitting body reference preview…");
+    const result = await onGenerateBodyPreview(profileId, {
+      prompt: buildBodyPreviewPrompt(characterBrief),
+      negative_prompt: "multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, loose clothing, bulky clothing, dramatic pose, text, watermark, child, teen, underage",
+      seed: bodyPreviewSeed ?? null,
+      lock_seed: bodyPreviewSeed !== undefined && bodyPreviewSeed !== null,
+      width: 768,
+      height: 1152,
+    });
+    if (result) setDraftSaveMessage("Body preview submitted. Its seed will be saved with the character.");
     return result;
   }
 
@@ -1422,6 +1501,41 @@ export function ImageStudio({
                   </div>
                 </aside>
                 </div>
+            ) : activeInterviewStep.id === "body_proportions" ? (
+              <div className="image-studio-face-workspace">
+                <div className="image-studio-face-builder">
+                  <p>Define the body foundation. Pose variations will be created later and will not change these proportions.</p>
+                  <div className="image-studio-face-options">
+                    {BODY_FEATURE_GROUPS.map((group) => (
+                      <fieldset key={group.id}>
+                        <legend>{group.label}</legend>
+                        <div className="image-studio-option-chips">
+                          {group.options.map((option) => {
+                            const selected = (bodyFeatureSelections[group.id] || []).includes(option);
+                            return <button className={selected ? "is-selected" : ""} type="button" aria-pressed={selected} key={option} onClick={() => selectBodyFeature(group, option)}>{option}</button>;
+                          })}
+                        </div>
+                      </fieldset>
+                    ))}
+                  </div>
+                  <label className="image-studio-full-field">Additional body details<textarea rows={3} value={bodyCustomDetails} onChange={(event) => updateBodyCustomDetails(event.target.value)} /></label>
+                  <div className="image-studio-face-summary"><span>Combined body description</span><p>{characterBrief.body || "Choose body characteristics to build the reference description."}</p></div>
+                </div>
+                <aside className="image-studio-face-preview">
+                  <span className="image-studio-eyebrow">Body foundation preview</span>
+                  <div className="image-studio-face-preview-canvas">
+                    {bodyPreviewImageUrl ? <img src={bodyPreviewImageUrl} alt={`Generated body reference for ${characterBrief.name || "character"}`} /> : <><span>Body reference</span><p>Your selected proportions will be rendered here.</p></>}
+                  </div>
+                  <button className="btn btn-primary" type="button" onClick={generateBodyPreview} disabled={!characterBrief.body.trim() || characterSaveBusy || bodyPreviewTracking}>
+                    {bodyPreviewTracking ? "Generating body preview…" : bodyPreviewImageUrl ? "Generate again with saved seed" : "Generate body preview"}
+                  </button>
+                  <div className={`image-studio-generation-summary ${bodyPreviewCompleted ? "is-complete" : ""}`} aria-live="polite">
+                    <span>Status</span><strong>{bodyPreviewStatus.replaceAll("_", " ")}</strong>
+                    <small>{bodyPreviewTracking ? "Generation status refreshes automatically." : bodyPreviewCompleted ? `Body identity seed ${bodyPreviewSeed} saved.` : "Generate one neutral reference before continuing."}</small>
+                  </div>
+                  <div className="image-studio-seed-controls"><p>Body seed: <code>{bodyPreviewSeed ?? "not generated"}</code></p></div>
+                </aside>
+              </div>
             ) : (
               <label className="image-studio-full-field">
                 Your answer

@@ -2698,8 +2698,8 @@ class NodeControlState:
         defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
         if not negative_prompt:
             negative_prompt = str(defaults.get("negative_prompt") or "").strip()
-        width = int(defaults.get("width") or 512)
-        height = int(defaults.get("height") or 512)
+        width = int(payload.width or defaults.get("width") or 512)
+        height = int(payload.height or defaults.get("height") or 512)
         steps = int(defaults.get("steps") or 4)
         cfg = float(defaults.get("cfg") or 1.2)
         denoise = float(defaults.get("denoise") or 1.0)
@@ -2809,8 +2809,8 @@ class NodeControlState:
         defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
         if not negative_prompt:
             negative_prompt = str(defaults.get("negative_prompt") or "").strip()
-        width = int(defaults.get("width") or 512)
-        height = int(defaults.get("height") or 512)
+        width = int(payload.width or defaults.get("width") or 512)
+        height = int(payload.height or defaults.get("height") or 512)
         steps = int(defaults.get("steps") or 4)
         cfg = float(defaults.get("cfg") or 1.2)
         denoise = float(defaults.get("denoise") or 1.0)
@@ -15588,6 +15588,8 @@ class AvatarProfileHeadPreviewRequest(BaseModel):
     refinement: str | None = None
     seed: int | str | None = None
     lock_seed: bool | None = False
+    width: int | None = None
+    height: int | None = None
 
 
 class AvatarProfileHeadSeedBatchRequest(BaseModel):
