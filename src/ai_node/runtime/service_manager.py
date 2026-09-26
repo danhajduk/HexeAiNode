@@ -1612,9 +1612,13 @@ class UserSystemdServiceManager:
             loaded_models=[],
             observed_vram_mib=observed_vram_mib,
             can_load_model=True,
-            can_unload_model=False,
-            unload_model_mode="container_stop_fallback",
-            reason="comfyui_model_unload_endpoint_not_available",
+            can_unload_model=True,
+            unload_model_mode="comfyui_free_api",
+            reason=(
+                "comfyui_model_loaded"
+                if model_state == "loaded"
+                else "comfyui_container_running_model_unloaded"
+            ),
         )
 
     def _training_model_residency_status(self) -> ModelResidencyStatus:

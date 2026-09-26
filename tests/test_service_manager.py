@@ -119,6 +119,22 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(residency["loaded_model"], "qwen3-8b-q4_k_m")
         self.assertEqual(residency["observed_vram_mib"], 5512)
 
+    def test_comfyui_status_exposes_model_unload_without_stopping_container(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+
+        residency = manager._visual_model_residency_status(
+            runtime="gpu",
+            state="running",
+            pid=4244,
+            observed_vram_mib=102,
+        ).to_payload()
+
+        self.assertEqual(residency["container_state"], "running")
+        self.assertEqual(residency["model_state"], "unloaded")
+        self.assertTrue(residency["can_unload_model"])
+        self.assertEqual(residency["unload_model_mode"], "comfyui_free_api")
+        self.assertEqual(residency["reason"], "comfyui_container_running_model_unloaded")
+
     def test_unload_model_reports_text_llm_unsupported_without_stopping_container(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
         with patch.object(manager, "stop") as fake_stop:
