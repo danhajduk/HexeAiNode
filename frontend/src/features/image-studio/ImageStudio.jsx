@@ -518,6 +518,8 @@ export function ImageStudio({
   const [facePromptDraft, setFacePromptDraft] = useState("");
   const [faceTweakInstruction, setFaceTweakInstruction] = useState("");
   const [faceSeedLocked, setFaceSeedLocked] = useState(false);
+  const [faceRefinementStatus, setFaceRefinementStatus] = useState("");
+  const [faceRefinementError, setFaceRefinementError] = useState("");
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -777,10 +779,10 @@ export function ImageStudio({
   }
 
   async function generateFacePreview({ promptOverride = "", forceLockedSeed = false } = {}) {
-    if (!characterBrief.appearance.trim() || characterSaveBusy || facePreviewTracking || !onGenerateFacePreview) return;
+    if (!characterBrief.appearance.trim() || characterSaveBusy || facePreviewTracking || !onGenerateFacePreview) return null;
     const savedProfile = await saveCharacterProgress();
     const profileId = savedProfile?.profile_id || characterProfileId;
-    if (!profileId) return;
+    if (!profileId) return null;
     setDraftSaveMessage("Character saved. Submitting face preview…");
     const locked = forceLockedSeed || faceSeedLocked;
     const seed = facePreview?.seed_text || facePreview?.seed;
@@ -792,10 +794,13 @@ export function ImageStudio({
       lock_seed: locked && seed !== undefined && seed !== null,
     });
     if (result) setDraftSaveMessage("Face preview submitted.");
+    return result;
   }
 
   async function refineAndRegenerateFacePreview() {
     if (!faceTweakInstruction.trim() || facePreviewSeed === undefined || facePreviewSeed === null || promptHelperBusy || facePreviewTracking) return;
+    setFaceRefinementError("");
+    setFaceRefinementStatus("Asking the local text LLM to refine the prompt…");
     const currentPrompt = buildFacePreviewPrompt(characterBrief, faceFeatureSelections, facePromptDraft);
     const refined = await onImprovePrompt?.({
       template_id: "template.avatar_head_face_preview.realvisxl.v1",
@@ -807,11 +812,26 @@ export function ImageStudio({
       reference_image_provided: false,
       instruction: faceTweakInstruction.trim(),
     });
-    if (!refined?.prompt) return;
+    if (!refined?.prompt) {
+      setFaceRefinementStatus("");
+      setFaceRefinementError(
+        refined?._error
+          ? `Refinement failed: ${refined._error}`
+          : "Refinement failed: the local text LLM did not return an updated prompt. No image was submitted."
+      );
+      return;
+    }
     setFacePromptDraft(String(refined.prompt));
     setFaceSeedLocked(true);
     setFaceTweakInstruction("");
-    await generateFacePreview({ promptOverride: String(refined.prompt), forceLockedSeed: true });
+    setFaceRefinementStatus("Prompt refined. Saving the character and submitting the same seed to ComfyUI…");
+    const generated = await generateFacePreview({ promptOverride: String(refined.prompt), forceLockedSeed: true });
+    if (!generated) {
+      setFaceRefinementStatus("");
+      setFaceRefinementError("The prompt was refined, but the preview could not be submitted to ComfyUI. Your refined prompt was preserved.");
+      return;
+    }
+    setFaceRefinementStatus("Refined preview submitted. Generation progress appears above.");
   }
 
   const choosingCharacterPath = creationType === "character" && !characterPath;
@@ -1168,6 +1188,8 @@ export function ImageStudio({
                     >
                       {promptHelperBusy ? "Refining prompt…" : "Refine & regenerate same seed"}
                     </button>
+                    {faceRefinementStatus ? <p className="image-studio-refinement-status" role="status">{faceRefinementStatus}</p> : null}
+                    {faceRefinementError ? <p className="error image-studio-refinement-error" role="alert">{faceRefinementError}</p> : null}
                   </div>
                 </aside>
                 </div>

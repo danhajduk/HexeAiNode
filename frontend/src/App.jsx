@@ -1262,7 +1262,7 @@ export default function App() {
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
       setError(message);
-      return null;
+      return { _error: message };
     } finally {
       setManualImagePromptHelperBusy(false);
     }

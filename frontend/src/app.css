@@ -3187,6 +3187,16 @@
   font-weight: 750;
 }
 
+.image-studio-refinement-status,
+.image-studio-refinement-error {
+  margin: 0;
+  font-size: 12px;
+}
+
+.image-studio-refinement-status {
+  color: hsl(var(--sx-text-muted));
+}
+
 .image-studio-option-visual {
   display: inline-grid;
   flex: 0 0 auto;
