@@ -2927,7 +2927,11 @@ class NodeControlState:
             kept_previews = [
                 {
                     **preview,
-                    "kept": str(preview.get("preview_id") or "").strip() in keep_ids or bool(preview.get("kept")),
+                    "kept": (
+                        str(preview.get("preview_id") or "").strip() in keep_ids
+                        if payload.keep_preview_ids is not None
+                        else bool(preview.get("kept"))
+                    ),
                 }
                 for preview in existing_previews
                 if str(preview.get("seed") or "").strip()
@@ -2945,6 +2949,7 @@ class NodeControlState:
         selected_preview_id = requested_selected_preview_id or str(seed_batch.get("selected_preview_id") or "").strip()
         manual_seed_preview_id = str(payload.manual_seed_preview_id or "").strip()
         manual_seed = self._coerce_manual_image_seed(payload.manual_seed) if payload.manual_seed is not None else None
+        anchor_seed = self._coerce_manual_image_seed(payload.anchor_seed) if payload.anchor_seed is not None else None
         if manual_seed_preview_id and manual_seed is None:
             raise ValueError("avatar_head_seed_batch_manual_seed_required")
 
@@ -2984,7 +2989,39 @@ class NodeControlState:
             )
 
         previews = kept_previews[:target_count]
+        if not previews and anchor_seed is not None:
+            previews.append(
+                {
+                    **self._avatar_head_face_seed_batch_local_preview(
+                        batch_id=batch_id,
+                        prompt=prompt,
+                        prompt_parts=prompt_parts,
+                        locked_prompt_parts=locked_prompt_parts,
+                        negative_prompt=negative_prompt,
+                        seed=anchor_seed,
+                        width=width,
+                        height=height,
+                        steps=steps,
+                        cfg=cfg,
+                        denoise=denoise,
+                        now=now,
+                        slot_index=1,
+                        anchor_seed=anchor_seed,
+                    ),
+                    "kept": True,
+                    "identity_anchor": True,
+                }
+            )
+        used_seeds = {
+            int(preview["seed"])
+            for preview in previews
+            if self._coerce_manual_image_seed(preview.get("seed")) is not None
+        }
         while len(previews) < target_count:
+            random_seed = secrets.randbelow(2**63)
+            while random_seed in used_seeds:
+                random_seed = secrets.randbelow(2**63)
+            used_seeds.add(random_seed)
             previews.append(
                 self._avatar_head_face_seed_batch_local_preview(
                     batch_id=batch_id,
@@ -2992,7 +3029,7 @@ class NodeControlState:
                     prompt_parts=prompt_parts,
                     locked_prompt_parts=locked_prompt_parts,
                     negative_prompt=negative_prompt,
-                    seed=secrets.randbelow(2**63),
+                    seed=random_seed,
                     width=width,
                     height=height,
                     steps=steps,
@@ -8804,11 +8841,12 @@ class NodeControlState:
                 was_completed = str(preview.get("status") or "").strip() in {"completed", "completed_with_fallback"}
                 if not was_completed:
                     repaired_preview["status"] = "completed"
-                    repaired_preview = self._publish_avatar_preview_completed_event(
-                        preview=repaired_preview,
-                        profile_id=profile_id,
-                        profile_name=str(metadata.get("name") or profile_dir.name),
-                    )
+                    if not preview.get("batch_id"):
+                        repaired_preview = self._publish_avatar_preview_completed_event(
+                            preview=repaired_preview,
+                            profile_id=profile_id,
+                            profile_name=str(metadata.get("name") or profile_dir.name),
+                        )
                 if (
                     repaired_preview.get("status") != preview.get("status")
                     or str(preview.get("input_image") or "") != expected_input
@@ -8936,11 +8974,12 @@ class NodeControlState:
                     "source_output": sidecar["source_output"],
                     "rgb_cleanup": rgb_cleanup,
                 }
-            completed_preview = self._publish_avatar_preview_completed_event(
-                preview=completed_preview,
-                profile_id=profile_id,
-                profile_name=str(metadata.get("name") or profile_dir.name),
-            )
+            if not preview.get("batch_id"):
+                completed_preview = self._publish_avatar_preview_completed_event(
+                    preview=completed_preview,
+                    profile_id=profile_id,
+                    profile_name=str(metadata.get("name") or profile_dir.name),
+                )
             updated_history.append(completed_preview)
             changed = True
         dispatch: dict = {}
@@ -15504,6 +15543,7 @@ class AvatarProfileHeadSeedBatchRequest(BaseModel):
     selected_preview_id: str | None = None
     manual_seed_preview_id: str | None = None
     manual_seed: int | str | None = None
+    anchor_seed: int | str | None = None
     batch_size: int | None = 20
 
 

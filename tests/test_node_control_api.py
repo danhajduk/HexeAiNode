@@ -4684,7 +4684,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             first = asyncio.run(
                 state.create_avatar_profile_head_seed_batch(
                     profile_id="Jane_Avatar",
-                    payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=4),
+                    payload=AvatarProfileHeadSeedBatchRequest(prompt="head portrait", batch_size=4, anchor_seed=424242),
                 )
             )
             kept_id = first["batch"]["previews"][1]["preview_id"]
@@ -4714,6 +4714,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(len(first["batch"]["previews"]), 4)
+        self.assertEqual(first["batch"]["previews"][0]["seed"], 424242)
+        self.assertTrue(first["batch"]["previews"][0]["identity_anchor"])
+        self.assertTrue(first["batch"]["previews"][0]["kept"])
+        self.assertEqual(len({preview["seed"] for preview in first["batch"]["previews"]}), 4)
         self.assertEqual(first["batch"]["remaining_count"], 4)
         self.assertTrue(all(preview["seed"] for preview in first["batch"]["previews"]))
         self.assertEqual(len(second["batch"]["previews"]), 4)

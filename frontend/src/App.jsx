@@ -228,6 +228,8 @@ export default function App() {
   const [imageStudioDataLoading, setImageStudioDataLoading] = useState(false);
   const [imageStudioFacePreviewResult, setImageStudioFacePreviewResult] = useState(null);
   const [imageStudioFacePreviewTracking, setImageStudioFacePreviewTracking] = useState(false);
+  const [imageStudioSeedBatchResult, setImageStudioSeedBatchResult] = useState(null);
+  const [imageStudioSeedBatchTracking, setImageStudioSeedBatchTracking] = useState(false);
   const [runningAdminAction, setRunningAdminAction] = useState("");
   const [adminActionState, setAdminActionState] = useState("");
   const [uiState, setUiState] = useState(() =>
@@ -551,6 +553,17 @@ export default function App() {
           setImageStudioFacePreviewTracking(false);
         }
       }
+      const seedProfileId = String(imageStudioSeedBatchResult?.profile?.profile_id || "").trim();
+      const seedProfile = (profilesResult.value?.profiles || []).find(
+        (profile) => String(profile?.profile_id || "") === seedProfileId
+      );
+      const seedBatch = seedProfile?.prompt_workspaces?.head_face?.seed_batch;
+      if (seedBatch) {
+        setImageStudioSeedBatchResult((current) => ({ ...(current || {}), profile: seedProfile, batch: seedBatch }));
+        if (Number(seedBatch.remaining_count || 0) <= 0) {
+          setImageStudioSeedBatchTracking(false);
+        }
+      }
     }
     if (generationResult.status === "fulfilled") {
       setManualImageGenerationPayload(generationResult.value);
@@ -565,7 +578,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!imageStudioOpen || !imageStudioFacePreviewTracking) {
+    if (!imageStudioOpen || (!imageStudioFacePreviewTracking && !imageStudioSeedBatchTracking)) {
       return undefined;
     }
     let cancelled = false;
@@ -581,7 +594,7 @@ export default function App() {
       cancelled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [imageStudioOpen, imageStudioFacePreviewTracking, imageStudioFacePreviewResult?.preview?.prompt_id]);
+  }, [imageStudioOpen, imageStudioFacePreviewTracking, imageStudioFacePreviewResult?.preview?.prompt_id, imageStudioSeedBatchTracking, imageStudioSeedBatchResult?.profile?.profile_id]);
 
   async function onCreateImageStudioFacePreview(profileId, payload) {
     const normalized = String(profileId || "").trim();
@@ -600,6 +613,31 @@ export default function App() {
     } catch (err) {
       setError(String(err?.message || err).replace(/^request failed \(\d+\):\s*/, ""));
       setImageStudioFacePreviewTracking(false);
+      return null;
+    } finally {
+      setAvatarGenerationBusy(false);
+    }
+  }
+
+  async function onCreateImageStudioSeedBatch(profileId, payload) {
+    const normalized = String(profileId || "").trim();
+    if (!normalized || avatarGenerationBusy) return null;
+    setAvatarGenerationBusy(true);
+    setImageStudioSeedBatchTracking(true);
+    setError("");
+    try {
+      const result = await apiPost(`/api/avatar-generation/profiles/${encodeURIComponent(normalized)}/head-face/seed-batch`, payload);
+      setImageStudioSeedBatchResult(result);
+      if (Array.isArray(result?.profiles)) {
+        setAvatarGenerationPayload((current) => ({ ...(current || {}), profiles: result.profiles }));
+      }
+      if (Number(result?.batch?.remaining_count || 0) <= 0) {
+        setImageStudioSeedBatchTracking(false);
+      }
+      return result;
+    } catch (err) {
+      setError(String(err?.message || err).replace(/^request failed \(\d+\):\s*/, ""));
+      setImageStudioSeedBatchTracking(false);
       return null;
     } finally {
       setAvatarGenerationBusy(false);
@@ -3016,6 +3054,8 @@ export default function App() {
           generationActivity={manualImageGenerationPayload}
           facePreviewResult={imageStudioFacePreviewResult}
           facePreviewTracking={imageStudioFacePreviewTracking}
+          faceSeedBatchResult={imageStudioSeedBatchResult}
+          faceSeedBatchTracking={imageStudioSeedBatchTracking}
           apiBase={getApiBase()}
           dataLoading={imageStudioDataLoading}
           dataError={error}
@@ -3028,6 +3068,7 @@ export default function App() {
           onInterviewQuestion={onCharacterInterviewQuestion}
           onSaveCharacterDraft={onSaveAvatarProfile}
           onGenerateFacePreview={onCreateImageStudioFacePreview}
+          onCreateFaceSeedBatch={onCreateImageStudioSeedBatch}
           onOpenLegacy={() => { window.location.hash = buildOperationalRoute("manual_image"); }}
           onClose={() => {
             if (window.opener) {

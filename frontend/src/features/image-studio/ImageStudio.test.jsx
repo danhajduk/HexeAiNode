@@ -319,6 +319,29 @@ describe("ImageStudio", () => {
     expect(markup).not.toContain("http://node.test/older.png");
   });
 
+  it("shows a 15-candidate identity review with the saved seed first", () => {
+    const previews = Array.from({ length: 15 }, (_, index) => ({
+      preview_id: `candidate-${index + 1}`,
+      seed: index === 0 ? 424242 : 500000 + index,
+      status: "completed",
+      url: `/candidate-${index + 1}.png`,
+      identity_anchor: index === 0,
+    }));
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialFaceSeedReviewOpen
+        faceSeedBatchResult={{ batch: { batch_id: "batch-1", remaining_count: 0, previews } }}
+      />
+    );
+
+    expect(markup).toContain("Choose every face that looks like the same character");
+    expect(markup).toContain("1 · Saved seed");
+    expect(markup).toContain("424242");
+    expect(markup).toContain("15 / 15");
+    expect(markup).toContain("Save selection &amp; continue");
+    expect((markup.match(/Identity seed candidate/g) || []).length).toBe(15);
+  });
+
   it("forces SFW when an adult character is changed to an under-18 age group", () => {
     expect(applyCharacterFoundation(
       { age_group: "adult (18+)", content_rating: "NSFW adult content" },

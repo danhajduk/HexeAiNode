@@ -547,10 +547,13 @@ export function ImageStudio({
   initialCreativeSetupOpen = false,
   initialInterviewOpen = false,
   initialInterviewStep = 0,
+  initialFaceSeedReviewOpen = false,
   runtimeStatus = null,
   generationActivity = null,
   facePreviewResult = null,
   facePreviewTracking = false,
+  faceSeedBatchResult = null,
+  faceSeedBatchTracking = false,
   apiBase = "",
   dataLoading = false,
   dataError = "",
@@ -562,6 +565,7 @@ export function ImageStudio({
   onInterviewQuestion,
   onSaveCharacterDraft,
   onGenerateFacePreview,
+  onCreateFaceSeedBatch,
   onRefreshData,
   onOpenLegacy,
   onClose,
@@ -604,6 +608,9 @@ export function ImageStudio({
   const [faceSeedLocked, setFaceSeedLocked] = useState(false);
   const [faceRefinementStatus, setFaceRefinementStatus] = useState("");
   const [faceRefinementError, setFaceRefinementError] = useState("");
+  const [faceSeedReviewOpen, setFaceSeedReviewOpen] = useState(initialFaceSeedReviewOpen);
+  const [faceSeedReviewSelections, setFaceSeedReviewSelections] = useState([]);
+  const [faceSeedReviewBatchId, setFaceSeedReviewBatchId] = useState("");
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -657,6 +664,15 @@ export function ImageStudio({
   );
   const facePreview = facePreviewResult?.preview || savedFacePreview;
   const displayedFacePreview = facePreview?.url ? facePreview : savedFacePreview;
+  const activeCharacterProfile = characterProfiles.find(
+    (profile) => String(profile?.profile_id || "") === String(characterProfileId || "")
+  );
+  const faceSeedBatch = faceSeedBatchResult?.batch || activeCharacterProfile?.prompt_workspaces?.head_face?.seed_batch || null;
+  const faceSeedBatchPreviews = Array.isArray(faceSeedBatch?.previews) ? faceSeedBatch.previews : [];
+  const faceSeedBatchReadyCount = faceSeedBatchPreviews.filter(
+    (preview) => ["completed", "completed_with_fallback"].includes(String(preview?.status || "").toLowerCase()) && preview?.url
+  ).length;
+  const faceSeedBatchComplete = faceSeedBatchPreviews.length === 15 && Number(faceSeedBatch?.remaining_count || 0) === 0;
   const facePreviewSeed = facePreview?.seed_text || facePreview?.seed;
   const generationProgress = generationActivity?.generation_status?.progress || {};
   const generationSession = generationActivity?.generation_status?.session || generationActivity?.service?.session || {};
@@ -711,6 +727,16 @@ export function ImageStudio({
       || (facePreviewTracking ? "Live status refreshes automatically." : "Generate a preview to see live model and rendering details.")
   );
   const previewImageUrl = displayedFacePreview?.url ? `${apiBase}${displayedFacePreview.url}` : "";
+
+  useEffect(() => {
+    const batchId = String(faceSeedBatch?.batch_id || "");
+    if (!batchId || batchId === faceSeedReviewBatchId) return;
+    setFaceSeedReviewBatchId(batchId);
+    setFaceSeedReviewSelections(faceSeedBatchPreviews
+      .filter((preview, index) => index === 0 || preview?.identity_anchor || preview?.kept)
+      .map((preview) => String(preview?.preview_id || ""))
+      .filter(Boolean));
+  }, [faceSeedBatch?.batch_id, faceSeedBatchPreviews, faceSeedReviewBatchId]);
 
   useEffect(() => {
     if (!interviewOpen) {
@@ -870,9 +896,64 @@ export function ImageStudio({
     setInterviewStep(nextStep);
   }
 
+  async function openFaceSeedReview(savedProfile) {
+    const profileId = savedProfile?.profile_id || characterProfileId;
+    if (!profileId || facePreviewSeed === undefined || facePreviewSeed === null || !previewCompleted) {
+      setDraftSaveMessage("Generate and finish a face preview before continuing to identity review.");
+      return false;
+    }
+    setInterviewOpen(false);
+    setFaceSeedReviewOpen(true);
+    if (!faceSeedBatch || faceSeedBatchPreviews.length !== 15) {
+      setDraftSaveMessage("Starting 15 identity seeds. The saved face seed is slot 1.");
+      const result = await onCreateFaceSeedBatch?.(profileId, {
+        anchor_seed: facePreviewSeed,
+        batch_size: 15,
+        preserve_existing: false,
+      });
+      if (!result) {
+        setFaceSeedReviewOpen(false);
+        setInterviewOpen(true);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function toggleFaceSeedReview(preview, index) {
+    const previewId = String(preview?.preview_id || "");
+    if (!previewId || index === 0 || preview?.identity_anchor || !preview?.url) return;
+    setFaceSeedReviewSelections((current) => current.includes(previewId)
+      ? current.filter((item) => item !== previewId)
+      : [...current, previewId]);
+  }
+
+  async function confirmFaceSeedReview() {
+    if (!faceSeedBatchComplete || characterSaveBusy) return;
+    const anchor = faceSeedBatchPreviews[0];
+    const anchorId = String(anchor?.preview_id || "");
+    const keepIds = Array.from(new Set([anchorId, ...faceSeedReviewSelections].filter(Boolean)));
+    const result = await onCreateFaceSeedBatch?.(characterProfileId, {
+      batch_size: 15,
+      preserve_existing: true,
+      keep_preview_ids: keepIds,
+      selected_preview_id: anchorId,
+    });
+    if (!result) return;
+    setCompletedInterviewSteps((current) => ({ ...current, face_features: true }));
+    setFaceSeedReviewOpen(false);
+    setInterviewOpen(true);
+    moveCharacterInterview(1);
+    setDraftSaveMessage(`${keepIds.length} visually consistent face seeds saved.`);
+  }
+
   async function completeCurrentInterviewStep() {
     const savedProfile = await saveCharacterProgress();
     if (!savedProfile) return;
+    if (activeInterviewStep.id === "face_features") {
+      await openFaceSeedReview(savedProfile);
+      return;
+    }
     setCompletedInterviewSteps((current) => ({ ...current, [activeInterviewStep.id]: true }));
     if (interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1) {
       moveCharacterInterview(1);
@@ -888,11 +969,7 @@ export function ImageStudio({
     const savedProfile = await saveCharacterProgress();
     if (!savedProfile) return;
     if (!interviewLlmEnabled || !textModelLoaded || !onInterviewQuestion) {
-      if (interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1) {
-        moveCharacterInterview(1);
-      } else {
-        setInterviewOpen(false);
-      }
+      await completeCurrentInterviewStep();
       return;
     }
     const questionsAsked = (interviewQuestionCounts[activeInterviewStep.id] || 0) + 1;
@@ -1365,6 +1442,57 @@ export function ImageStudio({
               </div>
             </footer>
             {draftSaveMessage ? <p className="image-studio-interview-save-status success">{draftSaveMessage}</p> : null}
+          </section>
+        </div>
+      ) : null}
+      {faceSeedReviewOpen ? (
+        <div className="image-studio-modal-backdrop" role="presentation">
+          <section className="image-studio-interview-modal image-studio-seed-review-modal" role="dialog" aria-modal="true" aria-labelledby="face-seed-review-title">
+            <header>
+              <div>
+                <span className="image-studio-eyebrow">Character identity check</span>
+                <h2 id="face-seed-review-title">Choose every face that looks like the same character</h2>
+                <p>Slot 1 uses your saved face seed and stays selected. Select any other results that preserve the same identity.</p>
+              </div>
+              <button className="btn" type="button" onClick={() => { setFaceSeedReviewOpen(false); setInterviewOpen(true); }}>Back to face setup</button>
+            </header>
+            <div className="image-studio-seed-review-summary" aria-live="polite">
+              <div><span>Generated</span><strong>{`${faceSeedBatchReadyCount} / 15`}</strong></div>
+              <div><span>Selected as same character</span><strong>{faceSeedReviewSelections.length}</strong></div>
+              <div><span>Status</span><strong>{faceSeedBatchTracking ? "Generating identity candidates…" : faceSeedBatchComplete ? "Ready for review" : "Preparing…"}</strong></div>
+            </div>
+            <div className="image-studio-seed-review-grid">
+              {Array.from({ length: 15 }, (_, index) => {
+                const preview = faceSeedBatchPreviews[index];
+                const previewId = String(preview?.preview_id || `pending-${index}`);
+                const selected = Boolean(preview && faceSeedReviewSelections.includes(String(preview.preview_id || "")));
+                const anchor = index === 0 || Boolean(preview?.identity_anchor);
+                return (
+                  <button
+                    className={`image-studio-seed-review-card${selected ? " is-selected" : ""}${anchor ? " is-anchor" : ""}`}
+                    type="button"
+                    key={previewId}
+                    disabled={!preview?.url || anchor}
+                    aria-pressed={selected}
+                    onClick={() => toggleFaceSeedReview(preview, index)}
+                  >
+                    {preview?.url ? <img src={`${apiBase}${preview.url}`} alt={`Identity seed candidate ${index + 1}`} /> : <span className="image-studio-seed-review-placeholder">{preview?.status ? String(preview.status).replaceAll("_", " ") : "Waiting"}</span>}
+                    <span className="image-studio-seed-review-card-meta">
+                      <strong>{anchor ? "1 · Saved seed" : `Seed ${index + 1}`}</strong>
+                      <code>{preview?.seed ?? "pending"}</code>
+                      <small>{anchor ? "Identity anchor" : selected ? "Same character" : preview?.url ? "Click if same character" : "Generating…"}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <footer>
+              <button className="btn" type="button" onClick={() => { setFaceSeedReviewOpen(false); setInterviewOpen(true); }}>Back</button>
+              <span>{faceSeedBatchComplete ? "Review all 15 candidates" : `Generating ${faceSeedBatchReadyCount} of 15`}</span>
+              <button className="btn btn-primary" type="button" disabled={!faceSeedBatchComplete || characterSaveBusy} onClick={confirmFaceSeedReview}>
+                {characterSaveBusy ? "Saving selection…" : "Save selection & continue"}
+              </button>
+            </footer>
           </section>
         </div>
       ) : null}
