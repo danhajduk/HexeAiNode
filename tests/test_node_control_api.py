@@ -2677,6 +2677,42 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(weather_files[3].exists())
             self.assertEqual(result["weather_remaining"], 2)
 
+    def test_image_output_cleanup_falls_back_to_container_for_owned_outputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "output"
+            output_dir.mkdir()
+            old_image = output_dir / "old.png"
+            old_image.write_bytes(b"old")
+            now = 1_800_000_000.0
+            old_timestamp = now - (31 * 24 * 60 * 60)
+            os.utime(old_image, (old_timestamp, old_timestamp))
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+            )
+            state._manual_image_output_dir = lambda: output_dir.resolve()
+            container_deletes = []
+
+            def container_delete(*, relative_path):
+                container_deletes.append(relative_path)
+                old_image.unlink()
+
+            state._delete_manual_image_output_via_container = container_delete
+            original_unlink = Path.unlink
+
+            def permission_denied(path, *args, **kwargs):
+                if path == old_image and not container_deletes:
+                    raise PermissionError("container owned")
+                return original_unlink(path, *args, **kwargs)
+
+            with patch.object(Path, "unlink", permission_denied):
+                result = state.cleanup_manual_image_outputs(now_timestamp=now)
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(container_deletes, ["old.png"])
+            self.assertFalse(old_image.exists())
+
     def test_manual_image_generation_status_reports_latest_job_completion(self):
         class _ManualImageServiceManager:
             def get_status(self):

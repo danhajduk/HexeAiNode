@@ -10898,12 +10898,21 @@ class NodeControlState:
                     raise ValueError("image_output_cleanup_path_outside_output_dir")
                 deleted_bytes += path.stat().st_size
                 relative = path.relative_to(output_dir).as_posix()
-                path.unlink()
+                try:
+                    path.unlink()
+                except PermissionError:
+                    self._delete_manual_image_output_via_container(relative_path=relative)
+                if path.exists():
+                    raise ValueError("image_output_cleanup_delete_failed")
                 deleted.append(relative)
                 for sidecar in (path.with_suffix(".txt"), path.with_suffix(".json")):
                     if sidecar.exists() and sidecar.is_file() and not sidecar.is_symlink():
                         deleted_bytes += sidecar.stat().st_size
-                        sidecar.unlink()
+                        sidecar_relative = sidecar.relative_to(output_dir).as_posix()
+                        try:
+                            sidecar.unlink()
+                        except PermissionError:
+                            self._delete_manual_image_output_via_container(relative_path=sidecar_relative)
             except Exception as exc:
                 errors.append({"path": str(path), "error": str(exc)})
 
