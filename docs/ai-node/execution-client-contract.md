@@ -83,7 +83,7 @@ The caller owns its HTTP timeout. For sync calls it should exceed the effective 
 
 Clients consume `output.images[]`. Every completed image artifact guarantees a non-empty `url`, positive `width`, `height`, and `size_bytes`, plus an image MIME type. `relative_path` is informational and may be null. A relative URL is resolved against Core's `provider_api_base_url`; clients must use `url` instead of constructing filesystem paths.
 
-Local artifact routes currently have no route authentication, URL signature, or URL-specific expiration. Files live under configured runtime output storage, survive API restarts, and remain until operator/runtime cleanup. No retention duration is implemented. Clients needing durable ownership should download promptly. Retry a failed artifact retrieval as GET only; do not automatically regenerate unless duplicates are acceptable.
+Local artifact routes currently have no route authentication, URL signature, or URL-specific expiration. Files live under configured runtime output storage and survive API restarts. Ordinary generated images are retained for 30 days by default. Weather scenery is bounded more tightly to seven days and the newest 100 files by default. These limits are configurable, so clients needing durable ownership should download promptly. Retry a failed artifact retrieval as GET only; do not automatically regenerate unless duplicates are acceptable.
 
 Legacy `output.image` and `output.text` on visual results are compatibility fields and may be deprecated. Inline image bytes are not canonical.
 

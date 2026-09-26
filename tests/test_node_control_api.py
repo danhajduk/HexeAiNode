@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import logging
+import os
 import tempfile
 import threading
 import time
@@ -1757,6 +1758,7 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertIn("provider_capability_refresh", payload["internal_scheduler"]["tasks"])
             self.assertIn("heartbeat", payload["internal_scheduler"]["tasks"])
             self.assertIn("telemetry", payload["internal_scheduler"]["tasks"])
+            self.assertIn("image_output_cleanup", payload["internal_scheduler"]["tasks"])
             self.assertIn("operational_mqtt_health", payload["internal_scheduler"]["tasks"])
             self.assertEqual(payload["internal_scheduler"]["tasks"]["heartbeat"]["schedule_name"], "heartbeat_5_seconds")
             self.assertEqual(payload["internal_scheduler"]["tasks"]["telemetry"]["schedule_name"], "telemetry_60_seconds")
@@ -2620,6 +2622,60 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 "template.avatar_profile_depth_pulid.realvisxl.v1",
             ],
         )
+
+    def test_image_output_cleanup_applies_general_and_weather_retention(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "output"
+            weather_dir = output_dir / "hexe" / "scenery"
+            general_dir = output_dir / "hexe" / "other"
+            weather_dir.mkdir(parents=True)
+            general_dir.mkdir(parents=True)
+            now = 1_800_000_000.0
+
+            old_general = general_dir / "old.png"
+            old_general.write_bytes(b"old")
+            old_general.with_suffix(".json").write_text("{}", encoding="utf-8")
+            recent_general = general_dir / "recent.png"
+            recent_general.write_bytes(b"recent")
+            weather_files = []
+            for index in range(4):
+                path = weather_dir / f"weather-{index}.png"
+                path.write_bytes(f"weather-{index}".encode())
+                weather_files.append(path)
+
+            old_timestamp = now - (31 * 24 * 60 * 60)
+            recent_timestamp = now - 60
+            old_weather_timestamp = now - (8 * 24 * 60 * 60)
+            old_general.touch()
+            old_general.with_suffix(".json").touch()
+            recent_general.touch()
+            for path in (old_general, old_general.with_suffix(".json")):
+                os.utime(path, (old_timestamp, old_timestamp))
+            os.utime(recent_general, (recent_timestamp, recent_timestamp))
+            for index, path in enumerate(weather_files):
+                timestamp = old_weather_timestamp if index == 0 else recent_timestamp - index
+                os.utime(path, (timestamp, timestamp))
+
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+            )
+            state._image_output_retention_days = 30
+            state._weather_image_retention_days = 7
+            state._weather_image_max_files = 2
+            state._manual_image_output_dir = lambda: output_dir.resolve()
+
+            result = state.cleanup_manual_image_outputs(now_timestamp=now)
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["deleted_count"], 3)
+            self.assertFalse(old_general.exists())
+            self.assertFalse(old_general.with_suffix(".json").exists())
+            self.assertTrue(recent_general.exists())
+            self.assertFalse(weather_files[0].exists())
+            self.assertFalse(weather_files[3].exists())
+            self.assertEqual(result["weather_remaining"], 2)
 
     def test_manual_image_generation_status_reports_latest_job_completion(self):
         class _ManualImageServiceManager:

@@ -895,6 +895,13 @@ class NodeControlState:
             _env_int("HEXE_LOCAL_LLM_ALWAYS_ON_CHECK_INTERVAL_SECONDS", 60),
             1,
         )
+        self._image_output_cleanup_interval_seconds = max(
+            _env_int("HEXE_IMAGE_OUTPUT_CLEANUP_INTERVAL_SECONDS", 3600),
+            60,
+        )
+        self._image_output_retention_days = max(_env_int("HEXE_IMAGE_OUTPUT_RETENTION_DAYS", 30), 1)
+        self._weather_image_retention_days = max(_env_int("HEXE_WEATHER_IMAGE_RETENTION_DAYS", 7), 1)
+        self._weather_image_max_files = max(_env_int("HEXE_WEATHER_IMAGE_MAX_FILES", 100), 1)
         self._comfyui_gpu_presets_config_path = str(
             os.environ.get("HEXE_COMFYUI_GPU_PRESETS_CONFIG") or "config/comfyui-gpu-presets.json"
         ).strip()
@@ -10842,6 +10849,81 @@ class NodeControlState:
             )
         return outputs
 
+    def cleanup_manual_image_outputs(self, *, now_timestamp: float | None = None) -> dict:
+        output_dir = self._manual_image_output_dir()
+        now_value = float(now_timestamp if now_timestamp is not None else time.time())
+        image_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
+        general_cutoff = now_value - (self._image_output_retention_days * 24 * 60 * 60)
+        weather_cutoff = now_value - (self._weather_image_retention_days * 24 * 60 * 60)
+        deleted: list[str] = []
+        errors: list[dict] = []
+
+        if not output_dir.exists():
+            return {
+                "status": "ok",
+                "output_dir": str(output_dir),
+                "deleted_count": 0,
+                "deleted_bytes": 0,
+                "weather_remaining": 0,
+                "errors": [],
+            }
+
+        image_files = []
+        modified_times: dict[Path, float] = {}
+        for path in output_dir.rglob("*"):
+            try:
+                if not path.is_file() or path.is_symlink() or path.suffix.lower() not in image_suffixes:
+                    continue
+                modified_times[path] = path.stat().st_mtime
+                image_files.append(path)
+            except FileNotFoundError:
+                continue
+        weather_root = (output_dir / "hexe" / "scenery").resolve()
+        weather_files = [path for path in image_files if weather_root in path.resolve().parents]
+        weather_files.sort(key=lambda path: modified_times[path], reverse=True)
+        weather_overflow = set(weather_files[self._weather_image_max_files :])
+        delete_candidates = {
+            path
+            for path in image_files
+            if modified_times[path] < general_cutoff
+            or (path in weather_files and modified_times[path] < weather_cutoff)
+            or path in weather_overflow
+        }
+
+        deleted_bytes = 0
+        for path in sorted(delete_candidates):
+            try:
+                resolved = path.resolve()
+                if output_dir != resolved and output_dir not in resolved.parents:
+                    raise ValueError("image_output_cleanup_path_outside_output_dir")
+                deleted_bytes += path.stat().st_size
+                relative = path.relative_to(output_dir).as_posix()
+                path.unlink()
+                deleted.append(relative)
+                for sidecar in (path.with_suffix(".txt"), path.with_suffix(".json")):
+                    if sidecar.exists() and sidecar.is_file() and not sidecar.is_symlink():
+                        deleted_bytes += sidecar.stat().st_size
+                        sidecar.unlink()
+            except Exception as exc:
+                errors.append({"path": str(path), "error": str(exc)})
+
+        weather_remaining = sum(1 for path in weather_files if path.exists())
+        result = {
+            "status": "ok" if not errors else "completed_with_errors",
+            "output_dir": str(output_dir),
+            "general_retention_days": self._image_output_retention_days,
+            "weather_retention_days": self._weather_image_retention_days,
+            "weather_max_files": self._weather_image_max_files,
+            "deleted_count": len(deleted),
+            "deleted_bytes": deleted_bytes,
+            "deleted": deleted,
+            "weather_remaining": weather_remaining,
+            "errors": errors,
+        }
+        if hasattr(self._logger, "info"):
+            self._logger.info("[image-output-cleanup] %s", result)
+        return result
+
     def _manual_image_references(self, *, limit: int) -> list[dict]:
         root = self._manual_image_reference_root()
         if not root.exists():
@@ -14728,6 +14810,15 @@ class NodeControlState:
             task_kind="local_recurring",
             readiness_critical=False,
         )
+        self._internal_scheduler.register_interval_task(
+            task_id="image_output_cleanup",
+            display_name="Generated Image Output Cleanup",
+            interval_seconds=self._image_output_cleanup_interval_seconds,
+            schedule_name="interval_seconds",
+            schedule_detail=f"Every {self._image_output_cleanup_interval_seconds} seconds",
+            task_kind="local_recurring",
+            readiness_critical=False,
+        )
         self._sync_operational_mqtt_health_schedule()
 
     def _operational_mqtt_health_schedule_definition(self) -> dict:
@@ -14889,6 +14980,11 @@ class NodeControlState:
                 initial_delay_seconds=self._visual_training_client_idle_check_interval_seconds,
             )
             self._internal_scheduler.start_interval_task(
+                task_id="image_output_cleanup",
+                coroutine_factory=self._image_output_cleanup_job_once,
+                initial_delay_seconds=0,
+            )
+            self._internal_scheduler.start_interval_task(
                 task_id="operational_mqtt_health",
                 coroutine_factory=self._operational_mqtt_health_job_once,
                 initial_delay_seconds=0,
@@ -14933,6 +15029,9 @@ class NodeControlState:
                 },
             )
         return result
+
+    async def _image_output_cleanup_job_once(self) -> dict:
+        return await asyncio.to_thread(self.cleanup_manual_image_outputs)
 
     async def _status_telemetry_job_once(self) -> dict | None:
         if self._capability_runner is None or not hasattr(self._capability_runner, "emit_periodic_status_telemetry"):

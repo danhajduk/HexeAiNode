@@ -115,6 +115,10 @@ Backend runtime:
 - `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` default `1`; max CPU ComfyUI background image jobs dispatched concurrently
 - `HEXE_EXECUTION_QUEUE_CHECK_AFTER_SECONDS` default `5`; queued response polling hint in seconds
 - `HEXE_EXECUTION_QUEUE_JOB_TTL_SECONDS` default `3600`; in-memory queued job retention hint in seconds
+- `HEXE_IMAGE_OUTPUT_CLEANUP_INTERVAL_SECONDS` default `3600`; generated-image cleanup frequency
+- `HEXE_IMAGE_OUTPUT_RETENTION_DAYS` default `30`; maximum age for ordinary generated images
+- `HEXE_WEATHER_IMAGE_RETENTION_DAYS` default `7`; maximum age for generated files under `hexe/scenery`
+- `HEXE_WEATHER_IMAGE_MAX_FILES` default `100`; maximum number of newest weather scenery images retained
 - `HEXE_EXECUTION_QUEUE_STATE_PATH` optional override; defaults to `execution_queue_jobs.json` next to the node config and persists async job status for restart-aware polling
 - `HEXE_EXECUTION_QUEUE_MAX_PENDING_PER_CLIENT` default `20`; maximum queued + running async jobs allowed per `requested_by` client across local/cloud queues; set `0` to disable the fairness cap
 - `HEXE_LOCAL_PREFERRED_SPILLOVER_ENABLED` default `true`; allows high-importance `local_preferred` queued jobs to use cloud when local is backed up and cloud is eligible
