@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, latestSavedFacePreview, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, latestSavedFacePreview, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -334,9 +334,13 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Define the body foundation");
     expect(markup).toContain("Overall build");
     expect(markup).toContain("Limb proportions");
-    expect(markup).toContain("Body foundation preview");
+    expect(markup).toContain("Neck-down full-body foundation");
     expect(markup).toContain("424242");
     expect(markup).toContain("Generate again with saved seed");
+    const prompt = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", body: "tall; athletic" });
+    expect(prompt).toContain("no head and no face");
+    expect(prompt).toContain("base of the neck through both feet");
+    expect(prompt).toContain("head completely outside the top of the frame");
   });
 
   it("forces SFW when an adult character is changed to an under-18 age group", () => {

@@ -93,11 +93,11 @@ function composeBodyDescription(selections = {}, customDetails = "") {
 
 function buildBodyPreviewPrompt(characterBrief) {
   return [
-    "EXACTLY ONE ADULT PERSON. Single centered neutral body reference, never a collage or character sheet.",
-    `Character: ${characterBrief.name}, ${characterBrief.age_group} ${characterBrief.gender_identity}.`,
-    `Face identity traits: ${characterBrief.appearance}.`,
+    "EXACTLY ONE ADULT BODY. Neck-down full-body anatomy reference, no head and no face, never a collage or character sheet.",
+    `Character body: ${characterBrief.age_group} ${characterBrief.gender_identity}.`,
     `BODY PROPORTIONS: ${characterBrief.body}.`,
-    "Full body visible from head to feet, neutral standing body-reference posture, shoulders level, arms relaxed and separated from torso, legs and proportions clearly visible.",
+    "Frame from the base of the neck through both feet. Entire shoulders, torso, arms, hands, hips, legs, and feet visible; head completely outside the top of the frame.",
+    "Neutral standing body-reference posture, shoulders level, arms relaxed and separated from torso, legs and proportions clearly visible.",
     "Simple close-fitting neutral bodysuit, no loose layers, clean studio background, even lighting, realistic anatomy.",
     `Visual style: ${characterBrief.visual_style}.`,
   ].filter(Boolean).join("\n");
@@ -1085,7 +1085,7 @@ export function ImageStudio({
     setDraftSaveMessage("Character saved. Submitting body reference preview…");
     const result = await onGenerateBodyPreview(profileId, {
       prompt: buildBodyPreviewPrompt(characterBrief),
-      negative_prompt: "multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, loose clothing, bulky clothing, dramatic pose, text, watermark, child, teen, underage",
+      negative_prompt: "head, face, eyes, mouth, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, loose clothing, bulky clothing, dramatic pose, text, watermark, child, teen, underage",
       seed: bodyPreviewSeed ?? null,
       lock_seed: bodyPreviewSeed !== undefined && bodyPreviewSeed !== null,
       width: 768,
@@ -1522,7 +1522,7 @@ export function ImageStudio({
                   <div className="image-studio-face-summary"><span>Combined body description</span><p>{characterBrief.body || "Choose body characteristics to build the reference description."}</p></div>
                 </div>
                 <aside className="image-studio-face-preview">
-                  <span className="image-studio-eyebrow">Body foundation preview</span>
+                  <span className="image-studio-eyebrow">Neck-down full-body foundation</span>
                   <div className="image-studio-face-preview-canvas">
                     {bodyPreviewImageUrl ? <img src={bodyPreviewImageUrl} alt={`Generated body reference for ${characterBrief.name || "character"}`} /> : <><span>Body reference</span><p>Your selected proportions will be rendered here.</p></>}
                   </div>
@@ -1618,4 +1618,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
