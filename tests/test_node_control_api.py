@@ -2565,6 +2565,36 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["generation_status"]["session"]["running_prompt_id"], "prompt-running")
         self.assertEqual(payload["generation_status"]["progress"]["percent"], 50.0)
 
+    def test_manual_image_generation_activity_skips_output_inventory(self):
+        class _ActivityServiceManager:
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "running", "vram_mib": 4096},
+                    "comfyui_webui": {"state": "running", "runtime": "gpu"},
+                }
+
+            def comfyui_webui_generation_status(self):
+                return {
+                    "runtime": "gpu",
+                    "session": {"queue_active": True, "running_prompt_id": "prompt-fast", "pending_prompt_ids": []},
+                    "progress": {"available": True, "percent": 75.0, "prompt_id": "prompt-fast"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ActivityServiceManager(),
+            )
+            state._write_manual_image_latest_job({"status": "submitted", "prompt_id": "prompt-fast"})
+            with patch.object(state, "_manual_image_outputs", side_effect=AssertionError("output inventory should not be scanned")):
+                payload = state.manual_image_generation_activity_status()
+
+        self.assertEqual(payload["latest_job"]["status"], "running")
+        self.assertEqual(payload["generation_status"]["progress"]["percent"], 75.0)
+        self.assertEqual(payload["runtime_service"]["vram_mib"], 4096)
+
     def test_manual_image_generation_status_only_exposes_active_manual_template(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = NodeControlState(

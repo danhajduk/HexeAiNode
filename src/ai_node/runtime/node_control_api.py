@@ -1594,6 +1594,39 @@ class NodeControlState:
             "outputs": outputs,
         }
 
+    def manual_image_generation_activity_status(self) -> dict:
+        """Return live generation activity without scanning reference or output inventories."""
+        services = self.service_status_payload().get("services", {})
+        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+        runtime = str(webui.get("runtime") or "gpu").strip().lower() if isinstance(webui, dict) else "gpu"
+        runtime_key = "comfyui_cpu" if runtime == "cpu" else "comfyui_gpu"
+        runtime_service = services.get(runtime_key) if isinstance(services, dict) else {}
+        generation_status = {}
+        if self._service_manager is not None and hasattr(self._service_manager, "comfyui_webui_generation_status"):
+            try:
+                generation_status = self._service_manager.comfyui_webui_generation_status()
+            except Exception as exc:
+                generation_status = {"available": False, "error": str(exc)}
+        generation_status = generation_status if isinstance(generation_status, dict) else {}
+        latest_job = self._read_manual_image_latest_job()
+        session = generation_status.get("session") if isinstance(generation_status.get("session"), dict) else {}
+        prompt_ids = {
+            str(latest_job.get("prompt_id") or "").strip(),
+            *[str(item or "").strip() for item in latest_job.get("prompt_ids") or []],
+        } - {""}
+        running_prompt_id = str(session.get("running_prompt_id") or "").strip()
+        pending_prompt_ids = {str(item or "").strip() for item in session.get("pending_prompt_ids") or []}
+        if running_prompt_id and running_prompt_id in prompt_ids:
+            latest_job = {**latest_job, "status": "running"}
+        elif prompt_ids.intersection(pending_prompt_ids):
+            latest_job = {**latest_job, "status": "queued"}
+        return {
+            "configured": True,
+            "generation_status": generation_status,
+            "latest_job": latest_job,
+            "runtime_service": runtime_service if isinstance(runtime_service, dict) else {},
+        }
+
     async def submit_manual_image_generation(self, *, payload: "ManualImageGenerationRequest") -> dict:
         if payload.scheduler_request_metadata:
             service = await self.start_service(
@@ -16174,6 +16207,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/manual-image-generation")
     def get_manual_image_generation():
         return state.manual_image_generation_status()
+
+    @app.get("/api/manual-image-generation/activity")
+    def get_manual_image_generation_activity():
+        return state.manual_image_generation_activity_status()
 
     @app.post("/api/manual-image-generation")
     async def post_manual_image_generation(payload: ManualImageGenerationRequest):

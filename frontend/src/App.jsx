@@ -329,7 +329,7 @@ export default function App() {
       apiGet("/api/prompts/services"),
       apiGet("/api/image-templates"),
       comfyuiTemplatesRequest,
-      apiGet("/api/manual-image-generation"),
+      apiGet("/api/manual-image-generation/activity"),
       apiGet("/api/avatar-generation"),
       apiGet("/api/execution/queues"),
       apiAdminGet("/api/capabilities/diagnostics"),
