@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, latestSavedFacePreview, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, latestSavedFacePreview, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -371,6 +371,7 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Continue character");
     expect(characterDraftBrief({ initial_data: JSON.stringify({ source: "image_studio", character_brief: brief }) })).toEqual(brief);
     expect(characterDraftFeatureCatalog({ initial_data: JSON.stringify({ source: "image_studio", face_feature_catalog: { selections: { "face shape": ["round"] } } }) })).toEqual({ selections: { "face shape": ["round"] } });
+    expect(characterDraftBodyFeatureCatalog({ initial_data: JSON.stringify({ source: "image_studio", body_feature_catalog: { selections: { build: ["athletic"] }, custom_details: "long legs" } }) })).toEqual({ selections: { build: ["athletic"] }, custom_details: "long legs" });
     expect(nextIncompleteInterviewStep(brief)).toBe(1);
   });
 });

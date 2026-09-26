@@ -509,6 +509,16 @@ function characterDraftFeatureCatalog(profile) {
   }
 }
 
+function characterDraftBodyFeatureCatalog(profile) {
+  try {
+    const initialData = JSON.parse(String(profile?.initial_data || ""));
+    const catalog = initialData?.body_feature_catalog;
+    return catalog && typeof catalog === "object" ? catalog : null;
+  } catch {
+    return null;
+  }
+}
+
 function nextIncompleteInterviewStep(brief) {
   if (!brief?.appearance) return 1;
   if (!brief?.body) return 2;
@@ -907,6 +917,7 @@ export function ImageStudio({
   function continueIncompleteCharacter(profile) {
     const savedBrief = characterDraftBrief(profile);
     const savedFeatures = characterDraftFeatureCatalog(profile);
+    const savedBodyFeatures = characterDraftBodyFeatureCatalog(profile);
     if (!savedBrief) {
       return;
     }
@@ -918,6 +929,8 @@ export function ImageStudio({
     setFaceFeatureSelections(savedFeatures?.selections || inferFaceFeatureSelections(savedBrief.appearance, faceFeatureCatalog));
     setFaceCustomDetails(savedFeatures?.custom_details || "");
     setFacePromptDraft(savedFeatures?.llm_refinement || "");
+    setBodyFeatureSelections(savedBodyFeatures?.selections || {});
+    setBodyCustomDetails(savedBodyFeatures?.custom_details || "");
     setCharacterProfileId(profile.profile_id || "");
     setPromptDraft("");
     setInterviewStep(nextIncompleteInterviewStep(savedBrief));
@@ -1618,4 +1631,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
