@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildFacePreviewPrompt, characterDraftBrief, composeFaceDescription, faceFeaturePromptDescription, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -13,13 +13,34 @@ describe("ImageStudio", () => {
       appearance: "oval face; green eyes; short black hair",
       expression: "quiet confidence",
       visual_style: "semi-realistic",
-    });
+    }, { "face shape": ["round"] }, "preserve the eyes; soften the eyebrows");
+    expect(prompt).toContain("EXACTLY ONE PERSON. EXACTLY ONE FACE.");
+    expect(prompt).toContain("PRIMARY FACE SHAPE REQUIREMENT");
+    expect(prompt).toContain("unmistakably round");
+    expect(prompt).toContain("LLM REFINEMENT LAYER: preserve the eyes; soften the eyebrows");
     expect(prompt).toContain("Character identity reference portrait of Nova, adult (18+) female.");
     expect(prompt).toContain("Character concept: space pilot.");
     expect(prompt).toContain("Face and hair: oval face; green eyes; short black hair.");
     expect(prompt).toContain("eyes looking directly at camera");
     expect(prompt).toContain("plain neutral-gray background");
     expect(prompt).not.toContain("Body and proportions");
+  });
+
+  it("adds strong multi-face and conflicting-shape negatives", () => {
+    const negative = buildFacePreviewNegativePrompt({ "face shape": ["round"] });
+    expect(negative).toContain("multiple faces");
+    expect(negative).toContain("portrait collage");
+    expect(negative).toContain("side-by-side portraits");
+    expect(negative).toContain("angular jaw");
+    expect(negative).toContain("pointed chin");
+  });
+
+  it("migrates descriptive legacy drafts back into structured selections", () => {
+    const appearance = composeFaceDescription({ "face shape": ["round"], "eye shape": ["almond"] }, "");
+    expect(inferFaceFeatureSelections(appearance)).toMatchObject({
+      "face shape": ["round"],
+      "eye shape": ["almond"],
+    });
   });
 
   it("expands eye-shape selections into structural prompt language", () => {
@@ -215,6 +236,7 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Incomplete characters");
     expect(markup).toContain("Continue character");
     expect(characterDraftBrief({ initial_data: JSON.stringify({ source: "image_studio", character_brief: brief }) })).toEqual(brief);
+    expect(characterDraftFeatureCatalog({ initial_data: JSON.stringify({ source: "image_studio", face_feature_catalog: { selections: { "face shape": ["round"] } } }) })).toEqual({ selections: { "face shape": ["round"] } });
     expect(nextIncompleteInterviewStep(brief)).toBe(1);
   });
 });

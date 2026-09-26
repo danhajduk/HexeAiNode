@@ -2586,6 +2586,7 @@ class NodeControlState:
             "prompt_id": generation.get("prompt_id"),
             "prompt_ids": generation.get("prompt_ids") or [],
             "seed": first_submission.get("seed"),
+            "seed_text": str(first_submission.get("seed")) if first_submission.get("seed") is not None else None,
             "seed_locked": lock_seed,
             "width": width,
             "height": height,
@@ -3050,7 +3051,7 @@ class NodeControlState:
                 _append_candidate(preview, source=str(preview.get("candidate_source") or "lora_seed"))
 
         while len(previews) < target_count:
-            seed = secrets.randbelow(2**63)
+            seed = secrets.randbelow(2**53 - 1)
             if seed in used_seeds:
                 continue
             used_seeds.add(seed)
@@ -7023,6 +7024,13 @@ class NodeControlState:
         metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
         if not metadata:
             return {}
+        prompt_workspaces = metadata.get("prompt_workspaces") if isinstance(metadata.get("prompt_workspaces"), dict) else {}
+        for workspace in prompt_workspaces.values():
+            if not isinstance(workspace, dict):
+                continue
+            for preview in workspace.get("preview_history") or []:
+                if isinstance(preview, dict) and preview.get("seed") is not None:
+                    preview["seed_text"] = str(preview["seed"])
         refresh_acquired = self._avatar_profile_refresh_lock.acquire(blocking=False)
         if refresh_acquired:
             try:
@@ -10386,7 +10394,7 @@ class NodeControlState:
         values = dict(template.get("defaults") or {})
         seed = self._coerce_manual_image_seed(payload.seed) if payload.seed is not None else values.get("seed")
         if seed is None:
-            seed = secrets.randbelow(2**63)
+            seed = secrets.randbelow(2**53 - 1)
         values.update(
             {
                 "positive_prompt": str(payload.prompt or values.get("positive_prompt") or "").strip(),
@@ -10423,7 +10431,7 @@ class NodeControlState:
     ) -> "ManualImageGenerationRequest":
         update: dict = {}
         if bool(payload.randomize_seed):
-            update["seed"] = secrets.randbelow(2**63)
+            update["seed"] = secrets.randbelow(2**53 - 1)
         if bool(payload.randomize_reference_strengths):
             variables = {item["name"]: item for item in list(template.get("variables") or []) if isinstance(item, dict) and item.get("name")}
             defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}

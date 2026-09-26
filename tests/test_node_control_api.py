@@ -5647,6 +5647,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["preview"]["template_id"], "template.avatar_head_face_preview.realvisxl.v1")
         self.assertEqual(result["preview"]["prompt_id"], "prompt-face-preview-11")
         self.assertEqual(result["preview"]["seed"], 1211)
+        self.assertEqual(result["preview"]["seed_text"], "1211")
         self.assertEqual(len(preview_history), 9)
         self.assertEqual(preview_history[0]["prompt"], "head portrait 3")
         self.assertEqual(preview_history[0]["seed"], 1203)

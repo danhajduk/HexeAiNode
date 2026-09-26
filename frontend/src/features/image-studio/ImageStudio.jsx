@@ -246,6 +246,17 @@ function faceFeaturePromptDescription(groupId, value) {
   return FACE_FEATURE_PROMPT_DESCRIPTIONS[groupId]?.[value] || value;
 }
 
+function inferFaceFeatureSelections(appearance) {
+  const text = String(appearance || "").toLowerCase();
+  return FACE_FEATURE_OPTION_GROUPS.reduce((selections, group) => {
+    const matches = group.options.filter((value) => {
+      const description = faceFeaturePromptDescription(group.id, value).toLowerCase();
+      return text.includes(description) || text.includes(`${group.id}: ${value}`);
+    });
+    return matches.length ? { ...selections, [group.id]: group.multiple ? matches : matches.slice(0, 1) } : selections;
+  }, {});
+}
+
 const OPTION_COLOR_SWATCHES = {
   "skin tone": {
     porcelain: "#f6dfd0", fair: "#edc8ad", light: "#dfb090", "light-medium": "#c9906b",
@@ -334,23 +345,46 @@ function composeFaceDescription(selections, customDetails) {
 }
 
 const FACE_PREVIEW_NEGATIVE_PROMPT = [
+  "multiple people", "more than one person", "two people", "multiple faces", "more than one face",
+  "two faces", "duplicate face", "extra face", "face collage", "portrait collage", "diptych", "triptych",
+  "contact sheet", "character sheet", "split screen", "side-by-side portraits", "mirrored face", "reflection",
   "profile view", "three-quarter view", "tilted head", "cropped forehead", "cropped chin",
   "closed eyes", "asymmetrical eyes", "distorted face", "duplicate features", "exaggerated expression",
   "heavy makeup", "dramatic lighting", "harsh shadows", "accessories covering the face",
   "text", "watermark", "blurry", "low detail", "child", "teen", "underage",
 ].join(", ");
 
-function buildFacePreviewPrompt(brief) {
+function buildFacePreviewPrompt(brief, selections = {}, refinement = "") {
   const identity = [brief?.age_group, brief?.gender_identity].filter(Boolean).join(" ");
+  const faceShape = selections["face shape"]?.[0];
+  const faceShapeDescription = faceShape ? faceFeaturePromptDescription("face shape", faceShape) : "";
   return [
+    "EXACTLY ONE PERSON. EXACTLY ONE FACE. Single centered identity portrait; never a collage, grid, comparison, or character sheet.",
     `Character identity reference portrait of ${brief?.name || "an unnamed character"}${identity ? `, ${identity}` : ""}.`,
     brief?.concept ? `Character concept: ${brief.concept}.` : "",
+    faceShapeDescription ? `PRIMARY FACE SHAPE REQUIREMENT: (${faceShapeDescription}:1.35). The facial silhouette must be unmistakably ${faceShape}.` : "",
     brief?.appearance ? `Face and hair: ${brief.appearance}.` : "",
     brief?.expression ? `Expression: ${brief.expression}.` : "Expression: neutral and relaxed.",
     "Front-facing head-and-shoulders composition, eyes looking directly at camera, symmetrical neutral pose, centered face, entire head visible.",
     "Realistic facial proportions, detailed natural skin texture, soft even studio lighting, plain neutral-gray background, identity reference sheet, sharp focus.",
     brief?.visual_style ? `Visual style: ${brief.visual_style}.` : "",
+    refinement ? `LLM REFINEMENT LAYER: ${refinement}` : "",
   ].filter(Boolean).join("\n");
+}
+
+function buildFacePreviewNegativePrompt(selections = {}) {
+  const faceShape = selections["face shape"]?.[0];
+  const conflictingShapes = {
+    round: ["square face", "long face", "oblong face", "angular jaw", "narrow face", "pointed chin"],
+    oval: ["square face", "extremely round face", "very long face", "angular jaw"],
+    square: ["round jaw", "pointed chin", "narrow jaw", "heart-shaped face"],
+    "heart-shaped": ["broad square jaw", "round face", "wide chin"],
+    diamond: ["round face", "broad forehead", "broad jaw"],
+    oblong: ["round face", "short face", "wide square face"],
+    triangular: ["broad forehead", "narrow jaw", "heart-shaped face"],
+    "soft angular": ["extremely round face", "harsh square jaw", "pointed chin"],
+  };
+  return [...FACE_PREVIEW_NEGATIVE_PROMPT.split(", "), ...(conflictingShapes[faceShape] || [])].join(", ");
 }
 
 function applyCharacterFoundation(current, field, value) {
@@ -367,6 +401,16 @@ function characterDraftBrief(profile) {
     return initialData?.source === "image_studio" && initialData.character_brief && typeof initialData.character_brief === "object"
       ? initialData.character_brief
       : null;
+  } catch {
+    return null;
+  }
+}
+
+function characterDraftFeatureCatalog(profile) {
+  try {
+    const initialData = JSON.parse(String(profile?.initial_data || ""));
+    const catalog = initialData?.face_feature_catalog;
+    return catalog && typeof catalog === "object" ? catalog : null;
   } catch {
     return null;
   }
@@ -517,6 +561,7 @@ export function ImageStudio({
     ].filter(Boolean).join(" — ")
     : characterBrief[activeInterviewStep.field] || "";
   const facePreview = facePreviewResult?.preview || null;
+  const facePreviewSeed = facePreview?.seed_text || facePreview?.seed;
   const generationProgress = generationActivity?.generation_status?.progress || {};
   const generationSession = generationActivity?.generation_status?.session || generationActivity?.service?.session || {};
   const generationJob = generationActivity?.latest_job || {};
@@ -610,6 +655,13 @@ export function ImageStudio({
         schema_version: "1.0",
         source: "image_studio",
         character_brief: characterBrief,
+        face_feature_catalog: {
+          schema_version: "1.0",
+          selections: faceFeatureSelections,
+          custom_details: faceCustomDetails,
+          expanded_description: characterBrief.appearance,
+          llm_refinement: facePromptDraft,
+        },
       }),
     });
     if (!result?.profile) {
@@ -626,6 +678,7 @@ export function ImageStudio({
 
   function continueIncompleteCharacter(profile) {
     const savedBrief = characterDraftBrief(profile);
+    const savedFeatures = characterDraftFeatureCatalog(profile);
     if (!savedBrief) {
       return;
     }
@@ -634,6 +687,9 @@ export function ImageStudio({
       setSelectedTemplateId(candidateTemplate.template_id);
     }
     setCharacterBrief((current) => ({ ...current, ...savedBrief }));
+    setFaceFeatureSelections(savedFeatures?.selections || inferFaceFeatureSelections(savedBrief.appearance));
+    setFaceCustomDetails(savedFeatures?.custom_details || "");
+    setFacePromptDraft(savedFeatures?.llm_refinement || "");
     setCharacterProfileId(profile.profile_id || "");
     setPromptDraft("");
     setInterviewStep(nextIncompleteInterviewStep(savedBrief));
@@ -727,10 +783,11 @@ export function ImageStudio({
     if (!profileId) return;
     setDraftSaveMessage("Character saved. Submitting face preview…");
     const locked = forceLockedSeed || faceSeedLocked;
-    const seed = facePreview?.seed;
+    const seed = facePreview?.seed_text || facePreview?.seed;
+    const refinement = promptOverride || facePromptDraft;
     const result = await onGenerateFacePreview(profileId, {
-      prompt: promptOverride || facePromptDraft || buildFacePreviewPrompt(characterBrief),
-      negative_prompt: FACE_PREVIEW_NEGATIVE_PROMPT,
+      prompt: buildFacePreviewPrompt(characterBrief, faceFeatureSelections, refinement),
+      negative_prompt: buildFacePreviewNegativePrompt(faceFeatureSelections),
       seed: locked && seed !== undefined && seed !== null ? seed : null,
       lock_seed: locked && seed !== undefined && seed !== null,
     });
@@ -738,13 +795,13 @@ export function ImageStudio({
   }
 
   async function refineAndRegenerateFacePreview() {
-    if (!faceTweakInstruction.trim() || facePreview?.seed === undefined || facePreview?.seed === null || promptHelperBusy || facePreviewTracking) return;
-    const currentPrompt = facePromptDraft || facePreview.prompt || buildFacePreviewPrompt(characterBrief);
+    if (!faceTweakInstruction.trim() || facePreviewSeed === undefined || facePreviewSeed === null || promptHelperBusy || facePreviewTracking) return;
+    const currentPrompt = buildFacePreviewPrompt(characterBrief, faceFeatureSelections, facePromptDraft);
     const refined = await onImprovePrompt?.({
       template_id: "template.avatar_head_face_preview.realvisxl.v1",
       mode: "txt2img",
       prompt: currentPrompt,
-      negative_prompt: FACE_PREVIEW_NEGATIVE_PROMPT,
+      negative_prompt: buildFacePreviewNegativePrompt(faceFeatureSelections),
       width: 512,
       height: 512,
       reference_image_provided: false,
@@ -1082,13 +1139,13 @@ export function ImageStudio({
                     <div><span>Runtime</span><code>{comfyService.state || "unknown"}</code></div>
                     <div><span>Model</span><code>{comfyResidency.loaded_model || comfyResidency.model_state || "unloaded"}</code></div>
                     <div><span>VRAM</span><code>{comfyService.vram_mib !== undefined ? `${comfyService.vram_mib} MiB` : "—"}</code></div>
-                    <div><span>Seed</span><code>{facePreview?.seed ?? "—"}</code></div>
+                    <div><span>Seed</span><code>{facePreviewSeed ?? "—"}</code></div>
                   </div>
-                  {facePreview?.seed !== undefined && facePreview?.seed !== null ? (
+                  {facePreviewSeed !== undefined && facePreviewSeed !== null ? (
                     <div className="image-studio-seed-controls">
                       <label>
                         <input type="checkbox" checked={faceSeedLocked} onChange={(event) => setFaceSeedLocked(event.target.checked)} />
-                        Lock seed <code>{facePreview.seed}</code>
+                        Lock seed <code>{facePreviewSeed}</code>
                       </label>
                       <p>Locking preserves the starting noise so prompt adjustments can be compared more directly.</p>
                     </div>
@@ -1107,7 +1164,7 @@ export function ImageStudio({
                       className="btn"
                       type="button"
                       onClick={refineAndRegenerateFacePreview}
-                      disabled={!faceTweakInstruction.trim() || facePreview?.seed === undefined || facePreview?.seed === null || promptHelperBusy || facePreviewTracking || characterSaveBusy}
+                      disabled={!faceTweakInstruction.trim() || facePreviewSeed === undefined || facePreviewSeed === null || promptHelperBusy || facePreviewTracking || characterSaveBusy}
                     >
                       {promptHelperBusy ? "Refining prompt…" : "Refine & regenerate same seed"}
                     </button>
@@ -1145,4 +1202,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, buildFacePreviewPrompt, characterDraftBrief, composeFaceDescription, faceFeaturePromptDescription, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
