@@ -11853,7 +11853,7 @@ class NodeControlState:
             if isinstance(constraints.get("image_template_resolved"), dict)
             else {}
         )
-        prompt = str(inputs.get("prompt") or "").strip()
+        prompt = self._direct_visual_runtime_prompt(request=request)
         if not prompt:
             raise ValueError("image_generation_prompt_required")
         template_id = str(inputs.get("template_id") or resolved_template.get("template_id") or "").strip()
@@ -11944,6 +11944,29 @@ class NodeControlState:
             },
             "completed_at": datetime.now(timezone.utc).isoformat(),
         }
+
+    def _direct_visual_runtime_prompt(self, *, request: TaskExecutionRequest) -> str:
+        inputs = request.inputs if isinstance(request.inputs, dict) else {}
+        authorization = self._direct_execution_authorization_snapshot(request=request)
+        prompt_definition = (
+            authorization.prompt_definition
+            if authorization is not None
+            and bool(getattr(authorization, "allowed", False))
+            and isinstance(getattr(authorization, "prompt_definition", None), dict)
+            else {}
+        )
+        prompt = render_prompt_template(prompt_definition=prompt_definition, request_inputs=inputs)
+        if prompt is None:
+            prompt = inputs.get("prompt")
+        if prompt is None:
+            prompt = inputs.get("text")
+        if prompt is None and isinstance(inputs.get("messages"), list):
+            prompt = "\n\n".join(
+                str(message.get("content") or "").strip()
+                for message in inputs["messages"]
+                if isinstance(message, dict) and str(message.get("content") or "").strip()
+            )
+        return str(prompt or "").strip()
 
     def _direct_visual_runtime_template_id(self) -> str:
         allowed_required = {

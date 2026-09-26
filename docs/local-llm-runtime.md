@@ -243,6 +243,8 @@ fills template variables from rendered prompt text, request inputs, defaults, an
 the resolved API workflow under `inputs.comfyui_workflow`. The effective request also includes
 `constraints.image_template_resolved` with template id, version, runtime, model requirements, and
 `output_folder_policy: operational`, keeping governed generation separate from manual Web UI artifact folders.
+The direct local Visual Runtime uses the same registered `prompt_template` rendering and input/default merging as the
+OpenAI image-generation adapter, then falls back to request `prompt`, `text`, or message content.
 
 The default ComfyUI template catalog contains GPU avatar templates for profile prompt previews, final profile-aware generation, body-reference testing, and masked inpaint passes. `Avatar Head Face Preview`
 (`template.avatar_head_face_preview.realvisxl.v1`) is a text-only RealVisXL SDXL portrait workflow used by the Avatar Generation profile detail page to submit head/face prompt previews and record the resulting prompt id in preview history. `Simple Avatar Generation`
@@ -349,7 +351,8 @@ mapping is deterministic and conservative:
   sentiment analysis, task planning, workflow reasoning, and streaming response
 - enabled for code-named local models such as `coder`, `code`, `codestral`, or `deepseek-coder`: code generation,
   review, debugging, and explanation
-- not enabled by the local mapping: tool calling, environment control, vision, OCR, image generation/editing/variation,
+- enabled by a separate local runtime capability: image generation through the GPU/CPU Visual Runtime
+- not enabled by the local model mapping: tool calling, environment control, vision, OCR, image editing/variation,
   audio, realtime voice, embeddings/search/indexing, moderation, and policy checks
 
 Inspect the local mapping with:

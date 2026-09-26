@@ -120,6 +120,17 @@ class CapabilityResolverTests(unittest.TestCase):
         )
         self.assertEqual(payload["resolved_tasks"], [])
 
+    def test_resolve_node_capabilities_includes_runtime_backed_features(self):
+        payload = resolve_node_capabilities(
+            enabled_models=["qwen3-8b-q4_k_m"],
+            model_feature_catalog={"entries": []},
+            task_graph={"tasks": {"task.image_generation": {"all_of": ["image_generation"]}}},
+            runtime_feature_flags={"image_generation": True},
+        )
+
+        self.assertTrue(payload["feature_union"]["image_generation"])
+        self.assertEqual(payload["resolved_tasks"], ["task.image_generation"])
+
     def test_resolve_task_capabilities_partial_graph_match_only_enables_satisfied_nodes(self):
         resolved = resolve_task_capabilities(
             feature_union={"chat": True, "reasoning": False, "tool_calling": True},

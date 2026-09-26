@@ -47,6 +47,9 @@ from ai_node.config.provider_enabled_models_config import (
 from ai_node.providers.provider_registry import ProviderRegistry
 
 
+LOCAL_RUNTIME_FEATURE_FLAGS = {"image_generation": True}
+
+
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -664,6 +667,7 @@ class ProviderRuntimeManager:
             enabled_models=enabled_model_ids,
             model_feature_catalog={"entries": entries},
             task_graph=task_graph,
+            runtime_feature_flags=LOCAL_RUNTIME_FEATURE_FLAGS,
         )
         return {
             "provider_id": "local",
@@ -678,7 +682,7 @@ class ProviderRuntimeManager:
                 "streaming": bool(resolved.get("feature_union", {}).get("streaming_output")),
                 "tool_calling": False,
                 "vision": False,
-                "image_generation": False,
+                "image_generation": bool(resolved.get("feature_union", {}).get("image_generation")),
                 "audio_input": False,
                 "audio_output": False,
                 "embeddings": False,
@@ -907,6 +911,7 @@ class ProviderRuntimeManager:
                 enabled_models=enabled_models,
                 model_feature_catalog=combined_feature_catalog,
                 task_graph=task_graph,
+                runtime_feature_flags=LOCAL_RUNTIME_FEATURE_FLAGS,
             )
             payload["selected_models"] = list(usable_payload.get("selected_model_ids") or [])
             payload["blocked_models"] = list(usable_payload.get("blocked_models") or [])
@@ -921,6 +926,7 @@ class ProviderRuntimeManager:
                     enabled_models=local_enabled_models,
                     model_feature_catalog={"entries": local_feature_entries},
                     task_graph=task_graph,
+                    runtime_feature_flags=LOCAL_RUNTIME_FEATURE_FLAGS,
                 ),
             }
             payload["generated_at"] = _iso_now()

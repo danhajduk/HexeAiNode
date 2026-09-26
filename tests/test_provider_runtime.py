@@ -607,14 +607,15 @@ class ProviderRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("task.classification", payload["enabled_task_capabilities"])
             self.assertIn("task.summarization", payload["enabled_task_capabilities"])
             self.assertIn("task.structured_extraction", payload["enabled_task_capabilities"])
-            self.assertNotIn("task.image_generation", payload["enabled_task_capabilities"])
+            self.assertIn("task.image_generation", payload["enabled_task_capabilities"])
             self.assertEqual(payload["provider_capabilities"]["openai"]["resolved_tasks"], [])
             self.assertIn("task.chat", payload["provider_capabilities"]["local"]["resolved_tasks"])
 
             local_payload = runtime.local_resolved_capabilities_payload()
             self.assertEqual(local_payload["provider_id"], "local")
             self.assertTrue(local_payload["capabilities"]["structured_output"])
-            self.assertFalse(local_payload["capabilities"]["image_generation"])
+            self.assertTrue(local_payload["capabilities"]["image_generation"])
+            self.assertIn("task.image_generation", local_payload["resolved_tasks"])
 
     async def test_usable_models_exclude_unavailable_selected_models(self):
         with tempfile.TemporaryDirectory() as tmp:

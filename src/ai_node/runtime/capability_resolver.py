@@ -45,12 +45,17 @@ def resolve_node_capabilities(
     enabled_models: list[str],
     model_feature_catalog: dict,
     task_graph: dict,
+    runtime_feature_flags: dict[str, bool] | None = None,
 ) -> dict:
     entries = model_feature_catalog.get("entries") if isinstance(model_feature_catalog, dict) else []
     feature_union = build_feature_union(
         model_feature_entries=entries if isinstance(entries, list) else [],
         enabled_models=enabled_models,
     )
+    for feature, enabled in (runtime_feature_flags or {}).items():
+        normalized = str(feature or "").strip()
+        if normalized in feature_union and bool(enabled):
+            feature_union[normalized] = True
     resolved_tasks = resolve_task_capabilities(feature_union=feature_union, task_graph=task_graph)
     return {
         "schema_version": "1.0",

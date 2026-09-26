@@ -7,6 +7,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from ai_node.config.task_capability_selection_config import TaskCapabilitySelectionConfigStore
@@ -7879,6 +7880,39 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(state.submitted_payload.prompt, "gray cube")
             self.assertEqual(state.submitted_payload.template_id, "template.avatar_head_face_preview.realvisxl.v1")
             self.assertEqual(state.submitted_payload.scheduler_request_metadata["idle_policy"], "client_job")
+
+    def test_direct_local_image_generation_reuses_registered_prompt_template(self):
+        class _PromptVisualExecutionState(NodeControlState):
+            def _direct_execution_authorization_snapshot(self, *, request):
+                return SimpleNamespace(
+                    allowed=True,
+                    prompt_definition={
+                        "prompt_template": "{{subject}} beneath {{lighting}}",
+                        "default_inputs": {"lighting": "soft daylight"},
+                    },
+                )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = _PromptVisualExecutionState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+                capability_runner=self._FakeCapabilityRunner(healthy=True),
+            )
+            request = TaskExecutionRequest(
+                task_id="direct-visual-prompt",
+                task_family="task.image_generation",
+                requested_by="test",
+                requested_provider="local",
+                prompt_id="prompt.shared.image",
+                inputs={"subject": "a mountain cabin"},
+                trace_id="trace-direct-visual-prompt",
+            )
+
+            self.assertEqual(
+                state._direct_visual_runtime_prompt(request=request),
+                "a mountain cabin beneath soft daylight",
+            )
 
     async def test_direct_local_image_generation_waits_for_vision_takeover_preflight(self):
         class _VisualExecutionState(NodeControlState):
