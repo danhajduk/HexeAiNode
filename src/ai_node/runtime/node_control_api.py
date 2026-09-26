@@ -74,6 +74,7 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
 
 MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID = "template.avatar_head_face_preview.realvisxl.v1"
+IMAGE_STUDIO_FACE_FEATURE_CATALOG_RELATIVE_PATH = "config/image-studio/face-feature-catalog.json"
 AVATAR_UPPER_TORSO_PREVIEW_TEMPLATE_ID = "template.avatar_upper_torso_preview.realvisxl.v1"
 AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID = "template.avatar_head_lora_pose_control.realvisxl.v1"
 AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID = "template.avatar_head_lora_epoch_review.realvisxl.v1"
@@ -2263,6 +2264,106 @@ class NodeControlState:
             "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
         }
 
+    @staticmethod
+    def _image_studio_face_feature_catalog_path() -> Path:
+        configured = str(os.environ.get("HEXE_IMAGE_STUDIO_FACE_FEATURE_CATALOG_PATH") or "").strip()
+        if configured:
+            return Path(configured).expanduser().resolve()
+        return (Path(__file__).resolve().parents[3] / IMAGE_STUDIO_FACE_FEATURE_CATALOG_RELATIVE_PATH).resolve()
+
+    def image_studio_face_feature_catalog(self) -> dict:
+        path = self._image_studio_face_feature_catalog_path()
+        try:
+            catalog = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            raise ValueError("image_studio_face_feature_catalog_not_found") from exc
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"image_studio_face_feature_catalog_invalid_json:{exc.lineno}:{exc.colno}") from exc
+        if not isinstance(catalog, dict) or not isinstance(catalog.get("groups"), list):
+            raise ValueError("image_studio_face_feature_catalog_invalid")
+        return {
+            **catalog,
+            "source_path": path.as_posix(),
+            "modified_ns": path.stat().st_mtime_ns,
+            "hot_reload": True,
+        }
+
+    @staticmethod
+    def _image_studio_profile_initial_data(metadata: dict) -> dict:
+        try:
+            parsed = json.loads(str(metadata.get("initial_data") or ""))
+        except (TypeError, json.JSONDecodeError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    def _compile_image_studio_face_preview_prompt(self, *, metadata: dict, refinement: str = "") -> dict | None:
+        initial_data = self._image_studio_profile_initial_data(metadata)
+        if str(initial_data.get("source") or "").strip() != "image_studio":
+            return None
+        catalog = self.image_studio_face_feature_catalog()
+        brief = initial_data.get("character_brief") if isinstance(initial_data.get("character_brief"), dict) else {}
+        feature_catalog = initial_data.get("face_feature_catalog") if isinstance(initial_data.get("face_feature_catalog"), dict) else {}
+        selections = feature_catalog.get("selections") if isinstance(feature_catalog.get("selections"), dict) else {}
+        custom_details = str(feature_catalog.get("custom_details") or "").strip()
+        expanded_parts: list[str] = []
+        primary_lines: list[str] = []
+        preview_config = catalog.get("preview") if isinstance(catalog.get("preview"), dict) else {}
+        negative_terms = [str(item).strip() for item in (preview_config.get("base_negative") or []) if str(item).strip()]
+        normalized_selections: dict[str, list[str]] = {}
+        for group in (item for item in catalog.get("groups", []) if isinstance(item, dict)):
+            group_id = str(group.get("id") or "").strip()
+            options = group.get("options") if isinstance(group.get("options"), dict) else {}
+            selected = selections.get(group_id) if isinstance(selections.get(group_id), list) else []
+            values = [str(value).strip() for value in selected if str(value).strip() in options]
+            if not bool(group.get("multiple")):
+                values = values[:1]
+            if not values:
+                continue
+            normalized_selections[group_id] = values
+            descriptions = [str(options[value].get("description") or value).strip() for value in values]
+            expanded_parts.append(f"{group_id}: {', '.join(descriptions)}")
+            for value in values:
+                negative_terms.extend(str(item).strip() for item in (options[value].get("negative_terms") or []) if str(item).strip())
+            if group.get("primary_weight") is not None and descriptions:
+                instruction = str(group.get("primary_instruction") or "").replace("{value}", values[0]).strip()
+                primary_lines.append(
+                    f"PRIMARY {group_id.upper()} REQUIREMENT: ({descriptions[0]}:{float(group['primary_weight']):.2f})."
+                    + (f" {instruction}" if instruction else "")
+                )
+        if custom_details:
+            expanded_parts.append(custom_details)
+        appearance = "; ".join(expanded_parts)
+        identity = " ".join(value for value in [str(brief.get("age_group") or "").strip(), str(brief.get("gender_identity") or "").strip()] if value)
+        name = str(brief.get("name") or metadata.get("name") or "an unnamed character").strip()
+        lines = [
+            str(preview_config.get("opening") or "").strip(),
+            f"Character identity reference portrait of {name}{f', {identity}' if identity else ''}.",
+            f"Character concept: {str(brief.get('concept') or '').strip()}." if str(brief.get("concept") or "").strip() else "",
+            *primary_lines,
+            f"Face and hair: {appearance}." if appearance else "",
+            f"Expression: {str(brief.get('expression') or '').strip()}." if str(brief.get("expression") or "").strip() else "Expression: neutral and relaxed.",
+            str(preview_config.get("composition") or "").strip(),
+            str(preview_config.get("quality") or "").strip(),
+            f"Visual style: {str(brief.get('visual_style') or '').strip()}." if str(brief.get("visual_style") or "").strip() else "",
+        ]
+        safe_refinement = str(refinement or "").strip()
+        if safe_refinement.startswith("{"):
+            try:
+                parsed_refinement = json.loads(safe_refinement)
+                safe_refinement = str(parsed_refinement.get("prompt") or "").strip() if isinstance(parsed_refinement, dict) else ""
+            except json.JSONDecodeError:
+                safe_refinement = ""
+        if safe_refinement:
+            lines.append(f"LLM REFINEMENT LAYER: {safe_refinement}")
+        return {
+            "prompt": "\n".join(line for line in lines if line),
+            "negative_prompt": ", ".join(dict.fromkeys(negative_terms)),
+            "expanded_description": appearance,
+            "selections": normalized_selections,
+            "catalog_id": catalog.get("catalog_id"),
+            "catalog_modified_ns": catalog.get("modified_ns"),
+        }
+
     def save_avatar_profile(self, *, payload: "AvatarProfileSaveRequest") -> dict:
         display_name = str(payload.name or "").strip()
         if not display_name:
@@ -2571,13 +2672,25 @@ class NodeControlState:
         locked_prompt_parts = self._avatar_profile_normalized_head_prompt_locks(
             payload.locked_prompt_parts if isinstance(payload.locked_prompt_parts, dict) else workspace.get("locked_prompt_parts")
         )
-        prompt = str(payload.prompt or "").strip() or self._avatar_profile_head_prompt_from_parts(
-            prompt_parts=prompt_parts,
-            profile=metadata,
+        compiled_catalog_prompt = self._compile_image_studio_face_preview_prompt(
+            metadata=metadata,
+            refinement=str(payload.refinement or "").strip(),
+        )
+        prompt = (
+            str(compiled_catalog_prompt.get("prompt") or "").strip()
+            if isinstance(compiled_catalog_prompt, dict)
+            else str(payload.prompt or "").strip() or self._avatar_profile_head_prompt_from_parts(
+                prompt_parts=prompt_parts,
+                profile=metadata,
+            )
         )
         if not prompt:
             prompt = self._avatar_profile_default_head_prompt(profile=metadata)
-        negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
+        negative_prompt = (
+            str(compiled_catalog_prompt.get("negative_prompt") or "").strip()
+            if isinstance(compiled_catalog_prompt, dict)
+            else str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
+        )
         template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID)["template"]
         defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
         if not negative_prompt:
@@ -2632,6 +2745,8 @@ class NodeControlState:
             "prompt_parts": prompt_parts,
             "locked_prompt_parts": locked_prompt_parts,
             "negative_prompt": negative_prompt,
+            "catalog_id": compiled_catalog_prompt.get("catalog_id") if isinstance(compiled_catalog_prompt, dict) else None,
+            "catalog_modified_ns": compiled_catalog_prompt.get("catalog_modified_ns") if isinstance(compiled_catalog_prompt, dict) else None,
             "skip_background_removal": True,
             "submitted_at": submitted_at,
             "created_at": now,
@@ -15326,6 +15441,7 @@ class AvatarProfileHeadPreviewRequest(BaseModel):
     prompt_parts: dict | None = None
     locked_prompt_parts: dict | None = None
     negative_prompt: str | None = None
+    refinement: str | None = None
     seed: int | str | None = None
     lock_seed: bool | None = False
 
@@ -16234,6 +16350,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             return state.character_interview_question(payload=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/image-studio/face-feature-catalog")
+    def get_image_studio_face_feature_catalog():
+        try:
+            return state.image_studio_face_feature_catalog()
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.post("/api/manual-image-generation/pose-helper")
     def post_manual_image_generation_pose_helper(payload: ManualImagePoseHelperRequest):

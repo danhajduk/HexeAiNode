@@ -4031,6 +4031,59 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("face_image", metadata)
         self.assertNotIn("body_image", metadata)
 
+    def test_image_studio_face_catalog_hot_reloads_and_compiles_prompt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            catalog_path = Path(tmp) / "face-catalog.json"
+            catalog = {
+                "schema_version": "1.0",
+                "catalog_id": "test.face.v1",
+                "preview": {
+                    "opening": "ONE FACE",
+                    "composition": "front portrait",
+                    "quality": "sharp focus",
+                    "base_negative": ["multiple faces"],
+                },
+                "groups": [
+                    {
+                        "id": "hair color",
+                        "label": "Hair color",
+                        "multiple": False,
+                        "primary_weight": 1.45,
+                        "primary_instruction": "Hair must be {value}.",
+                        "options": {
+                            "blonde": {
+                                "description": "clear blonde hair",
+                                "negative_terms": ["brown hair", "black hair"],
+                            }
+                        },
+                    }
+                ],
+            }
+            catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+            )
+            metadata = {
+                "name": "Hexe",
+                "initial_data": json.dumps({
+                    "source": "image_studio",
+                    "character_brief": {"name": "Hexe", "age_group": "adult (18+)", "gender_identity": "female"},
+                    "face_feature_catalog": {"selections": {"hair color": ["blonde"]}},
+                }),
+            }
+            with patch.dict("os.environ", {"HEXE_IMAGE_STUDIO_FACE_FEATURE_CATALOG_PATH": str(catalog_path)}):
+                first = state._compile_image_studio_face_preview_prompt(metadata=metadata)
+                catalog["groups"][0]["options"]["blonde"]["description"] = "bright golden blonde hair"
+                catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+                second = state._compile_image_studio_face_preview_prompt(metadata=metadata)
+
+        self.assertIn("(clear blonde hair:1.45)", first["prompt"])
+        self.assertIn("brown hair", first["negative_prompt"])
+        self.assertIn("bright golden blonde hair", second["prompt"])
+        self.assertNotEqual(first["prompt"], second["prompt"])
+
     def test_avatar_generation_refines_head_prompt_with_local_llm_and_saves_history(self):
         class _AvatarPromptServiceManager:
             def __init__(self, input_dir: str):

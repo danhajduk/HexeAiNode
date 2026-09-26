@@ -1,0 +1,190 @@
+{
+  "schema_version": "1.0",
+  "catalog_id": "image_studio.face_features.v1",
+  "preview": {
+    "template_id": "template.avatar_head_face_preview.realvisxl.v1",
+    "base_negative": [
+      "multiple people", "more than one person", "two people", "multiple faces", "more than one face", "two faces",
+      "duplicate face", "extra face", "face collage", "portrait collage", "diptych", "triptych", "contact sheet",
+      "character sheet", "split screen", "side-by-side portraits", "mirrored face", "reflection", "profile view",
+      "three-quarter view", "tilted head", "cropped forehead", "cropped chin", "closed eyes", "asymmetrical eyes",
+      "distorted face", "duplicate features", "exaggerated expression", "heavy makeup", "dramatic lighting",
+      "harsh shadows", "accessories covering the face", "text", "watermark", "blurry", "low detail", "child", "teen", "underage"
+    ],
+    "opening": "EXACTLY ONE PERSON. EXACTLY ONE FACE. Single centered identity portrait; never a collage, grid, comparison, or character sheet.",
+    "composition": "Front-facing head-and-shoulders composition, eyes looking directly at camera, symmetrical neutral pose, centered face, entire head visible.",
+    "quality": "Realistic facial proportions, detailed natural skin texture, soft even studio lighting, plain neutral-gray background, identity reference sheet, sharp focus."
+  },
+  "groups": [
+    {
+      "id": "apparent age", "label": "Apparent age", "multiple": false,
+      "options": {
+        "teen": {"description": "teenage facial appearance with youthful proportions, smooth skin, and minimal age lines"},
+        "young adult": {"description": "young-adult facial appearance with mature proportions, smooth skin, and subtle natural definition"},
+        "adult": {"description": "adult facial appearance with fully mature proportions and natural facial definition"},
+        "mature": {"description": "mature facial appearance with subtle expression lines, defined contours, and natural age texture"},
+        "elderly": {"description": "elderly facial appearance with visible age lines, softened contours, and realistic mature skin texture"}
+      }
+    },
+    {
+      "id": "face shape", "label": "Face shape", "multiple": false, "primary_weight": 1.35,
+      "primary_instruction": "The facial silhouette must be unmistakably {value}.",
+      "options": {
+        "oval": {"description": "oval face, gently rounded forehead and jaw, balanced length, cheekbones slightly wider than the jaw", "negative_terms": ["square face", "extremely round face", "very long face", "angular jaw"]},
+        "round": {"description": "round face, similar width and length, full cheeks, softly curved jawline, rounded chin", "negative_terms": ["square face", "long face", "oblong face", "angular jaw", "narrow face", "pointed chin"]},
+        "square": {"description": "square face, broad forehead, strong straight jawline, similar forehead and jaw width", "negative_terms": ["round jaw", "pointed chin", "narrow jaw", "heart-shaped face"]},
+        "heart-shaped": {"description": "heart-shaped face, broad forehead and cheekbones tapering toward a narrow pointed chin", "negative_terms": ["broad square jaw", "round face", "wide chin"]},
+        "diamond": {"description": "diamond-shaped face, prominent wide cheekbones, narrower forehead and jaw, tapered chin", "negative_terms": ["round face", "broad forehead", "broad jaw"]},
+        "oblong": {"description": "oblong face, noticeably longer than wide, straight cheek lines, softly rounded forehead and jaw", "negative_terms": ["round face", "short face", "wide square face"]},
+        "triangular": {"description": "triangular face, narrower forehead widening toward a broad strong jawline", "negative_terms": ["broad forehead", "narrow jaw", "heart-shaped face"]},
+        "soft angular": {"description": "softly angular face, defined cheekbones and jaw transitions with gently rounded edges", "negative_terms": ["extremely round face", "harsh square jaw", "pointed chin"]}
+      }
+    },
+    {
+      "id": "skin tone", "label": "Skin tone", "multiple": false,
+      "options": {
+        "porcelain": {"description": "porcelain natural skin tone with realistic tonal variation"}, "fair": {"description": "fair natural skin tone with realistic tonal variation"},
+        "light": {"description": "light natural skin tone with realistic tonal variation"}, "light-medium": {"description": "light-medium natural skin tone with realistic tonal variation"},
+        "medium": {"description": "medium natural skin tone with realistic tonal variation"}, "olive": {"description": "olive natural skin tone with realistic tonal variation"},
+        "tan": {"description": "tan natural skin tone with realistic tonal variation"}, "brown": {"description": "brown natural skin tone with realistic tonal variation"},
+        "deep brown": {"description": "deep brown natural skin tone with realistic tonal variation"}, "ebony": {"description": "ebony natural skin tone with realistic tonal variation"}
+      }
+    },
+    {
+      "id": "complexion", "label": "Complexion", "multiple": true,
+      "options": {
+        "clear": {"description": "clear even complexion with minimal visible blemishes"}, "dewy": {"description": "dewy complexion with soft hydrated skin and a subtle natural sheen"},
+        "matte": {"description": "matte complexion with soft diffused skin texture and minimal shine"}, "sun-kissed": {"description": "sun-kissed complexion with warm natural color across cheeks and nose"},
+        "freckled": {"description": "naturally freckled complexion with fine irregular freckles across cheeks and nose"}, "rosy cheeks": {"description": "natural rosy color concentrated softly across the cheeks"},
+        "weathered": {"description": "weathered complexion with realistic texture, fine lines, and subtle sun exposure"}, "vitiligo": {"description": "visible vitiligo with natural irregular areas of depigmentation across the face"}
+      }
+    },
+    {
+      "id": "eye shape", "label": "Eye shape", "multiple": false,
+      "options": {
+        "almond": {"description": "almond-shaped eyes, gently tapered inner and outer corners, softly curved eyelids, balanced proportions, iris partially covered by the upper and lower lids"},
+        "round": {"description": "round eyes, visibly curved upper and lower lids, open circular appearance, more sclera visible above and below the iris"},
+        "hooded": {"description": "hooded eyes, upper eyelid fold descending over and partially concealing the natural crease, softly shaded lid space"},
+        "monolid": {"description": "monolid eyes, smooth upper eyelids without a prominent visible crease, clean uninterrupted lid contour"},
+        "upturned": {"description": "upturned eyes, outer corners sitting slightly higher than the inner corners, gently rising lower lash line"},
+        "downturned": {"description": "downturned eyes, outer corners sitting slightly lower than the inner corners, softly descending outer lash line"},
+        "deep-set": {"description": "deep-set eyes positioned beneath a prominent brow ridge, recessed eyelids with natural shadow around the eye socket"},
+        "wide-set": {"description": "wide-set eyes with greater than one eye-width of space between the inner corners, balanced symmetrical placement"},
+        "close-set": {"description": "close-set eyes with less than one eye-width of space between the inner corners, balanced symmetrical placement"}
+      }
+    },
+    {
+      "id": "eye color", "label": "Eye color", "multiple": false,
+      "options": {
+        "dark brown": {"description": "dark-brown irises with rich near-black depth"}, "brown": {"description": "warm brown irises with natural tonal variation"},
+        "hazel": {"description": "hazel irises blending green, brown, and golden tones"}, "amber": {"description": "amber irises with clear golden copper coloration"},
+        "green": {"description": "green irises with natural radial detail and tonal variation"}, "blue": {"description": "blue irises with natural radial detail and darker limbal rings"},
+        "gray": {"description": "gray irises with cool silver tonal variation"}, "violet": {"description": "violet irises with believable purple-blue tonal variation"},
+        "heterochromia": {"description": "complete heterochromia, each iris a distinctly different natural color"}, "unnatural glowing": {"description": "unnaturally luminous irises emitting a subtle colored glow"}
+      }
+    },
+    {
+      "id": "eyebrows", "label": "Eyebrows", "multiple": false,
+      "options": {
+        "straight": {"description": "straight eyebrows with minimal arch and an even horizontal line"}, "softly arched": {"description": "softly arched eyebrows with a gentle gradual curve"},
+        "high arched": {"description": "high-arched eyebrows with a pronounced elevated peak"}, "thick": {"description": "thick full eyebrows with dense natural hair coverage"},
+        "thin": {"description": "thin refined eyebrows with sparse narrow hair coverage"}, "bushy": {"description": "bushy textured eyebrows with dense individually visible hairs"},
+        "defined": {"description": "cleanly defined eyebrows with precise edges and balanced shape"}, "scar through brow": {"description": "natural eyebrow interrupted by a visible narrow scar through the hair"}
+      }
+    },
+    {
+      "id": "nose", "label": "Nose", "multiple": false,
+      "options": {
+        "small": {"description": "small proportionate nose with a short bridge and compact nostrils"}, "straight": {"description": "straight nose with an even bridge and balanced tip projection"},
+        "button": {"description": "button nose with a short bridge, small rounded tip, and compact nostrils"}, "upturned": {"description": "upturned nose with a gently raised tip and subtly visible nostrils"},
+        "broad": {"description": "broad nose with a wide bridge, rounded tip, and wider nostril base"}, "aquiline": {"description": "aquiline nose with a prominent gently curved bridge and downward-defined tip"},
+        "Roman": {"description": "Roman nose with a strong high bridge and slightly convex profile"}, "flat bridge": {"description": "nose with a low flat bridge and softly widened nasal base"},
+        "prominent": {"description": "prominent nose with a strong projected bridge and clearly defined tip"}
+      }
+    },
+    {
+      "id": "lips", "label": "Lips", "multiple": false,
+      "options": {
+        "thin": {"description": "thin lips with low vertical volume and a restrained natural contour"}, "medium": {"description": "medium-full lips with balanced upper and lower volume"},
+        "full": {"description": "full lips with generous natural volume and softly rounded contours"}, "wide": {"description": "wide mouth with horizontally extended lip corners and balanced volume"},
+        "small": {"description": "small compact mouth with short width and delicate lip contours"}, "defined Cupid's bow": {"description": "lips with a sharply defined Cupid's bow and clear central upper-lip peaks"},
+        "soft Cupid's bow": {"description": "lips with a softly rounded Cupid's bow and gentle upper-lip peaks"}, "asymmetrical": {"description": "naturally asymmetrical lips with subtle believable variation between the two sides"}
+      }
+    },
+    {
+      "id": "hair texture", "label": "Hair texture", "multiple": false,
+      "options": {
+        "straight": {"description": "naturally straight hair with smooth strands and minimal wave"}, "wavy": {"description": "wavy hair with loose flowing S-shaped bends"},
+        "curly": {"description": "curly hair with defined springing ringlets"}, "coily": {"description": "coily hair with dense small spiral curls and natural volume"},
+        "kinky": {"description": "tightly kinked hair with compact angular curls and dense texture"}, "silky": {"description": "silky smooth hair with fine reflective strands and soft movement"},
+        "coarse": {"description": "coarse hair with thick visible strands and substantial texture"}, "shaved": {"description": "closely shaved hair with short even stubble following the scalp"}
+      }
+    },
+    {
+      "id": "hair length", "label": "Hair length", "multiple": false, "primary_weight": 1.4,
+      "primary_instruction": "The visible hair ends must unmistakably match {value}; keep the full hair silhouette and its endpoints visible in frame.",
+      "options": {
+        "bald": {"description": "fully bald scalp with no visible head hair", "negative_terms": ["visible head hair", "long hair", "short hair", "hair strands"]},
+        "buzz cut": {"description": "very short uniform buzz cut close to the scalp", "negative_terms": ["bald head", "long hair", "chin-length hair", "shoulder-length hair", "hair covering ears"]},
+        "short": {"description": "short hair ending above the ears or near the nape", "negative_terms": ["bald head", "buzz cut", "chin-length hair", "shoulder-length hair", "long hair", "waist-length hair"]},
+        "chin-length": {"description": "chin-length hair ending around the jawline", "negative_terms": ["bald head", "buzz cut", "pixie cut", "cropped short hair", "shoulder-length hair", "long hair", "waist-length hair"]},
+        "shoulder-length": {"description": "shoulder-length hair ending at the shoulders", "negative_terms": ["bald head", "buzz cut", "pixie cut", "cropped hair", "short hair", "chin-length hair", "long hair", "waist-length hair", "hair ending above the jaw", "hair extending below the shoulders"]},
+        "long": {"description": "long hair extending below the shoulders", "negative_terms": ["bald head", "buzz cut", "pixie cut", "cropped hair", "short hair", "chin-length hair", "shoulder-length hair", "waist-length hair"]},
+        "waist-length": {"description": "very long hair extending to the waist", "negative_terms": ["bald head", "buzz cut", "pixie cut", "cropped hair", "short hair", "chin-length hair", "shoulder-length hair", "mid-back hair"]}
+      }
+    },
+    {
+      "id": "hair color", "label": "Hair color", "multiple": false, "primary_weight": 1.45,
+      "primary_instruction": "The hair must read clearly and unmistakably as {value}, including at the roots and in shadow.",
+      "options": {
+        "black": {"description": "black hair with natural strand-level tonal variation", "negative_terms": ["blonde hair", "platinum hair", "white hair", "red hair", "light hair"]},
+        "dark brown": {"description": "dark brown hair with natural strand-level tonal variation", "negative_terms": ["blonde hair", "platinum hair", "white hair", "red hair", "black hair"]},
+        "brown": {"description": "brown hair with natural strand-level tonal variation", "negative_terms": ["blonde hair", "platinum hair", "white hair", "red hair", "black hair"]},
+        "auburn": {"description": "auburn hair with natural strand-level tonal variation", "negative_terms": ["blonde hair", "platinum hair", "white hair", "black hair", "plain brown hair"]},
+        "copper": {"description": "copper hair with natural strand-level tonal variation", "negative_terms": ["blonde hair", "platinum hair", "white hair", "black hair", "brown hair"]},
+        "red": {"description": "red hair with natural strand-level tonal variation", "negative_terms": ["blonde hair", "platinum hair", "white hair", "black hair", "brown hair"]},
+        "strawberry blonde": {"description": "strawberry blonde hair with natural strand-level tonal variation", "negative_terms": ["brunette", "dark brown hair", "black hair", "platinum hair", "deep red hair"]},
+        "blonde": {"description": "blonde hair with natural strand-level tonal variation", "negative_terms": ["brunette", "brown hair", "dark brown hair", "black hair", "auburn hair", "red hair"]},
+        "platinum": {"description": "platinum hair with natural strand-level tonal variation", "negative_terms": ["brunette", "brown hair", "dark brown hair", "black hair", "golden blonde hair", "red hair"]},
+        "gray": {"description": "gray hair with natural strand-level tonal variation", "negative_terms": ["blonde hair", "brown hair", "black hair", "red hair", "saturated hair color"]},
+        "white": {"description": "white hair with natural strand-level tonal variation", "negative_terms": ["blonde hair", "brown hair", "black hair", "red hair", "gray hair"]},
+        "blue": {"description": "blue hair with natural strand-level tonal variation", "negative_terms": ["blonde hair", "brown hair", "black hair", "red hair", "natural hair color"]},
+        "pink": {"description": "pink hair with natural strand-level tonal variation", "negative_terms": ["blonde hair", "brown hair", "black hair", "red hair", "natural hair color"]},
+        "multicolored": {"description": "multicolored hair with natural strand-level tonal variation", "negative_terms": ["single-color hair", "uniform hair color", "monochrome hair"]}
+      }
+    },
+    {
+      "id": "hairstyle", "label": "Hairstyle", "multiple": true,
+      "options": {
+        "loose": {"description": "hair worn loose and naturally falling around the head and shoulders"}, "layered": {"description": "layered haircut with visibly graduated lengths and natural movement"},
+        "bob": {"description": "clean bob haircut ending between the jaw and shoulders"}, "pixie cut": {"description": "short pixie cut with closely tapered sides and textured top"},
+        "pompadour": {"description": "pompadour hairstyle swept upward and back with volume above the forehead"}, "undercut": {"description": "undercut hairstyle with closely clipped sides and longer hair on top"},
+        "braids": {"description": "neatly defined braids with visible woven strand structure"}, "cornrows": {"description": "close-to-scalp cornrows arranged in clean defined rows"},
+        "locs": {"description": "well-defined natural locs with individual cylindrical sections"}, "afro": {"description": "rounded natural afro with dense coiled volume"},
+        "ponytail": {"description": "hair gathered and secured into a ponytail behind the head"}, "bun": {"description": "hair gathered into a tidy bun at the back of the head"},
+        "bangs": {"description": "visible bangs framing or crossing the forehead"}, "side part": {"description": "clear side part with hair directed to opposite sides"}
+      }
+    },
+    {
+      "id": "distinctive features", "label": "Distinctive features", "multiple": true,
+      "options": {
+        "dimples": {"description": "visible natural cheek dimples"}, "beauty mark": {"description": "single small natural beauty mark on the face"},
+        "facial freckles": {"description": "scattered natural facial freckles across cheeks and nose"}, "birthmark": {"description": "distinct natural facial birthmark"},
+        "facial scar": {"description": "visible healed facial scar with realistic skin texture"}, "tattoo": {"description": "clearly visible facial tattoo integrated with the skin"},
+        "ear piercings": {"description": "visible ear piercings with small jewelry"}, "nose piercing": {"description": "visible nose piercing with subtle jewelry"},
+        "lip piercing": {"description": "visible lip piercing with subtle jewelry"}, "pointed ears": {"description": "distinctly pointed ear tips with natural anatomy"},
+        "gap tooth": {"description": "visible natural gap between the front teeth"}, "prosthetic eye": {"description": "clearly artificial prosthetic eye with realistic surrounding anatomy"},
+        "facial cybernetics": {"description": "integrated facial cybernetic components following natural facial anatomy"}
+      }
+    },
+    {
+      "id": "facial hair", "label": "Facial hair", "multiple": true,
+      "options": {
+        "clean-shaven": {"description": "clean-shaven face with no visible facial hair"}, "stubble": {"description": "short even facial stubble across the jaw, chin, and upper lip"},
+        "mustache": {"description": "defined mustache following the upper-lip contour"}, "goatee": {"description": "trimmed goatee centered around the mouth and chin"},
+        "short beard": {"description": "short neatly trimmed beard following the jaw and chin"}, "full beard": {"description": "full dense beard covering the jaw, chin, and lower cheeks"},
+        "sideburns": {"description": "defined sideburns extending down in front of the ears"}, "shaped beard": {"description": "carefully shaped beard with clean intentional edges"}
+      }
+    }
+  ]
+}
