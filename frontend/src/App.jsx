@@ -1213,7 +1213,13 @@ export default function App() {
     try {
       const result = await apiPost("/api/avatar-generation/profiles", payload);
       setAvatarGenerationResult(result);
-      await loadStatus();
+      setAvatarGenerationPayload((current) => ({
+        ...(current || {}),
+        configured: true,
+        profiles: Array.isArray(result?.profiles) ? result.profiles : (current?.profiles || []),
+        selected_profile: result?.profile?.selected ? result.profile : current?.selected_profile,
+        selected_profile_id: result?.profile?.selected ? result.profile.profile_id : current?.selected_profile_id,
+      }));
       return result;
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
