@@ -519,6 +519,25 @@ function templateCharacterPath(template) {
   return "use_existing";
 }
 
+export function latestSavedFacePreview(characterProfiles = [], profileId = "") {
+  const matchingProfiles = profileId
+    ? characterProfiles.filter((profile) => String(profile?.profile_id || "") === String(profileId))
+    : characterProfiles;
+  return matchingProfiles
+    .flatMap((profile) => profile?.prompt_workspaces?.head_face?.preview_history || [])
+    .filter((preview) => (
+      preview
+      && preview.url
+      && !preview.placeholder
+      && ["completed", "completed_with_fallback"].includes(String(preview.status || "").toLowerCase())
+    ))
+    .sort((left, right) => String(
+      right.imported_at || right.completed_at || right.created_at || ""
+    ).localeCompare(String(
+      left.imported_at || left.completed_at || left.created_at || ""
+    )))[0] || null;
+}
+
 export function ImageStudio({
   templates = [],
   faceFeatureCatalog = null,
@@ -632,7 +651,12 @@ export function ImageStudio({
       ...CHARACTER_FOUNDATION_GROUPS.map((group) => characterBrief[group.id]),
     ].filter(Boolean).join(" — ")
     : characterBrief[activeInterviewStep.field] || "";
-  const facePreview = facePreviewResult?.preview || null;
+  const savedFacePreview = useMemo(
+    () => latestSavedFacePreview(characterProfiles, characterProfileId),
+    [characterProfiles, characterProfileId]
+  );
+  const facePreview = facePreviewResult?.preview || savedFacePreview;
+  const displayedFacePreview = facePreview?.url ? facePreview : savedFacePreview;
   const facePreviewSeed = facePreview?.seed_text || facePreview?.seed;
   const generationProgress = generationActivity?.generation_status?.progress || {};
   const generationSession = generationActivity?.generation_status?.session || generationActivity?.service?.session || {};
@@ -686,7 +710,7 @@ export function ImageStudio({
       || progressDetail?.failure_reason
       || (facePreviewTracking ? "Live status refreshes automatically." : "Generate a preview to see live model and rendering details.")
   );
-  const previewImageUrl = facePreview?.url ? `${apiBase}${facePreview.url}` : "";
+  const previewImageUrl = displayedFacePreview?.url ? `${apiBase}${displayedFacePreview.url}` : "";
 
   useEffect(() => {
     if (!interviewOpen) {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, latestSavedFacePreview, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -287,6 +287,36 @@ describe("ImageStudio", () => {
     expect(markup).toContain("12.4 s");
     expect(markup).toContain("RealVisXL_V5.0_fp16.safetensors");
     expect(markup).not.toContain("<strong>submitted</strong>");
+  });
+
+  it("loads the newest completed saved face preview", () => {
+    const characterProfiles = [{
+      profile_id: "Nova",
+      prompt_workspaces: {
+        head_face: {
+          preview_history: [
+            { preview_id: "older", status: "completed", url: "/older.png", imported_at: "2026-09-25T18:00:00Z" },
+            { preview_id: "newer", status: "completed", url: "/newer.png", imported_at: "2026-09-25T19:00:00Z" },
+          ],
+        },
+      },
+    }];
+    const preview = latestSavedFacePreview(characterProfiles);
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        apiBase="http://node.test"
+        characterProfiles={characterProfiles}
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialCreativeSetupOpen
+        initialInterviewOpen
+        initialInterviewStep={1}
+      />
+    );
+
+    expect(preview.preview_id).toBe("newer");
+    expect(markup).toContain("http://node.test/newer.png");
+    expect(markup).not.toContain("http://node.test/older.png");
   });
 
   it("forces SFW when an adult character is changed to an under-18 age group", () => {
