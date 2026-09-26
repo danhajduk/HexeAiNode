@@ -840,6 +840,10 @@ class NodeControlApiTests(unittest.TestCase):
                 self.assertEqual(preview["local_runtime_assignment"]["runtime_id"], "comfyui_gpu")
                 self.assertEqual(preview["local_runtime_assignment"]["checkpoint"], "RealVisXL_V5.0_fp16.safetensors")
                 self.assertEqual(preview["local_runtime_assignment"]["lora"], "sdxl_lightning_4step_lora.safetensors")
+                self.assertTrue(preview["would_execute"])
+                self.assertTrue(preview["provider_resolution"]["allowed"])
+                self.assertEqual(preview["provider_resolution"]["selected_provider"], "local_image")
+                self.assertEqual(preview["provider_resolution"]["selected_model"], "comfyui_gpu")
 
         asyncio.run(run_scenario())
 

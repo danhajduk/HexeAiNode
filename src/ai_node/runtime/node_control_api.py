@@ -11698,6 +11698,34 @@ class NodeControlState:
         }
 
     def _direct_execution_provider_resolution_preview(self, *, request: TaskExecutionRequest, authorization) -> dict:
+        if self._direct_execution_should_use_visual_runtime(request=request):
+            assignment = self.local_runtime_assignment_payload(
+                task_family=request.task_family,
+                priority=str(getattr(request.queue, "importance", "") or request.priority or "normal"),
+                requested_provider=request.requested_provider,
+                requested_model=request.requested_model,
+            )
+            selected = str(assignment.get("status") or "").strip().lower() == "selected"
+            runtime_id = str(assignment.get("runtime_id") or "").strip() or None
+            provider_id = str(assignment.get("provider_id") or "local_image").strip() or "local_image"
+            return {
+                "allowed": selected,
+                "selected_provider": provider_id if selected else None,
+                "selected_model": runtime_id if selected else None,
+                "provider_order": [provider_id] if selected else [],
+                "fallback_provider_ids": [],
+                "model_allowlist_by_provider": {provider_id: [runtime_id]} if selected and runtime_id else {},
+                "timeout_s": max(int(request.timeout_s or 180), 180),
+                "retry_count": 0,
+                "rejection_reason": None if selected else "visual_runtime_unavailable",
+                "resolution_metadata": {
+                    "selected_provider": provider_id if selected else None,
+                    "selected_model": runtime_id if selected else None,
+                    "provider_selection_reason": "local_visual_runtime_assignment",
+                    "runtime_lane": assignment.get("queue"),
+                    "rejection_reason": None if selected else "visual_runtime_unavailable",
+                },
+            }
         service = self._get_task_execution_service()
         governance_status = service._safe_governance_status()  # noqa: SLF001
         if str(governance_status.get("state") or "").strip().lower() == "stale":
