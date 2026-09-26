@@ -358,22 +358,35 @@ function buildFacePreviewPrompt(brief, selections = {}, refinement = "") {
   const identity = [brief?.age_group, brief?.gender_identity].filter(Boolean).join(" ");
   const faceShape = selections["face shape"]?.[0];
   const faceShapeDescription = faceShape ? faceFeaturePromptDescription("face shape", faceShape) : "";
+  const hairColor = selections["hair color"]?.[0];
+  const hairColorDescription = hairColor ? faceFeaturePromptDescription("hair color", hairColor) : "";
+  let safeRefinement = String(refinement || "").trim();
+  if (safeRefinement.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(safeRefinement);
+      safeRefinement = typeof parsed?.prompt === "string" ? parsed.prompt.trim() : "";
+    } catch {
+      safeRefinement = "";
+    }
+  }
   return [
     "EXACTLY ONE PERSON. EXACTLY ONE FACE. Single centered identity portrait; never a collage, grid, comparison, or character sheet.",
     `Character identity reference portrait of ${brief?.name || "an unnamed character"}${identity ? `, ${identity}` : ""}.`,
     brief?.concept ? `Character concept: ${brief.concept}.` : "",
     faceShapeDescription ? `PRIMARY FACE SHAPE REQUIREMENT: (${faceShapeDescription}:1.35). The facial silhouette must be unmistakably ${faceShape}.` : "",
+    hairColorDescription ? `PRIMARY HAIR COLOR REQUIREMENT: (${hairColorDescription}:1.45). The hair must read clearly and unmistakably as ${hairColor}, including at the roots and in shadow.` : "",
     brief?.appearance ? `Face and hair: ${brief.appearance}.` : "",
     brief?.expression ? `Expression: ${brief.expression}.` : "Expression: neutral and relaxed.",
     "Front-facing head-and-shoulders composition, eyes looking directly at camera, symmetrical neutral pose, centered face, entire head visible.",
     "Realistic facial proportions, detailed natural skin texture, soft even studio lighting, plain neutral-gray background, identity reference sheet, sharp focus.",
     brief?.visual_style ? `Visual style: ${brief.visual_style}.` : "",
-    refinement ? `LLM REFINEMENT LAYER: ${refinement}` : "",
+    safeRefinement ? `LLM REFINEMENT LAYER: ${safeRefinement}` : "",
   ].filter(Boolean).join("\n");
 }
 
 function buildFacePreviewNegativePrompt(selections = {}) {
   const faceShape = selections["face shape"]?.[0];
+  const hairColor = selections["hair color"]?.[0];
   const conflictingShapes = {
     round: ["square face", "long face", "oblong face", "angular jaw", "narrow face", "pointed chin"],
     oval: ["square face", "extremely round face", "very long face", "angular jaw"],
@@ -384,7 +397,27 @@ function buildFacePreviewNegativePrompt(selections = {}) {
     triangular: ["broad forehead", "narrow jaw", "heart-shaped face"],
     "soft angular": ["extremely round face", "harsh square jaw", "pointed chin"],
   };
-  return [...FACE_PREVIEW_NEGATIVE_PROMPT.split(", "), ...(conflictingShapes[faceShape] || [])].join(", ");
+  const conflictingHairColors = {
+    black: ["blonde hair", "platinum hair", "white hair", "red hair", "light hair"],
+    "dark brown": ["blonde hair", "platinum hair", "white hair", "red hair", "black hair"],
+    brown: ["blonde hair", "platinum hair", "white hair", "red hair", "black hair"],
+    auburn: ["blonde hair", "platinum hair", "white hair", "black hair", "plain brown hair"],
+    copper: ["blonde hair", "platinum hair", "white hair", "black hair", "brown hair"],
+    red: ["blonde hair", "platinum hair", "white hair", "black hair", "brown hair"],
+    "strawberry blonde": ["brunette", "dark brown hair", "black hair", "platinum hair", "deep red hair"],
+    blonde: ["brunette", "brown hair", "dark brown hair", "black hair", "auburn hair", "red hair"],
+    platinum: ["brunette", "brown hair", "dark brown hair", "black hair", "golden blonde hair", "red hair"],
+    gray: ["blonde hair", "brown hair", "black hair", "red hair", "saturated hair color"],
+    white: ["blonde hair", "brown hair", "black hair", "red hair", "gray hair"],
+    blue: ["blonde hair", "brown hair", "black hair", "red hair", "natural hair color"],
+    pink: ["blonde hair", "brown hair", "black hair", "red hair", "natural hair color"],
+    multicolored: ["single-color hair", "uniform hair color", "monochrome hair"],
+  };
+  return [
+    ...FACE_PREVIEW_NEGATIVE_PROMPT.split(", "),
+    ...(conflictingShapes[faceShape] || []),
+    ...(conflictingHairColors[hairColor] || []),
+  ].join(", ");
 }
 
 function applyCharacterFoundation(current, field, value) {

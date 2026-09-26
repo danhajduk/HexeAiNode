@@ -26,6 +26,32 @@ describe("ImageStudio", () => {
     expect(prompt).not.toContain("Body and proportions");
   });
 
+  it("makes selected hair color a primary requirement and rejects conflicting colors", () => {
+    const prompt = buildFacePreviewPrompt(
+      { name: "Hexe", appearance: "blonde wavy hair", visual_style: "realistic" },
+      { "hair color": ["blonde"] },
+    );
+    const negative = buildFacePreviewNegativePrompt({ "hair color": ["blonde"] });
+
+    expect(prompt).toContain("PRIMARY HAIR COLOR REQUIREMENT");
+    expect(prompt).toContain("blonde hair with natural strand-level tonal variation:1.45");
+    expect(prompt).toContain("including at the roots and in shadow");
+    expect(negative).toContain("brunette");
+    expect(negative).toContain("dark brown hair");
+    expect(negative).toContain("black hair");
+  });
+
+  it("drops a truncated JSON refinement instead of adding it to the prompt", () => {
+    const prompt = buildFacePreviewPrompt(
+      { name: "Hexe", appearance: "blonde hair" },
+      { "hair color": ["blonde"] },
+      '{"prompt":"truncated refinement',
+    );
+
+    expect(prompt).not.toContain("LLM REFINEMENT LAYER");
+    expect(prompt).not.toContain("truncated refinement");
+  });
+
   it("adds strong multi-face and conflicting-shape negatives", () => {
     const negative = buildFacePreviewNegativePrompt({ "face shape": ["round"] });
     expect(negative).toContain("multiple faces");
