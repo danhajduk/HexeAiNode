@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
+from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.openapi.utils import get_openapi
@@ -13927,6 +13928,7 @@ class NodeControlState:
                     "description": "Poll an asynchronous execution job.",
                     "request_schema_path": None,
                     "response_schema_path": "/api/schemas/client-node/v2/execution-job.v2.schema.json",
+                    "not_found_response_schema_path": "/api/schemas/client-node/v2/execution-job-not-found.v1.response.schema.json",
                     "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.jobs.read"]},
                 },
                 {
@@ -13936,6 +13938,7 @@ class NodeControlState:
                     "description": "Cancel queued work or cooperatively interrupt supported running provider work.",
                     "request_schema_path": "/api/schemas/client-node/v2/execution-job-cancel.v2.request.schema.json",
                     "response_schema_path": "/api/schemas/client-node/v2/execution-job-cancel.v2.response.schema.json",
+                    "not_found_response_schema_path": "/api/schemas/client-node/v2/execution-job-not-found.v1.response.schema.json",
                     "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.jobs.cancel"]},
                 },
                 {
@@ -13945,6 +13948,7 @@ class NodeControlState:
                     "description": "Acknowledge durable retrieval and release node-local job artifacts.",
                     "request_schema_path": "/api/schemas/client-node/v2/execution-artifact-ack.v1.request.schema.json",
                     "response_schema_path": "/api/schemas/client-node/v2/execution-artifact-ack.v1.response.schema.json",
+                    "not_found_response_schema_path": "/api/schemas/client-node/v2/execution-job-not-found.v1.response.schema.json",
                     "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.artifacts.ack"]},
                 },
                 {
@@ -16949,6 +16953,12 @@ class ExecutionArtifactAckRequest(BaseModel):
     acknowledged_by: str | None = None
 
 
+class ExecutionJobNotFoundResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    detail: Literal["job_not_found"]
+
+
 class ExecutionCompareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -17906,7 +17916,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @app.get("/api/execution/jobs/{job_id}")
+    @app.get(
+        "/api/execution/jobs/{job_id}",
+        responses={404: {"model": ExecutionJobNotFoundResponse, "description": "Execution job not found."}},
+    )
     async def get_execution_job(job_id: str, request: Request):
         payload = await state.execution_job_status(job_id=job_id)
         if payload.get("status") == "not_found":
@@ -17916,7 +17929,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             _require_job_owner(payload, claims=claims)
         return payload
 
-    @app.post("/api/execution/artifacts/ack")
+    @app.post(
+        "/api/execution/artifacts/ack",
+        responses={404: {"model": ExecutionJobNotFoundResponse, "description": "Execution job not found."}},
+    )
     async def post_execution_artifact_ack(payload: ExecutionArtifactAckRequest, request: Request):
         claims = _service_claims(request)
         if claims is not None:
@@ -17936,7 +17952,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=500, detail=response)
         return response
 
-    @app.delete("/api/execution/jobs/{job_id}")
+    @app.delete(
+        "/api/execution/jobs/{job_id}",
+        responses={404: {"model": ExecutionJobNotFoundResponse, "description": "Execution job not found."}},
+    )
     async def delete_execution_job(job_id: str, request: Request, payload: ExecutionJobCancelRequest | None = None):
         claims = _service_claims(request)
         if claims is not None:

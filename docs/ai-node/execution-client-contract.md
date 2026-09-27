@@ -119,7 +119,7 @@ Persisted jobs that were still `queued` restart with the same request, caller, r
 
 Cancellation schemas are `execution-job-cancel.v2.request.schema.json` and `execution-job-cancel.v2.response.schema.json`. `DELETE /api/execution/jobs/{job_id}` cancels queued work and cooperatively cancels running provider-managed work when `running_cancellation_supported` is true. Success returns HTTP 200 with terminal `cancelled` and releases the queue slot. HTTP 409 returns `cancellable=false` and a stable `cancel_rejected_reason`: `running_cancellation_unsupported`, `running_cancellation_unavailable`, or `job_already_<terminal-status>`. Local vision and visual-runtime work cannot currently be interrupted after dispatch.
 
-`expired_wait_budget` means dispatch did not start before the queue boundary and no provider work continues for that job. Terminal jobs are automatically removed after `expires_at`; subsequent status, cancellation, or artifact-acknowledgement requests return not found. Job-record expiration does not delete image files or their independent retention metadata. Cancelling a running job clears any partial result and artifact acknowledgement; image artifacts already created before cancellation remain governed by their image-retention metadata.
+`expired_wait_budget` means dispatch did not start before the queue boundary and no provider work continues for that job. Terminal jobs are automatically removed after `expires_at`; subsequent status, cancellation, or artifact-acknowledgement requests return HTTP 404 with `{"detail":"job_not_found"}`. `not_found` is not an execution-job status. Job-record expiration does not delete image files or their independent retention metadata. Cancelling a running job clears any partial result and artifact acknowledgement; image artifacts already created before cancellation remain governed by their image-retention metadata.
 
 ## Core publication
 
@@ -135,6 +135,7 @@ Each capability endpoint also publishes relative, base-URL-independent metadata 
 - `GET /api/schemas/client-node/v2/weather-scenery-inputs.v1.schema.json`
 - `GET /api/schemas/client-node/v2/execution-response.v2.schema.json`
 - `GET /api/schemas/client-node/v2/execution-job.v2.schema.json`
+- `GET /api/schemas/client-node/v2/execution-job-not-found.v1.response.schema.json`
 - `GET /api/schemas/client-node/v2/execution-job-cancel.v2.request.schema.json`
 - `GET /api/schemas/client-node/v2/execution-job-cancel.v2.response.schema.json`
 - `POST /api/execution/route-preview`

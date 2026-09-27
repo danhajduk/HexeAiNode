@@ -504,8 +504,8 @@ Poll the job status with:
 GET /api/execution/jobs/{job_id}
 ```
 
-The job status payload includes `status` as `queued`, `running`, `completed`, `failed`, `cancelled`,
-`expired_wait_budget`, or `not_found`. Completed jobs place the normal `TaskExecutionResult` under `result`; failed,
+The job status payload includes `status` as `queued`, `running`, `completed`, `failed`, `cancelled`, or
+`expired_wait_budget`. Completed jobs place the normal `TaskExecutionResult` under `result`; failed,
 cancelled, and expired jobs return a short `error` object. Both the initial queued response and the polled job status
 include `routing_decision`, `queue_intent`, `queue_state`, and `eta`. The `eta` object is a rough start-time estimate
 based on current queue position, active jobs, queue concurrency, and `check_after_seconds`; clients should poll using
@@ -545,7 +545,8 @@ Cancellation returns the job payload with `status = "cancelled"` and `error.code
 interruptible only when its payload reports `running_cancellation_supported = true`. Unsupported or unavailable
 running cancellation and already-terminal jobs return HTTP `409` with the stable `cancel_rejected_reason` values
 `running_cancellation_unsupported`, `running_cancellation_unavailable`, or `job_already_<terminal-status>`. Missing jobs
-return HTTP `404`.
+return HTTP `404` with `{"detail":"job_not_found"}`. Missing jobs are an HTTP outcome and never an
+`execution-job.v2` status. The same response applies to polling, cancellation, and artifact acknowledgement.
 
 Queue diagnostics include a `persistence` object showing whether status persistence is configured, the state-file path,
 `recovered_unfinished_count` for unfinished jobs recovered during startup, and `expired_record_count` for records pruned

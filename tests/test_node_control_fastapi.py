@@ -539,6 +539,7 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertIn("benchmark-execution-request.v2.schema.json", schema_names)
             self.assertIn("execution-response.v2.schema.json", schema_names)
             self.assertIn("execution-job.v2.schema.json", schema_names)
+            self.assertIn("execution-job-not-found.v1.response.schema.json", schema_names)
             self.assertIn("execution-artifact-ack.v1.request.schema.json", schema_names)
             self.assertIn("execution-artifact-ack.v1.response.schema.json", schema_names)
             self.assertIn("execution-job-cancel.v2.request.schema.json", schema_names)
@@ -549,6 +550,24 @@ class NodeControlFastApiTests(unittest.TestCase):
                 document_names,
                 ["execution-client-contract.md", "communication.md", "README.md"],
             )
+            job_apis = {
+                item["name"]: item
+                for item in catalog_response.json()["apis"]
+                if item["name"] in {"execution_job_status", "execution_job_cancel", "artifact_acknowledgement"}
+            }
+            self.assertEqual(len(job_apis), 3)
+            self.assertTrue(
+                all(
+                    item["not_found_response_schema_path"]
+                    == "/api/schemas/client-node/v2/execution-job-not-found.v1.response.schema.json"
+                    for item in job_apis.values()
+                )
+            )
+
+            openapi = client.get("/openapi.json").json()
+            self.assertIn("404", openapi["paths"]["/api/execution/jobs/{job_id}"]["get"]["responses"])
+            self.assertIn("404", openapi["paths"]["/api/execution/jobs/{job_id}"]["delete"]["responses"])
+            self.assertIn("404", openapi["paths"]["/api/execution/artifacts/ack"]["post"]["responses"])
 
             schema_response = client.get("/api/schemas/client-node/v2/prompt-register.v2.request.schema.json")
 
@@ -569,6 +588,28 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertIn("text/markdown", contract_response.headers["content-type"])
             self.assertIn("AI Node Execution Client Contract", contract_response.text)
             self.assertEqual(index_response.status_code, 200)
+
+    def test_missing_execution_job_uses_shared_http_404_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                execution_queue=ExecutionQueueService(logger=logging.getLogger("node-control-fastapi-test")),
+            )
+            client = TestClient(create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test")))
+            expected = {"detail": "job_not_found"}
+
+            status_response = client.get("/api/execution/jobs/job-deadbeef")
+            cancel_response = client.delete("/api/execution/jobs/job-deadbeef")
+            acknowledgement_response = client.post(
+                "/api/execution/artifacts/ack",
+                json={"job_id": "job-deadbeef"},
+            )
+
+            for response in (status_response, cancel_response, acknowledgement_response):
+                self.assertEqual(response.status_code, 404)
+                self.assertEqual(response.json(), expected)
 
     def test_client_node_v2_catalog_schema_links_resolve_and_validate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -595,7 +636,11 @@ class NodeControlFastApiTests(unittest.TestCase):
             for api in catalog["apis"]:
                 schema_paths.update(
                     path
-                    for path in (api["request_schema_path"], api["response_schema_path"])
+                    for path in (
+                        api["request_schema_path"],
+                        api["response_schema_path"],
+                        api.get("not_found_response_schema_path"),
+                    )
                     if path is not None
                 )
             schemas = {}

@@ -26,6 +26,7 @@ V2+ keeps the AI Node as an execution proxy:
 - [execution-request.v2.schema.json](./execution-request.v2.schema.json): normal task-family execution request
 - [execution-response.v2.schema.json](./execution-response.v2.schema.json): canonical terminal execution result
 - [execution-job.v2.schema.json](./execution-job.v2.schema.json): queued acknowledgement and job status
+- [execution-job-not-found.v1.response.schema.json](./execution-job-not-found.v1.response.schema.json): shared HTTP 404 body for missing or expired execution jobs
 - [execution-artifact-ack.v1.request.schema.json](./execution-artifact-ack.v1.request.schema.json): completed-job artifact acknowledgement
 - [execution-artifact-ack.v1.response.schema.json](./execution-artifact-ack.v1.response.schema.json): persisted acknowledgement and cleanup result
 - [execution-job-cancel.v2.request.schema.json](./execution-job-cancel.v2.request.schema.json): optional queued-job cancellation body

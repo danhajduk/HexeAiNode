@@ -961,3 +961,14 @@ Verification: Focused prompt persistence, execution gateway, NodeControl, FastAP
 #############
 All Tasks completed 09/27/2026 01:49:03
 #############
+###########
+Task #1038
+Step objective: Make missing execution jobs a documented HTTP 404 outcome rather than a job status.
+Issue cause: Runtime routes already returned HTTP 404 consistently, but the communication guide listed `not_found` in the execution-job status enum and OpenAPI omitted the shared error model.
+Chosen fix: Publish one strict `{"detail":"job_not_found"}` response schema and reference it from polling, cancellation, and artifact acknowledgement in both OpenAPI and the Client Node V2 catalog.
+What changed: Added the shared 404 schema, explicit FastAPI 404 response models, catalog error-schema links, corrected client documentation, and route/catalog/OpenAPI regression tests.
+Verification: Execution queue, execution contract, NodeControl, and FastAPI suites passed with 216 tests; all Client Node V2 JSON schemas parsed and diff validation passed.
+###########
+#############
+All Tasks completed 09/27/2026 01:58:42
+#############

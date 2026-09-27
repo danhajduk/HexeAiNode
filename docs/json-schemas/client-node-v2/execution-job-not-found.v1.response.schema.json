@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-node-v2/execution-job-not-found.v1.response.schema.json",
+  "title": "Execution Job Not Found Response V1",
+  "description": "HTTP 404 response returned when an execution job does not exist or its terminal record has expired.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["detail"],
+  "properties": {
+    "detail": {"const": "job_not_found"}
+  }
+}
