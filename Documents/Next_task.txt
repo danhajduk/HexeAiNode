@@ -1,13 +1,13 @@
-[TODO] Task 1019: Define the governed web retrieval contract for local text LLM requests (Future)
-[TODO] Task 1020: Add disabled-by-default web search configuration and governance policy (Future)
-[TODO] Task 1021: Implement the search backend interface and first SearXNG adapter (Future)
-[TODO] Task 1022: Add the normalized web evidence model and audit metadata (Future)
-[TODO] Task 1023: Add an optional hardened URL fetcher (Future)
-[TODO] Task 1024: Implement a node-owned local LLM tool loop for web search (Future)
-[TODO] Task 1025: Extend provider selection for search-capable local and cloud routing (Future)
-[TODO] Task 1026: Add local-first verification and one-step cloud escalation for search answers (Future)
-[TODO] Task 1027: Expose web retrieval status in APIs, diagnostics, and UI (Future)
-[TODO] Task 1028: Add tests and documentation for local web retrieval and hybrid routing (Future)
+[FUTURE TODO] Task 1019: Define the governed web retrieval contract for local text LLM requests
+[FUTURE TODO] Task 1020: Add disabled-by-default web search configuration and governance policy
+[FUTURE TODO] Task 1021: Implement the search backend interface and first SearXNG adapter
+[FUTURE TODO] Task 1022: Add the normalized web evidence model and audit metadata
+[FUTURE TODO] Task 1023: Add an optional hardened URL fetcher
+[FUTURE TODO] Task 1024: Implement a node-owned local LLM tool loop for web search
+[FUTURE TODO] Task 1025: Extend provider selection for search-capable local and cloud routing
+[FUTURE TODO] Task 1026: Add local-first verification and one-step cloud escalation for search answers
+[FUTURE TODO] Task 1027: Expose web retrieval status in APIs, diagnostics, and UI
+[FUTURE TODO] Task 1028: Add tests and documentation for local web retrieval and hybrid routing
 [TODO] Task 1029: Add authentication and verified caller identity to external client APIs (Future)
 [TODO] Task 1030: Enforce registered prompt input schemas during execution (Future)
 [TODO] Task 1031: Add caller-scoped execution idempotency (Future)
