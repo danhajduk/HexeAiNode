@@ -595,3 +595,4 @@ Task 1030: Enforce registered prompt input schemas during execution - Completed 
 Task 1031: Add caller-scoped execution idempotency - Completed on 09/27/2026 01:07
 Task 1032: Repair the node-control regression test suite - Completed on 09/27/2026 01:12
 Task 1033: Publish dedicated schemas for every external client API - Completed on 09/27/2026 01:19
+Task 1034: Add durable queued execution recovery across backend restarts - Completed on 09/27/2026 01:23

@@ -41,6 +41,7 @@ class ExecutionQueueService:
         max_pending_per_client: int = 20,
         extra_queue_concurrency: dict[str, int] | None = None,
         lane_admission_provider: Callable[[dict], dict] | None = None,
+        recovery_runner_factory: Callable[[dict], Callable[[], Awaitable[dict]] | None] | None = None,
         blocked_retry_seconds: int = 30,
     ) -> None:
         self._logger = logger
@@ -50,6 +51,7 @@ class ExecutionQueueService:
         self._job_ttl_seconds = max(int(job_ttl_seconds), 60)
         self._max_pending_per_client = max(int(max_pending_per_client), 0)
         self._lane_admission_provider = lane_admission_provider
+        self._recovery_runner_factory = recovery_runner_factory
         self._blocked_retry_seconds = max(int(blocked_retry_seconds), 1)
         self._sequence = itertools.count(1)
         self._lock = asyncio.Lock()
@@ -73,7 +75,24 @@ class ExecutionQueueService:
         self._blocked_retry_tasks: dict[str, asyncio.Task] = {}
         self._state_path = Path(state_path) if str(state_path or "").strip() else None
         self._recovered_unfinished_count = 0
+        self._recovered_queued_count = 0
+        self._recovered_running_count = 0
         self._load_persisted_jobs()
+
+    async def start_recovered_jobs(self) -> dict:
+        async with self._lock:
+            self._monitor_deadlines_locked()
+            queued_count = 0
+            for queue_key, entries in self._queues.items():
+                if entries:
+                    queued_count += len(entries)
+                    self._ensure_dispatcher_locked(queue_key)
+            return {
+                "status": "started",
+                "queued_count": queued_count,
+                "recovered_queued_count": self._recovered_queued_count,
+                "recovered_running_count": self._recovered_running_count,
+            }
 
     def queued_response(self, *, job_id: str, base_path: str = "/api/execution/jobs") -> dict:
         job = self._jobs.get(job_id) or {}
@@ -322,6 +341,8 @@ class ExecutionQueueService:
                     "configured": self._state_path is not None,
                     "path": str(self._state_path) if self._state_path is not None else None,
                     "recovered_unfinished_count": self._recovered_unfinished_count,
+                    "recovered_queued_count": self._recovered_queued_count,
+                    "recovered_running_count": self._recovered_running_count,
                 },
                 "queues": queues,
                 "job_count": len(self._jobs),
@@ -843,6 +864,7 @@ class ExecutionQueueService:
                 "blocked_reason",
                 "blocked_detail",
                 "artifact_acknowledgement",
+                "recovery",
             )
         }
         payload["queue_position"] = self._queue_position(job_id=str(job.get("job_id") or ""))
@@ -887,13 +909,63 @@ class ExecutionQueueService:
             job["priority"] = job.get("priority") or (job.get("queue_intent") or {}).get("priority") or job["importance"]
             job.setdefault("staged_at", None)
             job["_runner"] = None
-            if str(job.get("status") or "").strip().lower() in {"queued", "running"}:
+            persisted_status = str(job.get("status") or "").strip().lower()
+            if persisted_status == "queued":
                 self._recovered_unfinished_count += 1
+                runner = None
+                if callable(self._recovery_runner_factory):
+                    try:
+                        runner = self._recovery_runner_factory(self._public_job_payload(job))
+                    except Exception as exc:
+                        if hasattr(self._logger, "warning"):
+                            self._logger.warning(
+                                "[execution-queue-runner-recovery-failed] %s",
+                                {"job_id": job_id, "error": str(exc).strip() or type(exc).__name__},
+                            )
+                if callable(runner):
+                    self._recovered_queued_count += 1
+                    job["_runner"] = runner
+                    job["recovery"] = {
+                        "status": "queued_for_resume",
+                        "recovered_at": now_iso,
+                        "original_status": "queued",
+                    }
+                    heapq.heappush(
+                        self._queues[queue_key],
+                        self._queue_entry(
+                            rank=IMPORTANCE_RANK.get(job["importance"], IMPORTANCE_RANK["normal"]),
+                            deadline_sort=self._deadline_sort_value(
+                                queue_intent=job.get("queue_intent") if isinstance(job.get("queue_intent"), dict) else {}
+                            ),
+                            sequence=sequence,
+                            job_id=job_id,
+                        ),
+                    )
+                else:
+                    job["status"] = "failed"
+                    job["completed_at"] = job.get("completed_at") or now_iso
+                    job["error"] = {
+                        "code": "execution_queue_recovery_runner_unavailable",
+                        "message": "queued job could not be reconstructed safely after restart",
+                    }
+                    job["recovery"] = {
+                        "status": "failed",
+                        "recovered_at": now_iso,
+                        "original_status": "queued",
+                    }
+            elif persisted_status == "running":
+                self._recovered_unfinished_count += 1
+                self._recovered_running_count += 1
                 job["status"] = "failed"
                 job["completed_at"] = job.get("completed_at") or now_iso
                 job["error"] = {
-                    "code": "execution_queue_recovery_required",
-                    "message": "queued job was recovered after restart without an executable runner; resubmit if still needed",
+                    "code": "execution_queue_restart_while_running",
+                    "message": "job was already dispatched before restart and was not replayed to avoid duplicate provider work",
+                }
+                job["recovery"] = {
+                    "status": "not_replayed",
+                    "recovered_at": now_iso,
+                    "original_status": "running",
                 }
             self._jobs[job_id] = job
         self._sequence = itertools.count(max_sequence + 1)
@@ -910,7 +982,7 @@ class ExecutionQueueService:
                 public_job["sequence"] = int(job.get("sequence") or 0)
             jobs.append(public_job)
         payload = {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "generated_at": local_now_iso(),
             "jobs": sorted(jobs, key=lambda item: int(item.get("sequence") or 0)),
         }

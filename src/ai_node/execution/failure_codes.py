@@ -75,7 +75,11 @@ FAILURE_CODE_TAXONOMY = {
     },
     "internal_execution_error": {
         "canonical_code": "internal_execution_error",
-        "aliases": ["internal_execution_error"],
+        "aliases": [
+            "internal_execution_error",
+            "execution_queue_recovery_runner_unavailable",
+            "execution_queue_restart_while_running",
+        ],
     },
 }
 

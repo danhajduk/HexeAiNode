@@ -56,6 +56,69 @@ class NodeControlApiTests(unittest.TestCase):
         self._admission_env.start()
         self.addCleanup(self._admission_env.stop)
 
+    def test_node_control_resumes_persisted_queued_execution_after_restart(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                state_path = Path(tmp) / "execution_queue_jobs.json"
+                request = TaskExecutionRequest.model_validate(
+                    {
+                        "task_id": "task-recovered-001",
+                        "task_family": "task.classification",
+                        "requested_by": "service.alpha",
+                        "requested_provider": "openai",
+                        "requested_model": "gpt-5-mini",
+                        "inputs": {"text": "recover me"},
+                        "response_mode": "async_if_queued",
+                        "trace_id": "trace-recovered-001",
+                    }
+                )
+                state_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "2.0",
+                            "jobs": [
+                                {
+                                    "job_id": "job-recovered-001",
+                                    "job_name": "recover classification",
+                                    "client_id": "service.alpha",
+                                    "queue": "cloud",
+                                    "runtime_lane": "text_llm",
+                                    "importance": "normal",
+                                    "priority": "normal",
+                                    "queue_intent": {"runtime_lane": "text_llm", "priority": "normal"},
+                                    "routing_decision": {"selected_queue": "cloud", "reason": "explicit_provider"},
+                                    "status": "queued",
+                                    "request": request.model_dump(mode="json"),
+                                    "created_at": "2026-09-27T01:00:00-07:00",
+                                    "queued_at": "2026-09-27T01:00:00-07:00",
+                                    "expires_at": "2099-09-27T01:00:00-07:00",
+                                    "sequence": 1,
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                runtime_manager = self._FakeProviderRuntimeManager()
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=runtime_manager,
+                    direct_execution_admission_config=DirectExecutionAdmissionConfig(enabled=False),
+                )
+
+                startup = await state._execution_queue.start_recovered_jobs()  # noqa: SLF001
+                result = await self._wait_for_execution_job(state, "job-recovered-001", "completed")
+
+                self.assertEqual(startup["recovered_queued_count"], 1)
+                self.assertEqual(result["result"]["status"], "completed")
+                self.assertEqual(result["routing_decision"]["reason"], "explicit_provider")
+                self.assertEqual(result["recovery"]["status"], "queued_for_resume")
+                self.assertEqual(len(runtime_manager.execution_requests), 1)
+
+        asyncio.run(run_scenario())
+
     def test_completed_image_job_advertises_ack_and_ack_deletes_local_artifact(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:

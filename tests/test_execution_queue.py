@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import tempfile
 import unittest
@@ -538,51 +539,85 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         release_first.set()
         await _wait_for_status(queue, job_id=first["job_id"], status="completed")
 
-    async def test_recovers_unfinished_jobs_as_failed_after_restart(self):
+    async def test_recovers_queued_jobs_and_does_not_replay_running_jobs(self):
         with tempfile.TemporaryDirectory() as tmp:
             state_path = Path(tmp) / "execution_queue_jobs.json"
-            queue = ExecutionQueueService(
-                logger=logging.getLogger("execution-queue-test"),
-                local_concurrency=1,
-                state_path=str(state_path),
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "jobs": [
+                            {
+                                "job_id": "job-running",
+                                "job_name": "running",
+                                "client_id": "client-a",
+                                "queue": "local",
+                                "importance": "normal",
+                                "status": "running",
+                                "request": {"task_id": "running", "task_family": "task.classification"},
+                                "created_at": "2026-09-27T01:00:00-07:00",
+                                "queued_at": "2026-09-27T01:00:00-07:00",
+                                "started_at": "2026-09-27T01:00:01-07:00",
+                                "expires_at": "2099-09-27T01:00:00-07:00",
+                                "sequence": 1,
+                            },
+                            {
+                                "job_id": "job-queued",
+                                "job_name": "queued",
+                                "client_id": "client-a",
+                                "queue": "local",
+                                "importance": "high",
+                                "status": "queued",
+                                "request": {"task_id": "queued", "task_family": "task.classification"},
+                                "routing_decision": {"selected_queue": "local", "reason": "explicit_provider"},
+                                "queue_intent": {"runtime_lane": "text_llm", "priority": "high"},
+                                "created_at": "2026-09-27T01:00:02-07:00",
+                                "queued_at": "2026-09-27T01:00:02-07:00",
+                                "expires_at": "2099-09-27T01:00:00-07:00",
+                                "sequence": 2,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
             )
-            release_first = asyncio.Event()
-            first = await queue.enqueue(
-                queue="local",
-                importance="normal",
-                job_name="running",
-                request_payload={"task_id": "running"},
-                runner=lambda: _blocking_job(name="running", order=[], release=release_first),
-            )
-            await _wait_for_status(queue, job_id=first["job_id"], status="running")
-            second = await queue.enqueue(
-                queue="local",
-                importance="normal",
-                job_name="queued",
-                request_payload={"task_id": "queued"},
-                runner=lambda: _completed({"ok": True}),
-            )
+            recovered_requests = []
+
+            def recovery_runner(job):
+                request = job["request"]
+                return lambda: _record_completed(request=request, recovered_requests=recovered_requests)
 
             restored = ExecutionQueueService(
                 logger=logging.getLogger("execution-queue-test"),
                 local_concurrency=1,
                 state_path=str(state_path),
+                recovery_runner_factory=recovery_runner,
             )
-            running_status = await restored.job_status(job_id=first["job_id"])
-            queued_status = await restored.job_status(job_id=second["job_id"])
+            running_status = await restored.job_status(job_id="job-running")
+            queued_before_start = await restored.job_status(job_id="job-queued")
+            startup = await restored.start_recovered_jobs()
+            queued_status = await _wait_for_status(restored, job_id="job-queued", status="completed")
             diagnostics = await restored.diagnostics()
 
             self.assertEqual(running_status["status"], "failed")
-            self.assertEqual(queued_status["status"], "failed")
-            self.assertEqual(running_status["error"]["code"], "execution_queue_recovery_required")
-            self.assertEqual(queued_status["error"]["code"], "execution_queue_recovery_required")
+            self.assertEqual(running_status["error"]["code"], "execution_queue_restart_while_running")
+            self.assertEqual(running_status["recovery"]["status"], "not_replayed")
+            self.assertEqual(queued_before_start["status"], "queued")
+            self.assertEqual(queued_status["result"], {"task_id": "queued", "recovered": True})
+            self.assertEqual(recovered_requests, [{"task_id": "queued", "task_family": "task.classification"}])
+            self.assertEqual(startup["recovered_queued_count"], 1)
             self.assertEqual(diagnostics["persistence"]["recovered_unfinished_count"], 2)
-            release_first.set()
-            await _wait_for_status(queue, job_id=first["job_id"], status="completed")
+            self.assertEqual(diagnostics["persistence"]["recovered_queued_count"], 1)
+            self.assertEqual(diagnostics["persistence"]["recovered_running_count"], 1)
 
 
 async def _completed(payload: dict) -> dict:
     return payload
+
+
+async def _record_completed(*, request: dict, recovered_requests: list[dict]) -> dict:
+    recovered_requests.append(request)
+    return {"task_id": request["task_id"], "recovered": True}
 
 
 async def _ordered_job(*, name: str, order: list[str]) -> dict:

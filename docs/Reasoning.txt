@@ -917,3 +917,14 @@ Verification: Combined node-control suites passed with 186 tests; every Client N
 #############
 All Tasks completed 09/27/2026 01:19:00
 #############
+###########
+Task #1034
+Step objective: Recover safe queued executions after backend restart without duplicating dispatched provider work.
+Issue cause: Queue persistence retained request metadata but discarded every unfinished job because executable runners were process-local.
+Chosen fix: Reconstruct runners only for persisted queued jobs from their immutable TaskExecutionRequest payload, preserve queue/routing metadata and job IDs, and fail persisted running jobs without replay because provider dispatch may already have occurred.
+What changed: Added queue recovery factories and startup dispatch, versioned persistence to 2.0, exposed recovery state and diagnostics counts, added stable running/reconstruction failure codes, updated the execution-job schema and client contract, and added queue plus NodeControl restart integration tests.
+Verification: Queue, deadline, failure taxonomy, NodeControl, and FastAPI tests passed with 214 tests; Python compilation, JSON parsing, and `git diff --check` passed.
+###########
+#############
+All Tasks completed 09/27/2026 01:23:53
+#############

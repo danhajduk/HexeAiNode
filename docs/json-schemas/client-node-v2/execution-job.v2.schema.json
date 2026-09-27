@@ -54,6 +54,16 @@
         {"type": "null"}
       ]
     },
+    "recovery": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["status", "recovered_at", "original_status"],
+      "properties": {
+        "status": {"type": "string", "enum": ["queued_for_resume", "not_replayed", "failed"]},
+        "recovered_at": {"type": "string", "format": "date-time"},
+        "original_status": {"type": "string", "enum": ["queued", "running"]}
+      }
+    },
     "error": {
       "type": ["object", "null"],
       "additionalProperties": false,

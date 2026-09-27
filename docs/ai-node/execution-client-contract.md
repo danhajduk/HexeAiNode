@@ -109,7 +109,9 @@ The Core-proxied WebUI uses the separate `X-Hexe-Management-Authorization` opera
 
 When `idempotency_key` is supplied, the node scopes it to the verified `requested_by` caller and hashes the normalized complete request. An exact retry returns the original synchronous result or queued acknowledgement without creating work. Concurrent exact submissions join the first submission. Reuse by the same caller with a different request returns HTTP 409 `idempotency_key_conflict`; a different caller may reuse the same key safely.
 
-Completed mappings persist across backend restarts for `HEXE_EXECUTION_IDEMPOTENCY_RETENTION_SECONDS`, which defaults to 24 hours and has a 60-second minimum. After expiration the key may create new work. Failed submissions are not retained and may be retried. Polling may resume after client timeout/network loss. Persisted terminal records remain pollable after API restart while present, but in-memory queued/running work may be lost. `expired_wait_budget` requires a new request.
+Completed mappings persist across backend restarts for `HEXE_EXECUTION_IDEMPOTENCY_RETENTION_SECONDS`, which defaults to 24 hours and has a 60-second minimum. After expiration the key may create new work. Failed submissions are not retained and may be retried. Polling may resume after client timeout/network loss. Persisted terminal records remain pollable after API restart while present.
+
+Persisted jobs that were still `queued` restart with the same request, caller, routing decision, queue intent, priority, and job ID. Their status payload includes `recovery.status=queued_for_resume`. A job persisted as `running` is never automatically replayed because provider dispatch may already have occurred; it becomes terminal `failed` with `execution_queue_restart_while_running` and `recovery.status=not_replayed`. This fail-closed boundary prevents accidental duplicate provider work. `expired_wait_budget` requires a new request.
 
 ## Cancellation and expiration
 

@@ -1012,6 +1012,7 @@ class NodeControlState:
                 "visual_cpu": max(_env_int("HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY", 1), 1),
             },
             lane_admission_provider=self._execution_queue_lane_admission,
+            recovery_runner_factory=self._execution_queue_recovery_runner,
             state_path=str(
                 Path(
                     os.environ.get("HEXE_EXECUTION_QUEUE_STATE_PATH")
@@ -12811,6 +12812,13 @@ class NodeControlState:
             "message": f"job queued - check in {response['check_after_seconds']} secs",
         }
 
+    def _execution_queue_recovery_runner(self, job: dict):
+        request_payload = job.get("request") if isinstance(job.get("request"), dict) else None
+        if not request_payload:
+            return None
+        request = TaskExecutionRequest.model_validate(request_payload)
+        return lambda: self._execute_direct_now(request=request)
+
     async def execution_job_status(self, *, job_id: str) -> dict:
         payload = await self._execution_queue.job_status(job_id=job_id)
         if self._execution_job_has_image_artifacts(payload=payload):
@@ -15780,6 +15788,10 @@ class NodeControlState:
 
     async def start_background_jobs(self) -> None:
         self._start_bootstrap_listener_if_available()
+        if self._execution_queue is not None and hasattr(self._execution_queue, "start_recovered_jobs"):
+            recovery = await self._execution_queue.start_recovered_jobs()
+            if recovery.get("recovered_queued_count") or recovery.get("recovered_running_count"):
+                self._logger.info("[execution-queue-recovery-startup] %s", recovery)
         try:
             result = await self.refresh_provider_capabilities(force_refresh=False)
             if hasattr(self._logger, "info"):
