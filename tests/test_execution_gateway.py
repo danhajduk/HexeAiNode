@@ -67,7 +67,7 @@ class ExecutionGatewayTests(unittest.TestCase):
         )
         self.assertTrue(result.allowed)
         self.assertEqual(result.reason, "authorized")
-        self.assertEqual(result.prompt_version, "v1")
+        self.assertEqual(result.prompt_version, "v1.0")
 
     def test_allow_review_due_prompt(self):
         gateway = ExecutionGateway()

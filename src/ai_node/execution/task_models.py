@@ -9,6 +9,7 @@ from ai_node.execution.queue_contract import (
     RuntimeLane,
     infer_runtime_lane,
 )
+from ai_node.prompts.versioning import normalize_prompt_version
 
 
 TaskExecutionPriority = Literal["background", "low", "normal", "high", "critical"]
@@ -107,7 +108,10 @@ class TaskExecutionRequest(BaseModel):
     def _validate_prompt_selection_field(cls, value: str | None, info) -> str | None:
         if value is None:
             return None
-        return _normalized_non_empty_string(value, field_name=str(info.field_name))
+        normalized = _normalized_non_empty_string(value, field_name=str(info.field_name))
+        if str(info.field_name) == "prompt_version":
+            return normalize_prompt_version(normalized, allow_legacy_stored=True)
+        return normalized
 
     @field_validator("task_family")
     @classmethod

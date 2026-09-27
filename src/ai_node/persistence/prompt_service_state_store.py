@@ -15,6 +15,7 @@ from ai_node.prompts.registration import (
     normalize_prompt_privacy_class,
     normalize_provider_preferences,
 )
+from ai_node.prompts.versioning import normalize_prompt_version
 from ai_node.time_utils import local_now_iso
 
 
@@ -48,7 +49,10 @@ def _normalize_usage(value: object) -> dict:
 def _normalize_versions(entry: dict, fallback_metadata: dict | None = None) -> list[dict]:
     versions = entry.get("versions")
     if not isinstance(versions, list) or not versions:
-        current_version = str(entry.get("current_version") or entry.get("version") or "v1").strip() or "v1"
+        current_version = normalize_prompt_version(
+            entry.get("current_version") or entry.get("version") or "v1",
+            allow_legacy_stored=True,
+        )
         return [
             {
                 "version": current_version,
@@ -66,10 +70,13 @@ def _normalize_versions(entry: dict, fallback_metadata: dict | None = None) -> l
     for version_entry in versions:
         if not isinstance(version_entry, dict):
             continue
-        version_value = str(version_entry.get("version") or "").strip()
-        if not version_value:
-            continue
+        version_value = normalize_prompt_version(
+            version_entry.get("version"),
+            allow_legacy_stored=True,
+        )
         definition = version_entry.get("definition") if isinstance(version_entry.get("definition"), dict) else {}
+        if any(item["version"] == version_value for item in normalized):
+            raise ValueError("prompt_version_alias_conflict")
         normalized.append(
             {
                 "version": version_value,
@@ -128,7 +135,11 @@ def _normalize_entry(entry: dict) -> dict:
     normalized["metadata"] = deepcopy(entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {})
     normalized["versions"] = _normalize_versions(entry, fallback_metadata=normalized["metadata"])
     current_version = str(entry.get("current_version") or "").strip()
-    normalized["current_version"] = current_version or str(normalized["versions"][-1]["version"])
+    normalized["current_version"] = (
+        normalize_prompt_version(current_version, allow_legacy_stored=True)
+        if current_version
+        else str(normalized["versions"][-1]["version"])
+    )
     normalized["registered_at"] = str(entry.get("registered_at") or entry.get("updated_at") or _now_iso())
     normalized["updated_at"] = str(entry.get("updated_at") or normalized["registered_at"])
     normalized["last_reviewed_at"] = str(entry.get("last_reviewed_at") or "").strip() or None

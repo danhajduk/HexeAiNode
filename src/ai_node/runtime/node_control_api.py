@@ -23,7 +23,7 @@ from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from ai_node.config.bootstrap_config import BOOTSTRAP_PORT, BOOTSTRAP_TOPIC, create_bootstrap_config
 from ai_node.execution.gateway import ExecutionGateway
@@ -37,6 +37,7 @@ from ai_node.providers.models import UnifiedExecutionRequest
 from ai_node.providers.openai_model_catalog import select_representative_openai_model_ids
 from ai_node.prompts import PromptRegistry
 from ai_node.prompts.registration import find_prompt_entry, find_prompt_version
+from ai_node.prompts.versioning import normalize_prompt_version
 from ai_node.persistence.image_generation_template_store import (
     create_image_generation_template_registration,
     create_image_generation_template_state,
@@ -16599,6 +16600,11 @@ class PromptServiceRegisterRequest(BaseModel):
     status: str = "active"
     metadata: dict | None = None
 
+    @field_validator("version")
+    @classmethod
+    def _validate_version(cls, value: str | None) -> str | None:
+        return normalize_prompt_version(value) if value is not None else None
+
 
 class PromptServiceUpdateRequest(BaseModel):
     prompt_name: str | None = None
@@ -16618,6 +16624,11 @@ class PromptServiceUpdateRequest(BaseModel):
     benchmark: dict | None = None
     version: str | None = None
     metadata: dict | None = None
+
+    @field_validator("version")
+    @classmethod
+    def _validate_version(cls, value: str | None) -> str | None:
+        return normalize_prompt_version(value) if value is not None else None
 
 
 class PromptProbationRequest(BaseModel):
@@ -16919,6 +16930,11 @@ class ExecutionAuthorizeRequest(BaseModel):
     requested_model: str | None = None
     inputs: dict | None = None
 
+    @field_validator("prompt_version")
+    @classmethod
+    def _validate_prompt_version(cls, value: str | None) -> str | None:
+        return normalize_prompt_version(value, allow_legacy_stored=True) if value is not None else None
+
 
 class ExecutionJobCancelRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -16971,6 +16987,11 @@ class BenchmarkExecutionV2Request(BaseModel):
     timeout_s: int = 120
     trace_id: str
     metadata: dict | None = None
+
+    @field_validator("prompt_version")
+    @classmethod
+    def _validate_prompt_version(cls, value: str | None) -> str | None:
+        return normalize_prompt_version(value, allow_legacy_stored=True) if value is not None else None
 
 
 def _metadata_with_v2_contracts(

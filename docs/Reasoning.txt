@@ -950,3 +950,14 @@ Verification: Core's current capability validator preserved the expanded endpoin
 #############
 All Tasks completed 09/27/2026 01:38:57
 #############
+###########
+Task #1037
+Step objective: Align prompt-version grammar and normalization across registration, persistence, lookup, and execution.
+Issue cause: Registration schemas required dotted V2+ versions, execution schemas accepted several incompatible forms, and runtime models persisted arbitrary non-empty strings.
+Chosen fix: Store `vMAJOR.MINOR` with optional `.PATCH`, normalize `vMAJOR` to `vMAJOR.0`, and restrict historical date-prefixed values to exact-match execution compatibility.
+What changed: Added shared version normalization, API validators, state migration and collision detection, normalized lookup, aligned Client Node V2 catalog schemas, contract documentation, and valid/invalid/legacy regression tests.
+Verification: Focused prompt persistence, execution gateway, NodeControl, FastAPI, and versioning suites passed with 225 tests; the full first-party suite reached 814 passes with 21 unrelated environment-sensitive failures. Python compilation, schema JSON parsing, and diff validation passed.
+###########
+#############
+All Tasks completed 09/27/2026 01:49:03
+#############

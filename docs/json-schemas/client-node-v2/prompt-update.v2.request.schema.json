@@ -15,6 +15,6 @@
     "execution_policy": {"type": ["object", "null"]}, "provider_preferences": {"type": ["object", "null"]},
     "constraints": {"type": ["object", "null"]}, "definition": {"type": ["object", "null"]},
     "output_contract": {"type": ["object", "null"]}, "benchmark": {"type": ["object", "null"]},
-    "version": {"type": ["string", "null"]}, "metadata": {"type": ["object", "null"]}
+    "version": {"type": ["string", "null"], "pattern": "^v[1-9][0-9]*(\\.(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*))?)?$", "description": "Canonical form is vMAJOR.MINOR with optional PATCH; vMAJOR shorthand is normalized to vMAJOR.0."}, "metadata": {"type": ["object", "null"]}
   }
 }

@@ -8,5 +8,4 @@
 [FUTURE TODO] Task 1026: Add local-first verification and one-step cloud escalation for search answers
 [FUTURE TODO] Task 1027: Expose web retrieval status in APIs, diagnostics, and UI
 [FUTURE TODO] Task 1028: Add tests and documentation for local web retrieval and hybrid routing
-[TODO] Task 1037: Align prompt-version formats across registration and execution (Future)
 [TODO] Task 1038: Correct the job not-found HTTP contract documentation (Future)

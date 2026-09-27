@@ -8,7 +8,7 @@
   "properties": {
     "prompt_id": {"type": "string", "minLength": 1},
     "task_family": {"type": "string", "minLength": 1},
-    "prompt_version": {"type": ["string", "null"]},
+    "prompt_version": {"type": ["string", "null"], "pattern": "^(v[1-9][0-9]*(\\.(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*))?)?|[0-9]{4}-[0-9]{2}-[0-9]{2}\\.v[1-9][0-9]*)$"},
     "requested_by": {"type": ["string", "null"]},
     "service_id": {"type": ["string", "null"]},
     "customer_id": {"type": ["string", "null"]},

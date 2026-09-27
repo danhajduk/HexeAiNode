@@ -22,7 +22,7 @@ V2+ keeps the AI Node as an execution proxy:
 
 ## Schemas
 
-- [prompt-register.v2.request.schema.json](./prompt-register.v2.request.schema.json): prompt registration with benchmark-capable V2 metadata
+- [prompt-register.v2.request.schema.json](./prompt-register.v2.request.schema.json): prompt registration with canonical prompt-version normalization and benchmark metadata
 - [execution-request.v2.schema.json](./execution-request.v2.schema.json): normal task-family execution request
 - [execution-response.v2.schema.json](./execution-response.v2.schema.json): canonical terminal execution result
 - [execution-job.v2.schema.json](./execution-job.v2.schema.json): queued acknowledgement and job status

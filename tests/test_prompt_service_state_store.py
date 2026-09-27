@@ -74,7 +74,7 @@ class PromptServiceStateStoreTests(unittest.TestCase):
             loaded = store.load()
             self.assertEqual(loaded["schema_version"], "2.0")
             self.assertEqual(loaded["prompt_services"][0]["prompt_id"], "prompt.alpha")
-            self.assertEqual(loaded["prompt_services"][0]["current_version"], "v1")
+            self.assertEqual(loaded["prompt_services"][0]["current_version"], "v1.0")
             self.assertEqual(loaded["prompt_services"][0]["status"], "active")
             self.assertEqual(loaded["prompt_services"][0]["versions"][0]["definition"]["system_prompt"], "You are a classifier.")
             self.assertEqual(
@@ -103,7 +103,7 @@ class PromptServiceStateStoreTests(unittest.TestCase):
         )
         self.assertEqual(payload["schema_version"], "2.0")
         self.assertEqual(payload["prompt_services"][0]["status"], "active")
-        self.assertEqual(payload["prompt_services"][0]["current_version"], "v1")
+        self.assertEqual(payload["prompt_services"][0]["current_version"], "v1.0")
         self.assertEqual(payload["prompt_services"][0]["access_scope"], "service")
 
     def test_load_or_create_creates_file(self):

@@ -2395,13 +2395,13 @@ class NodeControlApiTests(unittest.TestCase):
                 metadata={"owner": "ops"},
             )
             self.assertEqual(len(registered["state"]["prompt_services"]), 1)
-            self.assertEqual(registered["state"]["prompt_services"][0]["current_version"], "v1")
+            self.assertEqual(registered["state"]["prompt_services"][0]["current_version"], "v1.0")
 
             updated = state.update_prompt_service(
                 prompt_id="prompt.alpha",
                 definition={"system_prompt": "Classify this text carefully."},
             )
-            self.assertEqual(updated["state"]["prompt_services"][0]["current_version"], "v2")
+            self.assertEqual(updated["state"]["prompt_services"][0]["current_version"], "v2.0")
 
             allowed = state.authorize_execution(
                 prompt_id="prompt.alpha",
@@ -2410,7 +2410,7 @@ class NodeControlApiTests(unittest.TestCase):
                 service_id="svc-alpha",
             )
             self.assertTrue(allowed["allowed"])
-            self.assertEqual(allowed["prompt_version"], "v2")
+            self.assertEqual(allowed["prompt_version"], "v2.0")
 
             restricted = state.transition_prompt_service(
                 prompt_id="prompt.alpha",

@@ -54,6 +54,8 @@ Canonical controls are `output_format=png`, `quality=low|medium|high`, `width`, 
 
 Prompt versions are immutable and coexist. Creation adds the first version. `PUT /api/prompts/services/{prompt_id}` appends a version when `definition` or `version` is supplied; it never replaces an existing version. Reuse fails with `duplicate_prompt_version`. `GET /api/prompts/services/{prompt_id}` exposes `current_version` and all versions.
 
+The canonical stored grammar is `vMAJOR.MINOR` with an optional `.PATCH`; each numeric component is decimal without leading zeroes, except the value `0`. The accepted `vMAJOR` shorthand is normalized before persistence and lookup, so `v10` becomes `v10.0`. Registration rejects all other forms. Execution additionally recognizes the historical exact-match form `YYYY-MM-DD.vMAJOR` so already-persisted versions remain addressable; this compatibility form cannot be used to register a new version. State loading migrates major-only stored versions in memory and rejects collisions such as stored `v10` plus `v10.0`.
+
 Queued requests pinned with `prompt_version` continue using it. Unpinned work resolves the current version at execution time, so reproducible clients must pin. A metadata-only update changes prompt-level metadata and does not mutate an existing version.
 
 Each immutable version may associate its input schema in metadata:

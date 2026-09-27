@@ -1,6 +1,7 @@
 from copy import deepcopy
 
 from ai_node.capabilities.task_families import CANONICAL_TASK_FAMILIES, canonicalize_task_family
+from ai_node.prompts.versioning import normalize_prompt_version, prompt_version_major
 from ai_node.time_utils import local_now_iso
 
 
@@ -189,7 +190,7 @@ def build_prompt_version(
     created_at: str | None = None,
 ) -> dict:
     return {
-        "version": _non_empty(version, name="version"),
+        "version": normalize_prompt_version(version),
         "definition": normalize_prompt_definition(definition),
         "metadata": _normalize_mapping(metadata),
         "created_at": _optional_string(created_at) or _now_iso(),
@@ -201,10 +202,10 @@ def next_prompt_version(existing_versions: list[dict] | None) -> str:
     for entry in list(existing_versions or []):
         if not isinstance(entry, dict):
             continue
-        version = str(entry.get("version") or "").strip().lower()
-        if version.startswith("v") and version[1:].isdigit():
-            max_version = max(max_version, int(version[1:]))
-    return f"v{max_version + 1}"
+        major = prompt_version_major(entry.get("version"))
+        if major is not None:
+            max_version = max(max_version, major)
+    return f"v{max_version + 1}.0"
 
 
 def create_prompt_service_registration(
@@ -233,7 +234,7 @@ def create_prompt_service_registration(
     task = canonicalize_task_family(_non_empty(task_family, name="task_family")) or _non_empty(task_family, name="task_family")
     if task not in set(CANONICAL_TASK_FAMILIES):
         raise ValueError("unsupported task_family")
-    version_value = _optional_string(version) or "v1"
+    version_value = normalize_prompt_version(_optional_string(version) or "v1")
     now = _now_iso()
     lifecycle_state = normalize_prompt_lifecycle_state(status)
     access_policy = normalize_prompt_access_policy(
@@ -355,8 +356,12 @@ def update_prompt_service_definition(
         if not isinstance(versions, list):
             versions = []
             entry["versions"] = versions
-        version_value = _optional_string(version) or next_prompt_version(versions)
-        if any(str(item.get("version") or "").strip() == version_value for item in versions if isinstance(item, dict)):
+        version_value = normalize_prompt_version(_optional_string(version) or next_prompt_version(versions))
+        if any(
+            normalize_prompt_version(item.get("version"), allow_legacy_stored=True) == version_value
+            for item in versions
+            if isinstance(item, dict)
+        ):
             raise ValueError("duplicate_prompt_version")
         versions.append(
             build_prompt_version(
@@ -432,17 +437,35 @@ def find_prompt_entry(*, prompt_services_state: dict | None, prompt_id: str) -> 
 def find_prompt_version(entry: dict, version: str | None = None) -> dict | None:
     versions = entry.get("versions")
     if not isinstance(versions, list) or not versions:
-        fallback_version = _optional_string(version) or _optional_string(entry.get("current_version")) or "v1"
+        fallback_version = normalize_prompt_version(
+            _optional_string(version) or _optional_string(entry.get("current_version")) or "v1",
+            allow_legacy_stored=True,
+        )
         return {
             "version": fallback_version,
             "definition": {},
             "metadata": _normalize_mapping(entry.get("metadata")),
             "created_at": _optional_string(entry.get("registered_at")) or _now_iso(),
         }
-    target_version = _optional_string(version) or _optional_string(entry.get("current_version"))
+    requested_version = _optional_string(version)
+    try:
+        target_version = normalize_prompt_version(requested_version or entry.get("current_version"))
+    except ValueError:
+        target_version = normalize_prompt_version(
+            requested_version or entry.get("current_version"),
+            allow_legacy_stored=True,
+        )
     if target_version is None:
         return None
     for item in versions:
-        if isinstance(item, dict) and str(item.get("version") or "").strip() == target_version:
-            return item
+        if not isinstance(item, dict):
+            continue
+        try:
+            stored_version = normalize_prompt_version(item.get("version"), allow_legacy_stored=True)
+        except ValueError:
+            continue
+        if stored_version == target_version:
+            normalized_item = deepcopy(item)
+            normalized_item["version"] = stored_version
+            return normalized_item
     return None

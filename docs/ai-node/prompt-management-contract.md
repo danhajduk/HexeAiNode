@@ -79,7 +79,9 @@ Each prompt definition stores:
 
 ## Versioning Rules
 
-- prompt creation starts at `v1` unless an explicit version is supplied
+- prompt creation starts at canonical `v1.0` unless an explicit version is supplied
+- canonical stored versions use `vMAJOR.MINOR` with optional `.PATCH`; `vMAJOR` input is normalized to `vMAJOR.0`
+- legacy stored `YYYY-MM-DD.vMAJOR` versions remain available only for exact-match execution and cannot be newly registered
 - `PUT /api/prompts/services/{prompt_id}` is the canonical prompt update path
 - prompt updates that include a new definition create a new immutable version
 - the newest saved version becomes `current_version`

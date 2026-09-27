@@ -1219,7 +1219,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 json={"definition": {"system_prompt": "Classify the text carefully."}},
             )
             self.assertEqual(prompt_update_response.status_code, 200)
-            self.assertEqual(prompt_update_response.json()["state"]["prompt_services"][0]["current_version"], "v2")
+            self.assertEqual(prompt_update_response.json()["state"]["prompt_services"][0]["current_version"], "v2.0")
 
             prompt_detail_response = client.get("/api/prompts/services/prompt.alpha")
             self.assertEqual(prompt_detail_response.status_code, 200)
@@ -1237,7 +1237,7 @@ class NodeControlFastApiTests(unittest.TestCase):
             )
             self.assertEqual(exec_authorize_response.status_code, 200)
             self.assertTrue(exec_authorize_response.json()["allowed"])
-            self.assertEqual(exec_authorize_response.json()["prompt_version"], "v2")
+            self.assertEqual(exec_authorize_response.json()["prompt_version"], "v2.0")
 
             prompt_lifecycle_response = client.post(
                 "/api/prompts/services/prompt.alpha/lifecycle",
