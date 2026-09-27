@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Optional, Tuple
 
 from ai_node.capabilities.node_features import (
@@ -129,13 +130,14 @@ def _normalize_capability_endpoints(value: object, *, task_families: list[str]) 
         family = str(raw_family or "").strip().lower()
         if family not in declared or not isinstance(raw_endpoint, dict):
             continue
-        endpoint = {
+        endpoint = deepcopy(raw_endpoint)
+        endpoint.update({
             "transport": str(raw_endpoint.get("transport") or "").strip().lower(),
             "method": str(raw_endpoint.get("method") or "").strip().upper(),
             "path": str(raw_endpoint.get("path") or "").strip(),
             "url": str(raw_endpoint.get("url") or "").strip(),
-        }
-        if all(endpoint.values()):
+        })
+        if all(endpoint.get(key) for key in ("transport", "method", "path", "url")):
             normalized[family] = endpoint
     return normalized
 

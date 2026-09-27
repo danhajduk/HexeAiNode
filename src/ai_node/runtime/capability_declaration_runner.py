@@ -467,6 +467,38 @@ class CapabilityDeclarationRunner:
                     "method": "POST",
                     "path": execution_path,
                     "url": execution_url,
+                    "request_schema_path": "/api/schemas/client-node/v2/execution-request.v2.schema.json",
+                    "response_schema_path": "/api/schemas/client-node/v2/execution-response.v2.schema.json",
+                    "job_status": {
+                        "method": "GET",
+                        "path": "/api/execution/jobs/{job_id}",
+                        "response_schema_path": "/api/schemas/client-node/v2/execution-job.v2.schema.json",
+                    },
+                    "job_cancel": {
+                        "method": "DELETE",
+                        "path": "/api/execution/jobs/{job_id}",
+                        "request_schema_path": "/api/schemas/client-node/v2/execution-job-cancel.v2.request.schema.json",
+                        "response_schema_path": "/api/schemas/client-node/v2/execution-job-cancel.v2.response.schema.json",
+                    },
+                    "artifact_retrieval": {
+                        "method": "GET",
+                        "path": "/api/manual-image-generation/outputs/{relative_path}",
+                    },
+                    "artifact_acknowledgement": {
+                        "method": "POST",
+                        "path": "/api/execution/artifacts/ack",
+                        "request_schema_path": "/api/schemas/client-node/v2/execution-artifact-ack.v1.request.schema.json",
+                        "response_schema_path": "/api/schemas/client-node/v2/execution-artifact-ack.v1.response.schema.json",
+                    },
+                    "schema_discovery": {
+                        "method": "GET",
+                        "path": "/api/schemas/client-node/v2",
+                        "response_schema_path": "/api/schemas/client-node/v2/schema-catalog.v2.response.schema.json",
+                    },
+                    "concrete_executors": self._concrete_executors_for_task_family(
+                        task_family=family,
+                        enabled_providers=providers.get("enabled"),
+                    ),
                 }
                 for family in manifest_task_families
             }
@@ -482,6 +514,24 @@ class CapabilityDeclarationRunner:
             environment_hints=collect_environment_hints(),
             capability_endpoints=capability_endpoints,
         )
+
+    @staticmethod
+    def _concrete_executors_for_task_family(*, task_family: str, enabled_providers: object) -> list[str]:
+        family = str(task_family or "").strip().lower()
+        providers = {
+            str(provider or "").strip().lower()
+            for provider in (enabled_providers if isinstance(enabled_providers, list) else [])
+            if str(provider or "").strip()
+        }
+        executors = sorted(provider for provider in providers if provider != "local")
+        if "local" in providers:
+            if family in {"task.image_generation", "task.generation.image"}:
+                executors.append("visual_runtime")
+            elif family == "task.vision_analysis":
+                executors.append("vision_runtime")
+            else:
+                executors.append("local")
+        return sorted(set(executors))
 
     async def submit_once(self) -> dict:
         state = self._lifecycle.get_state()

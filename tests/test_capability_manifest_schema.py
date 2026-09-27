@@ -63,6 +63,8 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
                     "method": "POST",
                     "path": "/api/execution/direct",
                     "url": "http://192.0.2.10:9002/api/execution/direct",
+                    "job_status": {"method": "GET", "path": "/api/execution/jobs/{job_id}"},
+                    "concrete_executors": [],
                 }
             },
         )
@@ -71,6 +73,11 @@ class CapabilityManifestSchemaTests(unittest.TestCase):
             manifest["capability_endpoints"]["task.chat"]["url"],
             "http://192.0.2.10:9002/api/execution/direct",
         )
+        self.assertEqual(
+            manifest["capability_endpoints"]["task.chat"]["job_status"]["path"],
+            "/api/execution/jobs/{job_id}",
+        )
+        self.assertEqual(manifest["capability_endpoints"]["task.chat"]["concrete_executors"], [])
         self.assertEqual(validate_capability_manifest(manifest), (True, None))
 
     def test_validate_rejects_missing_node_group(self):

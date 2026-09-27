@@ -471,6 +471,11 @@ The fairness cap is keyed by `requested_by` and counts queued plus running async
 Clients should poll existing jobs or retry after `check_after_seconds`. The node default is
 `HEXE_EXECUTION_QUEUE_MAX_PENDING_PER_CLIENT = 20`; `0` disables this cap.
 
+Core service resolution returns the Node's declared `capability_endpoint` metadata. Clients use Core's
+`provider_api_base_url` as the only host authority and combine it with the relative paths advertised for direct
+execution, `job_status`, `job_cancel`, `artifact_retrieval`, `artifact_acknowledgement`, and `schema_discovery`.
+The same metadata publishes request/response schema paths and the task family's possible `concrete_executors`.
+
 If the estimated local queue start already exceeds the submitted wait budget, the node returns HTTP `200` with a
 deadline rejection payload instead of creating a job:
 

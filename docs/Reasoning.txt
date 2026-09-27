@@ -939,3 +939,14 @@ Verification: Queue, execution-contract, NodeControl, and FastAPI tests passed w
 #############
 All Tasks completed 09/27/2026 01:31:59
 #############
+###########
+Task #1036
+Step objective: Publish complete execution workflow metadata through Core capability resolution.
+Issue cause: Capability declarations exposed only the direct execution URL, forcing clients to know polling, cancellation, artifact, acknowledgement, schema, and executor conventions out of band.
+Chosen fix: Preserve Core's authoritative base URL derivation from the direct endpoint while declaring all related operations as relative paths and retaining arbitrary endpoint metadata through Node normalization.
+What changed: Added schema-linked job status, cancellation, artifact retrieval, artifact acknowledgement, schema discovery, and task-specific concrete-executor metadata; updated contract documentation and declaration tests.
+Verification: Core's current capability validator preserved the expanded endpoint; declaration, client, Node API, FastAPI, and execution-contract suites passed with 236 tests; Python compilation and diff validation passed.
+###########
+#############
+All Tasks completed 09/27/2026 01:38:57
+#############

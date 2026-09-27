@@ -121,9 +121,9 @@ Cancellation schemas are `execution-job-cancel.v2.request.schema.json` and `exec
 
 ## Core publication
 
-AI Node publishes a Core capability manifest containing supported task families, supported/enabled provider classes, and per-task `capability_endpoints` with direct execution method, path, and absolute URL. Core derives `provider_api_base_url` from the registered node API base. Direct execution is `/api/execution/direct`, polling is `/api/execution/jobs/{job_id}`, and local artifacts use `/api/manual-image-generation/outputs/`.
+AI Node publishes a Core capability manifest containing supported task families, supported/enabled provider classes, and per-task `capability_endpoints`. The direct-execution entry retains `transport`, `method`, `path`, and absolute `url`, which Core uses to publish the authoritative `provider_api_base_url` and `execution_endpoint_url` during service resolution.
 
-The current Core declaration does not have separate polling/artifact-base fields or concrete-executor IDs. Clients derive those paths from this contract; terminal `provider_used` and `resolution_metadata.concrete_executor` are authoritative for the executor. Dedicated Core fields require a coordinated Core contract change and are not implemented here.
+Each capability endpoint also publishes relative, base-URL-independent metadata for direct request/response schemas, job polling, cancellation, artifact retrieval, artifact acknowledgement, and Client Node V2 schema discovery. The `concrete_executors` list identifies the enabled execution implementations for that task family, including `local`, `visual_runtime`, `vision_runtime`, and enabled cloud provider IDs as applicable. Core preserves this metadata in the resolved candidate's `capability_endpoint`; clients resolve every relative path against `provider_api_base_url` and do not construct paths or use the declaration-time absolute URL as a separate authority. Terminal `provider_used` and `resolution_metadata.concrete_executor` remain authoritative for the executor that actually ran a request.
 
 ## APIs
 

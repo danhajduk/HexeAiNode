@@ -360,6 +360,29 @@ class _FakeProviderRuntimeManager:
 
 
 class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
+    def test_concrete_executor_metadata_matches_runtime_paths(self):
+        self.assertEqual(
+            CapabilityDeclarationRunner._concrete_executors_for_task_family(
+                task_family="task.image_generation",
+                enabled_providers=["local", "openai"],
+            ),
+            ["openai", "visual_runtime"],
+        )
+        self.assertEqual(
+            CapabilityDeclarationRunner._concrete_executors_for_task_family(
+                task_family="task.vision_analysis",
+                enabled_providers=["local"],
+            ),
+            ["vision_runtime"],
+        )
+        self.assertEqual(
+            CapabilityDeclarationRunner._concrete_executors_for_task_family(
+                task_family="task.classification",
+                enabled_providers=["local"],
+            ),
+            ["local"],
+        )
+
     async def test_accepted_submission_transitions_to_operational(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
         lifecycle.transition_to(NodeLifecycleState.TRUSTED)
@@ -775,15 +798,16 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
 
         await runner.submit_once()
 
-        self.assertEqual(
-            client.last_manifest["capability_endpoints"]["task.classification"],
-            {
-                "transport": "http",
-                "method": "POST",
-                "path": "/api/execution/direct",
-                "url": "http://192.0.2.10:9002/api/execution/direct",
-            },
-        )
+        endpoint = client.last_manifest["capability_endpoints"]["task.classification"]
+        self.assertEqual(endpoint["url"], "http://192.0.2.10:9002/api/execution/direct")
+        self.assertEqual(endpoint["path"], "/api/execution/direct")
+        self.assertEqual(endpoint["job_status"]["path"], "/api/execution/jobs/{job_id}")
+        self.assertEqual(endpoint["job_cancel"]["method"], "DELETE")
+        self.assertEqual(endpoint["artifact_retrieval"]["path"], "/api/manual-image-generation/outputs/{relative_path}")
+        self.assertEqual(endpoint["artifact_acknowledgement"]["path"], "/api/execution/artifacts/ack")
+        self.assertEqual(endpoint["schema_discovery"]["path"], "/api/schemas/client-node/v2")
+        self.assertEqual(endpoint["concrete_executors"], ["openai"])
+        self.assertTrue(endpoint["request_schema_path"].startswith("/api/schemas/client-node/v2/"))
 
     async def test_submit_manifest_uses_resolved_provider_task_capabilities_when_available(self):
         lifecycle = NodeLifecycle(logger=logging.getLogger("capability-runner-test"))
