@@ -2355,3 +2355,174 @@ Validation:
 - Visual and Vision do not preempt each other while active.
 - Default Text/Vision model residency is restored when visual work completes.
 - Training smoke, when manually enabled, unloads incompatible residency and restores defaults.
+
+## Task 1019-1028
+Original task source: ad hoc operator request on 2026-09-02 after local web retrieval and hybrid routing research.
+
+Summary of preserved scope:
+- Add governed internet retrieval for local llama.cpp text execution.
+- Keep retrieval node-owned so the model never receives arbitrary container network access.
+- Support self-hosted SearXNG first, with a provider-neutral interface for future managed search backends.
+- Add optional hardened page fetching separately from search results.
+- Teach provider selection to decide when local llama can complete a freshness/search task and when cloud support is required.
+- Preserve existing routing modes while adding explicit feature, freshness, governance, privacy, and budget gates.
+- Verify local search answers before accepting them and escalate to cloud only when allowed.
+
+Task mapping:
+- Task 1019: Define the governed web retrieval contract
+  - Extend execution request requirements with `required_features`, `freshness_required`, optional `max_source_age`, and explicit search/fetch requirements.
+  - Define the node-owned `web_search` and optional `fetch_url` tool contracts.
+  - Identify Core-owned policy inputs versus AI Node-owned runtime/config inputs.
+  - Acceptance: requests can declare current-data requirements without forcing cloud execution by default.
+- Task 1020: Add disabled-by-default search configuration and governance
+  - Add config for enabling search, backend selection, result limits, locale, safe-search behavior, timeouts, allowed/blocked domains, and disclosure policy.
+  - Enforce requester, prompt, data classification, budget, and external-query permission checks before any network call.
+  - Acceptance: search is denied unless both configuration and governance allow it.
+- Task 1021: Implement search backend abstraction and SearXNG adapter
+  - Add a provider-neutral backend interface.
+  - Implement SearXNG JSON API support using configured endpoint, timeout, query parameters, and result limits.
+  - Normalize backend errors into stable Hexe failure codes.
+  - Acceptance: tests cover success, disabled JSON/API behavior, timeout, malformed response, and no-result outcomes.
+- Task 1022: Add normalized web evidence and audit metadata
+  - Normalize search results to title, canonical URL, snippet, source backend, rank, retrieval timestamp, and truncation fields.
+  - Record query, source URLs, backend, timestamps, latency, truncation, and retrieval failure metadata without logging sensitive prompt text unnecessarily.
+  - Acceptance: execution output can include source-linked citations and audit-safe retrieval metadata.
+- Task 1023: Add optional hardened URL fetcher
+  - Keep fetching disabled by default.
+  - Implement DNS/IP validation, redirect limits, content-type and size limits, timeouts, and loopback/private/link-local/metadata blocking.
+  - Sanitize fetched text and label it as untrusted evidence.
+  - Acceptance: tests cover SSRF protections, redirects, size/type limits, disabled state, and sanitized output.
+- Task 1024: Implement node-owned local LLM tool loop
+  - Allow local text execution to request a validated `web_search` tool call.
+  - Execute the tool in the AI Node, append bounded evidence, and request the final model answer.
+  - Avoid llama.cpp internal Web UI `/tools`; use stable chat/tool-call behavior or an AI Node-validated structured call format.
+  - Acceptance: local `task.chat` can answer a freshness-required query using retrieved evidence and citations.
+- Task 1025: Extend provider selection for search-capable routing
+  - Add deterministic gates for `web_search`, `tool_calling`, freshness, modality, context/output size, provider health, governance, privacy, budget, and `cloud_allowed`.
+  - Preserve `local_only`, `local_preferred`, `cloud_only`, and `cloud_fallback`.
+  - Acceptance: route metadata explains why local llama was selected, denied, or escalated for a search task.
+- Task 1026: Add local-first verification and cloud escalation
+  - Verify citations, source coverage, freshness, required fields, and schema before accepting local search answers.
+  - Escalate once to an eligible cloud provider only when governance and budget allow it.
+  - Acceptance: failed local verification returns either a governed cloud result or a stable non-escalated failure reason.
+- Task 1027: Expose retrieval availability and routing diagnostics
+  - Add API/status/UI fields for search configured, governance-enabled, backend healthy, local tool-loop available, citation count, retrieval failures, latency, and escalation state.
+  - Acceptance: operators can diagnose why a request did or did not use internet retrieval.
+- Task 1028: Add tests and documentation
+  - Cover configuration, governance denial, SearXNG success/failure, local tool loop, citation output, routing decisions, verification failure, and cloud fallback.
+  - Update operator docs and link to `docs/local-web-retrieval-and-hybrid-routing-research.md`.
+  - Acceptance: targeted backend tests pass and documentation distinguishes implemented behavior from optional future backends.
+
+## Task 1029
+Original task details:
+- Add authentication and verified caller identity to all external client APIs.
+- Protect prompt lookup/create/update, direct execution, route preview, job polling/cancellation, artifact acknowledgement, and artifact retrieval.
+- Validate Core-issued service tokens and bind token identity to `requested_by` and `service_id` rather than accepting arbitrary strings.
+- Apply prompt ownership and access-scope filtering to catalog and detail responses.
+- Publish the security scheme and per-operation requirements in OpenAPI and the client discovery contract.
+
+Acceptance:
+- Anonymous or invalid-token requests are rejected consistently.
+- A caller cannot impersonate another node/service or access prompts outside its scope.
+- Authorized existing client flows continue to work with Core-issued credentials.
+- Security behavior has backend and API tests.
+
+## Task 1030
+Original task details:
+- Enforce each selected immutable prompt version's registered `input_schema_id` or `input_schema_url` before routing or provider execution.
+- Resolve only trusted node-published schemas and reject missing, invalid, or mismatched inputs with stable error codes and field-level diagnostics.
+- Preserve prompt-owner authority: requests may satisfy or narrow the schema but cannot bypass it.
+
+Acceptance:
+- Weather and image inputs are validated server-side.
+- Invalid inputs never reach a provider or local runtime.
+- Validation behavior is documented and tested for synchronous and queued requests.
+
+## Task 1031
+Original task details:
+- Add caller-scoped idempotency for execution submission.
+- Introduce an explicit `idempotency_key`; do not silently reinterpret `task_id` or `trace_id`.
+- Persist the key-to-job/result mapping for the configured retention window.
+- Return the original acknowledgement/result for an exact replay and reject conflicting payload reuse.
+
+Acceptance:
+- Network retries cannot create duplicate work when the same caller and key are reused.
+- Different callers may safely use the same key.
+- Conflict, retention, restart, and concurrent-submission cases are tested.
+
+## Task 1032
+Original task details:
+- Restore the node-control backend/API test suite to green before further contract expansion.
+- Resolve the seven currently failing tests covering prompt/template execution, disabled LoRA dataset generation, local-LLM scheduler call expectations, and outdated template catalog counts.
+- Update tests only where behavior intentionally changed; fix implementation when the failure exposes an actual regression.
+
+Acceptance:
+- `tests/test_node_control_api.py` and `tests/test_node_control_fastapi.py` pass together.
+- No failing test is skipped or weakened without a documented reason.
+
+## Task 1033
+Original task details:
+- Publish stable request and response JSON Schemas for every external-client operation advertised by `GET /api/schemas/client-ai/v2`.
+- Cover route preview, authorization, prompt lookup/update/lifecycle/review, image-template operations, execution comparison, services, runtimes, models, queues, and errors.
+- Replace catalog `null` schema references where a dedicated contract is appropriate and retain `/openapi.json` as the complete generated API reference.
+
+Acceptance:
+- Every cataloged mutation has request and response schemas.
+- Read-only catalogs have response schemas.
+- Discovery tests verify all referenced schema URLs exist and validate representative payloads.
+
+## Task 1034
+Original task details:
+- Make queued execution recoverable across backend restarts instead of converting all unfinished jobs to `execution_queue_recovery_required` failures.
+- Persist enough immutable request, authorization, routing, and queue state to reconstruct safe runners.
+- Define explicit handling for jobs that were already dispatched when the process stopped, avoiding duplicate provider work.
+
+Acceptance:
+- Queued jobs resume safely after restart.
+- Running jobs reconcile or fail deterministically without accidental duplicate execution.
+- Restart recovery has persistence and integration tests.
+
+## Task 1035
+Original task details:
+- Implement automatic deletion of expired execution-job records according to `expires_at` and configured retention.
+- Add cooperative cancellation for running work where the selected provider/runtime supports it.
+- Preserve HTTP 409 with a stable unsupported-cancellation reason where interruption is impossible.
+- Ensure artifact acknowledgement and image retention metadata remain consistent when jobs expire or are cancelled.
+
+Acceptance:
+- Expired terminal records are removed automatically.
+- Supported running executions can be cancelled and release resources.
+- Unsupported providers report deterministic behavior.
+- Cleanup and cancellation races are tested.
+
+## Task 1036
+Original task details:
+- Coordinate with Core to publish complete execution endpoint metadata in capability resolution.
+- Add explicit job polling, cancellation, artifact retrieval, artifact acknowledgement, schema discovery, and concrete-executor metadata where the Core contract permits it.
+- Keep `provider_api_base_url` authoritative and avoid hard-coded client hostnames.
+
+Acceptance:
+- External clients can discover all required URLs from Core plus AI Node discovery without contract-specific path guessing.
+- AI Node and Core schemas agree and have cross-node tests.
+- Any Core-owned dependency is tracked in Core rather than silently implemented only in this repository.
+
+## Task 1037
+Original task details:
+- Align prompt-version validation between registration and execution.
+- Choose and document one canonical grammar, including whether `v10` is normalized to `v10.0` or rejected.
+- Apply the same rules in JSON Schemas, Pydantic/API validation, persistence, lookup, and client examples.
+
+Acceptance:
+- Registration and execution accept the same canonical version format.
+- Existing persisted versions have an explicit compatibility or migration path.
+- Contract and regression tests cover valid, invalid, and legacy versions.
+
+## Task 1038
+Original task details:
+- Correct client documentation that describes `not_found` as an execution-job status.
+- Keep the job schema limited to actual job states and document missing jobs as HTTP 404 responses with a stable error body.
+- Ensure polling, cancellation, and artifact acknowledgement use consistent not-found semantics.
+
+Acceptance:
+- Markdown guides, JSON Schemas, OpenAPI, and live route behavior agree.
+- Contract tests cover HTTP 404 separately from execution-job status validation.
