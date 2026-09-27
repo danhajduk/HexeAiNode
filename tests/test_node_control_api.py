@@ -2808,6 +2808,57 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(container_deletes, ["old.png"])
             self.assertFalse(old_image.exists())
 
+    def test_image_output_cleanup_honors_explicit_artifact_lifetimes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "output"
+            weather_dir = output_dir / "hexe" / "scenery"
+            weather_dir.mkdir(parents=True)
+            short_lived = weather_dir / "short.png"
+            long_term = weather_dir / "long.png"
+            short_lived.write_bytes(b"short")
+            long_term.write_bytes(b"long")
+            now = 1_800_000_000.0
+            two_hours_old = now - (2 * 60 * 60)
+            eight_days_old = now - (8 * 24 * 60 * 60)
+            os.utime(short_lived, (two_hours_old, two_hours_old))
+            os.utime(long_term, (eight_days_old, eight_days_old))
+
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-test"),
+            )
+            state._image_output_retention_days = 30
+            state._weather_image_retention_days = 7
+            state._weather_image_max_files = 1
+            state._manual_image_output_dir = lambda: output_dir.resolve()
+            state._write_image_artifact_retention_records_unlocked(
+                {
+                    "hexe/scenery/short.png": {"artifact_lifetime": "short_lived"},
+                    "hexe/scenery/long.png": {"artifact_lifetime": "long_term"},
+                }
+            )
+
+            result = state.cleanup_manual_image_outputs(now_timestamp=now)
+
+            self.assertEqual(result["deleted"], ["hexe/scenery/short.png"])
+            self.assertFalse(short_lived.exists())
+            self.assertTrue(long_term.exists())
+            records = state._read_image_artifact_retention_records()
+            self.assertNotIn("hexe/scenery/short.png", records)
+            self.assertEqual(records["hexe/scenery/long.png"]["artifact_lifetime"], "long_term")
+
+    def test_direct_visual_runtime_artifact_lifetime_validation(self):
+        self.assertEqual(
+            NodeControlState._direct_visual_runtime_artifact_lifetime(
+                inputs={"artifact_lifetime": "short_lived"}
+            ),
+            "short_lived",
+        )
+        self.assertIsNone(NodeControlState._direct_visual_runtime_artifact_lifetime(inputs={}))
+        with self.assertRaisesRegex(ValueError, "image_artifact_lifetime_invalid"):
+            NodeControlState._direct_visual_runtime_artifact_lifetime(inputs={"artifact_lifetime": "forever"})
+
     def test_manual_image_generation_status_reports_latest_job_completion(self):
         class _ManualImageServiceManager:
             def get_status(self):
@@ -8142,7 +8193,13 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 task_family="task.image_generation",
                 requested_by="test",
                 requested_provider="local",
-                inputs={"prompt": "gray cube", "width": 512, "height": 512, "steps": 4},
+                inputs={
+                    "prompt": "gray cube",
+                    "width": 512,
+                    "height": 512,
+                    "steps": 4,
+                    "artifact_lifetime": "short_lived",
+                },
                 constraints={"routing_policy": {"mode": "local_only"}},
                 response_mode="async_if_queued",
                 trace_id="trace-direct-visual",
@@ -8153,6 +8210,12 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["provider_used"], "visual_runtime")
             self.assertEqual(result["model_used"], "comfyui_gpu")
             self.assertEqual(result["output"]["image"]["relative_path"], "direct/visual.png")
+            self.assertEqual(result["output"]["images"][0]["artifact_lifetime"], "short_lived")
+            self.assertIn("expires_at", result["output"]["images"][0])
+            self.assertEqual(
+                state._read_image_artifact_retention_records()["direct/visual.png"]["artifact_lifetime"],
+                "short_lived",
+            )
             self.assertEqual(state.submitted_payload.prompt, "gray cube")
             self.assertEqual(state.submitted_payload.template_id, "template.avatar_head_face_preview.realvisxl.v1")
             self.assertEqual(state.submitted_payload.scheduler_request_metadata["idle_policy"], "client_job")

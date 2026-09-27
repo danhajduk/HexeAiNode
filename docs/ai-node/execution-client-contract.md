@@ -87,6 +87,8 @@ Local artifact routes currently have no route authentication, URL signature, or 
 
 A completed asynchronous job containing images includes `artifact_ack` with the acknowledgement URL, method, and job-scoped request body. After every image has been downloaded and durably stored, the client posts that body to `POST /api/execution/artifacts/ack`. This means all job artifacts were retrieved and are no longer needed. The operation is idempotent, records `artifact_acknowledgement` on the job, and immediately deletes node-local artifact files; non-local artifact URLs are acknowledged but retained by their owning provider. Clients must not acknowledge after only a partial download.
 
+Image-generation inputs may include `artifact_lifetime`. Use `short_lived` for node-local artifacts that may be deleted after one hour, or `long_term` to use the node's general generated-image retention period. If omitted, the existing output-class retention policy remains in effect. Completed local image artifacts echo `artifact_lifetime`, `created_at`, and `expires_at` when an explicit lifetime was requested. Artifact acknowledgement can still delete either class earlier.
+
 Legacy `output.image` and `output.text` on visual results are compatibility fields and may be deprecated. Inline image bytes are not canonical.
 
 ## Authentication

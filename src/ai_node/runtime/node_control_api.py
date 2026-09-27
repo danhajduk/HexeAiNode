@@ -960,6 +960,15 @@ class NodeControlState:
             60,
         )
         self._image_output_retention_days = max(_env_int("HEXE_IMAGE_OUTPUT_RETENTION_DAYS", 30), 1)
+        self._short_lived_image_retention_seconds = max(
+            _env_int("HEXE_SHORT_LIVED_IMAGE_RETENTION_SECONDS", 3600),
+            60,
+        )
+        self._image_artifact_retention_state_path = Path(
+            os.environ.get("HEXE_IMAGE_ARTIFACT_RETENTION_STATE_PATH")
+            or self._config_path.parent / "image_artifact_retention.json"
+        )
+        self._image_artifact_retention_lock = Lock()
         self._weather_image_retention_days = max(_env_int("HEXE_WEATHER_IMAGE_RETENTION_DAYS", 7), 1)
         self._weather_image_max_files = max(_env_int("HEXE_WEATHER_IMAGE_MAX_FILES", 100), 1)
         self._comfyui_gpu_presets_config_path = str(
@@ -10648,6 +10657,7 @@ class NodeControlState:
         except PermissionError:
             self._delete_manual_image_output_via_container(relative_path=safe_relative.as_posix())
         self._delete_manual_lora_sidecars(path=path)
+        self._remove_image_artifact_retention_records(relative_paths=[safe_relative.as_posix()])
         return {
             "deleted": True,
             "relative_path": safe_relative.as_posix(),
@@ -10921,6 +10931,7 @@ class NodeControlState:
         weather_cutoff = now_value - (self._weather_image_retention_days * 24 * 60 * 60)
         deleted: list[str] = []
         errors: list[dict] = []
+        retention_records = self._read_image_artifact_retention_records()
 
         if not output_dir.exists():
             return {
@@ -10943,14 +10954,32 @@ class NodeControlState:
             except FileNotFoundError:
                 continue
         weather_root = (output_dir / "hexe" / "scenery").resolve()
-        weather_files = [path for path in image_files if weather_root in path.resolve().parents]
+        relative_paths = {path: path.relative_to(output_dir).as_posix() for path in image_files}
+        long_term_files = {
+            path
+            for path in image_files
+            if retention_records.get(relative_paths[path], {}).get("artifact_lifetime") == "long_term"
+        }
+        short_lived_files = {
+            path
+            for path in image_files
+            if retention_records.get(relative_paths[path], {}).get("artifact_lifetime") == "short_lived"
+        }
+        explicitly_managed_files = long_term_files | short_lived_files
+        weather_files = [
+            path for path in image_files if weather_root in path.resolve().parents and path not in explicitly_managed_files
+        ]
         weather_files.sort(key=lambda path: modified_times[path], reverse=True)
         weather_overflow = set(weather_files[self._weather_image_max_files :])
         delete_candidates = {
             path
             for path in image_files
             if modified_times[path] < general_cutoff
-            or (path in weather_files and modified_times[path] < weather_cutoff)
+            or (
+                path in short_lived_files
+                and modified_times[path] < now_value - self._short_lived_image_retention_seconds
+            )
+            or (path in weather_files and path not in short_lived_files and modified_times[path] < weather_cutoff)
             or path in weather_overflow
         }
 
@@ -10980,11 +11009,15 @@ class NodeControlState:
             except Exception as exc:
                 errors.append({"path": str(path), "error": str(exc)})
 
+        if deleted:
+            self._remove_image_artifact_retention_records(relative_paths=deleted)
+
         weather_remaining = sum(1 for path in weather_files if path.exists())
         result = {
             "status": "ok" if not errors else "completed_with_errors",
             "output_dir": str(output_dir),
             "general_retention_days": self._image_output_retention_days,
+            "short_lived_retention_seconds": self._short_lived_image_retention_seconds,
             "weather_retention_days": self._weather_image_retention_days,
             "weather_max_files": self._weather_image_max_files,
             "deleted_count": len(deleted),
@@ -10996,6 +11029,66 @@ class NodeControlState:
         if hasattr(self._logger, "info"):
             self._logger.info("[image-output-cleanup] %s", result)
         return result
+
+    def _read_image_artifact_retention_records(self) -> dict[str, dict]:
+        with self._image_artifact_retention_lock:
+            try:
+                payload = json.loads(self._image_artifact_retention_state_path.read_text(encoding="utf-8"))
+            except (FileNotFoundError, json.JSONDecodeError, OSError):
+                return {}
+            records = payload.get("artifacts") if isinstance(payload, dict) else None
+            return {
+                str(path): dict(record)
+                for path, record in (records.items() if isinstance(records, dict) else [])
+                if isinstance(record, dict)
+            }
+
+    def _write_image_artifact_retention_records_unlocked(self, records: dict[str, dict]) -> None:
+        path = self._image_artifact_retention_state_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps({"schema_version": 1, "artifacts": records}, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(path)
+
+    def _record_image_artifact_retention(self, *, relative_path: str, artifact_lifetime: str) -> dict:
+        now = datetime.now(timezone.utc)
+        retention_seconds = (
+            self._short_lived_image_retention_seconds
+            if artifact_lifetime == "short_lived"
+            else self._image_output_retention_days * 24 * 60 * 60
+        )
+        record = {
+            "artifact_lifetime": artifact_lifetime,
+            "created_at": now.isoformat(),
+            "expires_at": (now + timedelta(seconds=retention_seconds)).isoformat(),
+        }
+        with self._image_artifact_retention_lock:
+            try:
+                payload = json.loads(self._image_artifact_retention_state_path.read_text(encoding="utf-8"))
+            except (FileNotFoundError, json.JSONDecodeError, OSError):
+                payload = {}
+            records = payload.get("artifacts") if isinstance(payload, dict) else None
+            records = dict(records) if isinstance(records, dict) else {}
+            records[relative_path] = record
+            self._write_image_artifact_retention_records_unlocked(records)
+        return record
+
+    def _remove_image_artifact_retention_records(self, *, relative_paths: list[str]) -> None:
+        targets = set(relative_paths)
+        with self._image_artifact_retention_lock:
+            try:
+                payload = json.loads(self._image_artifact_retention_state_path.read_text(encoding="utf-8"))
+            except (FileNotFoundError, json.JSONDecodeError, OSError):
+                return
+            records = payload.get("artifacts") if isinstance(payload, dict) else None
+            if not isinstance(records, dict):
+                return
+            updated = {path: record for path, record in records.items() if path not in targets}
+            if updated != records:
+                self._write_image_artifact_retention_records_unlocked(updated)
 
     def _manual_image_references(self, *, limit: int) -> list[dict]:
         root = self._manual_image_reference_root()
@@ -12050,6 +12143,7 @@ class NodeControlState:
 
     async def _execute_direct_visual_runtime_now(self, *, request: TaskExecutionRequest) -> dict:
         inputs = request.inputs if isinstance(request.inputs, dict) else {}
+        artifact_lifetime = self._direct_visual_runtime_artifact_lifetime(inputs=inputs)
         constraints = request.constraints if isinstance(request.constraints, dict) else {}
         resolved_template = (
             constraints.get("image_template_resolved")
@@ -12143,6 +12237,12 @@ class NodeControlState:
             width=width,
             height=height,
         )
+        if canonical_image is not None and artifact_lifetime is not None:
+            retention = self._record_image_artifact_retention(
+                relative_path=canonical_image["relative_path"],
+                artifact_lifetime=artifact_lifetime,
+            )
+            canonical_image.update(retention)
         runtime_lane = "visual_cpu" if str(submission.get("runtime_id") or "") == "comfyui_cpu" else "visual_gpu"
         runtime_id = "comfyui_cpu" if runtime_lane == "visual_cpu" else "comfyui_gpu"
         return {
@@ -12351,6 +12451,15 @@ class NodeControlState:
         if privacy_conflict or request_conflict:
             raise ValueError("prompt_routing_policy_conflict")
         return effective_mode
+
+    @staticmethod
+    def _direct_visual_runtime_artifact_lifetime(*, inputs: dict) -> str | None:
+        value = str(inputs.get("artifact_lifetime") or "").strip().lower()
+        if not value:
+            return None
+        if value not in {"short_lived", "long_term"}:
+            raise ValueError("image_artifact_lifetime_invalid")
+        return value
 
     @staticmethod
     def _direct_visual_runtime_canonical_image(

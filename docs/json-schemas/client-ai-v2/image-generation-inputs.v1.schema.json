@@ -20,6 +20,11 @@
       "default": "png",
       "description": "Canonical local visual-runtime output format. Cloud providers may expose other values through provider-specific contracts."
     },
+    "artifact_lifetime": {
+      "type": "string",
+      "enum": ["short_lived", "long_term"],
+      "description": "Optional node-local artifact retention policy. short_lived expires after one hour; long_term uses the node's general generated-image retention. If omitted, the node's existing output-class policy applies."
+    },
     "quality": {
       "type": "string",
       "enum": ["low", "medium", "high"],

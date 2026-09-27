@@ -123,6 +123,8 @@ Backend runtime:
 - `HEXE_EXECUTION_QUEUE_JOB_TTL_SECONDS` default `3600`; in-memory queued job retention hint in seconds
 - `HEXE_IMAGE_OUTPUT_CLEANUP_INTERVAL_SECONDS` default `3600`; generated-image cleanup frequency
 - `HEXE_IMAGE_OUTPUT_RETENTION_DAYS` default `30`; maximum age for ordinary generated images
+- `HEXE_SHORT_LIVED_IMAGE_RETENTION_SECONDS` default `3600`; retention for image-generation requests with `artifact_lifetime=short_lived`
+- `HEXE_IMAGE_ARTIFACT_RETENTION_STATE_PATH` defaults beside the bootstrap configuration; persistent per-artifact lifetime registry
 - `HEXE_WEATHER_IMAGE_RETENTION_DAYS` default `7`; maximum age for generated files under `hexe/scenery`
 - `HEXE_WEATHER_IMAGE_MAX_FILES` default `100`; maximum number of newest weather scenery images retained
 - `HEXE_EXECUTION_QUEUE_STATE_PATH` optional override; defaults to `execution_queue_jobs.json` next to the node config and persists async job status for restart-aware polling

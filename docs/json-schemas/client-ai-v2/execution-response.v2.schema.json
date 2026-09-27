@@ -127,7 +127,10 @@
         "mime_type": {"type": "string", "pattern": "^image/"},
         "width": {"type": "integer", "minimum": 1},
         "height": {"type": "integer", "minimum": 1},
-        "size_bytes": {"type": "integer", "minimum": 1}
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "artifact_lifetime": {"type": "string", "enum": ["short_lived", "long_term"]},
+        "created_at": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": "string", "format": "date-time"}
       }
     }
   }
