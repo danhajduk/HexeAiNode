@@ -863,3 +863,13 @@ Chosen fix: Stop at the repository trust boundary and require a Core-owned token
 What changed: Marked Task 1029 WIP and recorded the external Core dependency in the preserved task details.
 Verification: Confirmed Core token issuance and validation implementation in backend/app/system/auth/tokens.py, backend/app/system/auth/deps.py, backend/app/system/auth/router.py, and backend/app/api/system.py; no introspection or JWKS route exists.
 ###########
+Task #1029
+Step objective: Complete external client authentication after Core implemented service-token introspection and privileged scope issuance.
+Issue cause: Execution routes only bound part of the caller identity, while prompt, job, artifact, template, and service APIs lacked scoped client-token enforcement, ownership filtering, and published OpenAPI security requirements.
+Chosen fix: Validate Core-issued bearer tokens through the existing trusted-node introspection client, enforce per-operation `service.execute:*` and `ai.*` scopes, bind execution identity to JWT `sub`, and preserve the separate Core-proxied WebUI management authorization path.
+What changed: Added scoped route enforcement, prompt catalog/detail filtering, prompt mutation ownership checks, job polling/cancellation/artifact acknowledgement ownership checks, artifact retrieval protection, OpenAPI bearer security metadata, and matching client catalog/documentation updates.
+Verification: Service-token client, enforcement, and management authorization tests passed (15 tests); catalog security and OpenAPI scope assertions passed; all client-node JSON files parsed; Python compilation and `git diff --check` passed.
+###########
+#############
+All Tasks completed 09/27/2026 00:52:33
+#############

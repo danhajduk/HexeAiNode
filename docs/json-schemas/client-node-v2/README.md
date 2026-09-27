@@ -8,7 +8,7 @@ The primary external-client discovery endpoint is `GET /api/schemas/client-node/
 
 These schemas track the migration covered by Tasks 916-925. Schema discovery, V2 prompt metadata passthrough, and execution-only benchmark requests are implemented. Broader client migration and prompt-tuning consumers remain pending.
 
-Cross-node execution semantics, compatibility rules, and known authentication and idempotency gaps are defined in
+Cross-node execution semantics, compatibility rules, authentication requirements, and known idempotency gaps are defined in
 [the AI Node execution client contract](../../ai-node/execution-client-contract.md).
 
 ## Contract Direction

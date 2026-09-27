@@ -10,6 +10,12 @@ Important implementation note: the schema catalog publishes implemented V2+ cont
 The canonical response, queued-job, and image-input contracts are documented in
 `docs/ai-node/execution-client-contract.md` and published through the same schema API.
 
+## Authentication
+
+Send Core-issued client credentials as `Authorization: Bearer <token>`. The AI Node validates the token through Core and rejects anonymous, invalid, revoked, expired, wrongly targeted, or insufficiently scoped requests. OpenAPI and the schema catalog publish the required scope for each protected operation.
+
+Execution uses `service.execute:<task_family>`. Prompt, image-template, job, artifact, and service-status operations use the corresponding `ai.*` scope published for that operation. Verified JWT `sub` is authoritative for execution identity and resource ownership; request fields cannot impersonate another caller. The Core-proxied WebUI uses a separate management authorization header.
+
 ## Implemented Route Summary
 
 Implemented client-facing routes in this repository:

@@ -6,9 +6,9 @@ This is the canonical contract for clients that resolve Hexe AI Node through Cor
 
 ## Identity and service discovery
 
-`requested_by` is the caller principal, normally the Core node ID carried by the service-token subject. Execution-request `service_id` is the caller's logical service principal used for prompt access and budget selection; it defaults to `requested_by`. It is not the selected Core catalog service, prompt owner, executor, billing principal, or customer. `customer_id`, when present, selects the customer/budget context.
+`requested_by` and execution-request `service_id` identify the caller principal carried by the Core service-token subject. `service_id` defaults to `requested_by`; both must match the verified JWT `sub`. They are not the selected Core catalog service, prompt owner, executor, billing principal, or customer. `customer_id`, when present, selects the customer/budget context.
 
-Prompt records separately use `service_id` and `owner_service` for the prompt-owning service. Production execution routes require the Core-issued service token as an `Authorization: Bearer <token>` header. AI Node introspects the token through Core, requires `service.execute:<task_family>`, binds `requested_by` to JWT `sub`, binds the provider node and provider to JWT `aud`, and fails closed when validation is inactive or unavailable.
+Prompt records separately use `service_id` and `owner_service` for the prompt-owning service. Production execution routes require the Core-issued service token as an `Authorization: Bearer <token>` header. AI Node introspects the token through Core, requires `service.execute:<task_family>`, binds `requested_by` and `service_id` to JWT `sub`, binds the provider node and provider to JWT `aud`, and fails closed when validation is inactive or unavailable.
 
 The expected execution audience is `node-service:<provider-node-id>:<provider>`. When `requested_provider` is omitted, the verified audience supplies it; when it is present, it must match the verified audience.
 
@@ -85,7 +85,7 @@ The caller owns its HTTP timeout. For sync calls it should exceed the effective 
 
 Clients consume `output.images[]`. Every completed image artifact guarantees a non-empty `url`, positive `width`, `height`, and `size_bytes`, plus an image MIME type. `relative_path` is informational and may be null. A relative URL is resolved against Core's `provider_api_base_url`; clients must use `url` instead of constructing filesystem paths.
 
-Local artifact routes currently have no route authentication, URL signature, or URL-specific expiration. Files live under configured runtime output storage and survive API restarts. Ordinary generated images are retained for 30 days by default. Weather scenery is bounded more tightly to seven days and the newest 100 files by default. These limits are configurable, so clients needing durable ownership should download promptly. Retry a failed artifact retrieval as GET only; do not automatically regenerate unless duplicates are acceptable.
+Local artifact retrieval requires a Core service token with `ai.artifacts.read`; URLs are not signed and have no URL-specific expiration. Files live under configured runtime output storage and survive API restarts. Ordinary generated images are retained for 30 days by default. Weather scenery is bounded more tightly to seven days and the newest 100 files by default. These limits are configurable, so clients needing durable ownership should download promptly. Retry a failed artifact retrieval as GET only; do not automatically regenerate unless duplicates are acceptable.
 
 A completed asynchronous job containing images includes `artifact_ack` with the acknowledgement URL, method, and job-scoped request body. After every image has been downloaded and durably stored, the client posts that body to `POST /api/execution/artifacts/ack`. This means all job artifacts were retrieved and are no longer needed. The operation is idempotent, records `artifact_acknowledgement` on the job, and immediately deletes node-local artifact files; non-local artifact URLs are acknowledged but retained by their owning provider. Clients must not acknowledge after only a partial download.
 
@@ -95,7 +95,11 @@ Legacy `output.image` and `output.text` on visual results are compatibility fiel
 
 ## Authentication
 
-Core resolution and authorization require Core contracts and credentials. AI Node HTTP route token verification is not developed for prompt lookup/create/update, direct execution, route preview, job polling/cancellation, or artifact retrieval. The live OpenAPI therefore declares no security scheme. Deployments must keep these routes behind a trusted network boundary.
+Client routes accept `Authorization: Bearer <Core-issued-token>`. AI Node validates the token through Core and fails closed on invalid, revoked, expired, insufficiently scoped, or unverifiable tokens. The live OpenAPI declares `CoreServiceBearer` and publishes required scopes per operation.
+
+Execution and route-preview operations require `service.execute:<task_family>`. Prompt reads require `ai.prompts.read`; writes require `ai.prompts.write`; lifecycle and review operations require their corresponding `ai.prompts.lifecycle` or `ai.prompts.review` scope. Job polling and cancellation require `ai.jobs.read` and `ai.jobs.cancel`. Artifact retrieval and acknowledgement require `ai.artifacts.read` and `ai.artifacts.ack`. Prompt catalog/detail responses are filtered by the verified caller and prompt access policy, and prompt mutations require ownership. Job operations are restricted to the verified job owner.
+
+The Core-proxied WebUI uses the separate `X-Hexe-Management-Authorization` operator contract; it does not reuse client service tokens.
 
 ## Identifier, retry, and restart semantics
 

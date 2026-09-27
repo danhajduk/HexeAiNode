@@ -19,7 +19,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 
-from fastapi import FastAPI, Header, HTTPException, Response
+from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict
@@ -81,6 +82,40 @@ SERVICE_EXECUTION_PATHS = {
     "/api/execution/direct",
     "/api/execution/route-preview",
 }
+
+
+def service_scope_for_route(*, method: str, path: str) -> str | None:
+    method = str(method or "").upper()
+    path = str(path or "").rstrip("/") or "/"
+    if method == "OPTIONS":
+        return None
+    if path == "/api/prompts/services":
+        return "ai.prompts.read" if method in {"GET", "HEAD"} else "ai.prompts.write"
+    if path == "/api/prompts/services/migrations/review-due":
+        return None
+    if path.startswith("/api/prompts/services/"):
+        if path.endswith("/review"):
+            return "ai.prompts.review"
+        if path.endswith(("/lifecycle", "/probation")):
+            return "ai.prompts.lifecycle"
+        return "ai.prompts.read" if method in {"GET", "HEAD"} else "ai.prompts.write"
+    if path == "/api/image-templates":
+        return "ai.image_templates.read" if method in {"GET", "HEAD"} else "ai.image_templates.write"
+    if path.startswith("/api/image-templates/"):
+        if path.endswith("/review"):
+            return "ai.image_templates.review"
+        if path.endswith("/lifecycle"):
+            return "ai.image_templates.lifecycle"
+        return "ai.image_templates.read" if method in {"GET", "HEAD"} else "ai.image_templates.write"
+    if path.startswith("/api/execution/jobs/"):
+        return "ai.jobs.read" if method in {"GET", "HEAD"} else "ai.jobs.cancel"
+    if path == "/api/execution/artifacts/ack":
+        return "ai.artifacts.ack"
+    if path.startswith("/api/manual-image-generation/outputs/"):
+        return "ai.artifacts.read"
+    if path == "/api/services/status" and method in {"GET", "HEAD"}:
+        return "ai.services.read"
+    return None
 MANAGEMENT_ASSET_PREFIXES = (
     "/api/prompts/",
     "/api/image-templates",
@@ -11835,6 +11870,8 @@ class NodeControlState:
         provider_node_id = str(claims.get("provider_node_id") or "").strip()
         if subject != request.requested_by:
             raise ValueError("service_token_subject_mismatch")
+        if str(request.service_id or request.requested_by).strip() != subject:
+            raise ValueError("service_token_service_mismatch")
         if provider_node_id and provider_node_id != node_id:
             raise ValueError("service_token_provider_node_mismatch")
         audience_prefix = f"node-service:{node_id}:"
@@ -11845,6 +11882,36 @@ class NodeControlState:
         if requested_provider and requested_provider != authorized_provider:
             raise ValueError("service_token_provider_mismatch")
         request.requested_provider = authorized_provider
+        return claims
+
+    async def authorize_service_access(self, *, service_token: str, required_scope: str) -> dict:
+        if self._service_token_introspection_client is None:
+            raise ValueError("service_token_introspection_not_configured")
+        trust_state = self._trust_state_payload()
+        node_id = str(trust_state.get("node_id") or "").strip()
+        core_api_endpoint = str(trust_state.get("core_api_endpoint") or "").strip()
+        trust_token = str(trust_state.get("node_trust_token") or "").strip()
+        if not node_id or not core_api_endpoint or not trust_token:
+            raise ValueError("trusted_core_context_unavailable")
+        result = await self._service_token_introspection_client.introspect(
+            core_api_endpoint=core_api_endpoint,
+            node_id=node_id,
+            trust_token=trust_token,
+            service_token=service_token,
+            required_scopes=[required_scope],
+        )
+        if not result.active or not isinstance(result.claims, dict):
+            raise ValueError(result.error_code or "service_token_inactive")
+        claims = dict(result.claims)
+        subject = str(claims.get("sub") or "").strip()
+        audience = str(claims.get("aud") or "").strip()
+        provider_node_id = str(claims.get("provider_node_id") or "").strip()
+        if not subject:
+            raise ValueError("service_token_subject_invalid")
+        if provider_node_id and provider_node_id != node_id:
+            raise ValueError("service_token_provider_node_mismatch")
+        if not audience.startswith(f"node-service:{node_id}:"):
+            raise ValueError("service_token_audience_mismatch")
         return claims
 
     def record_request_metrics(self, *, duration_ms: float, status_code: int) -> None:
@@ -13744,6 +13811,7 @@ class NodeControlState:
                     "description": "Execute a governed AI task synchronously or enqueue it according to response_mode.",
                     "request_schema_path": "/api/schemas/client-node/v2/execution-request.v2.schema.json",
                     "response_schema_path": "/api/schemas/client-node/v2/execution-response.v2.schema.json",
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["service.execute:<task_family>"]},
                 },
                 {
                     "name": "route_preview",
@@ -13752,6 +13820,7 @@ class NodeControlState:
                     "description": "Preview authorization, routing, queue, and runtime selection without executing.",
                     "request_schema_path": "/api/schemas/client-node/v2/execution-request.v2.schema.json",
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["service.execute:<task_family>"]},
                 },
                 {
                     "name": "execution_authorization",
@@ -13760,6 +13829,7 @@ class NodeControlState:
                     "description": "Check whether a caller may execute a prompt version.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["service.execute:<task_family>"]},
                 },
                 {
                     "name": "execution_job_status",
@@ -13768,6 +13838,7 @@ class NodeControlState:
                     "description": "Poll an asynchronous execution job.",
                     "request_schema_path": None,
                     "response_schema_path": "/api/schemas/client-node/v2/execution-job.v2.schema.json",
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.jobs.read"]},
                 },
                 {
                     "name": "execution_job_cancel",
@@ -13776,6 +13847,7 @@ class NodeControlState:
                     "description": "Cancel work while it is still queued.",
                     "request_schema_path": "/api/schemas/client-node/v2/execution-job-cancel.v2.request.schema.json",
                     "response_schema_path": "/api/schemas/client-node/v2/execution-job-cancel.v2.response.schema.json",
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.jobs.cancel"]},
                 },
                 {
                     "name": "artifact_acknowledgement",
@@ -13784,6 +13856,7 @@ class NodeControlState:
                     "description": "Acknowledge durable retrieval and release node-local job artifacts.",
                     "request_schema_path": "/api/schemas/client-node/v2/execution-artifact-ack.v1.request.schema.json",
                     "response_schema_path": "/api/schemas/client-node/v2/execution-artifact-ack.v1.response.schema.json",
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.artifacts.ack"]},
                 },
                 {
                     "name": "benchmark_execution",
@@ -13808,6 +13881,7 @@ class NodeControlState:
                     "description": "List registered prompt services and versions.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.prompts.read"]},
                 },
                 {
                     "name": "prompt_registration",
@@ -13816,6 +13890,7 @@ class NodeControlState:
                     "description": "Register an immutable prompt version owned by the caller service.",
                     "request_schema_path": "/api/schemas/client-node/v2/prompt-register.v2.request.schema.json",
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.prompts.write"]},
                 },
                 {
                     "name": "prompt_detail",
@@ -13824,6 +13899,7 @@ class NodeControlState:
                     "description": "Read one registered prompt and its versions.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.prompts.read"]},
                 },
                 {
                     "name": "prompt_update",
@@ -13832,6 +13908,7 @@ class NodeControlState:
                     "description": "Add or update caller-owned prompt metadata and versions.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.prompts.write"]},
                 },
                 {
                     "name": "prompt_lifecycle",
@@ -13840,6 +13917,7 @@ class NodeControlState:
                     "description": "Transition a caller-owned prompt lifecycle state.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.prompts.lifecycle"]},
                 },
                 {
                     "name": "prompt_probation",
@@ -13848,6 +13926,7 @@ class NodeControlState:
                     "description": "Manage probation for a caller-owned prompt.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.prompts.lifecycle"]},
                 },
                 {
                     "name": "prompt_review",
@@ -13856,6 +13935,7 @@ class NodeControlState:
                     "description": "Record review of a caller-owned prompt.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.prompts.review"]},
                 },
                 {
                     "name": "image_template_catalog",
@@ -13864,6 +13944,7 @@ class NodeControlState:
                     "description": "List registered image workflow templates and versions.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.image_templates.read"]},
                 },
                 {
                     "name": "image_template_registration",
@@ -13872,6 +13953,7 @@ class NodeControlState:
                     "description": "Register a caller-owned image workflow template version.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.image_templates.write"]},
                 },
                 {
                     "name": "image_template_detail",
@@ -13880,6 +13962,7 @@ class NodeControlState:
                     "description": "Read one registered image workflow template and its versions.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.image_templates.read"]},
                 },
                 {
                     "name": "image_template_update",
@@ -13888,6 +13971,7 @@ class NodeControlState:
                     "description": "Add or update caller-owned image template metadata and versions.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.image_templates.write"]},
                 },
                 {
                     "name": "image_template_lifecycle",
@@ -13896,6 +13980,7 @@ class NodeControlState:
                     "description": "Transition a caller-owned image template lifecycle state.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.image_templates.lifecycle"]},
                 },
                 {
                     "name": "image_template_review",
@@ -13904,6 +13989,7 @@ class NodeControlState:
                     "description": "Record review of a caller-owned image template.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.image_templates.review"]},
                 },
                 {
                     "name": "models_by_task",
@@ -13928,6 +14014,7 @@ class NodeControlState:
                     "description": "Read current AI Node service and runtime status.",
                     "request_schema_path": None,
                     "response_schema_path": None,
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.services.read"]},
                 },
             ],
             "catalogs": [
@@ -16833,6 +16920,73 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "token_validation_unavailable",
             } else 403
             raise HTTPException(status_code=status_code, detail=error_code) from exc
+
+    def _service_subject(claims: dict | None) -> str:
+        return str((claims or {}).get("sub") or "").strip()
+
+    def _prompt_access_allowed(prompt: dict, *, claims: dict) -> bool:
+        subject = _service_subject(claims)
+        access_scope = str(prompt.get("access_scope") or "service").strip().lower()
+        owner_client = str(prompt.get("owner_client_id") or "").strip()
+        owner_service = str(prompt.get("owner_service") or prompt.get("service_id") or "").strip()
+        if subject in {owner_client, owner_service}:
+            return True
+        if access_scope == "public":
+            return True
+        if access_scope == "shared":
+            return subject in {
+                str(item or "").strip()
+                for item in [*(prompt.get("allowed_clients") or []), *(prompt.get("allowed_services") or [])]
+            }
+        return False
+
+    def _require_prompt_owner(prompt: dict, *, claims: dict) -> None:
+        subject = _service_subject(claims)
+        owners = {
+            str(prompt.get("owner_client_id") or "").strip(),
+            str(prompt.get("owner_service") or prompt.get("service_id") or "").strip(),
+        }
+        if subject not in owners:
+            raise HTTPException(status_code=403, detail="prompt_owner_mismatch")
+
+    def _service_claims(request: Request) -> dict | None:
+        claims = getattr(request.state, "service_claims", None)
+        return claims if isinstance(claims, dict) else None
+
+    def _filter_prompt_catalog(payload: dict, *, claims: dict) -> dict:
+        state_payload = payload.get("state") if isinstance(payload.get("state"), dict) else {}
+        prompts = state_payload.get("prompt_services") if isinstance(state_payload.get("prompt_services"), list) else []
+        visible = [item for item in prompts if isinstance(item, dict) and _prompt_access_allowed(item, claims=claims)]
+        visible_ids = {str(item.get("prompt_id") or "").strip() for item in visible}
+        probation = state_payload.get("probation") if isinstance(state_payload.get("probation"), dict) else {}
+        filtered_probation = {
+            **probation,
+            "active_prompt_ids": [
+                prompt_id for prompt_id in list(probation.get("active_prompt_ids") or []) if prompt_id in visible_ids
+            ],
+            "reasons": {
+                prompt_id: reason
+                for prompt_id, reason in dict(probation.get("reasons") or {}).items()
+                if prompt_id in visible_ids
+            },
+        }
+        filtered_state = {**state_payload, "prompt_services": visible, "probation": filtered_probation}
+        return {
+            **payload,
+            "state": filtered_state,
+            "summary": {
+                "prompt_count": len(visible),
+                "review_due_count": sum(str(item.get("status") or "").lower() == "review_due" for item in visible),
+                "active_count": sum(str(item.get("status") or "").lower() == "active" for item in visible),
+            },
+        }
+
+    def _require_job_owner(payload: dict, *, claims: dict) -> None:
+        subject = _service_subject(claims)
+        request_payload = payload.get("request") if isinstance(payload.get("request"), dict) else {}
+        owner = str(payload.get("client_id") or request_payload.get("requested_by") or "").strip()
+        if owner and owner != subject:
+            raise HTTPException(status_code=403, detail="job_owner_mismatch")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -16845,6 +16999,10 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     async def _management_authorization_middleware(request, call_next):
         required_scope = management_scope_for_route(method=request.method, path=request.url.path)
         if required_scope is None or not state.management_token_enforcement_enabled:
+            return await call_next(request)
+        if service_scope_for_route(method=request.method, path=request.url.path) is not None and str(
+            request.headers.get("Authorization") or ""
+        ).strip():
             return await call_next(request)
         management_token = str(request.headers.get(MANAGEMENT_AUTHORIZATION_HEADER) or "").strip()
         if not management_token:
@@ -16866,6 +17024,38 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 status_code=503 if error_code in unavailable else 403,
                 content={"detail": error_code},
             )
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def _service_authorization_middleware(request: Request, call_next):
+        required_scope = service_scope_for_route(method=request.method, path=request.url.path)
+        if required_scope is None or not state.service_token_enforcement_enabled:
+            return await call_next(request)
+        if str(request.headers.get(MANAGEMENT_AUTHORIZATION_HEADER) or "").strip():
+            return await call_next(request)
+        try:
+            claims = await state.authorize_service_access(
+                service_token=bearer_token(request.headers.get("Authorization")),
+                required_scope=required_scope,
+            )
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        except ValueError as exc:
+            error_code = str(exc)
+            unavailable = {
+                "service_token_introspection_not_configured",
+                "trusted_core_context_unavailable",
+                "token_validation_unavailable",
+                "invalid_json_response",
+                "rate_limit_exceeded",
+                "http_429",
+                "http_503",
+            }
+            return JSONResponse(
+                status_code=503 if error_code in unavailable else 403,
+                content={"detail": error_code},
+            )
+        request.state.service_claims = claims
         return await call_next(request)
 
     @app.middleware("http")
@@ -17314,20 +17504,30 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/prompts/services")
-    def get_prompt_services():
-        return state.prompt_service_state_payload()
+    def get_prompt_services(request: Request):
+        payload = state.prompt_service_state_payload()
+        claims = _service_claims(request)
+        return _filter_prompt_catalog(payload, claims=claims) if claims is not None else payload
 
     @app.post("/api/prompts/services")
-    def post_prompt_services(payload: PromptServiceRegisterRequest):
+    def post_prompt_services(payload: PromptServiceRegisterRequest, request: Request):
         try:
+            claims = _service_claims(request)
+            subject = _service_subject(claims)
+            if claims is not None and (
+                payload.service_id != subject
+                or (payload.owner_service is not None and payload.owner_service != subject)
+                or (payload.owner_client_id is not None and payload.owner_client_id != subject)
+            ):
+                raise HTTPException(status_code=403, detail="prompt_owner_mismatch")
             return state.register_prompt_service(
                 prompt_id=payload.prompt_id,
                 service_id=payload.service_id,
                 task_family=payload.task_family,
                 metadata=payload.metadata,
                 prompt_name=payload.prompt_name,
-                owner_service=payload.owner_service,
-                owner_client_id=payload.owner_client_id,
+                owner_service=subject if claims is not None else payload.owner_service,
+                owner_client_id=subject if claims is not None else payload.owner_client_id,
                 privacy_class=payload.privacy_class,
                 access_scope=payload.access_scope,
                 allowed_services=payload.allowed_services,
@@ -17346,15 +17546,28 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/prompts/services/{prompt_id}")
-    def get_prompt_service(prompt_id: str):
+    def get_prompt_service(prompt_id: str, request: Request):
         try:
-            return state.get_prompt_service(prompt_id=prompt_id)
+            response = state.get_prompt_service(prompt_id=prompt_id)
+            claims = _service_claims(request)
+            if claims is not None and not _prompt_access_allowed(response["prompt"], claims=claims):
+                raise HTTPException(status_code=404, detail="prompt_not_found")
+            return response
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.put("/api/prompts/services/{prompt_id}")
-    def put_prompt_service(prompt_id: str, payload: PromptServiceUpdateRequest):
+    def put_prompt_service(prompt_id: str, payload: PromptServiceUpdateRequest, request: Request):
         try:
+            claims = _service_claims(request)
+            if claims is not None:
+                _require_prompt_owner(state.get_prompt_service(prompt_id=prompt_id)["prompt"], claims=claims)
+                subject = _service_subject(claims)
+                if (
+                    (payload.owner_service is not None and payload.owner_service != subject)
+                    or (payload.owner_client_id is not None and payload.owner_client_id != subject)
+                ):
+                    raise HTTPException(status_code=403, detail="prompt_owner_mismatch")
             return state.update_prompt_service(
                 prompt_id=prompt_id,
                 prompt_name=payload.prompt_name,
@@ -17379,15 +17592,21 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/prompts/services/{prompt_id}/lifecycle")
-    def post_prompt_lifecycle(prompt_id: str, payload: PromptLifecycleRequest):
+    def post_prompt_lifecycle(prompt_id: str, payload: PromptLifecycleRequest, request: Request):
         try:
+            claims = _service_claims(request)
+            if claims is not None:
+                _require_prompt_owner(state.get_prompt_service(prompt_id=prompt_id)["prompt"], claims=claims)
             return state.transition_prompt_service(prompt_id=prompt_id, state=payload.state, reason=payload.reason)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/prompts/services/{prompt_id}/probation")
-    def post_prompt_probation(prompt_id: str, payload: PromptProbationRequest):
+    def post_prompt_probation(prompt_id: str, payload: PromptProbationRequest, request: Request):
         try:
+            claims = _service_claims(request)
+            if claims is not None:
+                _require_prompt_owner(state.get_prompt_service(prompt_id=prompt_id)["prompt"], claims=claims)
             return state.update_prompt_probation(
                 prompt_id=prompt_id,
                 action=payload.action,
@@ -17397,8 +17616,11 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/prompts/services/{prompt_id}/review")
-    def post_prompt_review(prompt_id: str, payload: PromptReviewRequest):
+    def post_prompt_review(prompt_id: str, payload: PromptReviewRequest, request: Request):
         try:
+            claims = _service_claims(request)
+            if claims is not None:
+                _require_prompt_owner(state.get_prompt_service(prompt_id=prompt_id)["prompt"], claims=claims)
             return state.review_prompt_service(
                 prompt_id=prompt_id,
                 reviewed_by=payload.reviewed_by,
@@ -17557,17 +17779,26 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/execution/jobs/{job_id}")
-    async def get_execution_job(job_id: str):
+    async def get_execution_job(job_id: str, request: Request):
         payload = await state.execution_job_status(job_id=job_id)
         if payload.get("status") == "not_found":
             raise HTTPException(status_code=404, detail="job_not_found")
+        claims = _service_claims(request)
+        if claims is not None:
+            _require_job_owner(payload, claims=claims)
         return payload
 
     @app.post("/api/execution/artifacts/ack")
-    async def post_execution_artifact_ack(payload: ExecutionArtifactAckRequest):
+    async def post_execution_artifact_ack(payload: ExecutionArtifactAckRequest, request: Request):
+        claims = _service_claims(request)
+        if claims is not None:
+            job = await state.execution_job_status(job_id=payload.job_id)
+            if job.get("status") == "not_found":
+                raise HTTPException(status_code=404, detail="job_not_found")
+            _require_job_owner(job, claims=claims)
         response = await state.acknowledge_execution_artifacts(
             job_id=payload.job_id,
-            acknowledged_by=payload.acknowledged_by,
+            acknowledged_by=_service_subject(claims) if claims is not None else payload.acknowledged_by,
         )
         if response.get("status") == "not_found":
             raise HTTPException(status_code=404, detail="job_not_found")
@@ -17578,7 +17809,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         return response
 
     @app.delete("/api/execution/jobs/{job_id}")
-    async def delete_execution_job(job_id: str, payload: ExecutionJobCancelRequest | None = None):
+    async def delete_execution_job(job_id: str, request: Request, payload: ExecutionJobCancelRequest | None = None):
+        claims = _service_claims(request)
+        if claims is not None:
+            job = await state.execution_job_status(job_id=job_id)
+            if job.get("status") == "not_found":
+                raise HTTPException(status_code=404, detail="job_not_found")
+            _require_job_owner(job, claims=claims)
         response = await state.cancel_execution_job(
             job_id=job_id,
             reason=payload.reason if payload is not None else None,
@@ -18027,6 +18264,36 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def get_capability_diagnostics(x_admin_token: str | None = Header(default=None, alias="X-Hexe-Admin-Token")):
         require_admin(x_admin_token)
         return state.capability_diagnostics_payload()
+
+    def custom_openapi() -> dict:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+        components = schema.setdefault("components", {})
+        security_schemes = components.setdefault("securitySchemes", {})
+        security_schemes["CoreServiceBearer"] = {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Short-lived Core-issued service token validated by the target node through Core introspection.",
+        }
+        for path, path_item in schema.get("paths", {}).items():
+            if not isinstance(path_item, dict):
+                continue
+            for method, operation in path_item.items():
+                if not isinstance(operation, dict):
+                    continue
+                required_scope = service_scope_for_route(method=method, path=path)
+                if path in SERVICE_EXECUTION_PATHS:
+                    required_scope = "service.execute:<task_family>"
+                if required_scope is None:
+                    continue
+                operation["security"] = [{"CoreServiceBearer": []}]
+                operation["x-hexe-required-scopes"] = [required_scope]
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = custom_openapi
 
     if hasattr(logger, "info"):
         logger.info("[node-control-api] FastAPI app initialized")
