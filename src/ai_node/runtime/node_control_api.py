@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict
 
 from ai_node.config.bootstrap_config import BOOTSTRAP_PORT, BOOTSTRAP_TOPIC, create_bootstrap_config
 from ai_node.execution.gateway import ExecutionGateway
+from ai_node.execution.input_schema_validation import PromptInputValidationFailure, validate_prompt_inputs
 from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.config.provider_credentials_config import summarize_provider_credentials
 from ai_node.core_api.budget_declaration_client import BudgetDeclarationClient
@@ -34,6 +35,7 @@ from ai_node.core_api.trust_status_client import TrustStatusClient
 from ai_node.providers.models import UnifiedExecutionRequest
 from ai_node.providers.openai_model_catalog import select_representative_openai_model_ids
 from ai_node.prompts import PromptRegistry
+from ai_node.prompts.registration import find_prompt_entry, find_prompt_version
 from ai_node.persistence.image_generation_template_store import (
     create_image_generation_template_registration,
     create_image_generation_template_state,
@@ -11741,6 +11743,24 @@ class NodeControlState:
             requested_model=requested_model,
             inputs=inputs,
         )
+        validation_diagnostics = None
+        if result.allowed:
+            try:
+                self._validate_prompt_inputs(
+                    prompt_id=prompt_id,
+                    prompt_version=result.prompt_version,
+                    inputs=inputs if isinstance(inputs, dict) else {},
+                )
+            except PromptInputValidationFailure as exc:
+                result = result.__class__(
+                    False,
+                    exc.error_code,
+                    result.prompt_id,
+                    result.task_family,
+                    prompt_version=result.prompt_version,
+                    prompt_state=result.prompt_state,
+                )
+                validation_diagnostics = exc.diagnostics
         if self._prompt_registry is not None and prompt_id:
             self._prompt_registry.record_authorization(
                 prompt_id=prompt_id,
@@ -11749,7 +11769,7 @@ class NodeControlState:
                 used_at=self._now_iso(),
             )
             self._prompt_service_state = self._prompt_registry.snapshot()
-        return {
+        response = {
             "allowed": result.allowed,
             "reason": result.reason,
             "prompt_id": result.prompt_id,
@@ -11757,6 +11777,31 @@ class NodeControlState:
             "prompt_version": result.prompt_version,
             "prompt_state": result.prompt_state,
         }
+        if validation_diagnostics is not None:
+            response["diagnostics"] = validation_diagnostics
+        return response
+
+    def _validate_prompt_inputs(
+        self,
+        *,
+        prompt_id: str | None,
+        prompt_version: str | None,
+        inputs: dict,
+    ) -> None:
+        if not str(prompt_id or "").strip() or self._prompt_registry is None:
+            return
+        state = self._prompt_registry.snapshot()
+        prompt = find_prompt_entry(prompt_services_state=state, prompt_id=str(prompt_id))
+        if not isinstance(prompt, dict):
+            return
+        version = find_prompt_version(prompt, prompt_version)
+        if not isinstance(version, dict):
+            return
+        validate_prompt_inputs(
+            inputs=inputs,
+            version_metadata=version.get("metadata") if isinstance(version.get("metadata"), dict) else {},
+            schema_dir=self._client_node_v2_schema_dir(),
+        )
 
     def _accepted_capability_profile_payload(self) -> dict:
         payload = (
@@ -12086,12 +12131,22 @@ class NodeControlState:
         return self._task_execution_service
 
     async def execute_direct(self, *, request: TaskExecutionRequest) -> dict:
+        self._validate_prompt_inputs(
+            prompt_id=request.prompt_id,
+            prompt_version=request.prompt_version,
+            inputs=request.inputs,
+        )
         request = self._resolve_image_generation_template_request(request=request)
         if request.response_mode == "async_if_queued":
             return await self._enqueue_direct_execution(request=request)
         return await self._execute_direct_now(request=request)
 
     async def preview_direct_execution_route(self, *, request: TaskExecutionRequest) -> dict:
+        self._validate_prompt_inputs(
+            prompt_id=request.prompt_id,
+            prompt_version=request.prompt_version,
+            inputs=request.inputs,
+        )
         request_copy = self._resolve_image_generation_template_request(request=request)
         authorization = self._direct_execution_authorization_snapshot(request=request_copy)
         authorization_payload = None
@@ -13808,7 +13863,7 @@ class NodeControlState:
                     "name": "direct_execution",
                     "method": "POST",
                     "api_path": "/api/execution/direct",
-                    "description": "Execute a governed AI task synchronously or enqueue it according to response_mode.",
+                    "description": "Validate prompt inputs, then execute a governed AI task synchronously or enqueue it according to response_mode.",
                     "request_schema_path": "/api/schemas/client-node/v2/execution-request.v2.schema.json",
                     "response_schema_path": "/api/schemas/client-node/v2/execution-response.v2.schema.json",
                     "security": {"scheme": "CoreServiceBearer", "required_scopes": ["service.execute:<task_family>"]},
@@ -13817,7 +13872,7 @@ class NodeControlState:
                     "name": "route_preview",
                     "method": "POST",
                     "api_path": "/api/execution/route-preview",
-                    "description": "Preview authorization, routing, queue, and runtime selection without executing.",
+                    "description": "Validate prompt inputs and preview authorization, routing, queue, and runtime selection without executing.",
                     "request_schema_path": "/api/schemas/client-node/v2/execution-request.v2.schema.json",
                     "response_schema_path": None,
                     "security": {"scheme": "CoreServiceBearer", "required_scopes": ["service.execute:<task_family>"]},
@@ -13826,7 +13881,7 @@ class NodeControlState:
                     "name": "execution_authorization",
                     "method": "POST",
                     "api_path": "/api/execution/authorize",
-                    "description": "Check whether a caller may execute a prompt version.",
+                    "description": "Check whether a caller and its inputs may execute a prompt version.",
                     "request_schema_path": None,
                     "response_schema_path": None,
                     "security": {"scheme": "CoreServiceBearer", "required_scopes": ["service.execute:<task_family>"]},
@@ -17764,6 +17819,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 detail=exc.payload,
                 headers={"Retry-After": str(exc.retry_after_seconds)},
             ) from exc
+        except PromptInputValidationFailure as exc:
+            raise HTTPException(status_code=422, detail=exc.payload()) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -17775,6 +17832,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         try:
             await require_execution_token(authorization=authorization, payload=payload)
             return await state.preview_direct_execution_route(request=payload)
+        except PromptInputValidationFailure as exc:
+            raise HTTPException(status_code=422, detail=exc.payload()) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

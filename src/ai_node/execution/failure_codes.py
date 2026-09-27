@@ -54,7 +54,15 @@ FAILURE_CODE_TAXONOMY = {
     },
     "invalid_input": {
         "canonical_code": "invalid_input",
-        "aliases": ["invalid_input"],
+        "aliases": [
+            "invalid_input",
+            "prompt_input_validation_failed",
+            "prompt_input_schema_untrusted",
+            "prompt_input_schema_reference_mismatch",
+            "prompt_input_schema_unavailable",
+            "prompt_input_schema_invalid",
+            "prompt_input_schema_not_found",
+        ],
     },
     "execution_timeout": {
         "canonical_code": "execution_timeout",

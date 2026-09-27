@@ -65,7 +65,9 @@ Each immutable version may associate its input schema in metadata:
 }
 ```
 
-Persistence and discovery are implemented. Automatic server-side validation against the referenced schema is not developed; callers and prompt owners currently validate inputs.
+The node resolves only schemas published from its local Client Node V2 catalog. When either reference is present, it validates `inputs` against the selected immutable prompt version before template expansion, routing, queue insertion, or provider execution. If both references are present they must identify the same schema. External URLs, traversal paths, missing schemas, invalid schemas, and mismatched references fail closed.
+
+Invalid direct-execution or route-preview inputs return HTTP 422 with `detail.error_code=prompt_input_validation_failed` and field-level `detail.diagnostics`. Each diagnostic contains a JSON-pointer-like `path`, the failed schema `keyword`, and a message. Schema-resolution failures use stable `prompt_input_schema_*` error codes. The authorization preview returns the same error code as its denial `reason` and includes diagnostics. Validation applies equally to synchronous and queued requests, so invalid work is never enqueued or sent to a provider.
 
 ## Direct, queued, and accepted responses
 

@@ -4,7 +4,6 @@
   "title": "Image Generation Inputs V1",
   "description": "Canonical shared task.image_generation controls. Prompt-specific schemas may require a subset such as image_type=scenery.",
   "type": "object",
-  "additionalProperties": true,
   "properties": {
     "image_type": {
       "type": "string",

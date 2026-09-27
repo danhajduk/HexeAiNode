@@ -101,6 +101,8 @@ prompt policy is the maximum allowed boundary for the prompt. The API request ma
 call by sending `constraints.routing_policy.mode`, and node governance may restrict it further. A request must not
 weaken prompt privacy or broaden the prompt's routing boundary.
 
+When a selected immutable prompt version declares `metadata.input_schema_id` or `metadata.input_schema_url`, the AI Node validates request `inputs` against that node-published schema before routing or queue insertion. Both references must resolve inside `/api/schemas/client-node/v2` and must identify the same schema when supplied together. Invalid inputs return HTTP 422 with `prompt_input_validation_failed` and field-level diagnostics; untrusted, missing, malformed, or mismatched schema references fail closed with stable `prompt_input_schema_*` codes.
+
 Examples:
 
 - Prompt `local_only` plus API `cloud_only`: reject as incompatible.

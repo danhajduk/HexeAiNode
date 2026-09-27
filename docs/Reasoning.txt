@@ -873,3 +873,14 @@ Verification: Service-token client, enforcement, and management authorization te
 #############
 All Tasks completed 09/27/2026 00:52:33
 #############
+###########
+Task #1030
+Step objective: Enforce registered immutable prompt-version input schemas before execution.
+Issue cause: Prompt schema references were persisted and published but request inputs were not validated server-side, allowing malformed sync or queued work to reach routing and runtimes.
+Chosen fix: Resolve only local Client Node V2 schemas, validate with JSON Schema Draft 2020-12 before template expansion or routing, and fail closed with stable codes and field-level diagnostics.
+What changed: Added trusted schema resolution, reference consistency checks, sync/queued/preview validation, authorization denial diagnostics, strict composed weather inputs, invalid-input failure classification, tests, and client catalog documentation.
+Verification: Targeted gateway, failure-code, authentication, and prompt-schema tests passed (27 tests); Python compilation, JSON parsing, and `git diff --check` passed.
+###########
+#############
+All Tasks completed 09/27/2026 01:01:45
+#############
