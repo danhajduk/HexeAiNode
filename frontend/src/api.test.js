@@ -11,13 +11,26 @@ describe("getApiBase", () => {
     vi.stubGlobal("window", {
       location: {
         origin: "https://core.example",
-        pathname: "/nodes/node-123/ui/",
+        pathname: "/nodes/proxy/ui/node-123/",
         protocol: "https:",
         hostname: "core.example",
       },
     });
 
     expect(getApiBase()).toBe("https://core.example/api/nodes/node-123");
+  });
+
+  it("does not treat the retired node UI mount as a Core proxy", () => {
+    vi.stubGlobal("window", {
+      location: {
+        origin: "https://core.example",
+        pathname: "/nodes/node-123/ui/",
+        protocol: "https:",
+        hostname: "core.example",
+      },
+    });
+
+    expect(getApiBase()).toBe("https://core.example:9002");
   });
 
   it("falls back to the local node API origin outside the proxy mount", () => {

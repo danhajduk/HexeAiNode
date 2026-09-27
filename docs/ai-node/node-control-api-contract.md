@@ -762,6 +762,11 @@ Route scopes are:
 execution routes remain outside management-token enforcement. Missing management authorization returns `401`;
 inactive or insufficient authorization returns `403`; and unavailable Core validation returns `503`.
 
+The supported management UI is mounted by Core at `/nodes/proxy/ui/<node-id>/...`. From that mount, the node WebUI
+uses `/api/nodes/<node-id>/...`; Core validates the operator session and injects management authorization into the
+proxied request. Browser code does not receive or store the token. Direct node UI access is not an authenticated
+management path, and the legacy `VITE_ADMIN_TOKEN` / `X-Hexe-Admin-Token` frontend mechanism is not used.
+
 ### Provider snapshot
 
 - `GET /debug/providers`

@@ -1,6 +1,6 @@
 function getProxiedNodeApiBase() {
   const pathname = String(window.location.pathname || "").trim();
-  const match = pathname.match(/^\/nodes\/([^/]+)\/ui(?:\/.*)?$/i);
+  const match = pathname.match(/^\/nodes\/proxy\/ui\/([^/]+)(?:\/.*)?$/i);
   if (!match) {
     return "";
   }
@@ -23,14 +23,6 @@ export function getApiBase() {
 
 function requestHeaders(extraHeaders = {}) {
   return { ...extraHeaders };
-}
-
-function adminHeaders() {
-  const token = import.meta.env.VITE_ADMIN_TOKEN;
-  if (!token) {
-    return {};
-  }
-  return { "X-Hexe-Admin-Token": token };
 }
 
 function formatBlockingReasons(blockingReasons) {
@@ -104,9 +96,9 @@ export async function apiDelete(path, extraHeaders = {}) {
 }
 
 export async function apiAdminGet(path) {
-  return apiGet(path, adminHeaders());
+  return apiGet(path);
 }
 
 export async function apiAdminPost(path, body) {
-  return apiPost(path, body, adminHeaders());
+  return apiPost(path, body);
 }
