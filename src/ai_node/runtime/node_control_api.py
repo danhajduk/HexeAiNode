@@ -12338,7 +12338,85 @@ class NodeControlState:
         }
 
     async def execution_job_status(self, *, job_id: str) -> dict:
-        return await self._execution_queue.job_status(job_id=job_id)
+        payload = await self._execution_queue.job_status(job_id=job_id)
+        if self._execution_job_has_image_artifacts(payload=payload):
+            payload["artifact_ack"] = {
+                "url": "/api/execution/artifacts/ack",
+                "method": "POST",
+                "body": {"job_id": str(payload.get("job_id") or job_id)},
+                "meaning": "all_artifacts_retrieved_and_no_longer_needed",
+            }
+        return payload
+
+    @staticmethod
+    def _execution_job_image_artifacts(*, payload: dict) -> list[dict]:
+        result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+        output = result.get("output") if isinstance(result.get("output"), dict) else {}
+        images = output.get("images") if isinstance(output.get("images"), list) else []
+        return [dict(image) for image in images if isinstance(image, dict)]
+
+    @classmethod
+    def _execution_job_has_image_artifacts(cls, *, payload: dict) -> bool:
+        return str(payload.get("status") or "").strip().lower() == "completed" and bool(
+            cls._execution_job_image_artifacts(payload=payload)
+        )
+
+    async def acknowledge_execution_artifacts(self, *, job_id: str, acknowledged_by: str | None = None) -> dict:
+        payload = await self._execution_queue.job_status(job_id=job_id)
+        status = str(payload.get("status") or "").strip().lower()
+        if status == "not_found":
+            return {"status": "not_found", "job_id": job_id}
+        existing = payload.get("artifact_acknowledgement")
+        if isinstance(existing, dict):
+            return existing
+        if status != "completed":
+            return {"status": "not_ready", "job_id": job_id}
+        images = self._execution_job_image_artifacts(payload=payload)
+        if not images:
+            return {"status": "no_artifacts", "job_id": job_id}
+
+        deleted: list[str] = []
+        already_absent: list[str] = []
+        retained: list[str] = []
+        errors: list[dict] = []
+        for image in images:
+            relative_path = str(image.get("relative_path") or "").strip()
+            url = str(image.get("url") or "").strip()
+            if not relative_path or not url.startswith("/api/manual-image-generation/outputs/"):
+                retained.append(url or relative_path)
+                continue
+            try:
+                self.delete_manual_image_output(relative_path=relative_path)
+                deleted.append(relative_path)
+            except ValueError as exc:
+                if str(exc) == "manual_output_not_found":
+                    already_absent.append(relative_path)
+                else:
+                    errors.append({"relative_path": relative_path, "error": str(exc)})
+            except Exception as exc:
+                errors.append({"relative_path": relative_path, "error": str(exc).strip() or type(exc).__name__})
+
+        if errors:
+            return {
+                "status": "failed",
+                "job_id": job_id,
+                "error_code": "artifact_cleanup_failed",
+                "deleted": deleted,
+                "already_absent": already_absent,
+                "retained": retained,
+                "errors": errors,
+            }
+        return await self._execution_queue.acknowledge_artifacts(
+            job_id=job_id,
+            acknowledgement={
+                "acknowledged_at": local_now_iso(),
+                "acknowledged_by": str(acknowledged_by or "").strip() or None,
+                "artifact_count": len(images),
+                "deleted": deleted,
+                "already_absent": already_absent,
+                "retained": retained,
+            },
+        )
 
     async def cancel_execution_job(self, *, job_id: str, reason: str | None = None) -> dict:
         return await self._execution_queue.cancel_job(job_id=job_id, reason=reason)
@@ -16057,6 +16135,13 @@ class ExecutionJobCancelRequest(BaseModel):
     reason: str | None = None
 
 
+class ExecutionArtifactAckRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str
+    acknowledged_by: str | None = None
+
+
 class ExecutionCompareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -16797,6 +16882,20 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         if payload.get("status") == "not_found":
             raise HTTPException(status_code=404, detail="job_not_found")
         return payload
+
+    @app.post("/api/execution/artifacts/ack")
+    async def post_execution_artifact_ack(payload: ExecutionArtifactAckRequest):
+        response = await state.acknowledge_execution_artifacts(
+            job_id=payload.job_id,
+            acknowledged_by=payload.acknowledged_by,
+        )
+        if response.get("status") == "not_found":
+            raise HTTPException(status_code=404, detail="job_not_found")
+        if response.get("status") in {"not_ready", "no_artifacts"}:
+            raise HTTPException(status_code=409, detail=response)
+        if response.get("status") == "failed":
+            raise HTTPException(status_code=500, detail=response)
+        return response
 
     @app.delete("/api/execution/jobs/{job_id}")
     async def delete_execution_job(job_id: str, payload: ExecutionJobCancelRequest | None = None):

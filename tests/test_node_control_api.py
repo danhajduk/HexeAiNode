@@ -46,6 +46,60 @@ from ai_node.runtime.service_manager import NullServiceManager, UserSystemdServi
 
 
 class NodeControlApiTests(unittest.TestCase):
+    def test_completed_image_job_advertises_ack_and_ack_deletes_local_artifact(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                async def completed_job():
+                    return {
+                        "task_id": "weather-image",
+                        "status": "completed",
+                        "output": {
+                            "images": [
+                                {
+                                    "url": "/api/manual-image-generation/outputs/weather/rain.png",
+                                    "relative_path": "weather/rain.png",
+                                }
+                            ]
+                        },
+                    }
+
+                output_dir = Path(tmp) / "outputs"
+                image_path = output_dir / "weather" / "rain.png"
+                image_path.parent.mkdir(parents=True)
+                image_path.write_bytes(b"png")
+                queue = ExecutionQueueService(logger=logging.getLogger("node-control-test"), local_concurrency=1)
+                queued = await queue.enqueue(
+                    queue="visual_gpu",
+                    importance="normal",
+                    job_name="weather image",
+                    request_payload={"task_id": "weather-image"},
+                    runner=completed_job,
+                )
+                await self._wait_for_queue_status(queue, queued["job_id"], "completed")
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    execution_queue=queue,
+                )
+                state._manual_image_output_dir = lambda: output_dir
+
+                completed = await state.execution_job_status(job_id=queued["job_id"])
+                acknowledged = await state.acknowledge_execution_artifacts(
+                    job_id=queued["job_id"],
+                    acknowledged_by="interaction-1",
+                )
+                repeated = await state.acknowledge_execution_artifacts(job_id=queued["job_id"])
+
+                self.assertEqual(completed["artifact_ack"]["url"], "/api/execution/artifacts/ack")
+                self.assertEqual(completed["artifact_ack"]["body"], {"job_id": queued["job_id"]})
+                self.assertEqual(acknowledged["status"], "acknowledged")
+                self.assertEqual(acknowledged["deleted"], ["weather/rain.png"])
+                self.assertEqual(repeated, acknowledged)
+                self.assertFalse(image_path.exists())
+
+        asyncio.run(run_scenario())
+
     def test_parse_output_payload_unwraps_tool_wrapper_when_arguments_match_schema(self):
         schema = {
             "type": "object",

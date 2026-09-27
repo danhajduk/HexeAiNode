@@ -189,6 +189,25 @@ class ExecutionQueueService:
                 return {"status": "not_found", "job_id": job_id}
             return self._public_job_payload(job)
 
+    async def acknowledge_artifacts(self, *, job_id: str, acknowledgement: dict) -> dict:
+        normalized_job_id = str(job_id or "").strip()
+        async with self._lock:
+            job = self._jobs.get(normalized_job_id)
+            if not isinstance(job, dict):
+                return {"status": "not_found", "job_id": job_id}
+            if str(job.get("status") or "").strip().lower() != "completed":
+                return {"status": "not_ready", "job_id": normalized_job_id}
+            existing = job.get("artifact_acknowledgement")
+            if isinstance(existing, dict):
+                return deepcopy(existing)
+            recorded = deepcopy(acknowledgement) if isinstance(acknowledgement, dict) else {}
+            recorded["status"] = "acknowledged"
+            recorded["job_id"] = normalized_job_id
+            recorded.setdefault("acknowledged_at", local_now_iso())
+            job["artifact_acknowledgement"] = recorded
+            self._persist_jobs_locked()
+            return deepcopy(recorded)
+
     async def cancel_job(self, *, job_id: str, reason: str | None = None) -> dict:
         normalized_job_id = str(job_id or "").strip()
         async with self._lock:
@@ -796,6 +815,7 @@ class ExecutionQueueService:
                 "error",
                 "blocked_reason",
                 "blocked_detail",
+                "artifact_acknowledgement",
             )
         }
         payload["queue_position"] = self._queue_position(job_id=str(job.get("job_id") or ""))

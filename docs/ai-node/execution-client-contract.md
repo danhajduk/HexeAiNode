@@ -85,6 +85,8 @@ Clients consume `output.images[]`. Every completed image artifact guarantees a n
 
 Local artifact routes currently have no route authentication, URL signature, or URL-specific expiration. Files live under configured runtime output storage and survive API restarts. Ordinary generated images are retained for 30 days by default. Weather scenery is bounded more tightly to seven days and the newest 100 files by default. These limits are configurable, so clients needing durable ownership should download promptly. Retry a failed artifact retrieval as GET only; do not automatically regenerate unless duplicates are acceptable.
 
+A completed asynchronous job containing images includes `artifact_ack` with the acknowledgement URL, method, and job-scoped request body. After every image has been downloaded and durably stored, the client posts that body to `POST /api/execution/artifacts/ack`. This means all job artifacts were retrieved and are no longer needed. The operation is idempotent, records `artifact_acknowledgement` on the job, and immediately deletes node-local artifact files; non-local artifact URLs are acknowledged but retained by their owning provider. Clients must not acknowledge after only a partial download.
+
 Legacy `output.image` and `output.text` on visual results are compatibility fields and may be deprecated. Inline image bytes are not canonical.
 
 ## Authentication
@@ -123,6 +125,7 @@ The current Core declaration does not have separate polling/artifact-base fields
 - `POST /api/execution/direct`
 - `GET /api/execution/jobs/{job_id}`
 - `DELETE /api/execution/jobs/{job_id}`
+- `POST /api/execution/artifacts/ack`
 - `GET /api/prompts/services/{prompt_id}`
 - `POST /api/prompts/services`
 - `PUT /api/prompts/services/{prompt_id}`

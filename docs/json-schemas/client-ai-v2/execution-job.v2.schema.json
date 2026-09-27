@@ -31,6 +31,29 @@
         {"type": "null"}
       ]
     },
+    "artifact_ack": {
+      "type": ["object", "null"],
+      "description": "Present on completed jobs with image artifacts. POST the supplied body only after every artifact has been retrieved successfully; acknowledgement permits immediate deletion of node-local copies.",
+      "additionalProperties": false,
+      "required": ["url", "method", "body", "meaning"],
+      "properties": {
+        "url": {"const": "/api/execution/artifacts/ack"},
+        "method": {"const": "POST"},
+        "body": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["job_id"],
+          "properties": {"job_id": {"type": "string", "pattern": "^job-[a-f0-9]+$"}}
+        },
+        "meaning": {"const": "all_artifacts_retrieved_and_no_longer_needed"}
+      }
+    },
+    "artifact_acknowledgement": {
+      "anyOf": [
+        {"$ref": "execution-artifact-ack.v1.response.schema.json"},
+        {"type": "null"}
+      ]
+    },
     "error": {
       "type": ["object", "null"],
       "additionalProperties": false,

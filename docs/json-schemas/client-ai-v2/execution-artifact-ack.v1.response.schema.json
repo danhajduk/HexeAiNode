@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-ai-v2/execution-artifact-ack.v1.response.schema.json",
+  "title": "Execution Artifact Acknowledgement Response V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "job_id", "acknowledged_at", "artifact_count", "deleted", "already_absent", "retained"],
+  "properties": {
+    "status": {"const": "acknowledged"},
+    "job_id": {"type": "string", "pattern": "^job-[a-f0-9]+$"},
+    "acknowledged_at": {"type": "string", "format": "date-time"},
+    "acknowledged_by": {"type": ["string", "null"]},
+    "artifact_count": {"type": "integer", "minimum": 1},
+    "deleted": {"type": "array", "items": {"type": "string"}},
+    "already_absent": {"type": "array", "items": {"type": "string"}},
+    "retained": {"type": "array", "items": {"type": "string"}}
+  }
+}

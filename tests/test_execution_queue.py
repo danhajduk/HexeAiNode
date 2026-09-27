@@ -34,6 +34,31 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(status["queue_position"])
         self.assertIsNone(status["eta"])
 
+    async def test_artifact_acknowledgement_is_persisted_and_idempotent(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
+        response = await queue.enqueue(
+            queue="visual_gpu",
+            importance="normal",
+            job_name="image-job",
+            request_payload={"task_id": "image-001"},
+            runner=lambda: _completed({"status": "completed"}),
+        )
+        await _wait_for_status(queue, job_id=response["job_id"], status="completed")
+
+        first = await queue.acknowledge_artifacts(
+            job_id=response["job_id"],
+            acknowledgement={"artifact_count": 1, "deleted": ["weather/test.png"]},
+        )
+        second = await queue.acknowledge_artifacts(
+            job_id=response["job_id"],
+            acknowledgement={"artifact_count": 99},
+        )
+        status = await queue.job_status(job_id=response["job_id"])
+
+        self.assertEqual(first["status"], "acknowledged")
+        self.assertEqual(second, first)
+        self.assertEqual(status["artifact_acknowledgement"], first)
+
     async def test_local_queue_prioritizes_importance_after_active_slot(self):
         queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
         release_first = asyncio.Event()

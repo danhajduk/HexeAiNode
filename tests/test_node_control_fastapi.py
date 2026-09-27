@@ -519,6 +519,8 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertIn("benchmark-execution-request.v2.schema.json", schema_names)
             self.assertIn("execution-response.v2.schema.json", schema_names)
             self.assertIn("execution-job.v2.schema.json", schema_names)
+            self.assertIn("execution-artifact-ack.v1.request.schema.json", schema_names)
+            self.assertIn("execution-artifact-ack.v1.response.schema.json", schema_names)
             self.assertIn("execution-job-cancel.v2.request.schema.json", schema_names)
             self.assertIn("execution-job-cancel.v2.response.schema.json", schema_names)
             self.assertIn("image-generation-inputs.v1.schema.json", schema_names)
