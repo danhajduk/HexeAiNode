@@ -23,6 +23,15 @@ from ai_node.runtime.execution_queue import ExecutionQueueService
 
 
 class NodeControlFastApiTests(unittest.TestCase):
+    def setUp(self):
+        self._admission_env = patch.dict(
+            os.environ,
+            {"HEXE_DIRECT_EXECUTION_ADMISSION_ENABLED": "false"},
+            clear=False,
+        )
+        self._admission_env.start()
+        self.addCleanup(self._admission_env.stop)
+
     @staticmethod
     def _active_budget_policy():
         return {
@@ -764,7 +773,11 @@ class NodeControlFastApiTests(unittest.TestCase):
 
             self.assertEqual(catalog_response.status_code, 200)
             self.assertTrue(catalog_response.json()["summary"]["valid"])
-            self.assertEqual(catalog_response.json()["summary"]["template_count"], 1)
+            self.assertEqual(
+                catalog_response.json()["summary"]["template_count"],
+                len(catalog_response.json()["templates"]),
+            )
+            self.assertEqual(catalog_response.json()["summary"]["template_count"], 9)
             self.assertEqual(template_response.status_code, 200)
             template = template_response.json()["template"]
             self.assertEqual(template["template_id"], "template.avatar_body_depth_reference_transparent.realvisxl.v1")

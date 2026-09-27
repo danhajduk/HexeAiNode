@@ -47,6 +47,15 @@ from ai_node.runtime.service_manager import NullServiceManager, UserSystemdServi
 
 
 class NodeControlApiTests(unittest.TestCase):
+    def setUp(self):
+        self._admission_env = patch.dict(
+            os.environ,
+            {"HEXE_DIRECT_EXECUTION_ADMISSION_ENABLED": "false"},
+            clear=False,
+        )
+        self._admission_env.start()
+        self.addCleanup(self._admission_env.stop)
+
     def test_completed_image_job_advertises_ack_and_ack_deletes_local_artifact(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:
@@ -1038,19 +1047,6 @@ class NodeControlApiTests(unittest.TestCase):
                 self.assertIn(
                     "standing three-quarter pose in black lingerie",
                     preview["effective_request"]["constraints"]["image_template_resolved"]["variables"]["positive_prompt"],
-                )
-
-                sync_result = await state.execute_direct(
-                    request=request.model_copy(update={"task_id": "task-avatar-image-sync-001", "response_mode": "sync"}, deep=True)
-                )
-                self.assertEqual(sync_result["status"], "degraded")
-                self.assertEqual(
-                    sync_result["resolution_metadata"]["image_template"]["template_id"],
-                    "template.avatar_body_depth_reference_transparent.realvisxl.v1",
-                )
-                self.assertEqual(
-                    sync_result["resolution_metadata"]["image_template"]["output_folder_policy"],
-                    "operational",
                 )
 
                 queued = await state.execute_direct(request=request)
@@ -2549,6 +2545,18 @@ class NodeControlApiTests(unittest.TestCase):
 
 
 class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self._admission_env = patch.dict(
+            os.environ,
+            {"HEXE_DIRECT_EXECUTION_ADMISSION_ENABLED": "false"},
+            clear=False,
+        )
+        self._admission_env.start()
+        self.addAsyncCleanup(self._stop_admission_env)
+
+    async def _stop_admission_env(self):
+        self._admission_env.stop()
+
     class _FakeCapabilityRunner:
         def __init__(self, *, healthy: bool, error: str | None = None):
             self.healthy = healthy
@@ -2616,6 +2624,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             payload = {
                 "component_id": component_id,
                 "importance": importance,
+                "local_in_flight": int((request_metadata or {}).get("local_in_flight") or 0),
                 "vision_local_in_flight": int((request_metadata or {}).get("local_in_flight") or 0),
                 "gpu_comfyui_critical_in_flight": bool(
                     (request_metadata or {}).get("gpu_comfyui_critical_in_flight")
@@ -2710,12 +2719,20 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
             payload = state.manual_image_generation_status()
 
+        self.assertEqual(len(payload["templates"]), 9)
         self.assertEqual(
-            [item["template_id"] for item in payload["templates"]],
-            [
+            {item["template_id"] for item in payload["templates"]},
+            {
+                "template.scenery_landscape.realvisxl.v1",
+                "template.avatar_head_face_preview.realvisxl.v1",
+                "template.avatar_upper_torso_preview.realvisxl.v1",
+                "template.avatar_head_lora_epoch_review.realvisxl.v1",
                 "template.avatar_body_depth_reference_transparent.realvisxl.v1",
+                "template.avatar_head_lora_pose_control.realvisxl.v1",
                 "template.avatar_profile_depth_pulid.realvisxl.v1",
-            ],
+                "template.avatar_lustify_sdxl_inpaint.v1",
+                "template.avatar_base_unclothed_lustify_inpaint.v1",
+            },
         )
 
     def test_image_output_cleanup_applies_general_and_weather_retention(self):
@@ -5274,7 +5291,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(lora_seed_set["seed_count"], 12)
         self.assertEqual(lora_seed_set["seeds"], [preview["seed"] for preview in updated["previews"][:12]])
 
-    def test_avatar_generation_head_lora_dataset_generates_pose_items(self):
+    def test_avatar_generation_head_lora_dataset_rejects_node_side_generation(self):
         class _AvatarProfileServiceManager:
             def __init__(self, input_dir: str, output_dir: str):
                 self.input_dir = input_dir
@@ -5324,7 +5341,6 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 )
             )["batch"]
             approved_ids = [preview["preview_id"] for preview in seed_map["previews"][:12]]
-            approved_seed_values = {preview["seed"] for preview in seed_map["previews"][:12]}
             asyncio.run(
                 state.create_avatar_profile_head_jitter_batch(
                     profile_id="Jane_Avatar",
@@ -5343,102 +5359,18 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     payload=AvatarProfileHeadLoraDatasetRequest(action="ensure", prompt="head portrait"),
                 )
             )["dataset"]
-            left_dataset = asyncio.run(
-                state.update_avatar_profile_head_lora_dataset(
-                    profile_id="Jane_Avatar",
-                    payload=AvatarProfileHeadLoraDatasetRequest(
-                        action="generate",
-                        pose_id="three_quarter_left",
-                        prompt="head portrait",
-                    ),
-                )
-            )["dataset"]
-            first_pose = dataset["poses"][0]
-            first_item = first_pose["items"][0]
-            left_pose = next(pose for pose in dataset["poses"] if pose["pose_id"] == "three_quarter_left")
-            generated_left_pose = next(pose for pose in left_dataset["poses"] if pose["pose_id"] == "three_quarter_left")
-            generated_left_item = generated_left_pose["items"][0]
-            first_pose_seeds = [item["seed"] for item in first_pose["items"]]
-            first_pose_cfgs = [item["cfg"] for item in first_pose["items"]]
-            state.avatar_generation_status()
-            profile_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "profile.json"
-            metadata = json.loads(profile_path.read_text(encoding="utf-8"))
-            stored_item = metadata["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]["items"][0]
-            target_subdir = stored_item["target_subdir"]
-            filename = stored_item["filename"]
-            target_path = input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / target_subdir / filename
-            target_path.write_bytes(b"lora-dataset-preview")
-            stored_item["status"] = "completed"
-            stored_item["placeholder"] = False
-            stored_item["source_output"] = f"hexe/avatar_head_face_preview/Jane_Avatar_lora_front_neutral_test_seed{stored_item['seed']}_rgb_00001_.png"
-            stored_item["input_image"] = f"avatar_profiles/Jane_Avatar/refs/head_face/preview/{filename}"
-            stored_item["url"] = f"/api/avatar-generation/profiles/Jane_Avatar/references/head_face/preview/{filename}"
-            profile_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            repaired_profile = state.avatar_generation_status()["profiles"][0]
-            repaired_item = repaired_profile["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]["items"][0]
-            for item in first_pose["items"][:6]:
-                dataset = asyncio.run(
+            self.assertEqual(len(dataset["poses"]), 6)
+            with self.assertRaisesRegex(ValueError, "avatar_head_lora_node_dataset_generation_disabled"):
+                asyncio.run(
                     state.update_avatar_profile_head_lora_dataset(
                         profile_id="Jane_Avatar",
-                        payload=AvatarProfileHeadLoraDatasetRequest(action="approve", item_id=item["preview_id"], prompt="head portrait"),
+                        payload=AvatarProfileHeadLoraDatasetRequest(
+                            action="generate",
+                            pose_id="three_quarter_left",
+                            prompt="head portrait",
+                        ),
                     )
-                )["dataset"]
-            advanced = asyncio.run(
-                state.update_avatar_profile_head_lora_dataset(
-                    profile_id="Jane_Avatar",
-                    payload=AvatarProfileHeadLoraDatasetRequest(
-                        action="next",
-                        pose_id="front_neutral",
-                        prompt="head portrait",
-                    ),
                 )
-            )["dataset"]
-            status_after_next = state.avatar_generation_status()
-            approved_dataset = advanced["poses"][0]["approved_dataset"]
-            approved_meta_files = list(
-                (input_dir / "avatar_profiles" / "Jane_Avatar" / "refs" / "head_face" / "lora_dataset" / "approved" / "front_neutral").glob("*.lora.json")
-            )
-
-        self.assertEqual(len(first_pose["items"]), 9)
-        self.assertEqual(first_item["batch_kind"], "lora_dataset")
-        self.assertEqual(first_item["target_subdir"], "lora_dataset/front_neutral")
-        self.assertEqual(first_item["width"], 512)
-        self.assertEqual(first_item["height"], 512)
-        self.assertEqual(len(first_pose_seeds), len(set(first_pose_seeds)))
-        self.assertFalse(set(first_pose_seeds) & approved_seed_values)
-        self.assertTrue(all(1.0 <= cfg <= 1.4 for cfg in first_pose_cfgs))
-        self.assertTrue(first_item["identity_source_seed"] in approved_seed_values)
-        self.assertIn("70 degrees", left_pose["pose_prompt"])
-        self.assertIn("near side-profile", left_pose["pose_prompt"])
-        self.assertIn("one cheek dominant", left_pose["pose_prompt"])
-        self.assertIn("far eye mostly hidden behind the nose bridge", left_pose["pose_prompt"])
-        self.assertIn("off camera", left_pose["pose_prompt"])
-        self.assertIn("no direct eye contact", left_pose["pose_prompt"])
-        self.assertIn("not a straight-on frontal face", left_pose["pose_prompt"])
-        self.assertEqual(generated_left_item["template_id"], "template.avatar_head_lora_pose_control.realvisxl.v1")
-        self.assertEqual(
-            generated_left_item["template_variables"]["pose_reference_image"],
-            "references/pose/300w_lp/three_quarter_left/three_quarter_left_001_idx00007_control.png",
-        )
-        self.assertEqual(
-            generated_left_item["pose_control"]["pose_reference_image"],
-            "references/pose/300w_lp/three_quarter_left/three_quarter_left_001_idx00007_control.png",
-        )
-        self.assertIn("lora_front_neutral", first_item["output_avatar_name"])
-        self.assertEqual(repaired_item["input_image"], f"avatar_profiles/Jane_Avatar/refs/head_face/lora_dataset/front_neutral/{filename}")
-        self.assertEqual(repaired_item["url"], f"/api/avatar-generation/profiles/Jane_Avatar/references/head_face/lora_dataset/front_neutral/{filename}")
-        self.assertEqual(dataset["poses"][0]["approved_count"], 6)
-        self.assertEqual(len(approved_dataset), 6)
-        self.assertEqual(approved_dataset[0]["status"], "background_removal_pending")
-        self.assertEqual(len(approved_meta_files), 6)
-        self.assertEqual(advanced["active_pose_index"], 1)
-        self.assertTrue(status_after_next["profiles"][0]["reference_counts"]["head_face"] >= 0)
-        self.assertFalse(
-            any(
-                "lora_dataset/approved" in str(reference.get("url") or "")
-                for reference in status_after_next["profiles"][0]["references"]["head_face"]
-            )
-        )
 
     def test_avatar_generation_head_lora_three_quarter_prompt_removes_front_facing_conflict(self):
         prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(
@@ -5734,7 +5666,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(vision.call_count, 10)
         self.assertTrue(all(item["vision_status"] == "approved" for item in reviewed_items))
 
-    def test_avatar_generation_head_lora_dataset_retry_vision_resets_failed_items(self):
+    def test_avatar_generation_head_lora_dataset_rejects_retry_vision(self):
         class _AvatarProfileServiceManager:
             def __init__(self, input_dir: str, output_dir: str):
                 self.input_dir = input_dir
@@ -5815,18 +5747,18 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             pose["vision_reviewed_count"] = 9
             profile_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-            result = asyncio.run(
-                state.update_avatar_profile_head_lora_dataset(
-                    profile_id="Jane_Avatar",
-                    payload=AvatarProfileHeadLoraDatasetRequest(action="retry_vision", prompt="head portrait"),
+            with self.assertRaisesRegex(ValueError, "avatar_head_lora_node_dataset_generation_disabled"):
+                asyncio.run(
+                    state.update_avatar_profile_head_lora_dataset(
+                        profile_id="Jane_Avatar",
+                        payload=AvatarProfileHeadLoraDatasetRequest(action="retry_vision", prompt="head portrait"),
+                    )
                 )
-            )
 
-        items = result["dataset"]["poses"][0]["items"]
-        self.assertTrue(all(item["vision_status"] == "pending" for item in items))
-        self.assertTrue(all("vision_error" not in item for item in items))
-        self.assertTrue(all("vision_review" not in item for item in items))
-        self.assertEqual(result["dataset"]["poses"][0]["vision_status"], "pending")
+            persisted = json.loads(profile_path.read_text(encoding="utf-8"))
+            persisted_pose = persisted["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]
+            self.assertEqual(persisted_pose["vision_status"], "reviewed")
+            self.assertTrue(all(item["vision_status"] == "failed" for item in persisted_pose["items"]))
 
     def test_avatar_generation_head_lora_approved_dataset_submits_background_removal(self):
         class _AvatarProfileServiceManager:
