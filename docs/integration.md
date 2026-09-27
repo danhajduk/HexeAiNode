@@ -8,6 +8,10 @@ This document summarizes how this node uses platform contracts without redefinin
 - capability declaration via `POST /api/system/nodes/capabilities/declaration`
 - provider intelligence submission via `POST /api/system/nodes/providers/capabilities/report`
 - governance sync via `GET /api/system/nodes/governance/current?node_id=...`
+- provider-side service-token validation via `POST /api/system/nodes/services/introspect`
+- budget reconciliation via `POST /api/system/nodes/budgets/usage-summary`
+
+Provider execution routes require a Core-issued bearer token. The node fails closed unless Core introspection confirms the caller subject, provider audience, and `service.execute:<task_family>` scope.
 
 ## MQTT Usage
 

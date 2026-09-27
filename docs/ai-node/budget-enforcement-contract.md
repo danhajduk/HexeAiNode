@@ -22,7 +22,7 @@ Current implementation alignment:
   - `node`
   - `customer`
   - `provider`
-- Usage is accumulated locally per grant period and queued into local pending usage-summary state for later reporting.
+- Usage is accumulated locally per grant period, queued durably, and submitted to Core's usage-summary endpoint after terminal execution.
 
 Current local-only additions:
 
@@ -81,7 +81,7 @@ The implemented local execution flow is:
 
 ## Current Limitations
 
-- usage summaries are queued locally but not yet flushed to the Core usage-summary route automatically
+- usage-summary delivery is best effort after terminal execution; failed submissions remain queued for the next execution-triggered retry
 - pre-dispatch reservation estimates use request-side cost ceilings first and fall back to a lightweight local pricing estimate when possible
 - provider-budget exhaustion decisions reconcile against accumulated exact provider spend so sub-cent model calls do not consume a full cent each at enforcement time
 - budget reset is driven by grant period changes observed in fresh policy/grant snapshots

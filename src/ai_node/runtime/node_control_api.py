@@ -810,6 +810,7 @@ class NodeControlState:
         client_usage_store=None,
         trust_status_client=None,
         budget_declaration_client=None,
+        service_token_introspection_client=None,
         execution_gateway=None,
         provider_runtime_manager=None,
         budget_manager=None,
@@ -859,6 +860,7 @@ class NodeControlState:
         self._client_usage_store = client_usage_store
         self._trust_status_client = trust_status_client or TrustStatusClient(logger=logger)
         self._budget_declaration_client = budget_declaration_client or BudgetDeclarationClient(logger=logger)
+        self._service_token_introspection_client = service_token_introspection_client
         self._execution_gateway = execution_gateway or ExecutionGateway()
         self._provider_runtime_manager = provider_runtime_manager
         self._budget_manager = budget_manager
@@ -11710,6 +11712,46 @@ class NodeControlState:
         payload = self._trust_state_store.load()
         return payload if isinstance(payload, dict) else {}
 
+    @property
+    def service_token_enforcement_enabled(self) -> bool:
+        return self._service_token_introspection_client is not None
+
+    async def authorize_service_execution(self, *, service_token: str, request: TaskExecutionRequest) -> dict:
+        if self._service_token_introspection_client is None:
+            raise ValueError("service_token_introspection_not_configured")
+        trust_state = self._trust_state_payload()
+        node_id = str(trust_state.get("node_id") or "").strip()
+        core_api_endpoint = str(trust_state.get("core_api_endpoint") or "").strip()
+        trust_token = str(trust_state.get("node_trust_token") or "").strip()
+        if not node_id or not core_api_endpoint or not trust_token:
+            raise ValueError("trusted_core_context_unavailable")
+        result = await self._service_token_introspection_client.introspect(
+            core_api_endpoint=core_api_endpoint,
+            node_id=node_id,
+            trust_token=trust_token,
+            service_token=service_token,
+            required_scopes=[f"service.execute:{request.task_family}"],
+        )
+        if not result.active or not isinstance(result.claims, dict):
+            raise ValueError(result.error_code or "service_token_inactive")
+        claims = result.claims
+        subject = str(claims.get("sub") or "").strip()
+        audience = str(claims.get("aud") or "").strip()
+        provider_node_id = str(claims.get("provider_node_id") or "").strip()
+        if subject != request.requested_by:
+            raise ValueError("service_token_subject_mismatch")
+        if provider_node_id and provider_node_id != node_id:
+            raise ValueError("service_token_provider_node_mismatch")
+        audience_prefix = f"node-service:{node_id}:"
+        if not audience.startswith(audience_prefix) or not audience[len(audience_prefix) :].strip():
+            raise ValueError("service_token_audience_mismatch")
+        authorized_provider = audience[len(audience_prefix) :].strip().lower()
+        requested_provider = str(request.requested_provider or "").strip().lower()
+        if requested_provider and requested_provider != authorized_provider:
+            raise ValueError("service_token_provider_mismatch")
+        request.requested_provider = authorized_provider
+        return claims
+
     def record_request_metrics(self, *, duration_ms: float, status_code: int) -> None:
         if self._runtime_metrics is None:
             return
@@ -12032,16 +12074,24 @@ class NodeControlState:
 
     async def _execute_direct_now(self, *, request: TaskExecutionRequest) -> dict:
         if self._direct_execution_should_use_visual_runtime(request=request):
-            return await self._execute_direct_visual_runtime_now(request=request)
-        if self._direct_execution_should_use_vision_runtime(request=request):
-            return await self._execute_direct_vision_runtime_now(request=request)
-        self._acquire_execution_admission(route="direct")
-        try:
-            service = self._get_task_execution_service()
-            result = await service.execute(request)
-            return result.model_dump(mode="json")
-        finally:
-            self._release_execution_admission(route="direct")
+            payload = await self._execute_direct_visual_runtime_now(request=request)
+        elif self._direct_execution_should_use_vision_runtime(request=request):
+            payload = await self._execute_direct_vision_runtime_now(request=request)
+        else:
+            self._acquire_execution_admission(route="direct")
+            try:
+                service = self._get_task_execution_service()
+                result = await service.execute(request)
+                payload = result.model_dump(mode="json")
+            finally:
+                self._release_execution_admission(route="direct")
+        if self._budget_manager is not None and hasattr(self._budget_manager, "flush_pending_usage_summaries"):
+            try:
+                await self._budget_manager.flush_pending_usage_summaries()
+            except Exception as exc:
+                if hasattr(self._logger, "warning"):
+                    self._logger.warning("[budget-usage-flush-failed] %s", {"error": str(exc)})
+        return payload
 
     @staticmethod
     def _direct_execution_should_use_visual_runtime(*, request: TaskExecutionRequest) -> bool:
@@ -16659,6 +16709,31 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             return
         if str(admin_token or "").strip() != configured_admin_token:
             raise HTTPException(status_code=403, detail="admin access required")
+
+    def bearer_token(authorization: str | None) -> str:
+        scheme, separator, token = str(authorization or "").strip().partition(" ")
+        if not separator or scheme.lower() != "bearer" or not token.strip():
+            raise HTTPException(status_code=401, detail="service_token_required")
+        return token.strip()
+
+    async def require_execution_token(*, authorization: str | None, payload: TaskExecutionRequest) -> None:
+        if not state.service_token_enforcement_enabled:
+            return
+        try:
+            await state.authorize_service_execution(
+                service_token=bearer_token(authorization),
+                request=payload,
+            )
+        except HTTPException:
+            raise
+        except ValueError as exc:
+            error_code = str(exc)
+            status_code = 503 if error_code in {
+                "service_token_introspection_not_configured",
+                "trusted_core_context_unavailable",
+                "token_validation_unavailable",
+            } else 403
+            raise HTTPException(status_code=status_code, detail=error_code) from exc
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -17293,7 +17368,24 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/execution/authorize")
-    def post_execution_authorize(payload: ExecutionAuthorizeRequest):
+    async def post_execution_authorize(
+        payload: ExecutionAuthorizeRequest,
+        authorization: str | None = Header(default=None),
+    ):
+        execution_request = TaskExecutionRequest(
+            task_id=f"authorize-{uuid.uuid4()}",
+            prompt_id=payload.prompt_id,
+            prompt_version=payload.prompt_version,
+            task_family=payload.task_family,
+            requested_by=payload.requested_by,
+            service_id=payload.service_id,
+            customer_id=payload.customer_id,
+            requested_provider=payload.requested_provider,
+            requested_model=payload.requested_model,
+            inputs=payload.inputs if isinstance(payload.inputs, dict) else {},
+            trace_id=f"authorize-{uuid.uuid4()}",
+        )
+        await require_execution_token(authorization=authorization, payload=execution_request)
         return state.authorize_execution(
             prompt_id=payload.prompt_id,
             task_family=payload.task_family,
@@ -17301,7 +17393,7 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             requested_by=payload.requested_by,
             service_id=payload.service_id,
             customer_id=payload.customer_id,
-            requested_provider=payload.requested_provider,
+            requested_provider=execution_request.requested_provider,
             requested_model=payload.requested_model,
             inputs=payload.inputs,
         )
@@ -17311,8 +17403,12 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         return state.direct_execution_admission_payload()
 
     @app.post("/api/execution/direct")
-    async def post_execution_direct(payload: TaskExecutionRequest):
+    async def post_execution_direct(
+        payload: TaskExecutionRequest,
+        authorization: str | None = Header(default=None),
+    ):
         try:
+            await require_execution_token(authorization=authorization, payload=payload)
             return await state.execute_direct(request=payload)
         except DirectExecutionBusyError as exc:
             raise HTTPException(
@@ -17324,8 +17420,12 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/execution/route-preview")
-    async def post_execution_route_preview(payload: TaskExecutionRequest):
+    async def post_execution_route_preview(
+        payload: TaskExecutionRequest,
+        authorization: str | None = Header(default=None),
+    ):
         try:
+            await require_execution_token(authorization=authorization, payload=payload)
             return await state.preview_direct_execution_route(request=payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

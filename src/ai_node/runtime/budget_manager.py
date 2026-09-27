@@ -90,6 +90,7 @@ class BudgetManager:
         logger,
         provider_runtime_manager=None,
         budget_policy_client=None,
+        budget_usage_client=None,
         notification_service=None,
         trust_state_provider=None,
     ) -> None:
@@ -97,6 +98,7 @@ class BudgetManager:
         self._logger = logger
         self._provider_runtime_manager = provider_runtime_manager
         self._budget_policy_client = budget_policy_client
+        self._budget_usage_client = budget_usage_client
         self._notification_service = notification_service
         self._trust_state_provider = trust_state_provider or (lambda: {})
 
@@ -187,6 +189,59 @@ class BudgetManager:
             "retryable": result.retryable,
             "error": result.error,
             "budget_policy": budget_policy if isinstance(budget_policy, dict) else cached,
+        }
+
+    async def flush_pending_usage_summaries(self, *, limit: int = 25) -> dict:
+        state = self._load_state()
+        pending = list(state.get("pending_usage_summaries") or [])
+        if not pending:
+            return {"status": "idle", "submitted": 0, "remaining": 0}
+        trust = self._trust_state()
+        if (
+            self._budget_usage_client is None
+            or not _normalize_string(trust.get("core_api_endpoint"))
+            or not _normalize_string(trust.get("node_trust_token"))
+            or not _normalize_string(trust.get("node_id"))
+        ):
+            return {"status": "unavailable", "submitted": 0, "remaining": len(pending)}
+
+        submitted = 0
+        error = None
+        for summary in pending[: max(int(limit), 1)]:
+            result = await self._budget_usage_client.submit(
+                core_api_endpoint=_normalize_string(trust.get("core_api_endpoint")),
+                trust_token=_normalize_string(trust.get("node_trust_token")),
+                node_id=_normalize_string(trust.get("node_id")),
+                summary=summary,
+            )
+            if not result.accepted:
+                error = result.error or "usage_summary_rejected"
+                break
+            submitted += 1
+
+        if submitted:
+            latest = self._load_state()
+            latest_pending = list(latest.get("pending_usage_summaries") or [])
+            delivered_keys = {
+                (str(item.get("grant_id") or ""), str(item.get("queued_at") or ""))
+                for item in pending[:submitted]
+                if isinstance(item, dict)
+            }
+            latest["pending_usage_summaries"] = [
+                item
+                for item in latest_pending
+                if not isinstance(item, dict)
+                or (str(item.get("grant_id") or ""), str(item.get("queued_at") or "")) not in delivered_keys
+            ]
+            self._save_state(latest)
+            remaining = len(latest["pending_usage_summaries"])
+        else:
+            remaining = len(pending)
+        return {
+            "status": "submitted" if error is None else "partial_failure",
+            "submitted": submitted,
+            "remaining": remaining,
+            "error": error,
         }
 
     def status_payload(self) -> dict:

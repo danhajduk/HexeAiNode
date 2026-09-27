@@ -1,6 +1,6 @@
 # AI Node Execution Client Contract
 
-Status: Partially implemented
+Status: Implemented for Core-authorized execution
 
 This is the canonical contract for clients that resolve Hexe AI Node through Core. Code is authoritative where behavior is marked not developed.
 
@@ -8,7 +8,9 @@ This is the canonical contract for clients that resolve Hexe AI Node through Cor
 
 `requested_by` is the caller principal, normally the Core node ID carried by the service-token subject. Execution-request `service_id` is the caller's logical service principal used for prompt access and budget selection; it defaults to `requested_by`. It is not the selected Core catalog service, prompt owner, executor, billing principal, or customer. `customer_id`, when present, selects the customer/budget context.
 
-Prompt records separately use `service_id` and `owner_service` for the prompt-owning service. AI Node currently validates identity fields only as bounded non-empty strings. Token-to-identity validation is not developed.
+Prompt records separately use `service_id` and `owner_service` for the prompt-owning service. Production execution routes require the Core-issued service token as an `Authorization: Bearer <token>` header. AI Node introspects the token through Core, requires `service.execute:<task_family>`, binds `requested_by` to JWT `sub`, binds the provider node and provider to JWT `aud`, and fails closed when validation is inactive or unavailable.
+
+The expected execution audience is `node-service:<provider-node-id>:<provider>`. When `requested_provider` is omitted, the verified audience supplies it; when it is present, it must match the verified audience.
 
 Clients use Core resolution's `provider_api_base_url` plus the advertised execution path. Hard-coded example hostnames must not override Core resolution.
 
