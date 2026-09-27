@@ -20,6 +20,7 @@ from ai_node.core_api.trust_status_client import TrustStatusClient
 from ai_node.core_api.budget_policy_client import BudgetPolicyClient
 from ai_node.core_api.budget_usage_client import BudgetUsageSummaryClient
 from ai_node.core_api.service_token_client import ServiceTokenIntrospectionClient
+from ai_node.core_api.management_token_client import ManagementTokenIntrospectionClient
 from ai_node.runtime.bootstrap_mqtt_runner import BootstrapMqttRunner
 from ai_node.runtime.bootstrap_timeout import BootstrapConnectTimeoutMonitor
 from ai_node.runtime.budget_manager import BudgetManager
@@ -579,6 +580,7 @@ def run(
     budget_policy_client = BudgetPolicyClient(logger=LOGGER)
     budget_usage_client = BudgetUsageSummaryClient(logger=LOGGER)
     service_token_introspection_client = ServiceTokenIntrospectionClient(logger=LOGGER)
+    management_token_introspection_client = ManagementTokenIntrospectionClient(logger=LOGGER)
     supervisor_client = SupervisorApiClient()
     notification_service = UserNotificationService(
         logger=LOGGER,
@@ -722,6 +724,7 @@ def run(
         client_usage_store=client_usage_store,
         trust_status_client=trust_status_client,
         service_token_introspection_client=service_token_introspection_client,
+        management_token_introspection_client=management_token_introspection_client,
         provider_runtime_manager=provider_runtime_manager,
         budget_manager=budget_manager,
         notification_service=notification_service,

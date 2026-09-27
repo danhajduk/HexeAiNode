@@ -21,7 +21,7 @@ from threading import Lock
 
 from fastapi import FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict
 
 from ai_node.config.bootstrap_config import BOOTSTRAP_PORT, BOOTSTRAP_TOPIC, create_bootstrap_config
@@ -72,6 +72,64 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
     "body_depth_strength",
     "pose_strength",
 )
+
+MANAGEMENT_AUTHORIZATION_HEADER = "X-Hexe-Management-Authorization"
+MANAGEMENT_PUBLIC_PATHS = {"/", "/api/health"}
+MANAGEMENT_PUBLIC_PREFIXES = ("/api/schemas/client-ai/v2", "/api/onboarding/")
+SERVICE_EXECUTION_PATHS = {
+    "/api/execution/authorize",
+    "/api/execution/direct",
+    "/api/execution/route-preview",
+}
+MANAGEMENT_ASSET_PREFIXES = (
+    "/api/prompts/",
+    "/api/image-templates",
+    "/api/manual-image-generation",
+    "/api/image-studio/",
+    "/api/avatar-generation",
+    "/api/comfyui/",
+)
+MANAGEMENT_OPERATION_PREFIXES = ("/api/execution/", "/api/local-scheduler/")
+MANAGEMENT_LIFECYCLE_PATHS = {
+    "/api/node/recover",
+    "/api/node/retrust",
+    "/api/services/start",
+    "/api/services/stop",
+    "/api/services/restart",
+}
+
+
+def _matches_route_prefix(path: str, prefix: str) -> bool:
+    normalized_prefix = prefix.rstrip("/")
+    return path == normalized_prefix or path.startswith(f"{normalized_prefix}/")
+
+
+def management_scope_for_route(*, method: str, path: str) -> str | None:
+    normalized_method = str(method or "").upper()
+    normalized_path = str(path or "").rstrip("/") or "/"
+    if normalized_method == "OPTIONS":
+        return None
+    if normalized_path in MANAGEMENT_PUBLIC_PATHS or any(
+        _matches_route_prefix(normalized_path, prefix) for prefix in MANAGEMENT_PUBLIC_PREFIXES
+    ):
+        return None
+    if normalized_path in SERVICE_EXECUTION_PATHS:
+        return None
+    if normalized_path.startswith("/debug/") or normalized_path == "/api/capabilities/diagnostics":
+        return "node.manage.diagnostics"
+    if normalized_path.startswith("/api/providers/openai/credentials"):
+        return "node.manage.credentials"
+    if normalized_path in MANAGEMENT_LIFECYCLE_PATHS:
+        return "node.manage.lifecycle"
+    if any(_matches_route_prefix(normalized_path, prefix) for prefix in MANAGEMENT_ASSET_PREFIXES):
+        return "node.manage.assets"
+    if any(_matches_route_prefix(normalized_path, prefix) for prefix in MANAGEMENT_OPERATION_PREFIXES):
+        return "node.manage.operations"
+    if normalized_method in {"GET", "HEAD"}:
+        return "node.manage.read"
+    if normalized_path.startswith(("/api/providers/", "/api/capabilities/", "/api/governance/", "/api/budgets/")):
+        return "node.manage.configuration"
+    return "node.manage.operations"
 
 MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID = "template.avatar_head_face_preview.realvisxl.v1"
@@ -811,6 +869,7 @@ class NodeControlState:
         trust_status_client=None,
         budget_declaration_client=None,
         service_token_introspection_client=None,
+        management_token_introspection_client=None,
         execution_gateway=None,
         provider_runtime_manager=None,
         budget_manager=None,
@@ -861,6 +920,7 @@ class NodeControlState:
         self._trust_status_client = trust_status_client or TrustStatusClient(logger=logger)
         self._budget_declaration_client = budget_declaration_client or BudgetDeclarationClient(logger=logger)
         self._service_token_introspection_client = service_token_introspection_client
+        self._management_token_introspection_client = management_token_introspection_client
         self._execution_gateway = execution_gateway or ExecutionGateway()
         self._provider_runtime_manager = provider_runtime_manager
         self._budget_manager = budget_manager
@@ -11716,6 +11776,41 @@ class NodeControlState:
     def service_token_enforcement_enabled(self) -> bool:
         return self._service_token_introspection_client is not None
 
+    @property
+    def management_token_enforcement_enabled(self) -> bool:
+        return self._management_token_introspection_client is not None
+
+    async def authorize_management(self, *, management_token: str, required_scope: str) -> dict:
+        if self._management_token_introspection_client is None:
+            raise ValueError("management_token_introspection_not_configured")
+        trust_state = self._trust_state_payload()
+        node_id = str(trust_state.get("node_id") or "").strip()
+        core_api_endpoint = str(trust_state.get("core_api_endpoint") or "").strip()
+        trust_token = str(trust_state.get("node_trust_token") or "").strip()
+        if not node_id or not core_api_endpoint or not trust_token:
+            raise ValueError("trusted_core_context_unavailable")
+        result = await self._management_token_introspection_client.introspect(
+            core_api_endpoint=core_api_endpoint,
+            node_id=node_id,
+            trust_token=trust_token,
+            management_token=management_token,
+            required_scopes=[required_scope],
+        )
+        if not result.active or not isinstance(result.claims, dict):
+            raise ValueError(result.error_code or "management_token_inactive")
+        claims = result.claims
+        if str(claims.get("token_use") or "").strip() != "node_management":
+            raise ValueError("token_use_invalid")
+        if str(claims.get("aud") or "").strip() != f"node-management:{node_id}":
+            raise ValueError("management_target_mismatch")
+        provider_node_id = str(claims.get("provider_node_id") or "").strip()
+        if provider_node_id and provider_node_id != node_id:
+            raise ValueError("management_target_mismatch")
+        scopes = claims.get("scp") if isinstance(claims.get("scp"), list) else []
+        if required_scope not in scopes:
+            raise ValueError("management_scope_insufficient")
+        return claims
+
     async def authorize_service_execution(self, *, service_token: str, request: TaskExecutionRequest) -> dict:
         if self._service_token_introspection_client is None:
             raise ValueError("service_token_introspection_not_configured")
@@ -16741,6 +16836,33 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def _management_authorization_middleware(request, call_next):
+        required_scope = management_scope_for_route(method=request.method, path=request.url.path)
+        if required_scope is None or not state.management_token_enforcement_enabled:
+            return await call_next(request)
+        management_token = str(request.headers.get(MANAGEMENT_AUTHORIZATION_HEADER) or "").strip()
+        if not management_token:
+            return JSONResponse(status_code=401, content={"detail": "management_authorization_required"})
+        try:
+            await state.authorize_management(management_token=management_token, required_scope=required_scope)
+        except ValueError as exc:
+            error_code = str(exc)
+            unavailable = {
+                "management_token_introspection_not_configured",
+                "trusted_core_context_unavailable",
+                "management_validation_unavailable",
+                "invalid_json_response",
+                "rate_limit_exceeded",
+                "http_429",
+                "http_503",
+            }
+            return JSONResponse(
+                status_code=503 if error_code in unavailable else 403,
+                content={"detail": error_code},
+            )
+        return await call_next(request)
 
     @app.middleware("http")
     async def _metrics_middleware(request, call_next):

@@ -740,6 +740,28 @@ Execution behavior:
 
 ## Provider Debug Endpoints
 
+## Core management authorization
+
+When the node runs with the Core management introspection client configured, control-plane routes require the
+Core-issued token forwarded in `X-Hexe-Management-Authorization`. The node sends that token, its node ID, and its
+trust token to Core's `POST /api/system/nodes/management/introspect` endpoint and accepts only HTTP 200 with
+`active=true`. It also verifies `token_use=node_management`, the `node-management:<node-id>` audience, the provider
+node binding, and the required route scope locally.
+
+Route scopes are:
+
+- ordinary control-plane reads: `node.manage.read`
+- provider, model, capability, budget, and governance mutation: `node.manage.configuration`
+- provider credential access or mutation: `node.manage.credentials`
+- prompt, template, image, avatar, and related asset routes: `node.manage.assets`
+- execution administration, jobs, and scheduler routes: `node.manage.operations`
+- service lifecycle, recovery, and retrust: `node.manage.lifecycle`
+- `/debug/*` and capability diagnostics: `node.manage.diagnostics`
+
+`/`, `/api/health`, Client AI schema discovery, onboarding, CORS preflight, and the separately protected Core service
+execution routes remain outside management-token enforcement. Missing management authorization returns `401`;
+inactive or insufficient authorization returns `403`; and unavailable Core validation returns `503`.
+
 ### Provider snapshot
 
 - `GET /debug/providers`
