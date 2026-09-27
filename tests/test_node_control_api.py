@@ -843,6 +843,9 @@ class NodeControlApiTests(unittest.TestCase):
                             "requested_by": "service.alpha",
                             "requested_provider": "local",
                             "inputs": {"prompt": "low priority render"},
+                            "constraints": {
+                                "image_template_resolved": {"template_runtime": "comfyui_cpu"}
+                            },
                             "response_mode": "async_if_queued",
                             "priority": "background",
                             "trace_id": "trace-cpu-image-001",
@@ -861,6 +864,43 @@ class NodeControlApiTests(unittest.TestCase):
                 diagnostics = await state.execution_queue_diagnostics()
                 self.assertIn("visual_cpu", diagnostics["queues"])
                 self.assertEqual(diagnostics["cpu_comfyui_policy"]["allowed_importance"], ["background", "low"])
+
+        asyncio.run(run_scenario())
+
+    def test_low_priority_gpu_template_stays_on_visual_gpu_queue(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                    capability_runner=self._FakeCapabilityRunner(),
+                )
+                preview = await state.preview_direct_execution_route(
+                    request=TaskExecutionRequest.model_validate(
+                        {
+                            "task_id": "task-background-gpu-template",
+                            "task_family": "task.image_generation",
+                            "requested_by": "service.alpha",
+                            "requested_provider": "local",
+                            "inputs": {"prompt": "weather background"},
+                            "constraints": {
+                                "image_template_resolved": {"template_runtime": "comfyui_gpu"}
+                            },
+                            "response_mode": "async_if_queued",
+                            "priority": "background",
+                            "trace_id": "trace-background-gpu-template",
+                        }
+                    )
+                )
+
+                self.assertEqual(preview["queue"], "visual_gpu")
+                self.assertFalse(preview["routing_decision"]["cpu_comfyui_policy"]["selected"])
+                self.assertEqual(
+                    preview["routing_decision"]["cpu_comfyui_policy"]["reason"],
+                    "template_requires_gpu",
+                )
 
         asyncio.run(run_scenario())
 

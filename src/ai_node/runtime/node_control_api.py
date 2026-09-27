@@ -11825,6 +11825,17 @@ class NodeControlState:
             requested_provider=request_copy.requested_provider,
             requested_model=request_copy.requested_model,
         )
+        if queue_context["queue"] == "visual_gpu":
+            runtime_assignment = self._local_gpu_comfyui_assignment(
+                task_family=request_copy.task_family,
+                importance=queue_context["importance"],
+                default_preset_id=self.comfyui_gpu_presets_payload().get("default_preset_id"),
+            )
+        elif queue_context["queue"] == "visual_cpu":
+            runtime_assignment = self._local_cpu_comfyui_assignment(
+                task_family=request_copy.task_family,
+                importance=queue_context["importance"],
+            )
         execution_request = self._execution_request_for_queue_context(request=request_copy, queue_context=queue_context)
         resolution_preview = self._direct_execution_provider_resolution_preview(
             request=execution_request,
@@ -12853,18 +12864,26 @@ class NodeControlState:
                 "local_wait_estimate": spillover_decision.get("local_wait_estimate") if spillover_decision else None,
                 "local_pressure": spillover_decision.get("local_pressure") if spillover_decision else None,
                 "spillover_allowed": bool(spillover_decision.get("spillover_allowed")) if spillover_decision else False,
+                "cpu_comfyui_policy": cpu_comfyui_policy,
             },
         }
 
     def _execution_request_for_queue_context(self, *, request: TaskExecutionRequest, queue_context: dict) -> TaskExecutionRequest:
         execution_routing_mode = TaskExecutionService._normalize_routing_policy_mode(queue_context.get("execution_routing_mode"))
+        request_copy = request
+        queue_key = str(queue_context.get("queue") or "").strip().lower()
+        if queue_key in {"visual_gpu", "visual_cpu"}:
+            request_copy = request_copy.model_copy(
+                update={"queue": request_copy.queue.model_copy(update={"runtime_lane": queue_key}, deep=True)},
+                deep=True,
+            )
         if not execution_routing_mode or execution_routing_mode == queue_context.get("routing_mode"):
-            return request
-        constraints = dict(request.constraints or {})
+            return request_copy
+        constraints = dict(request_copy.constraints or {})
         routing_policy = dict(constraints.get("routing_policy") or {})
         routing_policy["mode"] = execution_routing_mode
         constraints["routing_policy"] = routing_policy
-        return request.model_copy(update={"constraints": constraints}, deep=True)
+        return request_copy.model_copy(update={"constraints": constraints}, deep=True)
 
     @staticmethod
     def _direct_execution_is_image_generation(*, request: TaskExecutionRequest) -> bool:
@@ -13224,7 +13243,11 @@ class NodeControlState:
         priority_allowed = importance_key in {"background", "low"}
         requested_provider = str(request.requested_provider or "").strip().lower()
         provider_allowed = requested_provider in {"", "local", "comfyui", "comfyui_cpu"}
-        selected = bool(is_image_generation and priority_allowed and provider_allowed)
+        constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        resolved_template = constraints.get("image_template_resolved") if isinstance(constraints.get("image_template_resolved"), dict) else {}
+        template_runtime = str(resolved_template.get("template_runtime") or "comfyui_gpu").strip().lower()
+        cpu_template = template_runtime == "comfyui_cpu"
+        selected = bool(is_image_generation and priority_allowed and provider_allowed and cpu_template)
         reason = "eligible"
         if not is_image_generation:
             reason = "not_image_generation"
@@ -13232,6 +13255,8 @@ class NodeControlState:
             reason = "priority_not_low_or_background"
         elif not provider_allowed:
             reason = "explicit_nonlocal_provider"
+        elif not cpu_template:
+            reason = "template_requires_gpu"
         return {
             "selected": selected,
             "runtime_id": "comfyui_cpu",
@@ -13239,6 +13264,7 @@ class NodeControlState:
             "task_family": task_family or None,
             "importance": importance_key,
             "allowed_importance": ["background", "low"],
+            "template_runtime": template_runtime,
             "reason": reason,
         }
 
