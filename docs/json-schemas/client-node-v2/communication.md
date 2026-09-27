@@ -1,6 +1,6 @@
 # Client Node V2 Communication Guide
 
-Status: Partially implemented.
+Status: Implemented.
 
 This guide explains how a client node should communicate with the AI Node using the V2 client node contract.
 

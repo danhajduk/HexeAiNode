@@ -550,6 +550,9 @@ class NodeControlFastApiTests(unittest.TestCase):
                 document_names,
                 ["execution-client-contract.md", "communication.md", "README.md"],
             )
+            self.assertTrue(
+                all(item["status"] == "Implemented" for item in catalog_response.json()["documents"])
+            )
             job_apis = {
                 item["name"]: item
                 for item in catalog_response.json()["apis"]

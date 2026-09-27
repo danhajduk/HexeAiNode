@@ -14135,7 +14135,7 @@ class NodeControlState:
                 {
                     "name": "execution-client-contract.md",
                     "title": "AI Node Execution Client Contract",
-                    "status": "Partially implemented",
+                    "status": "Implemented",
                     "api_path": "/api/schemas/client-node/v2/execution-client-contract.md",
                 },
                 {
