@@ -80,7 +80,7 @@ gpu_proxy_pid="$proxy_pid"
 start_proxy "$GPU_HEALTH_SOCKET" "$GPU_PORT" "comfyui_gpu" "GPU ComfyUI" "${HEXE_COMFYUI_GPU_TARGET_CHECKPOINT:-}" "${HEXE_COMFYUI_GPU_TARGET_LORA:-}" "health"
 gpu_health_pid="$proxy_pid"
 
-CUDA_VISIBLE_DEVICES="" python3 main.py \
+CUDA_VISIBLE_DEVICES="" python3 /opt/hexe/run-cpu-limited.py python3 main.py \
   --cpu \
   --listen 0.0.0.0 \
   --port "$CPU_PORT" \

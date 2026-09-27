@@ -252,6 +252,50 @@ class DirectExecutionAdmissionConfig:
 
 
 @dataclass(frozen=True)
+class VisualCpuAdmissionConfig:
+    enabled: bool = True
+    core_limit_percent: float = 50.0
+    min_memory_available_percent: float = 25.0
+    max_swap_used_percent: float = 80.0
+    max_load_percent: float = 65.0
+    retry_after_seconds: int = 30
+
+    @classmethod
+    def from_env(cls) -> "VisualCpuAdmissionConfig":
+        return cls(
+            enabled=_env_bool("HEXE_VISUAL_CPU_ADMISSION_ENABLED", True),
+            core_limit_percent=_bounded_percent(
+                _env_float("HEXE_COMFYUI_CPU_CORE_LIMIT_PERCENT", 50.0),
+                default=50.0,
+                minimum=1.0,
+            ),
+            min_memory_available_percent=_bounded_percent(
+                _env_float("HEXE_VISUAL_CPU_MIN_MEMORY_AVAILABLE_PERCENT", 25.0),
+                default=25.0,
+            ),
+            max_swap_used_percent=_bounded_percent(
+                _env_float("HEXE_VISUAL_CPU_MAX_SWAP_USED_PERCENT", 80.0),
+                default=80.0,
+            ),
+            max_load_percent=_bounded_percent(
+                _env_float("HEXE_VISUAL_CPU_MAX_LOAD_PERCENT", 65.0),
+                default=65.0,
+            ),
+            retry_after_seconds=max(_env_int("HEXE_VISUAL_CPU_RETRY_AFTER_SECONDS", 30), 1),
+        )
+
+    def payload(self) -> dict:
+        return {
+            "enabled": self.enabled,
+            "core_limit_percent": self.core_limit_percent,
+            "min_memory_available_percent": self.min_memory_available_percent,
+            "max_swap_used_percent": self.max_swap_used_percent,
+            "max_load_percent": self.max_load_percent,
+            "retry_after_seconds": self.retry_after_seconds,
+        }
+
+
+@dataclass(frozen=True)
 class DirectExecutionAdmissionDecision:
     accepted: bool
     reason: str | None
@@ -482,6 +526,14 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _bounded_percent(value: float, *, default: float, minimum: float = 0.0) -> float:
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError):
+        normalized = float(default)
+    return round(min(max(normalized, minimum), 100.0), 3)
+
+
 def _read_memory_snapshot() -> dict:
     values: dict[str, int] = {}
     try:
@@ -508,6 +560,8 @@ def _read_memory_snapshot() -> dict:
         payload["memory_total_mb"] = round(total_memory_kb / 1024)
     if available_memory_kb is not None:
         payload["memory_available_mb"] = round(available_memory_kb / 1024)
+    if total_memory_kb and available_memory_kb is not None and total_memory_kb > 0:
+        payload["memory_available_percent"] = round((available_memory_kb / total_memory_kb) * 100.0, 3)
     if total_swap_kb is not None:
         payload["swap_total_mb"] = round(total_swap_kb / 1024)
     if free_swap_kb is not None:
@@ -531,6 +585,7 @@ def _read_load_snapshot() -> dict:
         "load_15m": round(load_15m, 2),
         "cpu_count": cpu_count,
         "load_per_cpu": round(load_1m / cpu_count, 3),
+        "load_percent": round(min(max((load_1m / cpu_count) * 100.0, 0.0), 100.0), 3),
     }
 
 
@@ -780,6 +835,8 @@ class NodeControlState:
         trusted_runtime_context: dict | None = None,
         direct_execution_admission_guard: DirectExecutionAdmissionGuard | None = None,
         direct_execution_admission_config: DirectExecutionAdmissionConfig | None = None,
+        visual_cpu_admission_config: VisualCpuAdmissionConfig | None = None,
+        visual_cpu_resource_sampler=None,
         execution_queue: ExecutionQueueService | None = None,
         user_message_publisher=None,
     ) -> None:
@@ -838,6 +895,8 @@ class NodeControlState:
             config=direct_execution_admission_config,
             logger=logger,
         )
+        self._visual_cpu_admission_config = visual_cpu_admission_config or VisualCpuAdmissionConfig.from_env()
+        self._visual_cpu_resource_sampler = visual_cpu_resource_sampler or DirectExecutionAdmissionGuard._sample_resources
         local_queue_concurrency = max(
             _env_int("HEXE_EXECUTION_QUEUE_LOCAL_CONCURRENCY", _env_int("LLAMACPP_PARALLEL", 1) + 1),
             1,
@@ -859,6 +918,7 @@ class NodeControlState:
                 )
             ),
             max_pending_per_client=max(_env_int("HEXE_EXECUTION_QUEUE_MAX_PENDING_PER_CLIENT", 20), 0),
+            blocked_retry_seconds=self._visual_cpu_admission_config.retry_after_seconds,
         )
         self._user_message_publisher = user_message_publisher
         self._local_preferred_spillover_enabled = _env_bool("HEXE_LOCAL_PREFERRED_SPILLOVER_ENABLED", True)
@@ -1648,7 +1708,9 @@ class NodeControlState:
             service = await self.start_service(target="comfyui_webui")
         services = service.get("services") if isinstance(service.get("services"), dict) else self.service_status_payload().get("services", {})
         webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
-        runtime_service = services.get("comfyui_gpu") if isinstance(services, dict) else {}
+        runtime = str(webui.get("runtime") or "gpu").strip().lower() if isinstance(webui, dict) else "gpu"
+        runtime_id = "comfyui_cpu" if runtime == "cpu" else "comfyui_gpu"
+        runtime_service = services.get(runtime_id) if isinstance(services, dict) else {}
         runtime_service = runtime_service if isinstance(runtime_service, dict) else {}
         manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
         socket_path = str(webui.get("socket_path") or "") if isinstance(webui, dict) else ""
@@ -1728,6 +1790,7 @@ class NodeControlState:
                 "runtime_pid": runtime_service.get("pid"),
                 "runtime_started_at": runtime_service.get("started_at"),
                 "runtime_restart_count": runtime_service.get("restart_count"),
+                "runtime_id": runtime_id,
                 "preflight_memory_cleanup": preflight_memory_cleanup,
                 "lora_metadata": {
                     "enabled": bool(payload.create_lora_metadata),
@@ -1755,6 +1818,7 @@ class NodeControlState:
             "number": first_submission.get("number"),
             "batch_count": batch_count,
             "submitted_count": len(submissions),
+            "runtime_id": runtime_id,
             "submissions": submissions,
             "node_errors": (submissions[0].get("node_errors") or {})
             if batch_count == 1 and submissions
@@ -12068,6 +12132,8 @@ class NodeControlState:
             width=width,
             height=height,
         )
+        runtime_lane = "visual_cpu" if str(submission.get("runtime_id") or "") == "comfyui_cpu" else "visual_gpu"
+        runtime_id = "comfyui_cpu" if runtime_lane == "visual_cpu" else "comfyui_gpu"
         return {
             "task_id": request.task_id,
             "status": "completed",
@@ -12087,16 +12153,16 @@ class NodeControlState:
             "error_code": None,
             "error_message": None,
             "provider_used": "visual_runtime",
-            "model_used": "comfyui_gpu",
+            "model_used": runtime_id,
             "resolution_metadata": {
                 "selected_provider": "local",
-                "selected_model": "comfyui_gpu",
+                "selected_model": runtime_id,
                 "provider_class": "local",
                 "concrete_executor": "visual_runtime",
                 "execution_location": "local",
                 "cloud_used": False,
                 "routing_policy_mode": self._direct_visual_runtime_routing_mode(request=request),
-                "runtime_lane": str(getattr(request.queue, "runtime_lane", "") or "visual_gpu"),
+                "runtime_lane": runtime_lane,
                 "template_id": submission.get("template_id"),
                 "prompt_id": submission.get("prompt_id"),
             },
@@ -12431,6 +12497,7 @@ class NodeControlState:
                 "allowed_task_families": ["task.image_generation", "task.generation.image"],
                 "allowed_importance": ["background", "low"],
                 "rejected_importance": ["normal", "high", "critical"],
+                "admission": self._visual_cpu_admission_snapshot(),
             }
         return payload
 
@@ -13987,6 +14054,16 @@ class NodeControlState:
             return {"allowed": True, "reason": "vision_lane_ready", "runtime_lane": lane}
         if lane in {"visual_gpu", "visual_cpu"} and task_family not in {"task.image_generation", "task.generation.image"}:
             return {"allowed": True, "reason": "non_image_visual_lane_job"}
+        if lane == "visual_cpu":
+            cpu_admission = self._visual_cpu_admission_snapshot()
+            if not cpu_admission["allowed"]:
+                return {
+                    "allowed": False,
+                    "reason": "visual_cpu_resource_pressure",
+                    "runtime_lane": lane,
+                    "retry_after_seconds": self._visual_cpu_admission_config.retry_after_seconds,
+                    "resource_admission": cpu_admission,
+                }
         if lane in {"visual_gpu", "visual_cpu"}:
             vision_work = self._local_vision_work_snapshot_nowait()
             if max(int(vision_work.get("active_count") or 0), 0) > 0 or max(int(vision_work.get("queued_count") or 0), 0) > 0:
@@ -14041,6 +14118,39 @@ class NodeControlState:
             "reason": "training_runtime_executor_not_ready",
             "runtime_lane": lane,
             "scheduler_request": scheduler_request,
+        }
+
+    def _visual_cpu_admission_snapshot(self) -> dict:
+        config = self._visual_cpu_admission_config
+        resources = self._visual_cpu_resource_sampler()
+        resources = resources if isinstance(resources, dict) else {}
+        blockers: list[str] = []
+        if config.enabled:
+            memory_available_percent = resources.get("memory_available_percent")
+            if memory_available_percent is not None and float(memory_available_percent) < config.min_memory_available_percent:
+                blockers.append("memory_available_percent_below_floor")
+            swap_used_ratio = resources.get("swap_used_ratio")
+            swap_used_percent = float(swap_used_ratio) * 100.0 if swap_used_ratio is not None else None
+            if swap_used_percent is not None and swap_used_percent >= config.max_swap_used_percent:
+                blockers.append("swap_used_percent_above_ceiling")
+            load_percent = resources.get("load_percent")
+            if load_percent is not None and float(load_percent) >= config.max_load_percent:
+                blockers.append("load_percent_above_ceiling")
+        else:
+            swap_used_percent = (
+                float(resources["swap_used_ratio"]) * 100.0
+                if resources.get("swap_used_ratio") is not None
+                else None
+            )
+        return {
+            "allowed": not blockers,
+            "reason": blockers[0] if blockers else None,
+            "blockers": blockers,
+            "thresholds": config.payload(),
+            "resources": {
+                **resources,
+                "swap_used_percent": round(swap_used_percent, 3) if swap_used_percent is not None else None,
+            },
         }
 
     def _local_visual_exclusive_work_snapshot_nowait(self) -> dict:

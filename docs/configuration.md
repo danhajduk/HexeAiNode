@@ -113,6 +113,12 @@ Backend runtime:
 - `HEXE_EXECUTION_QUEUE_LOCAL_CONCURRENCY` optional override; defaults to `LLAMACPP_PARALLEL + 1`
 - `HEXE_EXECUTION_QUEUE_CLOUD_CONCURRENCY` default `4`; max cloud queued jobs dispatched concurrently
 - `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` default `1`; max CPU ComfyUI background image jobs dispatched concurrently
+- `HEXE_COMFYUI_CPU_CORE_LIMIT_PERCENT` default `50`; percentage of the process's detected/allowed logical CPUs assigned to CPU ComfyUI, rounded up with a minimum of one
+- `HEXE_VISUAL_CPU_ADMISSION_ENABLED` default `true`; gates CPU image dispatch on host resource percentages
+- `HEXE_VISUAL_CPU_MIN_MEMORY_AVAILABLE_PERCENT` default `25`; CPU image jobs remain queued below this available-RAM percentage
+- `HEXE_VISUAL_CPU_MAX_SWAP_USED_PERCENT` default `80`; CPU image jobs remain queued at or above this swap-use percentage
+- `HEXE_VISUAL_CPU_MAX_LOAD_PERCENT` default `65`; CPU image jobs remain queued at or above this one-minute load percentage of detected CPU capacity
+- `HEXE_VISUAL_CPU_RETRY_AFTER_SECONDS` default `30`; interval before a resource-blocked CPU image lane is reconsidered
 - `HEXE_EXECUTION_QUEUE_CHECK_AFTER_SECONDS` default `5`; queued response polling hint in seconds
 - `HEXE_EXECUTION_QUEUE_JOB_TTL_SECONDS` default `3600`; in-memory queued job retention hint in seconds
 - `HEXE_IMAGE_OUTPUT_CLEANUP_INTERVAL_SECONDS` default `3600`; generated-image cleanup frequency

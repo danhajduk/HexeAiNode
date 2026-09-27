@@ -32,6 +32,7 @@ from ai_node.runtime.node_control_api import (
     DirectExecutionAdmissionConfig,
     DirectExecutionAdmissionGuard,
     DirectExecutionBusyError,
+    VisualCpuAdmissionConfig,
     ManualImageGenerationRequest,
     ManualImagePoseHelperRequest,
     ManualImagePromptHelperRequest,
@@ -7916,6 +7917,89 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertTrue(admission["allowed"])
             self.assertEqual(admission["reason"], "visual_gpu_executor_ready")
+
+    def test_visual_cpu_lane_admission_blocks_on_percentage_resource_pressure(self):
+        class _ServiceManager:
+            def request_local_scheduler_component(self, **_kwargs):
+                raise AssertionError("runtime must not start while admission is blocked")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ServiceManager(),
+                visual_cpu_admission_config=VisualCpuAdmissionConfig(
+                    core_limit_percent=50.0,
+                    min_memory_available_percent=25.0,
+                    max_swap_used_percent=80.0,
+                    max_load_percent=65.0,
+                    retry_after_seconds=30,
+                ),
+                visual_cpu_resource_sampler=lambda: {
+                    "memory_available_percent": 20.0,
+                    "swap_used_ratio": 0.9,
+                    "load_percent": 70.0,
+                    "cpu_count": 16,
+                },
+            )
+
+            admission = state._execution_queue_lane_admission(
+                {
+                    "job_id": "visual-cpu-pressure",
+                    "importance": "background",
+                    "runtime_lane": "visual_cpu",
+                    "request": {"task_id": "visual-cpu-pressure", "task_family": "task.image_generation"},
+                }
+            )
+
+            self.assertFalse(admission["allowed"])
+            self.assertEqual(admission["reason"], "visual_cpu_resource_pressure")
+            detail = admission["resource_admission"]
+            self.assertEqual(
+                detail["blockers"],
+                [
+                    "memory_available_percent_below_floor",
+                    "swap_used_percent_above_ceiling",
+                    "load_percent_above_ceiling",
+                ],
+            )
+            self.assertEqual(detail["thresholds"]["core_limit_percent"], 50.0)
+            self.assertEqual(detail["resources"]["swap_used_percent"], 90.0)
+
+    def test_visual_cpu_lane_admission_allows_safe_percentage_resources(self):
+        class _ServiceManager:
+            def request_local_scheduler_component(self, *, component_id, **_kwargs):
+                return {
+                    "status": "ok",
+                    "start_result": {"target": component_id, "result": "ready_for_job_submission"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_ServiceManager(),
+                visual_cpu_resource_sampler=lambda: {
+                    "memory_available_percent": 40.0,
+                    "swap_used_ratio": 0.2,
+                    "load_percent": 25.0,
+                    "cpu_count": 8,
+                },
+            )
+
+            admission = state._execution_queue_lane_admission(
+                {
+                    "job_id": "visual-cpu-safe",
+                    "importance": "background",
+                    "runtime_lane": "visual_cpu",
+                    "request": {"task_id": "visual-cpu-safe", "task_family": "task.image_generation"},
+                }
+            )
+
+            self.assertTrue(admission["allowed"])
+            self.assertEqual(admission["reason"], "visual_cpu_executor_ready")
 
     def test_execution_queue_visual_lane_admission_accepts_model_loaded_result(self):
         class _VisualModelLoadedServiceManager:

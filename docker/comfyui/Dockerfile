@@ -41,8 +41,9 @@ RUN git clone --depth 1 --branch "${COMFYUI_PULID_REF}" https://github.com/cubiq
     && python3 -m pip install -r custom_nodes/PuLID_ComfyUI/requirements.txt
 
 COPY docker/comfyui/run-dual.sh /opt/hexe/run-comfyui-dual.sh
+COPY docker/comfyui/run-cpu-limited.py /opt/hexe/run-cpu-limited.py
 COPY docker/comfyui/socket-proxy.py /opt/hexe/comfyui-socket-proxy.py
-RUN chmod +x /opt/hexe/run-comfyui-dual.sh /opt/hexe/comfyui-socket-proxy.py
+RUN chmod +x /opt/hexe/run-comfyui-dual.sh /opt/hexe/run-cpu-limited.py /opt/hexe/comfyui-socket-proxy.py
 
 EXPOSE 8188 8189
 

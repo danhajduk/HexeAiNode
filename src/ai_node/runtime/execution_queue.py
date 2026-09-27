@@ -41,6 +41,7 @@ class ExecutionQueueService:
         max_pending_per_client: int = 20,
         extra_queue_concurrency: dict[str, int] | None = None,
         lane_admission_provider: Callable[[dict], dict] | None = None,
+        blocked_retry_seconds: int = 30,
     ) -> None:
         self._logger = logger
         self._local_concurrency = max(int(local_concurrency), 1)
@@ -49,6 +50,7 @@ class ExecutionQueueService:
         self._job_ttl_seconds = max(int(job_ttl_seconds), 60)
         self._max_pending_per_client = max(int(max_pending_per_client), 0)
         self._lane_admission_provider = lane_admission_provider
+        self._blocked_retry_seconds = max(int(blocked_retry_seconds), 1)
         self._sequence = itertools.count(1)
         self._lock = asyncio.Lock()
         self._jobs: dict[str, dict] = {}
@@ -68,6 +70,7 @@ class ExecutionQueueService:
         self._queues: dict[str, list[tuple[int, int, str]]] = {queue_key: [] for queue_key in self._queue_concurrency}
         self._active_counts: dict[str, int] = {queue_key: 0 for queue_key in self._queue_concurrency}
         self._dispatcher_tasks: dict[str, asyncio.Task] = {}
+        self._blocked_retry_tasks: dict[str, asyncio.Task] = {}
         self._state_path = Path(state_path) if str(state_path or "").strip() else None
         self._recovered_unfinished_count = 0
         self._load_persisted_jobs()
@@ -510,6 +513,10 @@ class ExecutionQueueService:
                     job["blocked_reason"] = admission.get("reason") or "runtime_lane_not_ready"
                     job["blocked_detail"] = admission
                     self._persist_jobs_locked()
+                    self._schedule_blocked_retry_locked(
+                        queue_key,
+                        retry_after_seconds=admission.get("retry_after_seconds"),
+                    )
                     return
                 heapq.heappop(queue_entries)
                 job["blocked_reason"] = None
@@ -520,6 +527,26 @@ class ExecutionQueueService:
                 runner = job.get("_runner")
                 self._persist_jobs_locked()
             asyncio.create_task(self._run_job(queue_key=queue_key, job_id=job_id, runner=runner))
+
+    def _schedule_blocked_retry_locked(self, queue_key: str, *, retry_after_seconds: object = None) -> None:
+        current = self._blocked_retry_tasks.get(queue_key)
+        if current is not None and not current.done():
+            return
+        try:
+            delay = max(float(retry_after_seconds), 1.0) if retry_after_seconds is not None else float(self._blocked_retry_seconds)
+        except (TypeError, ValueError):
+            delay = float(self._blocked_retry_seconds)
+        self._blocked_retry_tasks[queue_key] = asyncio.create_task(
+            self._retry_blocked_queue(queue_key=queue_key, delay_seconds=delay)
+        )
+
+    async def _retry_blocked_queue(self, *, queue_key: str, delay_seconds: float) -> None:
+        await asyncio.sleep(max(delay_seconds, 1.0))
+        async with self._lock:
+            self._blocked_retry_tasks.pop(queue_key, None)
+            self._monitor_deadlines_locked()
+            if self._queues.get(queue_key):
+                self._ensure_dispatcher_locked(queue_key)
 
     async def _run_job(self, *, queue_key: str, job_id: str, runner) -> None:
         try:

@@ -145,6 +145,36 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(diagnostics["lanes"]["visual_gpu"]["blocked_reason"], "visual_runtime_executor_not_ready")
         self.assertEqual(diagnostics["lanes"]["visual_gpu"]["next_job"]["job_name"], "visual blocked")
 
+    async def test_blocked_lane_retries_and_dispatches_when_admission_recovers(self):
+        attempts = 0
+
+        def _recovering_admission(_job):
+            nonlocal attempts
+            attempts += 1
+            return {
+                "allowed": attempts > 1,
+                "reason": "ready" if attempts > 1 else "visual_cpu_resource_pressure",
+                "retry_after_seconds": 1,
+            }
+
+        queue = ExecutionQueueService(
+            logger=logging.getLogger("execution-queue-test"),
+            lane_admission_provider=_recovering_admission,
+            blocked_retry_seconds=1,
+        )
+        response = await queue.enqueue(
+            queue="visual_cpu",
+            importance="background",
+            job_name="retry visual cpu",
+            request_payload={"task_id": "retry-visual-cpu", "task_family": "task.image_generation"},
+            runner=lambda: _completed({"ok": True}),
+        )
+
+        status = await _wait_for_status(queue, job_id=response["job_id"], status="completed", attempts=150)
+
+        self.assertEqual(status["result"], {"ok": True})
+        self.assertGreaterEqual(attempts, 2)
+
     async def test_lane_admission_blocked_job_expires_from_backlog(self):
         def _deny_visual_lane(job):
             return {"allowed": False, "reason": "visual_runtime_executor_not_ready", "job_id": job.get("job_id")}
@@ -570,8 +600,14 @@ async def _failing_job() -> dict:
     raise RuntimeError("boom")
 
 
-async def _wait_for_status(queue: ExecutionQueueService, *, job_id: str, status: str) -> dict:
-    for _ in range(50):
+async def _wait_for_status(
+    queue: ExecutionQueueService,
+    *,
+    job_id: str,
+    status: str,
+    attempts: int = 50,
+) -> dict:
+    for _ in range(attempts):
         payload = await queue.job_status(job_id=job_id)
         if payload.get("status") == status:
             return payload
