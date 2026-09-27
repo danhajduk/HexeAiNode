@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/execution-authorize.v2.response.schema.json",
+  "title": "Execution Authorization Response V2", "type": "object", "required": ["allowed", "reason"], "properties": {
+    "allowed": {"type": "boolean"}, "reason": {"type": ["string", "null"]}, "prompt_id": {"type": ["string", "null"]},
+    "prompt_version": {"type": ["string", "null"]}, "task_family": {"type": ["string", "null"]},
+    "validation_diagnostics": {"type": ["object", "null"], "additionalProperties": true}
+  }, "additionalProperties": true
+}

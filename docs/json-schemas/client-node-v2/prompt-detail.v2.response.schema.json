@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/prompt-detail.v2.response.schema.json",
+  "title": "Prompt Detail Response V2", "type": "object", "additionalProperties": false, "required": ["configured", "prompt"],
+  "properties": {"configured": {"type": "boolean"}, "prompt": {"type": "object", "required": ["prompt_id"], "properties": {"prompt_id": {"type": "string", "minLength": 1}}, "additionalProperties": true}}
+}

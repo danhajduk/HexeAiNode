@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/prompt-catalog.v2.response.schema.json",
+  "title": "Prompt Catalog Response V2", "type": "object", "additionalProperties": false,
+  "required": ["configured", "state"], "properties": {
+    "configured": {"type": "boolean"}, "state": {"type": ["object", "null"], "additionalProperties": true},
+    "summary": {"type": "object", "additionalProperties": false, "required": ["prompt_count", "review_due_count", "active_count"], "properties": {
+      "prompt_count": {"type": "integer", "minimum": 0}, "review_due_count": {"type": "integer", "minimum": 0}, "active_count": {"type": "integer", "minimum": 0}
+    }}
+  }
+}

@@ -906,3 +906,14 @@ Verification: `tests/test_node_control_api.py` and `tests/test_node_control_fast
 #############
 All Tasks completed 09/27/2026 01:12:59
 #############
+###########
+Task #1033
+Step objective: Publish stable schemas for every external-client operation in Client Node V2 discovery.
+Issue cause: The catalog advertised prompt, template, authorization, comparison, routing, models, runtimes, services, and queue APIs with null request or response schema references.
+Chosen fix: Add operation-specific request schemas, resource-specific response schemas, a shared error envelope, and catalog discovery tests while retaining OpenAPI as the complete generated reference.
+What changed: Added 24 JSON Schema documents, filled all catalog response links and all mutation request links, added execution queues to the API list, published the error schema path, updated the schema index, and validated representative mutation and live read-only payloads.
+Verification: Combined node-control suites passed with 186 tests; every Client Node V2 JSON file parsed; discovery tests fetched and checked every referenced schema using JSON Schema Draft 2020-12; `git diff --check` passed.
+###########
+#############
+All Tasks completed 09/27/2026 01:19:00
+#############

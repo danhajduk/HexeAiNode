@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/execution-compare.v2.response.schema.json",
+  "title": "Execution Comparison Response V2", "type": "object", "additionalProperties": false,
+  "required": ["status", "task_family", "results", "generated_at"], "properties": {
+    "status": {"const": "completed"}, "task_family": {"type": "string"}, "results": {"type": "array", "items": {"type": "object", "additionalProperties": true}},
+    "generated_at": {"type": "string", "format": "date-time"}
+  }
+}

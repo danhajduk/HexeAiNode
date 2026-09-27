@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/models-by-task.v2.response.schema.json",
+  "title": "Models By Task Response V2", "type": "object", "required": ["task_family", "providers"],
+  "properties": {"task_family": {"type": "string", "minLength": 1}, "providers": {"type": "array", "items": {"type": "object", "additionalProperties": true}}}, "additionalProperties": true
+}

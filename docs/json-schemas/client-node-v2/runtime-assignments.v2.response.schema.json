@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/runtime-assignments.v2.response.schema.json",
+  "title": "Runtime Assignments Response V2", "type": "object", "required": ["schema_version", "status", "generated_at", "assignments"],
+  "properties": {"schema_version": {"type": "string"}, "status": {"type": "string"}, "generated_at": {"type": "string", "format": "date-time"}, "assignments": {"type": "array", "items": {"type": "object", "additionalProperties": true}}}, "additionalProperties": true
+}

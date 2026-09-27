@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/image-template-register.v2.request.schema.json",
+  "title": "Image Template Registration Request V2", "type": "object", "additionalProperties": false,
+  "required": ["template_id", "service_id", "template_version"],
+  "properties": {
+    "template_id": {"type": "string", "minLength": 1}, "service_id": {"type": "string", "minLength": 1},
+    "template_name": {"type": ["string", "null"]}, "owner_service": {"type": ["string", "null"]},
+    "owner_client_id": {"type": ["string", "null"]}, "privacy_class": {"type": "string", "default": "internal"},
+    "access_scope": {"type": "string", "default": "service"},
+    "allowed_services": {"type": ["array", "null"], "items": {"type": "string"}},
+    "allowed_clients": {"type": ["array", "null"], "items": {"type": "string"}},
+    "allowed_customers": {"type": ["array", "null"], "items": {"type": "string"}},
+    "template_version": {"$ref": "#/$defs/templateVersion"}, "version": {"type": ["string", "null"]},
+    "status": {"type": "string", "default": "active"}, "metadata": {"type": ["object", "null"]}
+  },
+  "$defs": {"templateVersion": {"type": "object", "additionalProperties": false, "required": ["api_workflow_path"], "properties": {
+    "version": {"type": ["string", "null"]}, "runtime_id": {"type": ["string", "null"], "default": "comfyui_gpu"},
+    "api_workflow_path": {"type": "string", "minLength": 1}, "ui_workflow_path": {"type": ["string", "null"]},
+    "variables": {"type": ["array", "null"], "items": {"type": "string"}}, "defaults": {"type": ["object", "null"]},
+    "model_requirements": {"type": ["object", "null"]}, "output_scope": {"type": ["string", "null"]}, "metadata": {"type": ["object", "null"]}
+  }}}
+}

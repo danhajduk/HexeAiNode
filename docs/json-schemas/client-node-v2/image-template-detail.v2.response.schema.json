@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/image-template-detail.v2.response.schema.json",
+  "title": "Image Template Detail Response V2", "type": "object", "additionalProperties": false, "required": ["configured", "template"],
+  "properties": {"configured": {"const": true}, "template": {"type": "object", "required": ["template_id"], "properties": {"template_id": {"type": "string", "minLength": 1}}, "additionalProperties": true}}
+}

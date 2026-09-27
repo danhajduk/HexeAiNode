@@ -2,11 +2,11 @@
 
 Status: Implemented
 
-This folder defines the V2+ client-facing AI contracts for benchmark-capable prompts and execution-only benchmark requests.
+This folder defines the V2+ external-client contracts for AI Node discovery, prompts, image templates, execution, models, runtimes, queues, services, and errors.
 
 The primary external-client discovery endpoint is `GET /api/schemas/client-node/v2`. It returns links to the full OpenAPI document, client-facing execution APIs, live prompt/template/service catalogs, every published JSON schema, and the Markdown guides below. Resolve every relative `api_path` against the `provider_api_base_url` published by Core.
 
-These schemas track the migration covered by Tasks 916-925. Schema discovery, V2 prompt metadata passthrough, and execution-only benchmark requests are implemented. Broader client migration and prompt-tuning consumers remain pending.
+Every operation advertised by the discovery catalog publishes a response schema. Every advertised mutation also publishes a request schema. `/openapi.json` remains the complete generated API reference.
 
 Cross-node execution semantics, compatibility rules, authentication requirements, and known idempotency gaps are defined in
 [the AI Node execution client contract](../../ai-node/execution-client-contract.md).
@@ -35,6 +35,11 @@ V2+ keeps the AI Node as an execution proxy:
 - [benchmark-execution-request.v2.schema.json](./benchmark-execution-request.v2.schema.json): multi-target execution-only benchmark request
 - [benchmark-execution-response.v2.schema.json](./benchmark-execution-response.v2.schema.json): unified response containing target outputs and metadata
 - [schema-catalog.v2.response.schema.json](./schema-catalog.v2.response.schema.json): implemented schema discovery response for client developers
+- `execution-authorize`, `execution-compare`, `route-preview`, and `execution-queues`: dedicated execution API contracts
+- `prompt-*`: prompt catalog, detail, mutation, update, lifecycle, probation, and review contracts
+- `image-template-*`: image-template catalog, detail, mutation, registration, update, lifecycle, and review contracts
+- `models-by-task`, `runtime-assignments`, and `service-status`: read-only discovery contracts
+- [error-response.v2.schema.json](./error-response.v2.schema.json): shared FastAPI error envelope
 - [communication.md](./communication.md): V2 client communication guide for developers
 
 ## Schema Discovery

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/execution-queues.v2.response.schema.json",
+  "title": "Execution Queues Response V2", "type": "object", "required": ["configured", "queues"],
+  "properties": {"configured": {"type": "boolean"}, "queues": {"type": "object", "additionalProperties": true}, "cpu_comfyui_policy": {"type": "object", "additionalProperties": true}}, "additionalProperties": true
+}

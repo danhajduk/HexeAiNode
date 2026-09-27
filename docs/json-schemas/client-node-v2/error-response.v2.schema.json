@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/error-response.v2.schema.json",
+  "title": "Client Node Error Response V2", "description": "FastAPI error envelope returned by external client operations.",
+  "type": "object", "additionalProperties": false, "required": ["detail"],
+  "properties": {"detail": {"oneOf": [{"type": "string"}, {"type": "object", "additionalProperties": true}, {"type": "array", "items": {}}]}}
+}

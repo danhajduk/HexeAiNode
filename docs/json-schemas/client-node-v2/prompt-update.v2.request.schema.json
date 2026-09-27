@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-node-v2/prompt-update.v2.request.schema.json",
+  "title": "Prompt Update Request V2",
+  "type": "object",
+  "additionalProperties": false,
+  "minProperties": 1,
+  "properties": {
+    "prompt_name": {"type": ["string", "null"]}, "owner_service": {"type": ["string", "null"]},
+    "owner_client_id": {"type": ["string", "null"]}, "task_family": {"type": ["string", "null"]},
+    "privacy_class": {"type": ["string", "null"]}, "access_scope": {"type": ["string", "null"]},
+    "allowed_services": {"type": ["array", "null"], "items": {"type": "string"}},
+    "allowed_clients": {"type": ["array", "null"], "items": {"type": "string"}},
+    "allowed_customers": {"type": ["array", "null"], "items": {"type": "string"}},
+    "execution_policy": {"type": ["object", "null"]}, "provider_preferences": {"type": ["object", "null"]},
+    "constraints": {"type": ["object", "null"]}, "definition": {"type": ["object", "null"]},
+    "output_contract": {"type": ["object", "null"]}, "benchmark": {"type": ["object", "null"]},
+    "version": {"type": ["string", "null"]}, "metadata": {"type": ["object", "null"]}
+  }
+}

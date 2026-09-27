@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-node-v2/execution-compare.v2.request.schema.json",
+  "title": "Execution Comparison Request V2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["task_family", "providers"],
+  "properties": {
+    "task_family": {"type": "string", "minLength": 1},
+    "prompt": {"type": ["string", "null"]},
+    "system_prompt": {"type": ["string", "null"]},
+    "messages": {"type": ["array", "null"], "items": {"type": "object"}},
+    "providers": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": true}},
+    "temperature": {"type": ["number", "null"]},
+    "max_tokens": {"type": ["integer", "null"], "minimum": 1}
+  }
+}

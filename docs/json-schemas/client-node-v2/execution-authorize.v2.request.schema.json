@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-node-v2/execution-authorize.v2.request.schema.json",
+  "title": "Execution Authorization Request V2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["prompt_id", "task_family"],
+  "properties": {
+    "prompt_id": {"type": "string", "minLength": 1},
+    "task_family": {"type": "string", "minLength": 1},
+    "prompt_version": {"type": ["string", "null"]},
+    "requested_by": {"type": ["string", "null"]},
+    "service_id": {"type": ["string", "null"]},
+    "customer_id": {"type": ["string", "null"]},
+    "requested_provider": {"type": ["string", "null"]},
+    "requested_model": {"type": ["string", "null"]},
+    "inputs": {"type": ["object", "null"], "additionalProperties": true}
+  }
+}

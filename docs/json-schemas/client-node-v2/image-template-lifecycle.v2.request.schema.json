@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/image-template-lifecycle.v2.request.schema.json",
+  "title": "Image Template Lifecycle Request V2", "type": "object", "additionalProperties": false, "required": ["state"],
+  "properties": {"state": {"type": "string", "minLength": 1}, "reason": {"type": ["string", "null"]}}
+}

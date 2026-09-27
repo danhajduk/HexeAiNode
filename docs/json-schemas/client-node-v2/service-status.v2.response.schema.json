@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/service-status.v2.response.schema.json",
+  "title": "Service Status Response V2", "type": "object", "additionalProperties": false, "required": ["configured", "services"],
+  "properties": {"configured": {"type": "boolean"}, "services": {"type": "object", "additionalProperties": true}}
+}

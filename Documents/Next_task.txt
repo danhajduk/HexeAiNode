@@ -8,7 +8,6 @@
 [FUTURE TODO] Task 1026: Add local-first verification and one-step cloud escalation for search answers
 [FUTURE TODO] Task 1027: Expose web retrieval status in APIs, diagnostics, and UI
 [FUTURE TODO] Task 1028: Add tests and documentation for local web retrieval and hybrid routing
-[TODO] Task 1033: Publish dedicated schemas for every external client API (Future)
 [TODO] Task 1034: Add durable queued execution recovery across backend restarts (Future)
 [TODO] Task 1035: Implement job-record expiration and running-job cancellation (Future)
 [TODO] Task 1036: Publish complete execution endpoint metadata through Core capabilities (Future)

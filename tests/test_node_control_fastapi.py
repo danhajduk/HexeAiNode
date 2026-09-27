@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from jsonschema import Draft202012Validator
 
 from ai_node.lifecycle.node_lifecycle import NodeLifecycle, NodeLifecycleState
 from ai_node.persistence.budget_state_store import BudgetStateStore
@@ -568,6 +569,80 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertIn("text/markdown", contract_response.headers["content-type"])
             self.assertIn("AI Node Execution Client Contract", contract_response.text)
             self.assertEqual(index_response.status_code, 200)
+
+    def test_client_node_v2_catalog_schema_links_resolve_and_validate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-fastapi-test"),
+                provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                prompt_service_state_store=self._FakePromptServiceStateStore(),
+                service_manager=self._FakeServiceManager(),
+            )
+            client = TestClient(create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test")))
+            catalog = client.get("/api/schemas/client-node/v2").json()
+            catalog_schema = client.get("/api/schemas/client-node/v2/schema-catalog.v2.response.schema.json").json()
+            Draft202012Validator(catalog_schema).validate(catalog)
+
+            mutation_methods = {"POST", "PUT", "DELETE"}
+            for api in catalog["apis"]:
+                self.assertIsNotNone(api["response_schema_path"], api["name"])
+                if api["method"] in mutation_methods:
+                    self.assertIsNotNone(api["request_schema_path"], api["name"])
+
+            schema_paths = {catalog["error_schema_path"]}
+            for api in catalog["apis"]:
+                schema_paths.update(
+                    path
+                    for path in (api["request_schema_path"], api["response_schema_path"])
+                    if path is not None
+                )
+            schemas = {}
+            for path in schema_paths:
+                response = client.get(path)
+                self.assertEqual(response.status_code, 200, path)
+                schema = response.json()
+                Draft202012Validator.check_schema(schema)
+                schemas[Path(path).name] = schema
+
+            examples = {
+                "execution-authorize.v2.request.schema.json": {"prompt_id": "prompt.alpha", "task_family": "task.classification"},
+                "execution-authorize.v2.response.schema.json": {"allowed": True, "reason": None},
+                "execution-compare.v2.request.schema.json": {"task_family": "task.classification", "providers": [{"provider": "local"}]},
+                "execution-compare.v2.response.schema.json": {"status": "completed", "task_family": "task.classification", "results": [], "generated_at": "2026-09-27T08:00:00Z"},
+                "prompt-update.v2.request.schema.json": {"prompt_name": "Updated"},
+                "prompt-lifecycle.v2.request.schema.json": {"state": "active"},
+                "prompt-probation.v2.request.schema.json": {"action": "start"},
+                "prompt-review.v2.request.schema.json": {"state": "active"},
+                "image-template-register.v2.request.schema.json": {"template_id": "template.alpha", "service_id": "service.alpha", "template_version": {"api_workflow_path": "workflow.json"}},
+                "image-template-update.v2.request.schema.json": {"template_name": "Updated"},
+                "image-template-lifecycle.v2.request.schema.json": {"state": "active"},
+                "image-template-review.v2.request.schema.json": {"state": "active"},
+                "error-response.v2.schema.json": {"detail": "invalid_input"},
+            }
+            for name, payload in examples.items():
+                Draft202012Validator(schemas[name]).validate(payload)
+
+            Draft202012Validator(schemas["prompt-catalog.v2.response.schema.json"]).validate(
+                state.prompt_service_state_payload()
+            )
+            Draft202012Validator(schemas["image-template-catalog.v2.response.schema.json"]).validate(
+                state.image_generation_template_state_payload()
+            )
+            Draft202012Validator(schemas["models-by-task.v2.response.schema.json"]).validate(
+                state.models_for_task_payload(task_family="task.classification")
+            )
+            Draft202012Validator(schemas["runtime-assignments.v2.response.schema.json"]).validate(
+                state.local_runtime_assignments_payload()
+            )
+            Draft202012Validator(schemas["service-status.v2.response.schema.json"]).validate(
+                state.service_status_payload()
+            )
+            Draft202012Validator(schemas["execution-queues.v2.response.schema.json"]).validate(
+                asyncio.run(state.execution_queue_diagnostics())
+            )
+            index_response = client.get("/api/schemas/client-node/v2/README.md")
             self.assertIn("Client Node V2 Schemas", index_response.text)
 
             prompt_response = client.post(

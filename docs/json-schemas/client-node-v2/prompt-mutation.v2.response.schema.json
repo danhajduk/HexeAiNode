@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/prompt-mutation.v2.response.schema.json",
+  "title": "Prompt Mutation Response V2", "type": "object", "additionalProperties": false, "required": ["configured", "state", "summary"],
+  "properties": {"configured": {"const": true}, "state": {"type": "object", "additionalProperties": true}, "summary": {"type": "object", "additionalProperties": true}}
+}

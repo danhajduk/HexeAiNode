@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/prompt-review.v2.request.schema.json",
+  "title": "Prompt Review Request V2", "type": "object", "additionalProperties": false,
+  "properties": {"reviewed_by": {"type": ["string", "null"]}, "review_reason": {"type": ["string", "null"]}, "state": {"type": ["string", "null"], "default": "active"}}
+}

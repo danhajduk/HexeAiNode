@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/route-preview.v2.response.schema.json",
+  "title": "Execution Route Preview Response V2", "type": "object", "required": ["task_id", "task_family", "would_execute", "effective_request"],
+  "properties": {
+    "task_id": {"type": "string"}, "task_family": {"type": "string"}, "would_execute": {"type": "boolean"},
+    "effective_request": {"type": "object", "additionalProperties": true}, "authorization": {"type": ["object", "null"], "additionalProperties": true},
+    "provider_resolution": {"type": ["object", "null"], "additionalProperties": true}, "routing_decision": {"type": ["object", "null"], "additionalProperties": true},
+    "queue": {"type": ["string", "null"]}, "queue_state": {"type": ["object", "null"], "additionalProperties": true}
+  }, "additionalProperties": true
+}

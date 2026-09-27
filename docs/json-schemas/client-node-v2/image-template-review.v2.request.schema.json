@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://hexe.local/schemas/client-node-v2/image-template-review.v2.request.schema.json",
+  "title": "Image Template Review Request V2", "type": "object", "additionalProperties": false,
+  "properties": {"reviewed_by": {"type": ["string", "null"]}, "review_reason": {"type": ["string", "null"]}, "state": {"type": ["string", "null"], "default": "active"}}
+}
