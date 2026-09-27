@@ -2427,6 +2427,12 @@ Acceptance:
 - Authorized existing client flows continue to work with Core-issued credentials.
 - Security behavior has backend and API tests.
 
+Current blocker (2026-09-26):
+- Core service tokens are HS256 JWTs signed with rotating secrets stored only in Core.
+- Core does not publish JWKS/verification material and does not expose a service-token introspection endpoint.
+- Core currently issues execution scopes such as `service.execute:<task_family>` but no prompt-management scopes for prompt/template catalog mutation.
+- AI Node implementation must wait for a Core-owned verification contract and management-scope issuance; copying Core's symmetric signing secret into AI Node is not acceptable.
+
 ## Task 1030
 Original task details:
 - Enforce each selected immutable prompt version's registered `input_schema_id` or `input_schema_url` before routing or provider execution.

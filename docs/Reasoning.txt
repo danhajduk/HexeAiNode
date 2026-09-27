@@ -855,3 +855,11 @@ Verification: Verified against `src/ai_node/execution/task_models.py`, `src/ai_n
 #############
 All Tasks completed 06/13/2026 10:24
 #############
+###########
+Task #1029
+Step objective: Add authentication and verified caller identity to external client APIs.
+Issue cause: Core issues HS256 service tokens using rotating secrets that are not available to AI Node, and Core exposes neither token introspection nor public verification material. Prompt-management scopes are also not issued.
+Chosen fix: Stop at the repository trust boundary and require a Core-owned token-verification contract plus management-scope issuance before adding route enforcement. Do not copy Core symmetric signing secrets into AI Node or publish unauthenticated behavior as authenticated in the client catalog.
+What changed: Marked Task 1029 WIP and recorded the external Core dependency in the preserved task details.
+Verification: Confirmed Core token issuance and validation implementation in backend/app/system/auth/tokens.py, backend/app/system/auth/deps.py, backend/app/system/auth/router.py, and backend/app/api/system.py; no introspection or JWKS route exists.
+###########
