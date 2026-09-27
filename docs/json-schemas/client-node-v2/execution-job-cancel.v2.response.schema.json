@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hexe.local/schemas/client-node-v2/execution-job-cancel.v2.response.schema.json",
   "title": "Execution Job Cancellation Response V2",
-  "description": "Cancellation result. HTTP 200 returns a cancelled job; HTTP 409 returns the rejection form when queued-to-running or terminal-state races make cancellation too late.",
+  "description": "Cancellation result. HTTP 200 returns a cancelled job; HTTP 409 returns the rejection form when running interruption is unsupported or unavailable, or when the job is already terminal.",
   "oneOf": [
     {
       "allOf": [
@@ -20,8 +20,15 @@
         "cancellable": {"const": false},
         "cancel_rejected_reason": {
           "type": "string",
-          "pattern": "^job_already_[a-z0-9_]+$",
-          "description": "Current values include job_already_running and job_already_<terminal-status>."
+          "enum": [
+            "running_cancellation_unsupported",
+            "running_cancellation_unavailable",
+            "job_already_completed",
+            "job_already_failed",
+            "job_already_cancelled",
+            "job_already_expired_wait_budget"
+          ],
+          "description": "Stable reason identifying unsupported/unavailable running interruption or an already-terminal job."
         }
       }
     }

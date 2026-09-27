@@ -3,6 +3,7 @@ import json
 import logging
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ai_node.runtime.execution_queue import ExecutionQueueService
@@ -419,9 +420,115 @@ class ExecutionQueueServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response["status"], "running")
         self.assertFalse(response["cancellable"])
-        self.assertEqual(response["cancel_rejected_reason"], "job_already_running")
+        self.assertEqual(response["cancel_rejected_reason"], "running_cancellation_unsupported")
         release_first.set()
         await _wait_for_status(queue, job_id=first["job_id"], status="completed")
+
+    async def test_cancel_supported_running_job_releases_slot(self):
+        queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)
+        release = asyncio.Event()
+        runner_stopped = asyncio.Event()
+
+        async def cancellable_runner():
+            try:
+                await release.wait()
+                return {"unexpected": True}
+            finally:
+                runner_stopped.set()
+
+        first = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="cancellable",
+            request_payload={"task_id": "cancellable"},
+            runner=cancellable_runner,
+            running_cancellation_supported=True,
+        )
+        await _wait_for_status(queue, job_id=first["job_id"], status="running")
+        second = await queue.enqueue(
+            queue="local",
+            importance="normal",
+            job_name="next",
+            request_payload={"task_id": "next"},
+            runner=lambda: _completed({"ok": True}),
+        )
+
+        cancelled = await queue.cancel_job(job_id=first["job_id"], reason="client_cancelled")
+
+        self.assertEqual(cancelled["status"], "cancelled")
+        self.assertEqual(cancelled["error"], {"code": "cancelled", "message": "client_cancelled"})
+        self.assertIsNone(cancelled["result"])
+        self.assertTrue(runner_stopped.is_set())
+        await _wait_for_status(queue, job_id=second["job_id"], status="completed")
+
+    async def test_expired_terminal_records_are_deleted_on_load(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "execution-jobs.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "2.0",
+                        "jobs": [
+                            {
+                                "job_id": "job-expired",
+                                "status": "completed",
+                                "queue": "local",
+                                "importance": "normal",
+                                "sequence": 1,
+                                "expires_at": "2000-01-01T00:00:00+00:00",
+                            },
+                            {
+                                "job_id": "job-retained",
+                                "status": "cancelled",
+                                "queue": "local",
+                                "importance": "normal",
+                                "sequence": 2,
+                                "expires_at": "2099-01-01T00:00:00+00:00",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), state_path=str(state_path))
+
+            self.assertEqual((await queue.job_status(job_id="job-expired"))["status"], "not_found")
+            self.assertEqual((await queue.job_status(job_id="job-retained"))["status"], "cancelled")
+            diagnostics = await queue.diagnostics()
+            self.assertEqual(diagnostics["persistence"]["expired_record_count"], 1)
+            persisted_ids = {job["job_id"] for job in json.loads(state_path.read_text(encoding="utf-8"))["jobs"]}
+            self.assertEqual(persisted_ids, {"job-retained"})
+
+    async def test_terminal_record_is_deleted_at_expiration_without_polling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "execution-jobs.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "2.0",
+                        "jobs": [
+                            {
+                                "job_id": "job-soon-expired",
+                                "status": "completed",
+                                "queue": "local",
+                                "importance": "normal",
+                                "sequence": 1,
+                                "expires_at": (datetime.now(timezone.utc) + timedelta(milliseconds=50)).isoformat(),
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), state_path=str(state_path))
+            await queue.start_recovered_jobs()
+
+            await asyncio.sleep(0.1)
+
+            persisted = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(persisted["jobs"], [])
+            self.assertEqual((await queue.diagnostics())["persistence"]["expired_record_count"], 1)
 
     async def test_matching_work_snapshot_reports_local_vision_jobs_and_reroute_candidates(self):
         queue = ExecutionQueueService(logger=logging.getLogger("execution-queue-test"), local_concurrency=1)

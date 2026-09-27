@@ -12804,6 +12804,10 @@ class NodeControlState:
             routing_decision=queue_context.get("routing_decision") if isinstance(queue_context.get("routing_decision"), dict) else None,
             queue_intent=queue_context.get("queue_intent") if isinstance(queue_context.get("queue_intent"), dict) else None,
             client_id=request_copy.requested_by,
+            running_cancellation_supported=(
+                not self._direct_execution_should_use_visual_runtime(request=execution_request)
+                and not self._direct_execution_should_use_vision_runtime(request=execution_request)
+            ),
         )
         if response.get("status") != "queued":
             return response
@@ -13928,7 +13932,7 @@ class NodeControlState:
                     "name": "execution_job_cancel",
                     "method": "DELETE",
                     "api_path": "/api/execution/jobs/{job_id}",
-                    "description": "Cancel work while it is still queued.",
+                    "description": "Cancel queued work or cooperatively interrupt supported running provider work.",
                     "request_schema_path": "/api/schemas/client-node/v2/execution-job-cancel.v2.request.schema.json",
                     "response_schema_path": "/api/schemas/client-node/v2/execution-job-cancel.v2.response.schema.json",
                     "security": {"scheme": "CoreServiceBearer", "required_scopes": ["ai.jobs.cancel"]},

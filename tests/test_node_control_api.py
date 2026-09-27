@@ -777,6 +777,7 @@ class NodeControlApiTests(unittest.TestCase):
                 self.assertEqual(queued["importance"], "high")
                 self.assertEqual(queued["routing_decision"]["reason"], "explicit_provider")
                 self.assertEqual(queued["routing_decision"]["selected_queue"], "local")
+                self.assertTrue(queued["running_cancellation_supported"])
                 self.assertIn("job queued - check in", queued["message"])
 
                 result = await self._wait_for_execution_job(state, queued["job_id"], "completed")

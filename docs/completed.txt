@@ -596,3 +596,4 @@ Task 1031: Add caller-scoped execution idempotency - Completed on 09/27/2026 01:
 Task 1032: Repair the node-control regression test suite - Completed on 09/27/2026 01:12
 Task 1033: Publish dedicated schemas for every external client API - Completed on 09/27/2026 01:19
 Task 1034: Add durable queued execution recovery across backend restarts - Completed on 09/27/2026 01:23
+Task 1035: Implement job-record expiration and running-job cancellation - Completed on 09/27/2026 01:31

@@ -27,7 +27,7 @@ Implemented client-facing routes in this repository:
 | `POST /api/execution/route-preview` | Implemented | Dry-run provider/model and queue routing for a direct execution request. |
 | `POST /api/execution/direct` | Implemented | Production task execution through provider/model routing. |
 | `GET /api/execution/jobs/{job_id}` | Implemented | Poll an async queued execution job. |
-| `DELETE /api/execution/jobs/{job_id}` | Implemented | Cancel a queued execution job before it starts running. |
+| `DELETE /api/execution/jobs/{job_id}` | Implemented | Cancel queued work or cooperatively interrupt supported running provider work. |
 | `GET /api/execution/queues` | Implemented | Read local/cloud execution queue diagnostics. |
 | `GET /api/providers/local/capability-resolution` | Implemented | Inspect deterministic local model feature and task mapping. |
 | `GET /api/providers/models/by-task/{task_family}` | Implemented | Discover enabled local/cloud providers and models mapped to a task family. |
@@ -517,12 +517,12 @@ Deadline monitoring is implemented for queued jobs:
   `queue_state`; `TaskExecutionResult.metrics.execution_duration_ms` measures execution after a runner starts.
 
 Queued job status is persisted to `HEXE_EXECUTION_QUEUE_STATE_PATH`, or by default to `execution_queue_jobs.json` next
-to the node config. Completed, failed, and cancelled job records can still be polled after API restart while they remain
-in the queue state file. Jobs that were `queued` or `running` when the API stopped are recovered as `failed` with
-`error.code = "execution_queue_recovery_required"` because the in-memory execution runner cannot be safely resumed from
-disk. Clients should resubmit the request if it is still needed.
+to the node config. Completed, failed, cancelled, and `expired_wait_budget` records remain pollable until their terminal
+`expires_at`, when they are deleted automatically. Record deletion does not delete image artifacts, whose lifetime is
+governed independently by image-retention metadata. Queued jobs are reconstructed and resumed after API restart;
+jobs that were already running fail deterministically without replay to prevent duplicate provider work.
 
-Cancel a queued job before it starts with:
+Cancel a queued job, or supported running provider work, with:
 
 ```text
 DELETE /api/execution/jobs/{job_id}
@@ -536,12 +536,15 @@ Optional body:
 }
 ```
 
-Cancellation returns the job payload with `status = "cancelled"` and `error.code = "cancelled"`. Running or already
-terminal jobs cannot be cancelled; the API returns HTTP `409` with `cancel_rejected_reason`. Missing jobs return HTTP
-`404`.
+Cancellation returns the job payload with `status = "cancelled"` and `error.code = "cancelled"`. A running job is
+interruptible only when its payload reports `running_cancellation_supported = true`. Unsupported or unavailable
+running cancellation and already-terminal jobs return HTTP `409` with the stable `cancel_rejected_reason` values
+`running_cancellation_unsupported`, `running_cancellation_unavailable`, or `job_already_<terminal-status>`. Missing jobs
+return HTTP `404`.
 
 Queue diagnostics include a `persistence` object showing whether status persistence is configured, the state-file path,
-and `recovered_unfinished_count` for unfinished jobs recovered during startup.
+`recovered_unfinished_count` for unfinished jobs recovered during startup, and `expired_record_count` for records pruned
+by the current process.
 Diagnostics also include `fairness.max_pending_per_client` and per-queue `per_client_pending` counts.
 
 Queue selection:

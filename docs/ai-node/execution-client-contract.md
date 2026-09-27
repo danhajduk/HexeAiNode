@@ -81,7 +81,7 @@ Queued clients poll no faster than `check_after_seconds`. Terminal statuses are 
 
 The effective provider budget is `min(request.timeout_s, prompt.constraints.max_timeout_s)` when both exist, so the prompt ceiling wins over a larger request value. Queue wait is separate: its boundary is the earliest of `queue.deadline_at` and enqueue time plus `queue.max_wait_seconds`. Exhaustion before dispatch yields terminal `expired_wait_budget` and consumes no provider execution budget.
 
-The caller owns its HTTP timeout. For sync calls it should exceed the effective provider budget; for polling it should be short and repeatable. A client timeout does not cancel server work. Job `expires_at` is record-TTL metadata, not an execution deadline or guaranteed deletion time.
+The caller owns its HTTP timeout. For sync calls it should exceed the effective provider budget; for polling it should be short and repeatable. A client timeout does not cancel server work. Job `expires_at` is the automatic deletion time for terminal status records, not an execution deadline; terminal transitions reset it from the completion time.
 
 ## Canonical images and artifact lifetime
 
@@ -115,9 +115,9 @@ Persisted jobs that were still `queued` restart with the same request, caller, r
 
 ## Cancellation and expiration
 
-Cancellation schemas are `execution-job-cancel.v2.request.schema.json` and `execution-job-cancel.v2.response.schema.json`. `DELETE /api/execution/jobs/{job_id}` cancels queued work. Success returns HTTP 200 with terminal `cancelled`. If dispatch wins the race or the job is terminal, HTTP 409 returns `cancellable=false` and `cancel_rejected_reason`; running provider work is not stopped.
+Cancellation schemas are `execution-job-cancel.v2.request.schema.json` and `execution-job-cancel.v2.response.schema.json`. `DELETE /api/execution/jobs/{job_id}` cancels queued work and cooperatively cancels running provider-managed work when `running_cancellation_supported` is true. Success returns HTTP 200 with terminal `cancelled` and releases the queue slot. HTTP 409 returns `cancellable=false` and a stable `cancel_rejected_reason`: `running_cancellation_unsupported`, `running_cancellation_unavailable`, or `job_already_<terminal-status>`. Local vision and visual-runtime work cannot currently be interrupted after dispatch.
 
-`expired_wait_budget` means dispatch did not start before the queue boundary and no provider work continues for that job. `expires_at` only describes configured record TTL; automatic deletion at that time is not developed and it never cancels work.
+`expired_wait_budget` means dispatch did not start before the queue boundary and no provider work continues for that job. Terminal jobs are automatically removed after `expires_at`; subsequent status, cancellation, or artifact-acknowledgement requests return not found. Job-record expiration does not delete image files or their independent retention metadata. Cancelling a running job clears any partial result and artifact acknowledgement; image artifacts already created before cancellation remain governed by their image-retention metadata.
 
 ## Core publication
 

@@ -24,7 +24,10 @@
     "queued_at": {"type": ["string", "null"], "format": "date-time"},
     "started_at": {"type": ["string", "null"], "format": "date-time"},
     "completed_at": {"type": ["string", "null"], "format": "date-time"},
-    "expires_at": {"type": ["string", "null"], "format": "date-time", "description": "Configured status-record TTL metadata. It does not cancel running work and automatic record deletion is not currently implemented."},
+    "expires_at": {"type": ["string", "null"], "format": "date-time", "description": "Terminal status-record expiration time. Expired terminal records are deleted automatically; this timestamp never cancels active work."},
+    "running_cancellation_supported": {"type": "boolean", "description": "Whether a running job can be cooperatively interrupted by this provider/runtime path."},
+    "cancellation_requested_at": {"type": ["string", "null"], "format": "date-time"},
+    "cancellation_reason": {"type": ["string", "null"]},
     "result": {
       "anyOf": [
         {"$ref": "execution-response.v2.schema.json"},

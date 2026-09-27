@@ -928,3 +928,14 @@ Verification: Queue, deadline, failure taxonomy, NodeControl, and FastAPI tests 
 #############
 All Tasks completed 09/27/2026 01:23:53
 #############
+###########
+Task #1035
+Step objective: Delete expired terminal job records automatically and cancel supported running work.
+Issue cause: Job expiration was metadata only, and cancellation stopped at the queue boundary even for cooperatively cancellable async provider work.
+Chosen fix: Schedule terminal-record cleanup at the earliest expiration, track running asyncio tasks, explicitly declare cancellation support per runtime path, and retain stable rejection reasons for non-interruptible work.
+What changed: Added timer-driven and startup expiration cleanup, cooperative running-task cancellation with queue-slot release, deterministic unsupported/unavailable reasons, terminal TTL reset, artifact-state handling, client schemas/catalog documentation, and race/cleanup tests.
+Verification: Queue, execution-contract, NodeControl, and FastAPI tests passed with 48 tests; Python compilation and `git diff --check` passed.
+###########
+#############
+All Tasks completed 09/27/2026 01:31:59
+#############

@@ -72,16 +72,20 @@ class ExecutionQueueService:
         self._queues: dict[str, list[tuple[int, int, str]]] = {queue_key: [] for queue_key in self._queue_concurrency}
         self._active_counts: dict[str, int] = {queue_key: 0 for queue_key in self._queue_concurrency}
         self._dispatcher_tasks: dict[str, asyncio.Task] = {}
+        self._running_tasks: dict[str, asyncio.Task] = {}
         self._blocked_retry_tasks: dict[str, asyncio.Task] = {}
+        self._record_expiry_handle: asyncio.TimerHandle | None = None
         self._state_path = Path(state_path) if str(state_path or "").strip() else None
         self._recovered_unfinished_count = 0
         self._recovered_queued_count = 0
         self._recovered_running_count = 0
+        self._expired_record_count = 0
         self._load_persisted_jobs()
 
     async def start_recovered_jobs(self) -> dict:
         async with self._lock:
             self._monitor_deadlines_locked()
+            self._schedule_next_record_expiry_locked()
             queued_count = 0
             for queue_key, entries in self._queues.items():
                 if entries:
@@ -112,6 +116,7 @@ class ExecutionQueueService:
             "routing_decision": deepcopy(job.get("routing_decision")) if isinstance(job.get("routing_decision"), dict) else None,
             "queue_state": queue_state,
             "expires_at": job.get("expires_at"),
+            "running_cancellation_supported": bool(job.get("running_cancellation_supported")),
         }
 
     async def enqueue(
@@ -125,6 +130,7 @@ class ExecutionQueueService:
         routing_decision: dict | None = None,
         queue_intent: dict | None = None,
         client_id: str | None = None,
+        running_cancellation_supported: bool = False,
     ) -> dict:
         queue_key = self._normalize_queue_key(queue)
         importance_key = str(importance or "normal").strip().lower()
@@ -156,6 +162,7 @@ class ExecutionQueueService:
             "request": deepcopy(request_payload) if isinstance(request_payload, dict) else {},
             "result": None,
             "error": None,
+            "running_cancellation_supported": bool(running_cancellation_supported),
             "created_at": now.isoformat(),
             "queued_at": now.isoformat(),
             "staged_at": None,
@@ -232,7 +239,9 @@ class ExecutionQueueService:
 
     async def cancel_job(self, *, job_id: str, reason: str | None = None) -> dict:
         normalized_job_id = str(job_id or "").strip()
+        running_task = None
         async with self._lock:
+            self._monitor_deadlines_locked()
             job = self._jobs.get(normalized_job_id)
             if not isinstance(job, dict):
                 return {"status": "not_found", "job_id": job_id}
@@ -247,19 +256,40 @@ class ExecutionQueueService:
                 cancel_reason = str(reason or "cancelled_by_client").strip() or "cancelled_by_client"
                 job["status"] = "cancelled"
                 job["completed_at"] = cancelled_at
+                job["expires_at"] = (local_now() + timedelta(seconds=self._job_ttl_seconds)).isoformat()
                 job["error"] = {"code": "cancelled", "message": cancel_reason}
                 job["_runner"] = None
                 self._persist_jobs_locked()
                 return self._public_job_payload(job)
             if current_status in {"running"}:
+                if not bool(job.get("running_cancellation_supported")):
+                    payload = self._public_job_payload(job)
+                    payload["cancellable"] = False
+                    payload["cancel_rejected_reason"] = "running_cancellation_unsupported"
+                    return payload
+                running_task = self._running_tasks.get(normalized_job_id)
+                if running_task is None or running_task.done():
+                    payload = self._public_job_payload(job)
+                    payload["cancellable"] = False
+                    payload["cancel_rejected_reason"] = "running_cancellation_unavailable"
+                    return payload
+                job["cancellation_requested_at"] = local_now_iso()
+                job["cancellation_reason"] = str(reason or "cancelled_by_client").strip() or "cancelled_by_client"
+                self._persist_jobs_locked()
+            elif current_status not in {"queued"}:
                 payload = self._public_job_payload(job)
                 payload["cancellable"] = False
-                payload["cancel_rejected_reason"] = "job_already_running"
+                payload["cancel_rejected_reason"] = f"job_already_{current_status or 'terminal'}"
                 return payload
-            payload = self._public_job_payload(job)
-            payload["cancellable"] = False
-            payload["cancel_rejected_reason"] = f"job_already_{current_status or 'terminal'}"
-            return payload
+        if running_task is not None:
+            running_task.cancel()
+            try:
+                await running_task
+            except asyncio.CancelledError:
+                pass
+            async with self._lock:
+                job = self._jobs.get(normalized_job_id)
+                return self._public_job_payload(job) if isinstance(job, dict) else {"status": "not_found", "job_id": job_id}
 
     async def diagnostics(self) -> dict:
         async with self._lock:
@@ -343,6 +373,7 @@ class ExecutionQueueService:
                     "recovered_unfinished_count": self._recovered_unfinished_count,
                     "recovered_queued_count": self._recovered_queued_count,
                     "recovered_running_count": self._recovered_running_count,
+                    "expired_record_count": self._expired_record_count,
                 },
                 "queues": queues,
                 "job_count": len(self._jobs),
@@ -547,7 +578,9 @@ class ExecutionQueueService:
                 self._active_counts[queue_key] = self._active_counts.get(queue_key, 0) + 1
                 runner = job.get("_runner")
                 self._persist_jobs_locked()
-            asyncio.create_task(self._run_job(queue_key=queue_key, job_id=job_id, runner=runner))
+            task = asyncio.create_task(self._run_job(queue_key=queue_key, job_id=job_id, runner=runner))
+            async with self._lock:
+                self._running_tasks[job_id] = task
 
     def _schedule_blocked_retry_locked(self, queue_key: str, *, retry_after_seconds: object = None) -> None:
         current = self._blocked_retry_tasks.get(queue_key)
@@ -580,8 +613,26 @@ class ExecutionQueueService:
                     job["status"] = "completed"
                     job["result"] = result if isinstance(result, dict) else {}
                     job["completed_at"] = local_now_iso()
+                    job["expires_at"] = (local_now() + timedelta(seconds=self._job_ttl_seconds)).isoformat()
                     job["_runner"] = None
                     self._persist_jobs_locked()
+        except asyncio.CancelledError:
+            async with self._lock:
+                job = self._jobs.get(job_id)
+                if isinstance(job, dict):
+                    cancelled_at = local_now_iso()
+                    job["status"] = "cancelled"
+                    job["result"] = None
+                    job["completed_at"] = cancelled_at
+                    job["expires_at"] = (local_now() + timedelta(seconds=self._job_ttl_seconds)).isoformat()
+                    job["error"] = {
+                        "code": "cancelled",
+                        "message": str(job.get("cancellation_reason") or "cancelled_by_client"),
+                    }
+                    job["artifact_acknowledgement"] = None
+                    job["_runner"] = None
+                    self._persist_jobs_locked()
+            raise
         except Exception as exc:
             if hasattr(self._logger, "warning"):
                 self._logger.warning(
@@ -597,10 +648,12 @@ class ExecutionQueueService:
                         "message": str(exc).strip() or type(exc).__name__,
                     }
                     job["completed_at"] = local_now_iso()
+                    job["expires_at"] = (local_now() + timedelta(seconds=self._job_ttl_seconds)).isoformat()
                     job["_runner"] = None
                     self._persist_jobs_locked()
         finally:
             async with self._lock:
+                self._running_tasks.pop(job_id, None)
                 self._active_counts[queue_key] = max(self._active_counts.get(queue_key, 0) - 1, 0)
                 for candidate_queue in list(self._queues.keys()):
                     self._ensure_dispatcher_locked(candidate_queue)
@@ -714,7 +767,8 @@ class ExecutionQueueService:
 
     def _monitor_deadlines_locked(self) -> dict:
         now = local_now()
-        changed = False
+        deleted = self._prune_expired_terminal_jobs_locked(now=now)
+        changed = bool(deleted)
         expired = []
         rerouted = []
         for job_id, job in list(self._jobs.items()):
@@ -758,13 +812,34 @@ class ExecutionQueueService:
             self._remove_from_queue_locked(queue_key=queue_key, job_id=job_id)
             job["status"] = "expired_wait_budget"
             job["completed_at"] = local_now_iso()
+            job["expires_at"] = (now + timedelta(seconds=self._job_ttl_seconds)).isoformat()
             job["error"] = {"code": "expired_wait_budget", "message": "queue wait budget expired before execution"}
             job["_runner"] = None
             expired.append(job_id)
             changed = True
         if changed:
             self._persist_jobs_locked()
-        return {"expired": expired, "rerouted_to_cloud": rerouted, "changed": changed}
+        return {"expired": expired, "rerouted_to_cloud": rerouted, "deleted": deleted, "changed": changed}
+
+    def _prune_expired_terminal_jobs_locked(self, *, now: datetime) -> list[str]:
+        terminal_statuses = {"completed", "failed", "cancelled", "expired_wait_budget"}
+        deleted = []
+        for job_id, job in list(self._jobs.items()):
+            if not isinstance(job, dict) or str(job.get("status") or "").strip().lower() not in terminal_statuses:
+                continue
+            try:
+                expires_at = datetime.fromisoformat(str(job.get("expires_at") or ""))
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=now.tzinfo)
+            except (TypeError, ValueError):
+                continue
+            if expires_at > now:
+                continue
+            self._jobs.pop(job_id, None)
+            self._running_tasks.pop(job_id, None)
+            deleted.append(job_id)
+        self._expired_record_count += len(deleted)
+        return deleted
 
     def _remove_from_queue_locked(self, *, queue_key: str, job_id: str) -> None:
         entries = [item for item in list(self._queues.get(queue_key) or []) if self._job_id_from_queue_entry(item) != job_id]
@@ -865,6 +940,9 @@ class ExecutionQueueService:
                 "blocked_detail",
                 "artifact_acknowledgement",
                 "recovery",
+                "running_cancellation_supported",
+                "cancellation_requested_at",
+                "cancellation_reason",
             )
         }
         payload["queue_position"] = self._queue_position(job_id=str(job.get("job_id") or ""))
@@ -969,10 +1047,12 @@ class ExecutionQueueService:
                 }
             self._jobs[job_id] = job
         self._sequence = itertools.count(max_sequence + 1)
-        if self._recovered_unfinished_count:
+        deleted = self._prune_expired_terminal_jobs_locked(now=local_now())
+        if self._recovered_unfinished_count or deleted:
             self._persist_jobs_locked()
 
     def _persist_jobs_locked(self) -> None:
+        self._schedule_next_record_expiry_locked()
         if self._state_path is None:
             return
         jobs = []
@@ -995,6 +1075,40 @@ class ExecutionQueueService:
                     "[execution-queue-state-save-failed] %s",
                     {"path": str(self._state_path), "error": str(exc).strip() or type(exc).__name__},
                 )
+
+    def _schedule_next_record_expiry_locked(self) -> None:
+        if self._record_expiry_handle is not None:
+            self._record_expiry_handle.cancel()
+            self._record_expiry_handle = None
+        terminal_statuses = {"completed", "failed", "cancelled", "expired_wait_budget"}
+        expiration_times = []
+        now = local_now()
+        for job in self._jobs.values():
+            if not isinstance(job, dict) or str(job.get("status") or "").strip().lower() not in terminal_statuses:
+                continue
+            try:
+                expires_at = datetime.fromisoformat(str(job.get("expires_at") or ""))
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=now.tzinfo)
+            except (TypeError, ValueError):
+                continue
+            expiration_times.append(expires_at)
+        if not expiration_times:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        delay = max((min(expiration_times) - now).total_seconds(), 0.0)
+        self._record_expiry_handle = loop.call_later(
+            delay,
+            lambda: asyncio.create_task(self._expire_due_records()),
+        )
+
+    async def _expire_due_records(self) -> None:
+        async with self._lock:
+            self._record_expiry_handle = None
+            self._monitor_deadlines_locked()
 
     def _client_pending_count_locked(self, *, client_id: str) -> int:
         client_key = str(client_id or "").strip()
