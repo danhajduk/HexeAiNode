@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hexe.local/schemas/client-ai-v2/image-generation-inputs.v1.schema.json",
+  "$id": "https://hexe.local/schemas/client-node-v2/image-generation-inputs.v1.schema.json",
   "title": "Image Generation Inputs V1",
   "description": "Canonical shared task.image_generation controls. Prompt-specific schemas may require a subset such as image_type=scenery.",
   "type": "object",

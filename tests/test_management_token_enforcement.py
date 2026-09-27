@@ -43,8 +43,8 @@ class ManagementRoutePolicyTests(unittest.TestCase):
     def test_route_scope_mapping(self):
         cases = {
             ("GET", "/api/health"): None,
-            ("GET", "/api/schemas/client-ai/v2"): None,
-            ("GET", "/api/schemas/client-ai/v2-malicious"): "node.manage.read",
+            ("GET", "/api/schemas/client-node/v2"): None,
+            ("GET", "/api/schemas/client-node/v2-malicious"): "node.manage.read",
             ("POST", "/api/onboarding/initiate"): None,
             ("POST", "/api/execution/direct"): None,
             ("GET", "/api/node/status"): "node.manage.read",

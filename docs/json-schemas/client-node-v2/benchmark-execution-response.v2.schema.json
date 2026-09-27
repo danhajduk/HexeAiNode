@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hexe.local/schemas/client-ai-v2/benchmark-execution-response.v2.schema.json",
+  "$id": "https://hexe.local/schemas/client-node-v2/benchmark-execution-response.v2.schema.json",
   "title": "Benchmark Execution Response V2",
   "description": "Implemented V2+ execution-only benchmark response. Contains target outputs and metadata without correctness scoring.",
   "type": "object",

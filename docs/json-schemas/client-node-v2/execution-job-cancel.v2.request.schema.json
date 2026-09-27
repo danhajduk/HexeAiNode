@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hexe.local/schemas/client-ai-v2/execution-job-cancel.v2.request.schema.json",
+  "$id": "https://hexe.local/schemas/client-node-v2/execution-job-cancel.v2.request.schema.json",
   "title": "Execution Job Cancellation Request V2",
   "description": "Optional JSON body for DELETE /api/execution/jobs/{job_id}.",
   "type": "object",

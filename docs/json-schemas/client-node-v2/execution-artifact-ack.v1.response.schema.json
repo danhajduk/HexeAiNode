@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hexe.local/schemas/client-ai-v2/execution-artifact-ack.v1.response.schema.json",
+  "$id": "https://hexe.local/schemas/client-node-v2/execution-artifact-ack.v1.response.schema.json",
   "title": "Execution Artifact Acknowledgement Response V1",
   "type": "object",
   "additionalProperties": false,

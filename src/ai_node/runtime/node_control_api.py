@@ -75,7 +75,7 @@ MANUAL_IMAGE_REFERENCE_STRENGTH_VARIABLES = (
 
 MANAGEMENT_AUTHORIZATION_HEADER = "X-Hexe-Management-Authorization"
 MANAGEMENT_PUBLIC_PATHS = {"/", "/api/health"}
-MANAGEMENT_PUBLIC_PREFIXES = ("/api/schemas/client-ai/v2", "/api/onboarding/")
+MANAGEMENT_PUBLIC_PREFIXES = ("/api/schemas/client-node/v2", "/api/onboarding/")
 SERVICE_EXECUTION_PATHS = {
     "/api/execution/authorize",
     "/api/execution/direct",
@@ -13704,32 +13704,36 @@ class NodeControlState:
         return parsed
 
     @staticmethod
-    def _client_ai_v2_schema_dir() -> Path:
-        configured = str(os.environ.get("HEXE_CLIENT_AI_V2_SCHEMA_DIR") or "").strip()
+    def _client_node_v2_schema_dir() -> Path:
+        configured = str(
+            os.environ.get("HEXE_CLIENT_NODE_V2_SCHEMA_DIR")
+            or os.environ.get("HEXE_CLIENT_AI_V2_SCHEMA_DIR")
+            or ""
+        ).strip()
         if configured:
             return Path(configured)
-        return Path(__file__).resolve().parents[3] / "docs/json-schemas/client-ai-v2"
+        return Path(__file__).resolve().parents[3] / "docs/json-schemas/client-node-v2"
 
-    def client_ai_v2_schema_catalog(self) -> dict:
-        schema_dir = self._client_ai_v2_schema_dir()
+    def client_node_v2_schema_catalog(self) -> dict:
+        schema_dir = self._client_node_v2_schema_dir()
         schemas = []
         if schema_dir.exists():
             for path in sorted(schema_dir.glob("*.json")):
                 schemas.append(
                     {
                         "name": path.name,
-                        "schema_id": f"https://hexe.local/schemas/client-ai-v2/{path.name}",
+                        "schema_id": f"https://hexe.local/schemas/client-node-v2/{path.name}",
                         "status": "Implemented",
-                        "api_path": f"/api/schemas/client-ai/v2/{path.name}",
+                        "api_path": f"/api/schemas/client-node/v2/{path.name}",
                     }
                 )
         return {
-            "schema_family": "client-ai",
+            "schema_family": "client-node",
             "version": "v2",
             "generated_at": local_now_iso(),
             "discovery": {
                 "openapi_path": "/openapi.json",
-                "client_index_path": "/api/schemas/client-ai/v2/README.md",
+                "client_index_path": "/api/schemas/client-node/v2/README.md",
                 "base_url_source": "Core provider_api_base_url",
             },
             "apis": [
@@ -13738,15 +13742,15 @@ class NodeControlState:
                     "method": "POST",
                     "api_path": "/api/execution/direct",
                     "description": "Execute a governed AI task synchronously or enqueue it according to response_mode.",
-                    "request_schema_path": "/api/schemas/client-ai/v2/execution-request.v2.schema.json",
-                    "response_schema_path": "/api/schemas/client-ai/v2/execution-response.v2.schema.json",
+                    "request_schema_path": "/api/schemas/client-node/v2/execution-request.v2.schema.json",
+                    "response_schema_path": "/api/schemas/client-node/v2/execution-response.v2.schema.json",
                 },
                 {
                     "name": "route_preview",
                     "method": "POST",
                     "api_path": "/api/execution/route-preview",
                     "description": "Preview authorization, routing, queue, and runtime selection without executing.",
-                    "request_schema_path": "/api/schemas/client-ai/v2/execution-request.v2.schema.json",
+                    "request_schema_path": "/api/schemas/client-node/v2/execution-request.v2.schema.json",
                     "response_schema_path": None,
                 },
                 {
@@ -13763,31 +13767,31 @@ class NodeControlState:
                     "api_path": "/api/execution/jobs/{job_id}",
                     "description": "Poll an asynchronous execution job.",
                     "request_schema_path": None,
-                    "response_schema_path": "/api/schemas/client-ai/v2/execution-job.v2.schema.json",
+                    "response_schema_path": "/api/schemas/client-node/v2/execution-job.v2.schema.json",
                 },
                 {
                     "name": "execution_job_cancel",
                     "method": "DELETE",
                     "api_path": "/api/execution/jobs/{job_id}",
                     "description": "Cancel work while it is still queued.",
-                    "request_schema_path": "/api/schemas/client-ai/v2/execution-job-cancel.v2.request.schema.json",
-                    "response_schema_path": "/api/schemas/client-ai/v2/execution-job-cancel.v2.response.schema.json",
+                    "request_schema_path": "/api/schemas/client-node/v2/execution-job-cancel.v2.request.schema.json",
+                    "response_schema_path": "/api/schemas/client-node/v2/execution-job-cancel.v2.response.schema.json",
                 },
                 {
                     "name": "artifact_acknowledgement",
                     "method": "POST",
                     "api_path": "/api/execution/artifacts/ack",
                     "description": "Acknowledge durable retrieval and release node-local job artifacts.",
-                    "request_schema_path": "/api/schemas/client-ai/v2/execution-artifact-ack.v1.request.schema.json",
-                    "response_schema_path": "/api/schemas/client-ai/v2/execution-artifact-ack.v1.response.schema.json",
+                    "request_schema_path": "/api/schemas/client-node/v2/execution-artifact-ack.v1.request.schema.json",
+                    "response_schema_path": "/api/schemas/client-node/v2/execution-artifact-ack.v1.response.schema.json",
                 },
                 {
                     "name": "benchmark_execution",
                     "method": "POST",
                     "api_path": "/api/benchmarks/execution/v2",
                     "description": "Execute one benchmark request against multiple targets.",
-                    "request_schema_path": "/api/schemas/client-ai/v2/benchmark-execution-request.v2.schema.json",
-                    "response_schema_path": "/api/schemas/client-ai/v2/benchmark-execution-response.v2.schema.json",
+                    "request_schema_path": "/api/schemas/client-node/v2/benchmark-execution-request.v2.schema.json",
+                    "response_schema_path": "/api/schemas/client-node/v2/benchmark-execution-response.v2.schema.json",
                 },
                 {
                     "name": "execution_comparison",
@@ -13810,7 +13814,7 @@ class NodeControlState:
                     "method": "POST",
                     "api_path": "/api/prompts/services",
                     "description": "Register an immutable prompt version owned by the caller service.",
-                    "request_schema_path": "/api/schemas/client-ai/v2/prompt-register.v2.request.schema.json",
+                    "request_schema_path": "/api/schemas/client-node/v2/prompt-register.v2.request.schema.json",
                     "response_schema_path": None,
                 },
                 {
@@ -13943,28 +13947,28 @@ class NodeControlState:
                     "name": "execution-client-contract.md",
                     "title": "AI Node Execution Client Contract",
                     "status": "Partially implemented",
-                    "api_path": "/api/schemas/client-ai/v2/execution-client-contract.md",
+                    "api_path": "/api/schemas/client-node/v2/execution-client-contract.md",
                 },
                 {
                     "name": "communication.md",
-                    "title": "Client AI V2 Communication Guide",
+                    "title": "Client Node V2 Communication Guide",
                     "status": "Implemented",
-                    "api_path": "/api/schemas/client-ai/v2/communication.md",
+                    "api_path": "/api/schemas/client-node/v2/communication.md",
                 },
                 {
                     "name": "README.md",
-                    "title": "Client AI V2 Schema Index",
+                    "title": "Client Node V2 Schema Index",
                     "status": "Implemented",
-                    "api_path": "/api/schemas/client-ai/v2/README.md",
+                    "api_path": "/api/schemas/client-node/v2/README.md",
                 },
             ],
         }
 
-    def client_ai_v2_schema_document(self, *, schema_name: str) -> dict:
+    def client_node_v2_schema_document(self, *, schema_name: str) -> dict:
         normalized = str(schema_name or "").strip()
         if not normalized or "/" in normalized or "\\" in normalized or not normalized.endswith(".json"):
             raise ValueError("schema_not_found")
-        path = self._client_ai_v2_schema_dir() / normalized
+        path = self._client_node_v2_schema_dir() / normalized
         if not path.exists() or not path.is_file():
             raise ValueError("schema_not_found")
         try:
@@ -13973,11 +13977,11 @@ class NodeControlState:
             raise ValueError("schema_invalid") from exc
         return payload if isinstance(payload, dict) else {}
 
-    def client_ai_v2_markdown_document(self, *, document_name: str) -> str:
+    def client_node_v2_markdown_document(self, *, document_name: str) -> str:
         normalized = str(document_name or "").strip()
         documents = {
-            "communication.md": self._client_ai_v2_schema_dir() / "communication.md",
-            "README.md": self._client_ai_v2_schema_dir() / "README.md",
+            "communication.md": self._client_node_v2_schema_dir() / "communication.md",
+            "README.md": self._client_node_v2_schema_dir() / "README.md",
             "execution-client-contract.md": Path(__file__).resolve().parents[3]
             / "docs/ai-node/execution-client-contract.md",
         }
@@ -13988,8 +13992,8 @@ class NodeControlState:
             raise ValueError("schema_guide_not_found")
         return path.read_text(encoding="utf-8")
 
-    def client_ai_v2_communication_markdown(self) -> str:
-        return self.client_ai_v2_markdown_document(document_name="communication.md")
+    def client_node_v2_communication_markdown(self) -> str:
+        return self.client_node_v2_markdown_document(document_name="communication.md")
 
     @staticmethod
     def _parse_output_payload(output_text: object, *, expected_schema: dict | None = None):
@@ -16924,11 +16928,11 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "/api/image-templates/{template_id}",
                 "/api/image-templates/{template_id}/lifecycle",
                 "/api/image-templates/{template_id}/review",
-                "/api/schemas/client-ai/v2",
-                "/api/schemas/client-ai/v2/communication.md",
-                "/api/schemas/client-ai/v2/README.md",
-                "/api/schemas/client-ai/v2/execution-client-contract.md",
-                "/api/schemas/client-ai/v2/{schema_name}",
+                "/api/schemas/client-node/v2",
+                "/api/schemas/client-node/v2/communication.md",
+                "/api/schemas/client-node/v2/README.md",
+                "/api/schemas/client-node/v2/execution-client-contract.md",
+                "/api/schemas/client-node/v2/{schema_name}",
                 "/api/execution/authorize",
                 "/api/execution/admission",
                 "/api/execution/route-preview",
@@ -16962,44 +16966,44 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     def health():
         return {"status": "ok"}
 
-    @app.get("/api/schemas/client-ai/v2")
-    def get_client_ai_v2_schema_catalog():
-        return state.client_ai_v2_schema_catalog()
+    @app.get("/api/schemas/client-node/v2")
+    def get_client_node_v2_schema_catalog():
+        return state.client_node_v2_schema_catalog()
 
-    @app.get("/api/schemas/client-ai/v2/communication.md")
-    def get_client_ai_v2_communication_markdown():
+    @app.get("/api/schemas/client-node/v2/communication.md")
+    def get_client_node_v2_communication_markdown():
         try:
             return Response(
-                content=state.client_ai_v2_communication_markdown(),
+                content=state.client_node_v2_communication_markdown(),
                 media_type="text/markdown; charset=utf-8",
             )
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.get("/api/schemas/client-ai/v2/README.md")
-    def get_client_ai_v2_readme_markdown():
+    @app.get("/api/schemas/client-node/v2/README.md")
+    def get_client_node_v2_readme_markdown():
         try:
             return Response(
-                content=state.client_ai_v2_markdown_document(document_name="README.md"),
+                content=state.client_node_v2_markdown_document(document_name="README.md"),
                 media_type="text/markdown; charset=utf-8",
             )
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.get("/api/schemas/client-ai/v2/execution-client-contract.md")
-    def get_client_ai_v2_execution_contract_markdown():
+    @app.get("/api/schemas/client-node/v2/execution-client-contract.md")
+    def get_client_node_v2_execution_contract_markdown():
         try:
             return Response(
-                content=state.client_ai_v2_markdown_document(document_name="execution-client-contract.md"),
+                content=state.client_node_v2_markdown_document(document_name="execution-client-contract.md"),
                 media_type="text/markdown; charset=utf-8",
             )
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.get("/api/schemas/client-ai/v2/{schema_name}")
-    def get_client_ai_v2_schema(schema_name: str):
+    @app.get("/api/schemas/client-node/v2/{schema_name}")
+    def get_client_node_v2_schema(schema_name: str):
         try:
-            return state.client_ai_v2_schema_document(schema_name=schema_name)
+            return state.client_node_v2_schema_document(schema_name=schema_name)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hexe.local/schemas/client-ai-v2/execution-job-cancel.v2.response.schema.json",
+  "$id": "https://hexe.local/schemas/client-node-v2/execution-job-cancel.v2.response.schema.json",
   "title": "Execution Job Cancellation Response V2",
   "description": "Cancellation result. HTTP 200 returns a cancelled job; HTTP 409 returns the rejection form when queued-to-running or terminal-state races make cancellation too late.",
   "oneOf": [

@@ -178,9 +178,9 @@ Canonical routes:
 - `GET /api/execution/queues`
 - `POST /api/execution/compare`
 - `POST /api/benchmarks/execution/v2`
-- `GET /api/schemas/client-ai/v2`
-- `GET /api/schemas/client-ai/v2/communication.md`
-- `GET /api/schemas/client-ai/v2/{schema_name}`
+- `GET /api/schemas/client-node/v2`
+- `GET /api/schemas/client-node/v2/communication.md`
+- `GET /api/schemas/client-node/v2/{schema_name}`
 
 Compatibility or convenience:
 
@@ -194,7 +194,7 @@ Notes:
 - Execution admission exposes the node's shared execution guardrails, including `thresholds.max_in_flight`, `thresholds.effective_max_in_flight`, current in-flight count, per-route counters, retry hint, capacity tier, and resource snapshot.
 - Direct, benchmark, and comparison execution can return HTTP `503` with `Retry-After` when node admission guardrails reject work due to in-flight count or host memory/swap/load pressure.
 - V2 benchmark execution is execution-only: it returns target outputs and metadata without correctness scoring.
-- Client AI V2 schema discovery is exposed for prompt and execution contract consumers.
+- Client Node V2 schema discovery is exposed for prompt and execution contract consumers.
 - Cross-node identity, provider, timeout, queue, authentication, image-input, and result semantics are defined in `docs/ai-node/execution-client-contract.md`.
 - `communication.md` is a Markdown developer guide served through the same V2 schema/discovery route family.
 - Execution observability currently appears under the debug convenience family.

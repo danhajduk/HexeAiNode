@@ -9,7 +9,7 @@ These schemas document contracts implemented and enforced in this repo. They do 
 This folder now covers:
 
 - existing client-facing AI request and prompt schemas in `docs/json-schemas/client-ai/`
-- V2+ benchmark-capable client AI schemas in `docs/json-schemas/client-ai-v2/`
+- V2+ benchmark-capable client AI schemas in `docs/json-schemas/client-node-v2/`
 - node-control API request models defined in `src/ai_node/runtime/node_control_api.py`
 - task execution request/result models defined in `src/ai_node/execution/task_models.py`
 - provider-enabled-model snapshot models defined in `src/ai_node/config/provider_enabled_models_config.py`
@@ -34,9 +34,9 @@ This folder now covers:
 
 - [client-ai/README.md](/home/dan/hexe/HexeAiNode/docs/json-schemas/client-ai/README.md)
 
-## Client AI V2+ Schemas
+## Client Node V2+ Schemas
 
-- [client-ai-v2/README.md](/home/dan/hexe/HexeAiNode/docs/json-schemas/client-ai-v2/README.md)
+- [client-node-v2/README.md](/home/dan/hexe/HexeAiNode/docs/json-schemas/client-node-v2/README.md)
 
 These V2+ schemas cover benchmark-capable prompt metadata, production execution requests, execution-only benchmark requests, benchmark responses, and schema discovery.
 
@@ -45,9 +45,9 @@ These V2+ schemas cover benchmark-capable prompt metadata, production execution 
 Implemented today:
 
 - developers can read schemas directly from this repository under `docs/json-schemas/`
-- `GET /api/schemas/client-ai/v2` returns a schema catalog
-- `GET /api/schemas/client-ai/v2/{schema_name}` returns an individual schema document
-- `GET /api/schemas/client-ai/v2/communication.md` returns the V2 communication guide as Markdown
+- `GET /api/schemas/client-node/v2` returns a schema catalog
+- `GET /api/schemas/client-node/v2/{schema_name}` returns an individual schema document
+- `GET /api/schemas/client-node/v2/communication.md` returns the V2 communication guide as Markdown
 
 ## Notes
 

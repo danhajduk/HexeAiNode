@@ -697,7 +697,7 @@ Execution behavior:
 - resolves provider/model from current local usable provider state
 - applies governance before and after provider resolution
 - `response_mode=sync` executes inline; `response_mode=async_if_queued` always returns a queued job acknowledgement
-- canonical request/result/job and image-input schemas are served by the Client AI V2 schema API
+- canonical request/result/job and image-input schemas are served by the Client Node V2 schema API
 - identity, provider, timeout, queue, image-artifact, and current authentication semantics are defined in [execution-client-contract.md](execution-client-contract.md)
 
 ### V2 execution-only benchmark request
@@ -729,13 +729,13 @@ Execution behavior:
   - authorizes prompt access when `prompt_id` is supplied
   - returns evidence only; it does not return winners, scores, or correctness judgments
 
-### Client AI V2 schema discovery
+### Client Node V2 schema discovery
 
-- `GET /api/schemas/client-ai/v2`
+- `GET /api/schemas/client-node/v2`
   - returns the V2 schema catalog
-- `GET /api/schemas/client-ai/v2/communication.md`
-  - returns a Markdown developer guide for V2 client AI communication
-- `GET /api/schemas/client-ai/v2/{schema_name}`
+- `GET /api/schemas/client-node/v2/communication.md`
+  - returns a Markdown developer guide for V2 client node communication
+- `GET /api/schemas/client-node/v2/{schema_name}`
   - returns an individual V2 schema document
 
 ## Provider Debug Endpoints
@@ -758,7 +758,7 @@ Route scopes are:
 - service lifecycle, recovery, and retrust: `node.manage.lifecycle`
 - `/debug/*` and capability diagnostics: `node.manage.diagnostics`
 
-`/`, `/api/health`, Client AI schema discovery, onboarding, CORS preflight, and the separately protected Core service
+`/`, `/api/health`, Client Node schema discovery, onboarding, CORS preflight, and the separately protected Core service
 execution routes remain outside management-token enforcement. Missing management authorization returns `401`;
 inactive or insufficient authorization returns `403`; and unavailable Core validation returns `503`.
 

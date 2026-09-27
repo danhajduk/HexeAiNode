@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hexe.local/schemas/client-ai-v2/execution-job.v2.schema.json",
+  "$id": "https://hexe.local/schemas/client-node-v2/execution-job.v2.schema.json",
   "title": "Execution Job V2",
   "description": "Queued acknowledgement and GET /api/execution/jobs/{job_id} status payload.",
   "type": "object",

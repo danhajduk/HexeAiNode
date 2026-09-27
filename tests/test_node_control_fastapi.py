@@ -498,7 +498,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 "source": "node_capabilities",
             }
 
-    def test_client_ai_v2_schema_and_execution_only_benchmark_endpoints(self):
+    def test_client_node_v2_schema_and_execution_only_benchmark_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = NodeControlState(
                 lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-fastapi-test")),
@@ -511,9 +511,10 @@ class NodeControlFastApiTests(unittest.TestCase):
             app = create_node_control_app(state=state, logger=logging.getLogger("node-control-fastapi-test"))
             client = TestClient(app)
 
-            catalog_response = client.get("/api/schemas/client-ai/v2")
+            catalog_response = client.get("/api/schemas/client-node/v2")
 
             self.assertEqual(catalog_response.status_code, 200)
+            self.assertEqual(catalog_response.json()["schema_family"], "client-node")
             schema_names = [item["name"] for item in catalog_response.json()["schemas"]]
             document_names = [item["name"] for item in catalog_response.json()["documents"]]
             api_names = [item["name"] for item in catalog_response.json()["apis"]]
@@ -539,26 +540,26 @@ class NodeControlFastApiTests(unittest.TestCase):
                 ["execution-client-contract.md", "communication.md", "README.md"],
             )
 
-            schema_response = client.get("/api/schemas/client-ai/v2/prompt-register.v2.request.schema.json")
+            schema_response = client.get("/api/schemas/client-node/v2/prompt-register.v2.request.schema.json")
 
             self.assertEqual(schema_response.status_code, 200)
             self.assertEqual(schema_response.json()["title"], "Prompt Register Request V2")
 
-            guide_response = client.get("/api/schemas/client-ai/v2/communication.md")
+            guide_response = client.get("/api/schemas/client-node/v2/communication.md")
 
             self.assertEqual(guide_response.status_code, 200)
             self.assertIn("text/markdown", guide_response.headers["content-type"])
-            self.assertIn("Client AI V2 Communication Guide", guide_response.text)
+            self.assertIn("Client Node V2 Communication Guide", guide_response.text)
             self.assertNotIn("/api/benchmarks/local-llm", guide_response.text)
 
-            contract_response = client.get("/api/schemas/client-ai/v2/execution-client-contract.md")
-            index_response = client.get("/api/schemas/client-ai/v2/README.md")
+            contract_response = client.get("/api/schemas/client-node/v2/execution-client-contract.md")
+            index_response = client.get("/api/schemas/client-node/v2/README.md")
 
             self.assertEqual(contract_response.status_code, 200)
             self.assertIn("text/markdown", contract_response.headers["content-type"])
             self.assertIn("AI Node Execution Client Contract", contract_response.text)
             self.assertEqual(index_response.status_code, 200)
-            self.assertIn("Client AI V2 Schemas", index_response.text)
+            self.assertIn("Client Node V2 Schemas", index_response.text)
 
             prompt_response = client.post(
                 "/api/prompts/services",

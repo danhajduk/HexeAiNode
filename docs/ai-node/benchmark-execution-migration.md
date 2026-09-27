@@ -9,7 +9,7 @@ This document records the migration from node-local benchmark judging to an exec
 
 Implemented today:
 
-- client AI V2 schema discovery through `GET /api/schemas/client-ai/v2`
+- client AI V2 schema discovery through `GET /api/schemas/client-node/v2`
 - V2 prompt registration/update metadata passthrough for `output_contract` and `benchmark`
 - execution-only V2 benchmark requests through `POST /api/benchmarks/execution/v2`
 

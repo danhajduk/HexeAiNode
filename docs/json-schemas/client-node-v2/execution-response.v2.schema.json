@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hexe.local/schemas/client-ai-v2/execution-response.v2.schema.json",
+  "$id": "https://hexe.local/schemas/client-node-v2/execution-response.v2.schema.json",
   "title": "Execution Response V2",
   "description": "Canonical terminal response returned directly or in a completed execution job result. Queued acknowledgements use execution-job.v2.",
   "type": "object",

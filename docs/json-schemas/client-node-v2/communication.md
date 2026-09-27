@@ -1,8 +1,8 @@
-# Client AI V2 Communication Guide
+# Client Node V2 Communication Guide
 
 Status: Partially implemented.
 
-This guide explains how a client node should communicate with the AI Node using the V2 client AI contract.
+This guide explains how a client node should communicate with the AI Node using the V2 client node contract.
 
 Important implementation note: the schema catalog publishes implemented V2+ contracts.
 `execution-request.v2.schema.json` tracks the direct execution request model for fields used by
@@ -34,9 +34,9 @@ Implemented client-facing routes in this repository:
 | `GET /api/comfyui/templates` | Implemented | Discover validated Visual Runtime workflow templates and editable variables. The API path keeps the `comfyui` adapter identifier. |
 | `GET /api/comfyui/templates/{template_id}` | Implemented | Inspect one validated Visual Runtime workflow template. The API path keeps the `comfyui` adapter identifier. |
 | `POST /api/benchmarks/execution/v2` | Implemented | Execution-only multi-target benchmark run. The client owns scoring. |
-| `GET /api/schemas/client-ai/v2` | Implemented | Schema catalog discovery. |
-| `GET /api/schemas/client-ai/v2/{schema_name}` | Implemented | Fetch one schema document. |
-| `GET /api/schemas/client-ai/v2/communication.md` | Implemented | Fetch this communication guide. |
+| `GET /api/schemas/client-node/v2` | Implemented | Schema catalog discovery. |
+| `GET /api/schemas/client-node/v2/{schema_name}` | Implemented | Fetch one schema document. |
+| `GET /api/schemas/client-node/v2/communication.md` | Implemented | Fetch this communication guide. |
 
 Admission guard status:
 
@@ -1343,19 +1343,19 @@ accepted when they contain the fields required by the output schema, for example
 Fetch the V2 schema catalog:
 
 ```text
-GET /api/schemas/client-ai/v2
+GET /api/schemas/client-node/v2
 ```
 
 Fetch one schema:
 
 ```text
-GET /api/schemas/client-ai/v2/{schema_name}
+GET /api/schemas/client-node/v2/{schema_name}
 ```
 
 Fetch this guide:
 
 ```text
-GET /api/schemas/client-ai/v2/communication.md
+GET /api/schemas/client-node/v2/communication.md
 ```
 
 `execution-request.v2.schema.json` documents the implemented direct-execution envelope. Task-specific `inputs`

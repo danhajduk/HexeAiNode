@@ -46,7 +46,7 @@ The effective provider set is the intersection of Core, prompt, request, and que
 
 ## Image inputs and weather strictness
 
-The shared schema is `GET /api/schemas/client-ai/v2/image-generation-inputs.v1.schema.json`. It intentionally permits additional properties for template/provider controls. The weather schema requires `image_type=scenery`, `condition`, and `day_night`, and uses Draft 2020-12 `unevaluatedProperties: false` to reject unknown properties after shared properties are evaluated.
+The shared schema is `GET /api/schemas/client-node/v2/image-generation-inputs.v1.schema.json`. It intentionally permits additional properties for template/provider controls. The weather schema requires `image_type=scenery`, `condition`, and `day_night`, and uses Draft 2020-12 `unevaluatedProperties: false` to reject unknown properties after shared properties are evaluated.
 
 Canonical controls are `output_format=png`, `quality=low|medium|high`, `width`, `height`, `steps`, `cfg`, `denoise`, and `seed`. Local quality maps to 4, 6, or 8 steps when `steps` is absent. Dimensions are normalized to multiples of 8 within 256–4096. `size`, `target_width`, and `target_height` are compatibility inputs; no separate resize stage exists.
 
@@ -60,8 +60,8 @@ Each immutable version may associate its input schema in metadata:
 
 ```json
 {
-  "input_schema_id": "https://hexe.local/schemas/client-ai/v2/weather-scenery-inputs.v1.schema.json",
-  "input_schema_url": "/api/schemas/client-ai/v2/weather-scenery-inputs.v1.schema.json"
+  "input_schema_id": "https://hexe.local/schemas/client-node/v2/weather-scenery-inputs.v1.schema.json",
+  "input_schema_url": "/api/schemas/client-node/v2/weather-scenery-inputs.v1.schema.json"
 }
 ```
 
@@ -117,14 +117,14 @@ The current Core declaration does not have separate polling/artifact-base fields
 
 ## APIs
 
-- `GET /api/schemas/client-ai/v2`
-- `GET /api/schemas/client-ai/v2/execution-request.v2.schema.json`
-- `GET /api/schemas/client-ai/v2/image-generation-inputs.v1.schema.json`
-- `GET /api/schemas/client-ai/v2/weather-scenery-inputs.v1.schema.json`
-- `GET /api/schemas/client-ai/v2/execution-response.v2.schema.json`
-- `GET /api/schemas/client-ai/v2/execution-job.v2.schema.json`
-- `GET /api/schemas/client-ai/v2/execution-job-cancel.v2.request.schema.json`
-- `GET /api/schemas/client-ai/v2/execution-job-cancel.v2.response.schema.json`
+- `GET /api/schemas/client-node/v2`
+- `GET /api/schemas/client-node/v2/execution-request.v2.schema.json`
+- `GET /api/schemas/client-node/v2/image-generation-inputs.v1.schema.json`
+- `GET /api/schemas/client-node/v2/weather-scenery-inputs.v1.schema.json`
+- `GET /api/schemas/client-node/v2/execution-response.v2.schema.json`
+- `GET /api/schemas/client-node/v2/execution-job.v2.schema.json`
+- `GET /api/schemas/client-node/v2/execution-job-cancel.v2.request.schema.json`
+- `GET /api/schemas/client-node/v2/execution-job-cancel.v2.response.schema.json`
 - `POST /api/execution/route-preview`
 - `POST /api/execution/direct`
 - `GET /api/execution/jobs/{job_id}`

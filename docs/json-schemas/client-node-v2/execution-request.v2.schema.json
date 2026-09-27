@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hexe.local/schemas/client-ai-v2/execution-request.v2.schema.json",
+  "$id": "https://hexe.local/schemas/client-node-v2/execution-request.v2.schema.json",
   "title": "Execution Request V2",
   "description": "Implemented request contract for POST /api/execution/direct and /api/execution/route-preview.",
   "type": "object",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hexe.local/schemas/client-ai-v2/benchmark-execution-request.v2.schema.json",
+  "$id": "https://hexe.local/schemas/client-node-v2/benchmark-execution-request.v2.schema.json",
   "title": "Benchmark Execution Request V2",
   "description": "Implemented V2+ execution-only benchmark request. The AI Node executes targets and returns evidence without scoring.",
   "type": "object",

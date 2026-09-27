@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hexe.local/schemas/client-ai-v2/execution-artifact-ack.v1.request.schema.json",
+  "$id": "https://hexe.local/schemas/client-node-v2/execution-artifact-ack.v1.request.schema.json",
   "title": "Execution Artifact Acknowledgement Request V1",
   "description": "Confirms that every image artifact for a completed job was retrieved and is no longer needed on the AI Node.",
   "type": "object",

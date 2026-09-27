@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hexe.local/schemas/client-ai-v2/schema-catalog.v2.response.schema.json",
+  "$id": "https://hexe.local/schemas/client-node-v2/schema-catalog.v2.response.schema.json",
   "title": "Schema Catalog V2 Response",
-  "description": "Implemented response for GET /api/schemas/client-ai/v2.",
+  "description": "Implemented response for GET /api/schemas/client-node/v2.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,7 @@
   "properties": {
     "schema_family": {
       "type": "string",
-      "const": "client-ai"
+      "const": "client-node"
     },
     "version": {
       "type": "string",
