@@ -516,6 +516,15 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertEqual(catalog_response.status_code, 200)
             schema_names = [item["name"] for item in catalog_response.json()["schemas"]]
             document_names = [item["name"] for item in catalog_response.json()["documents"]]
+            api_names = [item["name"] for item in catalog_response.json()["apis"]]
+            catalog_names = [item["name"] for item in catalog_response.json()["catalogs"]]
+            self.assertEqual(catalog_response.json()["discovery"]["openapi_path"], "/openapi.json")
+            self.assertIn("direct_execution", api_names)
+            self.assertIn("artifact_acknowledgement", api_names)
+            self.assertIn("prompt_registration", api_names)
+            self.assertIn("registered_prompts", catalog_names)
+            self.assertIn("service_status", catalog_names)
+            self.assertTrue(all("path" not in item for item in catalog_response.json()["schemas"]))
             self.assertIn("benchmark-execution-request.v2.schema.json", schema_names)
             self.assertIn("execution-response.v2.schema.json", schema_names)
             self.assertIn("execution-job.v2.schema.json", schema_names)

@@ -4,6 +4,8 @@ Status: Implemented
 
 This folder defines the V2+ client-facing AI contracts for benchmark-capable prompts and execution-only benchmark requests.
 
+The primary external-client discovery endpoint is `GET /api/schemas/client-ai/v2`. It returns links to the full OpenAPI document, client-facing execution APIs, live prompt/template/service catalogs, every published JSON schema, and the Markdown guides below. Resolve every relative `api_path` against the `provider_api_base_url` published by Core.
+
 These schemas track the migration covered by Tasks 916-925. Schema discovery, V2 prompt metadata passthrough, and execution-only benchmark requests are implemented. Broader client migration and prompt-tuning consumers remain pending.
 
 Cross-node execution semantics, compatibility rules, and known authentication and idempotency gaps are defined in

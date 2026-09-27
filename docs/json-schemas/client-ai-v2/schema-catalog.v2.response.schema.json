@@ -8,6 +8,9 @@
   "required": [
     "schema_family",
     "version",
+    "discovery",
+    "apis",
+    "catalogs",
     "schemas",
     "documents"
   ],
@@ -26,6 +29,46 @@
         "null"
       ],
       "format": "date-time"
+    },
+    "discovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["openapi_path", "client_index_path", "base_url_source"],
+      "properties": {
+        "openapi_path": {"type": "string", "minLength": 1},
+        "client_index_path": {"type": "string", "minLength": 1},
+        "base_url_source": {"type": "string", "minLength": 1}
+      }
+    },
+    "apis": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "method", "api_path", "description", "request_schema_path", "response_schema_path"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "method": {"type": "string", "enum": ["GET", "POST", "PUT", "DELETE"]},
+          "api_path": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1},
+          "request_schema_path": {"type": ["string", "null"]},
+          "response_schema_path": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "catalogs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "resource_type", "api_path", "description"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "resource_type": {"type": "string", "minLength": 1},
+          "api_path": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1}
+        }
+      }
     },
     "schemas": {
       "type": "array",
@@ -55,12 +98,6 @@
               "Not verifiable from current repository state",
               "Documented but not implemented",
               "Implemented but undocumented"
-            ]
-          },
-          "path": {
-            "type": [
-              "string",
-              "null"
             ]
           },
           "api_path": {
