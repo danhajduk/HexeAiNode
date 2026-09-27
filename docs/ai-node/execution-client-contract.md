@@ -105,9 +105,11 @@ The Core-proxied WebUI uses the separate `X-Hexe-Management-Authorization` opera
 
 ## Identifier, retry, and restart semantics
 
-`task_id` and `trace_id` are non-empty UTF-8 strings up to 128 characters. UUIDs or caller-namespaced IDs are recommended. `task_id` identifies caller work; `trace_id` correlates telemetry and may equal `task_id`. Uniqueness is caller-scoped for the caller's retention window; AI Node supplies no separate retention guarantee and does not reject collisions.
+`task_id`, `trace_id`, and optional `idempotency_key` are non-empty UTF-8 strings up to 128 characters. UUIDs or caller-namespaced IDs are recommended. `task_id` identifies caller work; `trace_id` correlates telemetry and may equal `task_id`. Neither is silently treated as an idempotency key.
 
-Neither ID is an idempotency key. Repeated submission creates new work. On an ambiguous POST result, use a received `job_id`; otherwise retry only if duplicates are acceptable. Polling may resume after client timeout/network loss. Persisted terminal records remain pollable after API restart while present, but in-memory queued/running work may be lost. `expired_wait_budget` requires a new request.
+When `idempotency_key` is supplied, the node scopes it to the verified `requested_by` caller and hashes the normalized complete request. An exact retry returns the original synchronous result or queued acknowledgement without creating work. Concurrent exact submissions join the first submission. Reuse by the same caller with a different request returns HTTP 409 `idempotency_key_conflict`; a different caller may reuse the same key safely.
+
+Completed mappings persist across backend restarts for `HEXE_EXECUTION_IDEMPOTENCY_RETENTION_SECONDS`, which defaults to 24 hours and has a 60-second minimum. After expiration the key may create new work. Failed submissions are not retained and may be retried. Polling may resume after client timeout/network loss. Persisted terminal records remain pollable after API restart while present, but in-memory queued/running work may be lost. `expired_wait_budget` requires a new request.
 
 ## Cancellation and expiration
 

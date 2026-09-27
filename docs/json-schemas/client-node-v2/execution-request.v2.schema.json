@@ -18,6 +18,12 @@
       "maxLength": 128,
       "description": "Caller-assigned logical execution identifier. It is not an idempotency key; a repeated submission creates new work."
     },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Explicit caller-scoped deduplication key. Exact retries return the original response; reuse with a different request returns a conflict."
+    },
     "prompt_id": {
       "type": [
         "string",
@@ -40,7 +46,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 255,
-      "description": "Caller principal, normally the Core node ID carried by the service-token subject. AI Node does not yet validate this value against the token."
+      "description": "Caller principal bound to the verified Core service-token subject."
     },
     "service_id": {
       "type": [

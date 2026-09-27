@@ -592,3 +592,4 @@ Task 1017: Surface container state and model residency state in runtime APIs and
 Task 1018: Add live switching smoke test for forced residency load/unload jobs - Completed on 06/13/2026 16:42
 Task 1029: Add authentication and verified caller identity to external client APIs - Completed on 09/27/2026 00:52
 Task 1030: Enforce registered prompt input schemas during execution - Completed on 09/27/2026 01:01
+Task 1031: Add caller-scoped execution idempotency - Completed on 09/27/2026 01:07

@@ -28,6 +28,7 @@ from pydantic import BaseModel, ConfigDict
 from ai_node.config.bootstrap_config import BOOTSTRAP_PORT, BOOTSTRAP_TOPIC, create_bootstrap_config
 from ai_node.execution.gateway import ExecutionGateway
 from ai_node.execution.input_schema_validation import PromptInputValidationFailure, validate_prompt_inputs
+from ai_node.execution.idempotency import ExecutionIdempotencyStore, IdempotencyConflictError
 from ai_node.execution.task_models import TaskExecutionRequest
 from ai_node.config.provider_credentials_config import summarize_provider_credentials
 from ai_node.core_api.budget_declaration_client import BudgetDeclarationClient
@@ -935,6 +936,7 @@ class NodeControlState:
         visual_cpu_admission_config: VisualCpuAdmissionConfig | None = None,
         visual_cpu_resource_sampler=None,
         execution_queue: ExecutionQueueService | None = None,
+        execution_idempotency_store: ExecutionIdempotencyStore | None = None,
         user_message_publisher=None,
     ) -> None:
         self._lifecycle = lifecycle
@@ -1018,6 +1020,15 @@ class NodeControlState:
             ),
             max_pending_per_client=max(_env_int("HEXE_EXECUTION_QUEUE_MAX_PENDING_PER_CLIENT", 20), 0),
             blocked_retry_seconds=self._visual_cpu_admission_config.retry_after_seconds,
+        )
+        self._execution_idempotency_store = execution_idempotency_store or ExecutionIdempotencyStore(
+            path=str(
+                Path(
+                    os.environ.get("HEXE_EXECUTION_IDEMPOTENCY_PATH")
+                    or self._config_path.parent / "execution_idempotency.json"
+                )
+            ),
+            retention_seconds=max(_env_int("HEXE_EXECUTION_IDEMPOTENCY_RETENTION_SECONDS", 86400), 60),
         )
         self._user_message_publisher = user_message_publisher
         self._local_preferred_spillover_enabled = _env_bool("HEXE_LOCAL_PREFERRED_SPILLOVER_ENABLED", True)
@@ -12131,6 +12142,16 @@ class NodeControlState:
         return self._task_execution_service
 
     async def execute_direct(self, *, request: TaskExecutionRequest) -> dict:
+        if request.idempotency_key:
+            return await self._execution_idempotency_store.execute(
+                caller_id=request.requested_by,
+                idempotency_key=request.idempotency_key,
+                request_payload=request.model_dump(mode="json"),
+                operation=lambda: self._execute_direct_once(request=request),
+            )
+        return await self._execute_direct_once(request=request)
+
+    async def _execute_direct_once(self, *, request: TaskExecutionRequest) -> dict:
         self._validate_prompt_inputs(
             prompt_id=request.prompt_id,
             prompt_version=request.prompt_version,
@@ -13863,7 +13884,7 @@ class NodeControlState:
                     "name": "direct_execution",
                     "method": "POST",
                     "api_path": "/api/execution/direct",
-                    "description": "Validate prompt inputs, then execute a governed AI task synchronously or enqueue it according to response_mode.",
+                    "description": "Validate prompt inputs, apply caller-scoped idempotency, then execute synchronously or enqueue according to response_mode.",
                     "request_schema_path": "/api/schemas/client-node/v2/execution-request.v2.schema.json",
                     "response_schema_path": "/api/schemas/client-node/v2/execution-response.v2.schema.json",
                     "security": {"scheme": "CoreServiceBearer", "required_scopes": ["service.execute:<task_family>"]},
@@ -17821,6 +17842,8 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             ) from exc
         except PromptInputValidationFailure as exc:
             raise HTTPException(status_code=422, detail=exc.payload()) from exc
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

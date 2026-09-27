@@ -884,3 +884,14 @@ Verification: Targeted gateway, failure-code, authentication, and prompt-schema 
 #############
 All Tasks completed 09/27/2026 01:01:45
 #############
+###########
+Task #1031
+Step objective: Add caller-scoped idempotency to direct execution submission.
+Issue cause: Retrying an ambiguous direct-execution request always created new work because task_id and trace_id were identifiers only and no explicit retry key was accepted or retained.
+Chosen fix: Accept an explicit idempotency_key, scope it to the verified caller, fingerprint the normalized full request, join concurrent identical submissions, persist completed responses for a bounded retention period, and reject conflicting reuse without inferring idempotency from existing identifiers.
+What changed: Added the durable execution idempotency store, direct-route integration, HTTP 409 conflict behavior, request schema and catalog metadata, failure taxonomy coverage, client contract documentation, and concurrency/restart/retention/caller-scope tests.
+Verification: Focused idempotency, execution-contract, failure-code, and prompt-schema tests passed (22 tests, 4 subtests); the execution-request JSON schema parsed and git diff validation passed.
+###########
+#############
+All Tasks completed 09/27/2026 01:07:02
+#############

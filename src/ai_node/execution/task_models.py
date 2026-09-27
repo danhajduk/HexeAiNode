@@ -78,6 +78,7 @@ class TaskExecutionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     task_id: str
+    idempotency_key: str | None = None
     prompt_id: str | None = None
     prompt_version: str | None = None
     task_family: str
@@ -101,7 +102,7 @@ class TaskExecutionRequest(BaseModel):
     def _validate_task_id(cls, value: str) -> str:
         return _normalized_non_empty_string(value, field_name="task_id")
 
-    @field_validator("prompt_id", "prompt_version")
+    @field_validator("prompt_id", "prompt_version", "idempotency_key")
     @classmethod
     def _validate_prompt_selection_field(cls, value: str | None, info) -> str | None:
         if value is None:

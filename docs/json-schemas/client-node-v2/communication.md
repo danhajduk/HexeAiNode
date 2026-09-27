@@ -73,6 +73,10 @@ The AI Node owns:
 
 The AI Node does not judge benchmark correctness and does not pick a winner.
 
+## Execution Idempotency
+
+Set `idempotency_key` when submitting work that may be retried after a timeout or network failure. The key is scoped to the verified caller. An exact retry returns the original result or queued acknowledgement, including after backend restart while the mapping remains within its retention window. Reusing the key with different request content returns HTTP 409 `idempotency_key_conflict`. `task_id` and `trace_id` remain identifiers only and are never inferred as idempotency keys.
+
 ## Prompt Contract Versions
 
 The AI Node accepts legacy and V2+ prompt registrations. Prefer V3 for new prompt contracts because it is the first

@@ -62,6 +62,7 @@ FAILURE_CODE_TAXONOMY = {
             "prompt_input_schema_unavailable",
             "prompt_input_schema_invalid",
             "prompt_input_schema_not_found",
+            "idempotency_key_conflict",
         ],
     },
     "execution_timeout": {
