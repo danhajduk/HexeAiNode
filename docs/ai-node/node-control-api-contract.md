@@ -765,7 +765,10 @@ inactive or insufficient authorization returns `403`; and unavailable Core valid
 The supported management UI is mounted by Core at `/nodes/proxy/ui/<node-id>/...`. From that mount, the node WebUI
 uses `/api/nodes/<node-id>/...`; Core validates the operator session and injects management authorization into the
 proxied request. Browser code does not receive or store the token. Direct node UI access is not an authenticated
-management path, and the legacy `VITE_ADMIN_TOKEN` / `X-Hexe-Admin-Token` frontend mechanism is not used.
+management path. The production frontend resolves the registered Core URL and node identity from local runtime
+configuration and redirects direct browser visits to `/nodes/proxy/ui/<node-id>/`; visits already mounted through Core
+are left unchanged. If runtime proxy configuration is unavailable, the UI remains local and protected API calls fail
+closed. The legacy `VITE_ADMIN_TOKEN` / `X-Hexe-Admin-Token` frontend mechanism is not used.
 
 ### Provider snapshot
 
