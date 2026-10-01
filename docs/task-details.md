@@ -2532,3 +2532,29 @@ Original task details:
 Acceptance:
 - Markdown guides, JSON Schemas, OpenAPI, and live route behavior agree.
 - Contract tests cover HTTP 404 separately from execution-job status validation.
+
+## Task 1039
+Coordination request: `HEXE-AI-0001`
+
+Original task details:
+- Design governed family-aware AI memory, relationship adaptation, and room-aware interaction while preserving identity, consent, and privacy boundaries.
+- Define memory visibility and room privacy matrices.
+- Define identity, consent, retention, deletion, and export behavior.
+- Define versioned interaction, memory, and audit models.
+- Prevent private-memory retrieval for unknown or unauthorized participants.
+- Link the accepted Core identity and policy contract.
+
+Dependencies:
+- `HEXE-REQ-0001`: accepted Core identity and policy contract.
+
+Constraints:
+- Identity, consent, and privacy boundaries must govern all memory and room-context behavior.
+- Private memory must not be retrieved for unknown or unauthorized participants.
+- Planning source: `docs/ai-node/family-memory-personality-room-context-roadmap.md`.
+
+Acceptance:
+- Memory visibility and room privacy matrices are defined.
+- Identity, consent, retention, deletion, and export behavior are defined.
+- Versioned interaction, memory, and audit models are defined.
+- Private-memory retrieval is suppressed for unknown or unauthorized participants.
+- The accepted Core identity and policy contract is linked.
