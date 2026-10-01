@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+project_id="ai-node"
+project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+coordination_root="${HEXE_COORDINATION_ROOT:-$(dirname "$project_root")/HexeCoordination}"
+remote_url="${HEXE_COORDINATION_REMOTE:-hexe-coordination:/var/lib/hexe-git/coordination.git}"
+project_tasks="$coordination_root/projects/$project_id"
+local_link="$project_root/tasks"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/hexe-tasks <command>
+
+Commands:
+  setup     Clone the coordination repository if needed and create tasks link
+  sync      Pull the coordination repository with rebase
+  status    Show coordination repository status
+  current   List current AI Node work items
+  inbox     List requests addressed to the AI Node
+EOF
+}
+
+require_checkout() {
+  if [[ ! -d "$coordination_root/.git" ]]; then
+    echo "Coordination checkout is missing: $coordination_root" >&2
+    echo "Run: scripts/hexe-tasks setup" >&2
+    exit 1
+  fi
+}
+
+ensure_link() {
+  if [[ -e "$local_link" && ! -L "$local_link" ]]; then
+    echo "Refusing to replace non-symlink path: $local_link" >&2
+    exit 1
+  fi
+
+  if [[ -L "$local_link" ]]; then
+    current_target="$(readlink -f "$local_link")"
+    expected_target="$(readlink -f "$project_tasks")"
+    if [[ "$current_target" == "$expected_target" ]]; then
+      return
+    fi
+    rm "$local_link"
+  fi
+
+  ln -s "$project_tasks" "$local_link"
+}
+
+sync_checkout() {
+  require_checkout
+  if [[ -n "$(git -C "$coordination_root" status --porcelain)" ]]; then
+    echo "Coordination checkout has uncommitted changes; refusing to rebase." >&2
+    exit 1
+  fi
+  git -C "$coordination_root" pull --rebase --no-autostash
+  ensure_link
+}
+
+list_markdown() {
+  local directory="$1"
+  require_checkout
+  find "$directory" -maxdepth 1 -type f -name '*.md' -printf '%f\n' | sort
+}
+
+command="${1:-}"
+case "$command" in
+  setup)
+    if [[ ! -d "$coordination_root/.git" ]]; then
+      git clone --branch main "$remote_url" "$coordination_root"
+    fi
+    require_checkout
+    [[ -d "$project_tasks" ]] || {
+      echo "Project task directory is missing: $project_tasks" >&2
+      exit 1
+    }
+    ensure_link
+    ;;
+  sync)
+    sync_checkout
+    ;;
+  status)
+    require_checkout
+    git -C "$coordination_root" status --short --branch
+    ;;
+  current)
+    list_markdown "$project_tasks/current"
+    ;;
+  inbox)
+    list_markdown "$project_tasks/inbox"
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

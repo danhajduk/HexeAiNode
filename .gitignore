@@ -22,6 +22,9 @@ scripts/stack.env
 frontend/node_modules/
 frontend/dist/
 
+# Generated link to the canonical cross-project coordination repository.
+/tasks
+
 docs/reports/
 docs/report-format.md
 
