@@ -15,6 +15,8 @@ MemoryVisibility = Literal["private", "explicit", "household", "room", "guardian
 AuthorizationEffect = Literal["allow", "deny"]
 MemoryLifecycleStatus = Literal["active", "expired", "deleted"]
 AuditResult = Literal["allowed", "denied", "completed", "failed"]
+LifecycleAction = Literal["memory.delete", "memory.export"]
+LifecycleRequestStatus = Literal["pending", "in_progress", "completed", "incomplete", "failed"]
 
 
 def _require_identifier(value: str, *, field_name: str) -> str:
@@ -291,3 +293,122 @@ class FamilyMemoryAuditEvent(BaseModel):
     @classmethod
     def _validate_occurred_at(cls, value: datetime) -> datetime:
         return _require_aware_datetime(value, field_name="occurred_at")
+
+
+class FamilyMemoryLifecycleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["1.0"] = "1.0"
+    request_id: str
+    authorization_id: str
+    core_id: str
+    household_id: str
+    action: LifecycleAction
+    subject_person_ids: list[str] = Field(min_length=1)
+    categories: list[str] = Field(min_length=1)
+    requested_at: datetime
+    expires_at: datetime
+
+    @field_validator("request_id", "authorization_id", "core_id", "household_id")
+    @classmethod
+    def _validate_identifier(cls, value: str, info) -> str:
+        return _require_identifier(value, field_name=str(info.field_name))
+
+    @field_validator("subject_person_ids", "categories")
+    @classmethod
+    def _validate_identifier_list(cls, value: list[str], info) -> list[str]:
+        normalized = [_require_identifier(item, field_name=str(info.field_name)) for item in value]
+        return list(dict.fromkeys(normalized))
+
+    @field_validator("requested_at", "expires_at")
+    @classmethod
+    def _validate_datetime(cls, value: datetime, info) -> datetime:
+        return _require_aware_datetime(value, field_name=str(info.field_name))
+
+    @model_validator(mode="after")
+    def _validate_expiry(self) -> "FamilyMemoryLifecycleRequest":
+        if self.expires_at <= self.requested_at:
+            raise ValueError("lifecycle_request_expiry_invalid")
+        return self
+
+
+class FamilyMemoryDeletionReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["1.0"] = "1.0"
+    receipt_id: str
+    request_id: str
+    authorization_id: str
+    core_id: str
+    household_id: str
+    subject_person_ids: list[str] = Field(min_length=1)
+    categories_deleted: list[str] = Field(default_factory=list)
+    categories_retained: list[str] = Field(default_factory=list)
+    retention_reason: str | None = None
+    status: LifecycleRequestStatus
+    completed_at: datetime
+
+    @field_validator("receipt_id", "request_id", "authorization_id", "core_id", "household_id")
+    @classmethod
+    def _validate_identifier(cls, value: str, info) -> str:
+        return _require_identifier(value, field_name=str(info.field_name))
+
+    @field_validator("subject_person_ids", "categories_deleted", "categories_retained")
+    @classmethod
+    def _validate_identifier_list(cls, value: list[str], info) -> list[str]:
+        normalized = [_require_identifier(item, field_name=str(info.field_name)) for item in value]
+        return list(dict.fromkeys(normalized))
+
+    @field_validator("retention_reason")
+    @classmethod
+    def _validate_retention_reason(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _require_identifier(value, field_name="retention_reason")
+
+    @field_validator("completed_at")
+    @classmethod
+    def _validate_completed_at(cls, value: datetime) -> datetime:
+        return _require_aware_datetime(value, field_name="completed_at")
+
+    @model_validator(mode="after")
+    def _validate_result(self) -> "FamilyMemoryDeletionReceipt":
+        overlap = set(self.categories_deleted) & set(self.categories_retained)
+        if overlap:
+            raise ValueError("deletion_receipt_category_overlap")
+        if self.categories_retained and self.retention_reason is None:
+            raise ValueError("deletion_receipt_retention_reason_required")
+        if self.status == "completed" and self.categories_retained:
+            raise ValueError("deletion_receipt_completed_with_retained_categories")
+        return self
+
+
+class FamilyMemoryExportManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["1.0"] = "1.0"
+    export_id: str
+    request_id: str
+    authorization_id: str
+    core_id: str
+    household_id: str
+    subject_person_ids: list[str] = Field(min_length=1)
+    categories_exported: list[str] = Field(default_factory=list)
+    record_count: int = Field(ge=0)
+    generated_at: datetime
+
+    @field_validator("export_id", "request_id", "authorization_id", "core_id", "household_id")
+    @classmethod
+    def _validate_identifier(cls, value: str, info) -> str:
+        return _require_identifier(value, field_name=str(info.field_name))
+
+    @field_validator("subject_person_ids", "categories_exported")
+    @classmethod
+    def _validate_identifier_list(cls, value: list[str], info) -> list[str]:
+        normalized = [_require_identifier(item, field_name=str(info.field_name)) for item in value]
+        return list(dict.fromkeys(normalized))
+
+    @field_validator("generated_at")
+    @classmethod
+    def _validate_generated_at(cls, value: datetime) -> datetime:
+        return _require_aware_datetime(value, field_name="generated_at")

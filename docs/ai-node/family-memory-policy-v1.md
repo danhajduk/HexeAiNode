@@ -6,6 +6,9 @@ Coordination: `HEXE-AI-0001`
 
 Core contract: `hexe.family-identity-authorization.v1`
 
+Canonical contract artifact:
+`HexeCoordination/contracts/accepted/family-identity-authorization-v1.md`.
+
 This policy defines the AI Node's first fail-closed family-memory boundary. It
 does not enable durable memory storage or claim that Core's family identity
 runtime is available. Until Core supplies a valid short-lived authorization
@@ -55,6 +58,9 @@ authorize private or personal-sensitive memory.
   provenance, lifecycle state, and timestamps.
 - `FamilyMemoryAuditEvent` records opaque identifiers, action, result, and safe
   reason without memory content or raw interaction data.
+- `FamilyMemoryLifecycleRequest`, `FamilyMemoryDeletionReceipt`, and
+  `FamilyMemoryExportManifest` bind lifecycle operations and evidence to the
+  Core authorization, household, subjects, and declared data categories.
 
 All models use explicit schema versions. Semantic or cardinality changes require
 a new version; optional additions remain deny-by-default until understood.
@@ -71,3 +77,64 @@ Replay enforcement, trusted service-token binding, storage, deletion receipts,
 export, and retrieval integration remain separate implementation steps. Callers
 must not interpret this pure policy evaluator as verification that a context was
 authentically issued by Core.
+
+## Consent and Child Safety
+
+Consent is purpose-specific and deny-by-default. Every memory record carries at
+least one opaque consent identifier. Missing, expired, denied, or revoked consent
+denies new reads and writes; revocation also triggers the bounded lifecycle flow
+for previously persisted data. Operational personalization consent never implies
+model-training consent.
+
+A dependent's memory is `guardian_managed` only when Core supplies an active
+guardian decision scoped to the requested purpose, action, and subject. A family
+relationship label, platform admin role, room assignment, or device ownership is
+not guardian authority. Explicit denial and child-safety policy override grants.
+Sensitive actions remain denied unless Core explicitly authorizes them.
+
+## Retention and Expiry
+
+Every durable record has `created_at`, `updated_at`, optional `expires_at`, and a
+lifecycle status. Retrieval must exclude expired and deleted records before
+ranking or prompt construction. Expiry produces an auditable lifecycle change;
+it must not resurrect data from an index, cache, backup, or restored snapshot.
+AI Node storage implementations must publish category-specific retention periods
+before durable family memory is enabled.
+
+Authorization envelopes are operational inputs, not memory records. They may be
+retained only long enough for replay enforcement and a minimized audit reference.
+Raw transcripts, biometrics, presence history, and memory content are excluded
+from authorization and audit records.
+
+## Deletion
+
+Core sends a versioned, authorized deletion request scoped to `core_id`,
+`household_id`, subject identifiers, and declared categories. The node blocks new
+access for a deleted subject, removes active records and retrieval-index entries,
+and preserves tombstones only where synchronization requires them. Shared records
+are redacted or detached according to policy rather than deleting another
+subject's private data.
+
+The node returns a bound receipt listing deleted and retained categories. Retained
+categories require a policy/legal reason and make the operation `incomplete`; a
+receipt cannot mark completion while retaining requested categories. Backup
+purging or expiry remains visible until complete.
+
+## Export
+
+Export requires an explicit `memory.export` authorization and applicable consent.
+It is limited to the intersection of authorized subject identifiers and
+categories, excludes another person's private data, and records an audit event.
+The manifest contains opaque scope and counts, not memory content. Export payload
+encryption, transport, and signed delivery receipts remain part of the future
+storage/API implementation.
+
+## Threat Controls
+
+- Memory text is untrusted data and cannot become system instructions.
+- Model output, voice inference, room presence, and caller-provided identifiers
+  cannot upgrade identity or authorization.
+- Authorization filtering precedes room relevance, semantic ranking, and prompt
+  construction.
+- Denials reveal no person, consent, relationship, or memory existence.
+- Automatic durable learning and biometric authorization remain disabled.

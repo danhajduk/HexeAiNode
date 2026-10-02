@@ -46,6 +46,8 @@ def evaluate_family_memory_access(
         return _deny("wrong_household", authorization)
     if expected_room_id is not None and authorization.context.room_id != expected_room_id:
         return _deny("wrong_room", authorization)
+    if visibility == "room" and authorization.context.room_id is None:
+        return _deny("wrong_room", authorization)
     if authorization.decision.effect != "allow":
         return _deny("operation_denied", authorization)
     if authorization.operation.kind != action or action not in authorization.decision.allowed_actions:

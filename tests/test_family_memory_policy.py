@@ -3,7 +3,13 @@ from datetime import datetime, timedelta, timezone
 
 from pydantic import ValidationError
 
-from ai_node.family_memory.models import FamilyAuthorizationContext, FamilyMemoryRecord
+from ai_node.family_memory.models import (
+    FamilyAuthorizationContext,
+    FamilyMemoryDeletionReceipt,
+    FamilyMemoryExportManifest,
+    FamilyMemoryLifecycleRequest,
+    FamilyMemoryRecord,
+)
 from ai_node.family_memory.policy import evaluate_family_memory_access
 
 
@@ -87,6 +93,20 @@ class FamilyMemoryPolicyTests(unittest.TestCase):
         self.assertEqual(self._evaluate(context, expected_core_id="core_2").reason, "wrong_core")
         self.assertEqual(self._evaluate(context, expected_household_id="household_2").reason, "wrong_household")
         self.assertEqual(self._evaluate(context, expected_room_id="room_2").reason, "wrong_room")
+
+    def test_room_visibility_requires_room_context(self):
+        operation = self._context().operation.model_copy(update={"requested_visibility": ["room"]})
+        decision = self._context().decision.model_copy(update={"allowed_visibility": ["room"]})
+        context = self._context(
+            context={"audience_mode": "shared"},
+            operation=operation.model_dump(),
+            decision=decision.model_dump(),
+        )
+
+        result = self._evaluate(context, visibility="room", expected_room_id=None)
+
+        self.assertFalse(result.allowed)
+        self.assertEqual(result.reason, "wrong_room")
 
     def test_unknown_participant_suppresses_private_retrieval(self):
         context = self._context(
@@ -176,6 +196,64 @@ class FamilyMemoryPolicyTests(unittest.TestCase):
             FamilyMemoryRecord.model_validate({**base, "audience_person_ids": ["person_2"]})
         with self.assertRaises(ValidationError):
             FamilyMemoryRecord.model_validate({**base, "visibility": "explicit"})
+
+    def test_lifecycle_models_require_scoped_requests_and_unambiguous_receipts(self):
+        now = datetime.now(timezone.utc)
+        request = FamilyMemoryLifecycleRequest.model_validate(
+            {
+                "request_id": "delete_1",
+                "authorization_id": "authz_1",
+                "core_id": "core_1",
+                "household_id": "household_1",
+                "action": "memory.delete",
+                "subject_person_ids": ["person_1"],
+                "categories": ["family_memory"],
+                "requested_at": now,
+                "expires_at": now + timedelta(minutes=5),
+            }
+        )
+        self.assertEqual(request.action, "memory.delete")
+
+        receipt_payload = {
+            "receipt_id": "receipt_1",
+            "request_id": "delete_1",
+            "authorization_id": "authz_1",
+            "core_id": "core_1",
+            "household_id": "household_1",
+            "subject_person_ids": ["person_1"],
+            "categories_deleted": ["family_memory"],
+            "status": "completed",
+            "completed_at": now,
+        }
+        receipt = FamilyMemoryDeletionReceipt.model_validate(receipt_payload)
+        self.assertEqual(receipt.status, "completed")
+
+        with self.assertRaises(ValidationError):
+            FamilyMemoryDeletionReceipt.model_validate(
+                {
+                    **receipt_payload,
+                    "categories_retained": ["family_memory"],
+                    "retention_reason": "legal_hold",
+                }
+            )
+
+    def test_export_manifest_is_subject_scoped_and_contains_no_memory_payload(self):
+        manifest = FamilyMemoryExportManifest.model_validate(
+            {
+                "export_id": "export_1",
+                "request_id": "request_1",
+                "authorization_id": "authz_1",
+                "core_id": "core_1",
+                "household_id": "household_1",
+                "subject_person_ids": ["person_1"],
+                "categories_exported": ["family_memory"],
+                "record_count": 3,
+                "generated_at": datetime.now(timezone.utc),
+            }
+        )
+
+        self.assertEqual(manifest.record_count, 3)
+        self.assertNotIn("records", manifest.model_dump())
 
 
 if __name__ == "__main__":

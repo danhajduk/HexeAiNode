@@ -987,3 +987,10 @@ Chosen fix: Add extra-field-forbidden Pydantic models and a pure evaluator that 
 What changed: Added authorization, interaction, memory, and audit models; visibility and room matrices; deterministic access evaluation; and focused privacy tests.
 Verification: Model schema generation passed; 29 family-memory and neighboring policy tests passed; Python compilation and diff validation passed.
 ###########
+Task #1039
+Step objective: Define retention, deletion, export, consent, and child-safety lifecycle behavior.
+Issue cause: Access authorization alone did not define how subject data expires, is exported, is deleted across indexes and backups, or reports incomplete retention.
+Chosen fix: Add strict lifecycle request, deletion receipt, and export manifest models plus explicit deny-by-default lifecycle and threat rules.
+What changed: Added scoped lifecycle evidence models and documented consent, guardian authority, retention, deletion, export, audit minimization, and threat controls.
+Verification: 27 family-memory and neighboring policy tests passed; all seven model schemas generated; Python compilation and diff validation passed.
+###########
