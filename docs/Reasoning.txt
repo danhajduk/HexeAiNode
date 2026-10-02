@@ -980,3 +980,10 @@ Chosen fix: Build against the accepted hexe.family-identity-authorization.v1 con
 What changed: Marked Task 1039 active after verifying its Core contract dependency is complete.
 Verification: Coordination validation passed and the accepted Core contract is available in the shared repository.
 ###########
+Task #1039
+Step objective: Define the v1 family-memory models and deterministic fail-closed access policy.
+Issue cause: The accepted Core contract was normative prose, but AI Node had no strict local models or reusable enforcement boundary.
+Chosen fix: Add extra-field-forbidden Pydantic models and a pure evaluator that only narrows Core authorization and denies uncertain identity, missing consent, scope mismatch, and stale context.
+What changed: Added authorization, interaction, memory, and audit models; visibility and room matrices; deterministic access evaluation; and focused privacy tests.
+Verification: Model schema generation passed; 29 family-memory and neighboring policy tests passed; Python compilation and diff validation passed.
+###########
