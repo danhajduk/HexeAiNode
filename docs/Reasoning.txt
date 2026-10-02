@@ -994,3 +994,9 @@ Chosen fix: Add strict lifecycle request, deletion receipt, and export manifest 
 What changed: Added scoped lifecycle evidence models and documented consent, guardian authority, retention, deletion, export, audit minimization, and threat controls.
 Verification: 27 family-memory and neighboring policy tests passed; all seven model schemas generated; Python compilation and diff validation passed.
 ###########
+Task #1039
+Step objective: Verify and close the family-aware memory design task.
+Chosen fix: Complete the design boundary without enabling storage or runtime access before Core implements trusted authorization issuance.
+What changed: Removed Task 1039 from the active queue and recorded its completion after satisfying the coordination acceptance criteria.
+Verification: Focused tests passed; repository-owned tests reported 832 passed and 21 unrelated onboarding/service-manager failures; no rebuild script is present.
+###########

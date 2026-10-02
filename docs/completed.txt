@@ -599,3 +599,4 @@ Task 1034: Add durable queued execution recovery across backend restarts - Compl
 Task 1035: Implement job-record expiration and running-job cancellation - Completed on 09/27/2026 01:31
 Task 1036: Publish complete execution endpoint metadata through Core capabilities - Completed on 09/27/2026 01:38
 Task 1038: Correct the job not-found HTTP contract documentation - Completed on 09/27/2026 01:58
+Task 1039: Design family-aware AI memory - Completed on 10/02/2026 16:52
