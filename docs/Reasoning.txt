@@ -972,3 +972,11 @@ Verification: Execution queue, execution contract, NodeControl, and FastAPI suit
 #############
 All Tasks completed 09/27/2026 01:58:42
 #############
+###########
+Task #1039
+Step objective: Start the contract-aligned family-aware memory design and fail-closed policy implementation.
+Issue cause: AI Node had no normative family identity, consent, room, or memory-authorization contract until Core completed HEXE-REQ-0001.
+Chosen fix: Build against the accepted hexe.family-identity-authorization.v1 contract, keeping runtime family-memory access disabled unless trusted Core authorization context is present.
+What changed: Marked Task 1039 active after verifying its Core contract dependency is complete.
+Verification: Coordination validation passed and the accepted Core contract is available in the shared repository.
+###########

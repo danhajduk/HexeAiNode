@@ -48,4 +48,4 @@ Standards reference:
 Do not edit above this line:
 #######################################################################
 
-[TODO] Task 1039: Design family-aware AI memory (HEXE-AI-0001; details: docs/task-details.md#task-1039)
+[WIP] Task 1039: Design family-aware AI memory (HEXE-AI-0001; details: docs/task-details.md#task-1039)
