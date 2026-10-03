@@ -73,10 +73,30 @@ out-of-scope subject, missing-consent, uncertain-identity, guest-private, and
 multi-participant private requests. An allow result contains only the requested
 intersection of subject identifiers and visibility.
 
-Replay enforcement, trusted service-token binding, storage, deletion receipts,
-export, and retrieval integration remain separate implementation steps. Callers
-must not interpret this pure policy evaluator as verification that a context was
-authentically issued by Core.
+Replay enforcement, trusted service-token binding, deletion execution, export
+payload generation, and live request integration remain separate implementation
+steps. Callers must not interpret this pure policy evaluator as verification that
+a context was authentically issued by Core.
+
+## Node Storage Foundation
+
+`EncryptedFamilyMemoryStore` provides an inactive local persistence primitive for
+future family-memory APIs. It requires an externally supplied 256-bit master key,
+derives a distinct AES-256-GCM key for each Core, household, and person partition,
+hashes scope identifiers in filesystem paths, encrypts the complete record set
+and metadata, uses process-safe atomic writes, and sets data files to mode `0600`.
+It never generates or persists the master key.
+
+`AuthorizedFamilyMemoryRetriever` evaluates the short-lived Core authorization
+context before opening a partition. It then filters by authorized subjects,
+visibility, lifecycle status, expiry, and explicit audience before returning a
+bounded deterministic result set. Missing or uncertain authorization therefore
+cannot probe whether a person's partition or memory exists.
+
+These classes are deliberately not connected to `task.chat`, HTTP routes, or
+startup configuration. Production activation still requires Core-issued trusted
+authorization contexts, service-token binding, replay enforcement, managed key
+provisioning, lifecycle APIs, and audit integration.
 
 ## Consent and Child Safety
 
