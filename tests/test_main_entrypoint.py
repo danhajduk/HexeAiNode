@@ -4,7 +4,81 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_node.main import _default_node_api_base_url, _default_node_hostname, _default_node_ui_endpoint, run
+from ai_node.main import (
+    _default_node_api_base_url,
+    _default_node_hostname,
+    _default_node_ui_endpoint,
+    run,
+    synchronize_trusted_startup,
+)
+
+
+class _StartupCapabilityRunner:
+    def __init__(self, *, missing: bool):
+        self.missing = missing
+        self.submissions = 0
+
+    async def resume_or_refresh_on_startup(self):
+        return {"resumed": not self.missing, "reason": "accepted_capability_missing" if self.missing else "ready"}
+
+    async def submit_once(self):
+        self.submissions += 1
+        return {"status": "accepted"}
+
+
+class _StartupControlState:
+    def __init__(self):
+        self.declarations = []
+        self.refreshes = 0
+
+    def provider_selection_payload(self):
+        return {
+            "config": {
+                "providers": {
+                    "enabled": ["local", "openai"],
+                    "budget_limits": {"openai": {"max_cost_cents": 1000, "period": "monthly"}},
+                }
+            }
+        }
+
+    async def declare_budget_to_core(self, *, provider_id):
+        self.declarations.append(provider_id)
+        return {"status": "accepted", "provider_id": provider_id}
+
+    async def refresh_budget_policy(self):
+        self.refreshes += 1
+        return {"status": "fresh"}
+
+
+class TrustedStartupSynchronizationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_declares_missing_capabilities_and_configured_provider_budgets(self):
+        runner = _StartupCapabilityRunner(missing=True)
+        state = _StartupControlState()
+
+        result = await synchronize_trusted_startup(
+            capability_runner=runner,
+            control_state=state,
+            logger=__import__("logging").getLogger("startup-sync-test"),
+        )
+
+        self.assertEqual(runner.submissions, 1)
+        self.assertEqual(state.declarations, ["openai"])
+        self.assertEqual(state.refreshes, 1)
+        self.assertEqual(result["capability"]["status"], "accepted")
+        self.assertEqual(result["budgets"][0]["status"], "accepted")
+
+    async def test_does_not_redeclare_existing_capabilities(self):
+        runner = _StartupCapabilityRunner(missing=False)
+        state = _StartupControlState()
+
+        await synchronize_trusted_startup(
+            capability_runner=runner,
+            control_state=state,
+            logger=__import__("logging").getLogger("startup-sync-test"),
+        )
+
+        self.assertEqual(runner.submissions, 0)
+        self.assertEqual(state.declarations, ["openai"])
 
 
 class MainEntrypointTests(unittest.TestCase):

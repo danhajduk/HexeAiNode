@@ -47,6 +47,9 @@ Core implemented lifecycle path:
 Additional implemented runtime behavior:
 
 - trusted startup can fast-path to operational when accepted capability + fresh governance already exist
+- trusted startup automatically submits a capability declaration when no accepted profile exists
+- trusted startup automatically declares each enabled provider with a configured budget limit, then refreshes the Core-issued budget policy
+- budget declaration advertises capacity and suggested limits; Core remains responsible for approving allocations and issuing grants
 - trusted startup refreshes governance before settling in `capability_setup_pending` when accepted capability exists but the saved governance bundle is stale
 - temporary failures in capability declaration or governance sync can move node to `degraded`
 - operational MQTT readiness and trusted telemetry publish status are retained as runtime health signals after acceptance rather than post-acceptance lifecycle gates

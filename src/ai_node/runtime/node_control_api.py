@@ -14725,6 +14725,17 @@ class NodeControlState:
             raise ValueError("provider budget period must be weekly or monthly")
         report = self._provider_capability_report_payload()
         return {
+            "currency": "USD",
+            "compute_unit": "cost_units",
+            "default_period": period,
+            "supports_money_budget": True,
+            "supports_compute_budget": True,
+            "supports_customer_allocations": True,
+            "supports_provider_allocations": True,
+            "supported_providers": [normalized_provider_id],
+            "setup_requirements": ["operator_budget_confirmation"],
+            "suggested_money_limit": max_cost_cents / 100.0,
+            "suggested_compute_limit": float(max_cost_cents),
             "service_capacity": {
                 "service": "ai.inference",
                 "period": period,

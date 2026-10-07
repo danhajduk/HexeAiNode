@@ -1056,6 +1056,17 @@ class NodeControlFastApiTests(unittest.TestCase):
             budget_declare_response = client.post("/api/budgets/declare", json={"provider_id": "openai"})
             self.assertEqual(budget_declare_response.status_code, 200)
             self.assertEqual(budget_declare_response.json()["status"], "accepted")
+            self.assertTrue(
+                budget_declaration_client.calls[0]["declaration_payload"]["supports_provider_allocations"]
+            )
+            self.assertEqual(
+                budget_declaration_client.calls[0]["declaration_payload"]["supported_providers"],
+                ["openai"],
+            )
+            self.assertEqual(
+                budget_declaration_client.calls[0]["declaration_payload"]["suggested_money_limit"],
+                25.0,
+            )
             self.assertEqual(
                 budget_declaration_client.calls[0]["declaration_payload"]["service_capacity"],
                 {

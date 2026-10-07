@@ -343,6 +343,36 @@ def configure_logging(log_file: str) -> None:
     root_logger.addHandler(stream_handler)
 
 
+async def synchronize_trusted_startup(*, capability_runner, control_state, logger) -> dict:
+    """Restore Core-facing declarations that are missing after a trusted restart."""
+    result = {"capability": None, "budgets": [], "budget_policy": None}
+    resume_result = await capability_runner.resume_or_refresh_on_startup()
+    result["capability"] = resume_result
+    if resume_result.get("reason") == "accepted_capability_missing":
+        result["capability"] = await capability_runner.submit_once()
+
+    provider_payload = control_state.provider_selection_payload()
+    providers = provider_payload.get("config", {}).get("providers", {})
+    enabled = {str(item).strip().lower() for item in providers.get("enabled", [])}
+    budget_limits = providers.get("budget_limits", {})
+    for provider_id in sorted(enabled):
+        if not isinstance(budget_limits.get(provider_id), dict):
+            continue
+        try:
+            declaration = await control_state.declare_budget_to_core(provider_id=provider_id)
+        except Exception as exc:
+            logger.exception("[startup-budget-declare] provider=%s failed", provider_id)
+            declaration = {"status": "failed", "provider_id": provider_id, "error": str(exc)}
+        result["budgets"].append(declaration)
+
+    try:
+        result["budget_policy"] = await control_state.refresh_budget_policy()
+    except Exception as exc:
+        logger.exception("[startup-budget-refresh] failed")
+        result["budget_policy"] = {"status": "failed", "error": str(exc)}
+    return result
+
+
 def run(
     *,
     once: bool,
@@ -698,12 +728,6 @@ def run(
         provider_capability_refresh_interval_seconds=provider_capability_refresh_interval_seconds,
         notification_service=notification_service,
     )
-    if startup_mode == "trusted_resume":
-        try:
-            resume_result = asyncio.run(capability_runner.resume_or_refresh_on_startup())
-            LOGGER.info("[startup-resume] %s", resume_result)
-        except Exception:
-            LOGGER.exception("[startup-resume] failed to evaluate trusted startup resume")
     service_manager = UserSystemdServiceManager(logger=LOGGER)
     control_state = NodeControlState(
         lifecycle=lifecycle,
@@ -749,6 +773,18 @@ def run(
         user_message_publisher=UserMessagePublisher(logger=LOGGER),
     )
     onboarding_runtime.set_node_identity_changed_callback(control_state.handle_node_identity_change)
+    if startup_mode == "trusted_resume":
+        try:
+            startup_sync = asyncio.run(
+                synchronize_trusted_startup(
+                    capability_runner=capability_runner,
+                    control_state=control_state,
+                    logger=LOGGER,
+                )
+            )
+            LOGGER.info("[startup-sync] %s", startup_sync)
+        except Exception:
+            LOGGER.exception("[startup-sync] failed to synchronize trusted startup declarations")
     app = create_node_control_app(state=control_state, logger=LOGGER)
     LOGGER.info("[Hexe AI Node] phase1 modules loaded; control API active")
 
