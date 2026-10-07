@@ -309,6 +309,8 @@ class DirectExecutionAdmissionConfig:
     warm_memory_available_mb: int = 8192
     hot_memory_available_mb: int = 2048
     max_swap_used_ratio: float = 0.95
+    max_memory_pressure_some_avg10: float = 5.0
+    max_memory_pressure_full_avg10: float = 1.0
     warm_swap_used_ratio: float = 0.5
     hot_swap_used_ratio: float = 0.8
     max_load_per_cpu: float = 2.0
@@ -327,6 +329,12 @@ class DirectExecutionAdmissionConfig:
             warm_memory_available_mb=max(_env_int("HEXE_DIRECT_EXECUTION_WARM_MEMORY_AVAILABLE_MB", 8192), 0),
             hot_memory_available_mb=max(_env_int("HEXE_DIRECT_EXECUTION_HOT_MEMORY_AVAILABLE_MB", 2048), 0),
             max_swap_used_ratio=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_MAX_SWAP_USED_RATIO", 0.95)),
+            max_memory_pressure_some_avg10=max(
+                0.0, _env_float("HEXE_DIRECT_EXECUTION_MAX_MEMORY_PRESSURE_SOME_AVG10", 5.0)
+            ),
+            max_memory_pressure_full_avg10=max(
+                0.0, _env_float("HEXE_DIRECT_EXECUTION_MAX_MEMORY_PRESSURE_FULL_AVG10", 1.0)
+            ),
             warm_swap_used_ratio=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_WARM_SWAP_USED_RATIO", 0.5)),
             hot_swap_used_ratio=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_HOT_SWAP_USED_RATIO", 0.8)),
             max_load_per_cpu=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_MAX_LOAD_PER_CPU", 2.0)),
@@ -346,6 +354,8 @@ class DirectExecutionAdmissionConfig:
             "warm_memory_available_mb": self.warm_memory_available_mb,
             "hot_memory_available_mb": self.hot_memory_available_mb,
             "max_swap_used_ratio": self.max_swap_used_ratio,
+            "max_memory_pressure_some_avg10": self.max_memory_pressure_some_avg10,
+            "max_memory_pressure_full_avg10": self.max_memory_pressure_full_avg10,
             "warm_swap_used_ratio": self.warm_swap_used_ratio,
             "hot_swap_used_ratio": self.hot_swap_used_ratio,
             "max_load_per_cpu": self.max_load_per_cpu,
@@ -417,6 +427,8 @@ class DirectExecutionAdmissionGuard:
         self._resource_sampler = resource_sampler or self._sample_resources
         self._logger = logger
         self._lock = Lock()
+        self._resource_lock = Lock()
+        self._last_swap_io_counters: tuple[int, int] | None = None
         self._in_flight = 0
         self._accepted_count = 0
         self._rejected_count = 0
@@ -430,7 +442,7 @@ class DirectExecutionAdmissionGuard:
 
     def try_acquire(self, *, route: str = "direct") -> DirectExecutionAdmissionDecision:
         route_key = self._normalize_route(route)
-        resources = self._resource_sampler()
+        resources = self._annotate_swap_io(self._resource_sampler())
         reason = self._rejection_reason(resources=resources)
         effective_max, capacity_tier = self._effective_capacity(resources=resources)
         with self._lock:
@@ -492,7 +504,7 @@ class DirectExecutionAdmissionGuard:
             route_counts["in_flight"] = max(route_counts.get("in_flight", 0) - 1, 0)
 
     def snapshot(self) -> dict:
-        resources = self._resource_sampler()
+        resources = self._annotate_swap_io(self._resource_sampler())
         reason = self._rejection_reason(resources=resources)
         effective_max, capacity_tier = self._effective_capacity(resources=resources)
         with self._lock:
@@ -585,18 +597,52 @@ class DirectExecutionAdmissionGuard:
         if memory_available_mb is not None and memory_available_mb < self._config.min_memory_available_mb:
             return "memory_available_below_floor"
         swap_used_ratio = resources.get("swap_used_ratio")
-        if swap_used_ratio is not None and swap_used_ratio >= self._config.max_swap_used_ratio:
+        if (
+            swap_used_ratio is not None
+            and swap_used_ratio >= self._config.max_swap_used_ratio
+            and self._has_active_swap_pressure(resources=resources)
+        ):
             return "swap_pressure_high"
         load_per_cpu = resources.get("load_per_cpu")
         if load_per_cpu is not None and load_per_cpu >= self._config.max_load_per_cpu:
             return "load_average_high"
         return None
 
+    def _has_active_swap_pressure(self, *, resources: dict) -> bool:
+        memory_available_mb = resources.get("memory_available_mb")
+        if memory_available_mb is not None and memory_available_mb <= self._config.hot_memory_available_mb:
+            return True
+        pressure_some = resources.get("memory_pressure_some_avg10")
+        if pressure_some is not None and pressure_some >= self._config.max_memory_pressure_some_avg10:
+            return True
+        pressure_full = resources.get("memory_pressure_full_avg10")
+        if pressure_full is not None and pressure_full >= self._config.max_memory_pressure_full_avg10:
+            return True
+        return bool(resources.get("swap_io_active"))
+
+    def _annotate_swap_io(self, resources: dict) -> dict:
+        resources = dict(resources)
+        if "swap_io_active" in resources:
+            return resources
+        swap_in = resources.get("swap_in_pages")
+        swap_out = resources.get("swap_out_pages")
+        if swap_in is None or swap_out is None:
+            return resources
+        current = (int(swap_in), int(swap_out))
+        with self._resource_lock:
+            previous = self._last_swap_io_counters
+            self._last_swap_io_counters = current
+        resources["swap_io_active"] = bool(
+            previous is not None and (current[0] > previous[0] or current[1] > previous[1])
+        )
+        return resources
+
     @staticmethod
     def _sample_resources() -> dict:
         memory = _read_memory_snapshot()
         load = _read_load_snapshot()
-        return {**memory, **load}
+        swap_io = _read_swap_io_snapshot()
+        return {**memory, **load, **swap_io}
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -674,6 +720,42 @@ def _read_memory_snapshot() -> dict:
         payload["swap_used_ratio"] = round(max(total_swap_kb - free_swap_kb, 0) / total_swap_kb, 4)
     elif total_swap_kb == 0:
         payload["swap_used_ratio"] = 0.0
+    payload.update(_read_memory_pressure_snapshot())
+    return payload
+
+
+def _read_memory_pressure_snapshot() -> dict:
+    payload: dict[str, float] = {}
+    try:
+        with open("/proc/pressure/memory", "r", encoding="utf-8") as handle:
+            for line in handle:
+                parts = line.split()
+                if not parts or parts[0] not in {"some", "full"}:
+                    continue
+                avg10 = next((part.split("=", 1)[1] for part in parts[1:] if part.startswith("avg10=")), None)
+                if avg10 is not None:
+                    payload[f"memory_pressure_{parts[0]}_avg10"] = float(avg10)
+    except (OSError, ValueError):
+        return {}
+    return payload
+
+
+def _read_swap_io_snapshot() -> dict:
+    counters: dict[str, int] = {}
+    try:
+        with open("/proc/vmstat", "r", encoding="utf-8") as handle:
+            for line in handle:
+                key, _, raw_value = line.partition(" ")
+                if key not in {"pswpin", "pswpout"}:
+                    continue
+                counters[key] = int(raw_value.strip())
+    except (OSError, ValueError):
+        return {}
+    payload = {}
+    if "pswpin" in counters:
+        payload["swap_in_pages"] = counters["pswpin"]
+    if "pswpout" in counters:
+        payload["swap_out_pages"] = counters["pswpout"]
     return payload
 
 

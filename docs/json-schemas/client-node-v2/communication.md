@@ -1121,7 +1121,7 @@ Current execution admission reasons:
 | --- | --- | --- |
 | `max_in_flight_exceeded` | The node already has `thresholds.max_in_flight` direct executions running. | Stop sending more work to this node until at least `retry_after_seconds` has passed. |
 | `memory_available_below_floor` | Available host memory is below `thresholds.min_memory_available_mb`. | Stop the batch and retry later; consider routing to another AI Node if available. |
-| `swap_pressure_high` | Swap usage is at or above `thresholds.max_swap_used_ratio`. | Stop the batch and retry later; do not immediately replay the whole batch. |
+| `swap_pressure_high` | Swap usage is at or above `thresholds.max_swap_used_ratio` and low available memory, memory PSI, or active swap I/O confirms current pressure. | Stop the batch and retry later; do not immediately replay the whole batch. |
 | `load_average_high` | Host load per CPU is at or above `thresholds.max_load_per_cpu`. | Pause and retry later with a smaller batch. |
 
 When the node is busy, guarded execution returns HTTP `503`:

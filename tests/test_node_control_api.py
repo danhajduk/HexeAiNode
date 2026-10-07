@@ -1764,6 +1764,43 @@ class NodeControlApiTests(unittest.TestCase):
             self.assertEqual(context.exception.payload["reason"], "load_average_high")
             self.assertIsNone(runtime_manager.last_execution_request)
 
+    def test_direct_execution_ignores_stale_swap_when_memory_pressure_is_healthy(self):
+        guard = DirectExecutionAdmissionGuard(
+            config=DirectExecutionAdmissionConfig(max_swap_used_ratio=0.9),
+            resource_sampler=lambda: {
+                "memory_available_mb": 4096,
+                "swap_used_ratio": 1.0,
+                "memory_pressure_some_avg10": 0.0,
+                "memory_pressure_full_avg10": 0.0,
+                "swap_io_active": False,
+                "load_per_cpu": 0.2,
+            },
+        )
+
+        decision = guard.try_acquire()
+
+        self.assertTrue(decision.accepted)
+        self.assertIsNone(decision.reason)
+        guard.release()
+
+    def test_direct_execution_rejects_full_swap_with_active_memory_pressure(self):
+        guard = DirectExecutionAdmissionGuard(
+            config=DirectExecutionAdmissionConfig(max_swap_used_ratio=0.9),
+            resource_sampler=lambda: {
+                "memory_available_mb": 4096,
+                "swap_used_ratio": 1.0,
+                "memory_pressure_some_avg10": 5.0,
+                "memory_pressure_full_avg10": 0.0,
+                "swap_io_active": False,
+                "load_per_cpu": 0.2,
+            },
+        )
+
+        decision = guard.try_acquire()
+
+        self.assertFalse(decision.accepted)
+        self.assertEqual(decision.reason, "swap_pressure_high")
+
     def test_compare_provider_execution_returns_per_provider_results(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))

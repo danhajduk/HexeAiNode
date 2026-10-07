@@ -103,7 +103,9 @@ Backend runtime:
 - `HEXE_DIRECT_EXECUTION_MIN_MEMORY_AVAILABLE_MB` default `512`; rejects direct execution when host available memory drops below this floor
 - `HEXE_DIRECT_EXECUTION_WARM_MEMORY_AVAILABLE_MB` default `8192`; dynamic capacity enters warm tier at or below this available-memory value
 - `HEXE_DIRECT_EXECUTION_HOT_MEMORY_AVAILABLE_MB` default `2048`; dynamic capacity enters hot tier at or below this available-memory value
-- `HEXE_DIRECT_EXECUTION_MAX_SWAP_USED_RATIO` default `0.95`; rejects direct execution when swap usage is at or above this ratio
+- `HEXE_DIRECT_EXECUTION_MAX_SWAP_USED_RATIO` default `0.95`; considers swap usage high at or above this ratio, but rejects only when low available memory, memory PSI, or active swap I/O confirms current pressure
+- `HEXE_DIRECT_EXECUTION_MAX_MEMORY_PRESSURE_SOME_AVG10` default `5.0`; PSI `some` 10-second threshold used to confirm active swap pressure
+- `HEXE_DIRECT_EXECUTION_MAX_MEMORY_PRESSURE_FULL_AVG10` default `1.0`; PSI `full` 10-second threshold used to confirm active swap pressure
 - `HEXE_DIRECT_EXECUTION_WARM_SWAP_USED_RATIO` default `0.5`; dynamic capacity enters warm tier at or above this swap ratio
 - `HEXE_DIRECT_EXECUTION_HOT_SWAP_USED_RATIO` default `0.8`; dynamic capacity enters hot tier at or above this swap ratio
 - `HEXE_DIRECT_EXECUTION_MAX_LOAD_PER_CPU` default `2.0`; rejects direct execution when 1-minute load divided by CPU count is at or above this value
