@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hexe.local/schemas/client-node-v2/assistant-reasoning.v1.request.schema.json",
+  "title": "Assistant Reasoning V1 Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "requested_by", "core_id", "session_id", "turn_id", "turn_text", "actor_context", "trace_id"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "request_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "idempotency_key": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+    "requested_by": {"type": "string", "minLength": 1, "maxLength": 255},
+    "service_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
+    "customer_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
+    "core_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "session_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "turn_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "turn_text": {"type": "string", "minLength": 1, "maxLength": 32000},
+    "actor_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity_state"],
+      "properties": {
+        "actor_id": {"type": ["string", "null"], "maxLength": 255},
+        "user_id": {"type": ["string", "null"], "maxLength": 255},
+        "person_id": {"type": ["string", "null"], "maxLength": 255},
+        "device_id": {"type": ["string", "null"], "maxLength": 255},
+        "room_id": {"type": ["string", "null"], "maxLength": 255},
+        "identity_state": {"enum": ["unknown", "probable", "conflicted", "verified"]},
+        "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "roles": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 255}, "maxItems": 64, "uniqueItems": true},
+        "scopes": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 255}, "maxItems": 128, "uniqueItems": true},
+        "provenance": {"type": ["string", "null"], "maxLength": 255}
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "description", "argument_schema"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$", "maxLength": 255},
+          "description": {"type": "string", "minLength": 1, "maxLength": 4000},
+          "argument_schema": {"type": "object"}
+        }
+      }
+    },
+    "requested_provider": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+    "requested_model": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
+    "constraints": {"type": "object"},
+    "timeout_s": {"type": "integer", "minimum": 1, "maximum": 3600, "default": 60},
+    "response_mode": {"enum": ["sync", "async_if_queued"], "default": "sync"},
+    "queue": {"type": "object"},
+    "trace_id": {"type": "string", "minLength": 1, "maxLength": 255}
+  }
+}

@@ -28,6 +28,11 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from ai_node.config.bootstrap_config import BOOTSTRAP_PORT, BOOTSTRAP_TOPIC, create_bootstrap_config
 from ai_node.execution.gateway import ExecutionGateway
+from ai_node.execution.assistant_reasoning import (
+    AssistantReasoningRequest,
+    build_assistant_execution_request,
+    normalize_assistant_execution_result,
+)
 from ai_node.execution.input_schema_validation import PromptInputValidationFailure, validate_prompt_inputs
 from ai_node.execution.idempotency import ExecutionIdempotencyStore, IdempotencyConflictError
 from ai_node.execution.task_models import TaskExecutionRequest
@@ -83,6 +88,7 @@ MANAGEMENT_AUTHORIZATION_HEADER = "X-Hexe-Management-Authorization"
 MANAGEMENT_PUBLIC_PATHS = {"/", "/api/health"}
 MANAGEMENT_PUBLIC_PREFIXES = ("/api/schemas/client-node/v2", "/api/onboarding/")
 SERVICE_EXECUTION_PATHS = {
+    "/api/assistant/reasoning/v1",
     "/api/execution/authorize",
     "/api/execution/direct",
     "/api/execution/route-preview",
@@ -11943,6 +11949,26 @@ class NodeControlState:
         request.requested_provider = authorized_provider
         return claims
 
+    async def authorize_assistant_execution(
+        self,
+        *,
+        service_token: str,
+        request: AssistantReasoningRequest,
+        execution_request: TaskExecutionRequest,
+    ) -> dict:
+        claims = await self.authorize_service_execution(
+            service_token=service_token,
+            request=execution_request,
+        )
+        authorized_core_id = str(
+            claims.get("core_id") or claims.get("paired_core_id") or claims.get("household_id") or ""
+        ).strip()
+        if not authorized_core_id:
+            raise ValueError("service_token_core_context_missing")
+        if authorized_core_id != request.core_id:
+            raise ValueError("service_token_core_context_mismatch")
+        return claims
+
     async def authorize_service_access(self, *, service_token: str, required_scope: str) -> dict:
         if self._service_token_introspection_client is None:
             raise ValueError("service_token_introspection_not_configured")
@@ -12153,6 +12179,68 @@ class NodeControlState:
                 operation=lambda: self._execute_direct_once(request=request),
             )
         return await self._execute_direct_once(request=request)
+
+    async def execute_assistant_reasoning(self, *, request: AssistantReasoningRequest) -> dict:
+        execution_request = build_assistant_execution_request(request)
+
+        async def execute_once() -> dict:
+            if request.response_mode == "async_if_queued":
+                return await self._enqueue_assistant_reasoning(
+                    request=request,
+                    execution_request=execution_request,
+                )
+            execution = await self._execute_direct_now(request=execution_request)
+            return normalize_assistant_execution_result(request=request, execution=execution)
+
+        if request.idempotency_key:
+            return await self._execution_idempotency_store.execute(
+                caller_id=request.requested_by,
+                idempotency_key=request.idempotency_key,
+                request_payload=request.model_dump(mode="json"),
+                operation=execute_once,
+            )
+        return await execute_once()
+
+    async def _enqueue_assistant_reasoning(
+        self,
+        *,
+        request: AssistantReasoningRequest,
+        execution_request: TaskExecutionRequest,
+    ) -> dict:
+        queue_context = await self._direct_execution_queue_context(request=execution_request)
+        queued_request = self._execution_request_for_queue_context(
+            request=execution_request,
+            queue_context=queue_context,
+        )
+
+        async def runner() -> dict:
+            execution = await self._execute_direct_now(request=queued_request)
+            return normalize_assistant_execution_result(request=request, execution=execution)
+
+        response = await self._execution_queue.enqueue(
+            queue=queue_context["queue"],
+            importance=queue_context["importance"],
+            job_name=request.request_id,
+            request_payload=queued_request.model_dump(mode="json"),
+            runner=runner,
+            routing_decision=queue_context.get("routing_decision")
+            if isinstance(queue_context.get("routing_decision"), dict)
+            else None,
+            queue_intent=queue_context.get("queue_intent")
+            if isinstance(queue_context.get("queue_intent"), dict)
+            else None,
+            client_id=request.requested_by,
+            running_cancellation_supported=True,
+        )
+        if response.get("status") == "queued":
+            response["message"] = f"job queued - check in {response['check_after_seconds']} secs"
+        return {
+            "schema_version": request.schema_version,
+            "request_id": request.request_id,
+            "turn_id": request.turn_id,
+            "status": str(response.get("status") or "queued"),
+            "job": response,
+        }
 
     async def _execute_direct_once(self, *, request: TaskExecutionRequest) -> dict:
         self._validate_prompt_inputs(
@@ -12823,6 +12911,19 @@ class NodeControlState:
         if not request_payload:
             return None
         request = TaskExecutionRequest.model_validate(request_payload)
+        constraints = request.constraints if isinstance(request.constraints, dict) else {}
+        assistant_contract = constraints.get("assistant_reasoning_contract")
+        if isinstance(assistant_contract, dict):
+            assistant_request = AssistantReasoningRequest.model_validate(assistant_contract)
+
+            async def assistant_runner() -> dict:
+                execution = await self._execute_direct_now(request=request)
+                return normalize_assistant_execution_result(
+                    request=assistant_request,
+                    execution=execution,
+                )
+
+            return assistant_runner
         return lambda: self._execute_direct_now(request=request)
 
     async def execution_job_status(self, *, job_id: str) -> dict:
@@ -13894,6 +13995,15 @@ class NodeControlState:
                 "base_url_source": "Core provider_api_base_url",
             },
             "apis": [
+                {
+                    "name": "assistant_reasoning_v1",
+                    "method": "POST",
+                    "api_path": "/api/assistant/reasoning/v1",
+                    "description": "Provide governed chat, intent disambiguation, argument extraction, clarification, refusal, and no-match reasoning without executing an intent.",
+                    "request_schema_path": "/api/schemas/client-node/v2/assistant-reasoning.v1.request.schema.json",
+                    "response_schema_path": "/api/schemas/client-node/v2/assistant-reasoning.v1.response.schema.json",
+                    "security": {"scheme": "CoreServiceBearer", "required_scopes": ["service.execute:task.classification"]},
+                },
                 {
                     "name": "direct_execution",
                     "method": "POST",
@@ -17881,6 +17991,39 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/execution/admission")
     def get_execution_admission():
         return state.direct_execution_admission_payload()
+
+    @app.post("/api/assistant/reasoning/v1")
+    async def post_assistant_reasoning_v1(
+        payload: AssistantReasoningRequest,
+        authorization: str | None = Header(default=None),
+    ):
+        try:
+            execution_request = build_assistant_execution_request(payload)
+            if state.service_token_enforcement_enabled:
+                await state.authorize_assistant_execution(
+                    service_token=bearer_token(authorization),
+                    request=payload,
+                    execution_request=execution_request,
+                )
+                payload.requested_provider = execution_request.requested_provider
+            return await state.execute_assistant_reasoning(request=payload)
+        except DirectExecutionBusyError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=exc.payload,
+                headers={"Retry-After": str(exc.retry_after_seconds)},
+            ) from exc
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            error_code = str(exc)
+            unavailable = {
+                "service_token_introspection_not_configured",
+                "trusted_core_context_unavailable",
+                "token_validation_unavailable",
+            }
+            status_code = 503 if error_code in unavailable else 403 if error_code.startswith("service_token_") else 400
+            raise HTTPException(status_code=status_code, detail=error_code) from exc
 
     @app.post("/api/execution/direct")
     async def post_execution_direct(

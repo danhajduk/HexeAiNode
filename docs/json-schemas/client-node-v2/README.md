@@ -22,6 +22,8 @@ V2+ keeps the AI Node as an execution proxy:
 
 ## Schemas
 
+- [assistant-reasoning.v1.request.schema.json](./assistant-reasoning.v1.request.schema.json): Core-governed Assistant turn, actor-policy context, and Interaction-owned candidate catalog
+- [assistant-reasoning.v1.response.schema.json](./assistant-reasoning.v1.response.schema.json): validated intent candidate, clarification, no-match chat, refusal, provider error, or queued acknowledgement
 - [prompt-register.v2.request.schema.json](./prompt-register.v2.request.schema.json): prompt registration with canonical prompt-version normalization and benchmark metadata
 - [execution-request.v2.schema.json](./execution-request.v2.schema.json): normal task-family execution request
 - [execution-response.v2.schema.json](./execution-response.v2.schema.json): canonical terminal execution result

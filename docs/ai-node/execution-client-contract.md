@@ -14,6 +14,14 @@ The expected execution audience is `node-service:<provider-node-id>:<provider>`.
 
 Clients use Core resolution's `provider_api_base_url` plus the advertised execution path. Hard-coded example hostnames must not override Core resolution.
 
+## Assistant reasoning V1
+
+`POST /api/assistant/reasoning/v1` is the Interaction-facing governed reasoning adapter. It accepts one authorized turn, a bounded actor-policy context, and an Interaction-owned candidate catalog. It can return a validated intent candidate and arguments, a clarification request, a conversational no-match response, a refusal, or a provider error. It never invokes the selected intent and does not persist conversation state or assume ownership of identity, approvals, or the intent catalog.
+
+The route requires `service.execute:task.classification`. `requested_by` and `service_id` remain bound to token `sub`; `core_id` must match the Core/household identity in the verified token claims. Actor roles and scopes are prompt policy context only and cannot change provider authorization. Only the turn, bounded actor-policy fields, candidate names/descriptions, and candidate argument schemas are sent to the provider. Provider output is rejected if it invents a candidate or violates the selected candidate's argument schema.
+
+The adapter uses the ordinary execution pipeline, so Core governance, provider/model selection, budget reservation, timeout, idempotency, usage telemetry, and provider isolation remain authoritative. `response_mode=async_if_queued` returns the ordinary owned job handle; polling and cooperative cancellation use the existing job APIs. The current provider protocol returns a validated terminal object rather than token-by-token Assistant content; provider streaming support remains a routing capability and is not exposed as an unvalidated action stream.
+
 ## Provider identity and mapping
 
 Provider identity has two levels: Core/provider classes such as `local` and `openai`, and concrete executors such as `visual_runtime`, `vision_runtime`, and `openai`.
@@ -129,6 +137,9 @@ Each capability endpoint also publishes relative, base-URL-independent metadata 
 
 ## APIs
 
+- `POST /api/assistant/reasoning/v1`
+- `GET /api/schemas/client-node/v2/assistant-reasoning.v1.request.schema.json`
+- `GET /api/schemas/client-node/v2/assistant-reasoning.v1.response.schema.json`
 - `GET /api/schemas/client-node/v2`
 - `GET /api/schemas/client-node/v2/execution-request.v2.schema.json`
 - `GET /api/schemas/client-node/v2/image-generation-inputs.v1.schema.json`

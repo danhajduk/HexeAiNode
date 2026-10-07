@@ -1000,3 +1000,20 @@ Chosen fix: Complete the design boundary without enabling storage or runtime acc
 What changed: Removed Task 1039 from the active queue and recorded its completion after satisfying the coordination acceptance criteria.
 Verification: Focused tests passed; repository-owned tests reported 832 passed and 21 unrelated onboarding/service-manager failures; no rebuild script is present.
 ###########
+###########
+Task #1040
+Step objective: Add a governed, versioned Assistant reasoning boundary for HexeInteraction.
+Issue cause: AI Node exposed generic chat and classification execution but no Assistant-specific contract that constrained model output to Interaction-owned intent candidates and schemas.
+Chosen fix: Layer a V1 Assistant adapter on the existing Core-authorized classification pipeline so provider policy, budgets, timeouts, cancellation, telemetry, idempotency, and isolation remain authoritative.
+What changed: Added strict turn, actor-policy, candidate, and result contracts; subject/Core binding; minimal provider context; structured-output routing; candidate/argument validation; and sync/queued execution with validated restart recovery.
+Verification: 140 focused execution, queue, provider, capability, schema, and authorization tests passed. The repository-owned suite reported 849 passed and 21 unrelated onboarding/service-manager failures; vendored LoRA tests require absent heavyweight dependencies.
+###########
+Task #1040
+Step objective: Publish and close the Assistant reasoning capability.
+Chosen fix: Advertise the V1 endpoint and schemas through Client Node V2 discovery and the `task.classification` Core capability endpoint metadata, and document the ownership and security boundary.
+What changed: Added request/response JSON Schemas, discovery metadata, client documentation, focused security/failure tests, and removed Task 1040 from the active queue.
+Verification: JSON Schema discovery tests, capability declaration tests, targeted execution tests, Python compilation, and diff validation passed; no rebuild script is present.
+###########
+#############
+All Tasks completed 10/07/2026 16:00:39
+#############

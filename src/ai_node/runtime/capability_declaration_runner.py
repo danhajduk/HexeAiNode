@@ -502,6 +502,16 @@ class CapabilityDeclarationRunner:
                 }
                 for family in manifest_task_families
             }
+            classification_endpoint = capability_endpoints.get("task.classification")
+            if isinstance(classification_endpoint, dict):
+                classification_endpoint["assistant_reasoning"] = {
+                    "version": "1.0",
+                    "method": "POST",
+                    "path": "/api/assistant/reasoning/v1",
+                    "request_schema_path": "/api/schemas/client-node/v2/assistant-reasoning.v1.request.schema.json",
+                    "response_schema_path": "/api/schemas/client-node/v2/assistant-reasoning.v1.response.schema.json",
+                    "required_scope": "service.execute:task.classification",
+                }
         return create_capability_manifest(
             node_id=self._node_id,
             node_name=str(trust_state.get("node_name") or "ai-node").strip(),

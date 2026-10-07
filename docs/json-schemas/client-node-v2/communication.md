@@ -22,6 +22,7 @@ Implemented client-facing routes in this repository:
 
 | Route | Status | Purpose |
 | --- | --- | --- |
+| `POST /api/assistant/reasoning/v1` | Implemented | Governed Assistant reasoning for Interaction; never executes a selected intent. |
 | `POST /api/execution/authorize` | Implemented | Lightweight prompt authorization and access check. |
 | `GET /api/execution/admission` | Implemented | Read the AI Node's direct execution admission state and `max_in_flight` limit. |
 | `POST /api/execution/route-preview` | Implemented | Dry-run provider/model and queue routing for a direct execution request. |

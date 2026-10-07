@@ -806,6 +806,12 @@ class CapabilityDeclarationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(endpoint["artifact_retrieval"]["path"], "/api/manual-image-generation/outputs/{relative_path}")
         self.assertEqual(endpoint["artifact_acknowledgement"]["path"], "/api/execution/artifacts/ack")
         self.assertEqual(endpoint["schema_discovery"]["path"], "/api/schemas/client-node/v2")
+        self.assertEqual(endpoint["assistant_reasoning"]["version"], "1.0")
+        self.assertEqual(endpoint["assistant_reasoning"]["path"], "/api/assistant/reasoning/v1")
+        self.assertEqual(
+            endpoint["assistant_reasoning"]["required_scope"],
+            "service.execute:task.classification",
+        )
         self.assertEqual(endpoint["concrete_executors"], ["openai"])
         self.assertTrue(endpoint["request_schema_path"].startswith("/api/schemas/client-node/v2/"))
 
