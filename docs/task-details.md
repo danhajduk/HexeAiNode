@@ -2558,3 +2558,35 @@ Acceptance:
 - Versioned interaction, memory, and audit models are defined.
 - Private-memory retrieval is suppressed for unknown or unauthorized participants.
 - The accepted Core identity and policy contract is linked.
+
+## Task 1040
+Coordination request: `HEXE-REQ-20261006-ASSISTANT-MIGRATION-AI`
+
+Title: Provide governed Assistant reasoning without owning orchestration.
+
+Requested outcome:
+- Support HexeInteraction's Assistant Engine as a replaceable, Core-authorized AI provider rather than owning conversations, intents, user identity, approvals, or action execution.
+- Preserve the governed `task.chat` capability and add only the structured classification or reasoning contract Interaction needs for ambiguous intent candidates, argument extraction, clarification, and genuine conversational no-match handling.
+- Treat the Core-authorized requester and actor context as input policy rather than independently trusted identity, and never invoke domain actions directly.
+- Return structured outputs that Interaction can validate against its registered intent schema.
+- Preserve request identity binding, budgets, timeout, cancellation, streaming, usage telemetry, and model/provider isolation.
+
+Dependencies:
+- `HEXE-REQ-20261006-ASSISTANT-MIGRATION-INTERACTION`: completed.
+- `HEXE-REQ-20261006-ASSISTANT-MIGRATION-CORE`: accepted and currently blocked pending Voice caller-token forwarding and direct Voice-to-Interaction evidence.
+
+Constraints:
+- AI Node must not own the intent catalog, durable conversation state, user/person identity, approvals, or domain action execution.
+- Caller identity must remain bound to the authorized service-token subject; actor context may narrow but never broaden provider or action authority.
+- Prompt/tool input must contain only the minimum authorized turn and catalog context and must not disclose unrelated users, households, credentials, or provider secrets.
+- Interaction remains responsible for validating AI output against registered intent schemas and for invoking any selected domain capability through Core-governed paths.
+
+Acceptance:
+- AI Node exposes a versioned Core-governed capability usable by Interaction for chat and, if required, structured intent disambiguation and argument extraction.
+- Structured output distinguishes an intent candidate, extracted arguments, confidence, clarification request, no-match chat response, refusal, and provider error in a schema Interaction can validate.
+- AI Node does not own the intent catalog, durable conversation state, user/person identity, approvals, or domain action execution.
+- Caller identity fields remain bound to the authorized service-token subject, and actor context is not used to broaden provider or action authority.
+- Budget, timeout, cancellation, streaming, usage telemetry, and model/provider selection remain enforceable through Core policy.
+- Prompt/tool input contains only the minimum authorized turn and catalog context and does not expose unrelated users, households, credentials, or provider secrets.
+- Focused tests cover malformed structured output, prompt-injected intent names/arguments, ambiguous candidates, cancellation, budget denial, provider failure, cross-Core isolation, and subject mismatch.
+- Integration evidence shows Interaction can fall back from deterministic matching to AI-assisted clarification or chat without allowing AI Node to execute the selected intent.
