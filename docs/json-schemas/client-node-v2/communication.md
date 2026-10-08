@@ -254,6 +254,34 @@ Example:
 
 The AI Node returns the normal execution result.
 
+### General Image Generation and Workflow Selection
+
+Image clients submit `task.image_generation` to the same direct execution endpoint and describe the requested scenario
+with `inputs.image_type`. Built-in paired scenarios are scenery/weather, portrait, product/object, illustration,
+icon/graphic, and generic generation. If neither a governed prompt template nor `inputs.template_id` fixes a workflow,
+the AI Node selects the scenario from `image_type`, then selects CPU for `background`/`low` importance or GPU for
+interactive importance. Omit `queue.runtime_lane` when requesting automatic selection.
+
+Selection precedence is explicit `inputs.template_id`, governed prompt template, `inputs.image_type`, then generic
+fallback. Explicit template selection does not bypass prompt authorization, routing, privacy, or input validation.
+Installed operator workflows are discoverable through management-protected `GET /api/comfyui/templates`;
+service clients discover governed registrations through `GET /api/image-templates` with `ai.image_templates.read`.
+Custom workflow upload is **Not developed**: template registration references a workflow already installed on the AI
+Node. The detailed catalog table, general request, runtime rules, and artifact protocol are in
+[`docs/ai-node/execution-client-contract.md`](../../ai-node/execution-client-contract.md#general-image-generation-protocol).
+
+### Weather Background Image
+
+For the complete hardware-independent weather-image protocol, including token scopes, strict inputs, automatic CPU/GPU
+selection, job polling, artifact download, acknowledgement, retry, and cancellation behavior, see
+[`docs/ai-node/execution-client-contract.md`](../../ai-node/execution-client-contract.md#weather-background-protocol).
+
+The caller sends `prompt.weather.condition_background`, pins `v11.0`, supplies `image_type=scenery`, and uses
+`response_mode=async_if_queued`. When the AI Node should choose the hardware, omit `queue.runtime_lane`. The registered
+prompt's background importance selects the built-in CPU scenery variant; an explicit governed template binding remains
+authoritative. The live OpenAPI operation for `POST /api/execution/direct` publishes the complete request as the
+`weather_background` example and exposes the selection policy under `x-hexe-runtime-selection`.
+
 ### Route Preview
 
 Use `POST /api/execution/route-preview` with the same `TaskExecutionRequest` payload to dry-run routing before deciding

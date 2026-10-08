@@ -58,6 +58,153 @@ The shared schema is `GET /api/schemas/client-node/v2/image-generation-inputs.v1
 
 Canonical controls are `output_format=png`, `quality=low|medium|high`, `width`, `height`, `steps`, `cfg`, `denoise`, and `seed`. Local quality maps to 4, 6, or 8 steps when `steps` is absent. Dimensions are normalized to multiples of 8 within 256–4096. `size`, `target_width`, and `target_height` are compatibility inputs; no separate resize stage exists.
 
+### General image-generation protocol
+
+Submit image generation to `POST /api/execution/direct` with `task_family=task.image_generation`, an authorized prompt,
+semantic `inputs`, and either `sync` or `async_if_queued`. Production clients should normally use
+`async_if_queued`, provide an idempotency key, poll the returned job, download `result.output.images[]`, and acknowledge
+the artifacts after durable storage. Authentication, polling, download, acknowledgement, and retry semantics are the
+same for every image scenario; the weather example below is a concrete instance of this general protocol.
+
+The template selection order is:
+
+1. `inputs.template_id`. This explicitly selects an installed built-in workflow template and therefore selects that
+   template's CPU or GPU runtime. The caller must be authorized to execute the prompt; template selection does not
+   bypass prompt access, routing, privacy, or input validation.
+2. A governed `constraints.image_template` binding on the selected prompt version. The node resolves its registered
+   version and runtime when the request does not explicitly select an installed template.
+3. `inputs.image_type`, mapped to a built-in scenario pair. The node chooses the CPU or GPU member according to the
+   effective importance.
+4. The generic built-in scenario pair when no recognized image type is supplied.
+
+For unbound scenario selection, `background` and `low` use CPU while `normal`, `high`, and `critical` use GPU. A fixed
+explicit or governed template uses its declared runtime regardless of importance. Callers that want the AI Node to
+choose must omit both `inputs.template_id` and `queue.runtime_lane`; callers should normally express the scenario with
+`inputs.image_type` and urgency with the prompt's importance policy.
+
+The default paired catalog is:
+
+| Scenario | Recognized `image_type` values | CPU template | GPU template |
+| --- | --- | --- | --- |
+| Scenery/weather | `scenery`, `environment`, `background`, `location`, `weather` | `template.scenery_landscape.dreamshaper.v1` | `template.scenery_landscape.realvisxl.v1` |
+| Portrait | `portrait`, `person`, `character`, `headshot` | `template.portrait.dreamshaper.v1` | `template.portrait.realvisxl.v1` |
+| Product/object | `product`, `object`, `item` | `template.product.dreamshaper.v1` | `template.product.realvisxl.v1` |
+| Illustration | `illustration`, `concept`, `artwork` | `template.illustration.dreamshaper.v1` | `template.illustration.realvisxl.v1` |
+| Icon/graphic | `icon`, `graphic`, `symbol` | `template.icon.dreamshaper.v1` | `template.icon.realvisxl.v1` |
+| Generic | `generic`, `image`, missing, or unrecognized | `template.generic.dreamshaper.v1` | `template.generic.realvisxl.v1` |
+
+CPU variants use `DreamShaper8_LCM.safetensors`; GPU variants use `RealVisXL_V5.0_fp16.safetensors` with
+`sdxl_lightning_4step_lora.safetensors`. The catalog also includes specialized GPU avatar, reference-conditioning,
+pose/depth-control, and inpainting workflows; these require their documented inputs and model assets and are not
+automatic generic-scenario choices.
+
+There are two related catalogs:
+
+- `GET /api/comfyui/templates` is the operator-managed installed workflow catalog. It exposes validated workflow
+  metadata, variables, defaults, model requirements, and runtime IDs, and requires management authorization.
+- `GET /api/image-templates` is the governed registered-template catalog for service clients and requires
+  `ai.image_templates.read`. Registration through `POST /api/image-templates` requires
+  `ai.image_templates.write` and references a workflow file already installed on the AI Node.
+
+Arbitrary workflow JSON upload is **Not developed**. Registration currently stores governance, ownership, version,
+runtime, variables, defaults, and an AI-Node-local workflow path; it does not transfer a workflow file from another
+node. Use built-ins for general generation and install custom workflows through operator-controlled deployment before
+registering them.
+
+A minimal hardware-independent request is:
+
+```json
+{
+  "task_id": "image-product-001",
+  "idempotency_key": "image-product-001",
+  "task_family": "task.image_generation",
+  "requested_by": "<token-subject>",
+  "service_id": "<token-subject>",
+  "requested_provider": "local",
+  "inputs": {
+    "prompt": "Studio photograph of a ceramic coffee mug on a neutral surface",
+    "image_type": "product",
+    "quality": "medium",
+    "width": 1024,
+    "height": 1024,
+    "output_format": "png",
+    "artifact_lifetime": "short_lived",
+    "randomize_seed": true
+  },
+  "priority": "normal",
+  "queue": {
+    "importance": "normal",
+    "queue_class": "interactive"
+  },
+  "response_mode": "async_if_queued",
+  "timeout_s": 180,
+  "trace_id": "image-product-001"
+}
+```
+
+This example selects `template.product.realvisxl.v1` on `visual_gpu`. Changing effective importance to `background`
+selects `template.product.dreamshaper.v1` on `visual_cpu`, provided an authorized prompt does not own a different
+importance or governed template policy.
+
+### Weather background protocol
+
+The Interaction service resolves the AI Node through Core and requests a service token whose audience is
+`node-service:<resolved-provider-node-id>:local`. The token needs `service.execute:task.image_generation` for submission,
+`ai.jobs.read` for polling, and `ai.artifacts.read` plus `ai.artifacts.ack` for artifact completion. Add
+`ai.jobs.cancel` when cancellation is required and `ai.prompts.read` when the client retrieves the prompt before use.
+The request `requested_by` and `service_id` must both equal the verified token subject.
+
+Submit the registered weather prompt through `POST /api/execution/direct`:
+
+```json
+{
+  "task_id": "weather-image-rain-night-001",
+  "idempotency_key": "weather-image-rain-night-001",
+  "prompt_id": "prompt.weather.condition_background",
+  "prompt_version": "v11.0",
+  "task_family": "task.image_generation",
+  "requested_by": "<token-subject>",
+  "service_id": "<token-subject>",
+  "requested_provider": "local",
+  "inputs": {
+    "image_type": "scenery",
+    "condition": "rain",
+    "day_night": "night",
+    "location_context": "Pacific Northwest suburban landscape",
+    "visual_guidance": "Steady rain, reflective surfaces, layered clouds, and cool nighttime lighting",
+    "scene_recipe": "Wide landscape with an open central composition and distant tree line",
+    "width": 1672,
+    "height": 944,
+    "quality": "low",
+    "output_format": "png",
+    "artifact_lifetime": "long_term",
+    "randomize_seed": true
+  },
+  "priority": "background",
+  "queue": {
+    "importance": "background",
+    "priority": "background",
+    "queue_class": "background"
+  },
+  "response_mode": "async_if_queued",
+  "job_name": "Weather background: rain/night",
+  "timeout_s": 180,
+  "trace_id": "weather-image-rain-night-001"
+}
+```
+
+Do not send `queue.runtime_lane` when the AI Node should choose the hardware. For an unbound built-in image request,
+`background` or `low` selects the CPU scenario variant and interactive importance selects the GPU scenario variant.
+The example therefore resolves `image_type=scenery` to `template.scenery_landscape.dreamshaper.v1` on `visual_cpu`.
+An explicit governed prompt-template binding remains authoritative and uses its registered runtime instead. Dimensions
+are multiples of eight; the former 941-pixel weather height normalizes to 944.
+
+With `response_mode=async_if_queued`, retain the returned `job_id` and poll the returned `status_url` no faster than
+`check_after_seconds`. On `completed`, consume every entry in `result.output.images[]`, resolve relative `url` values
+against Core's `provider_api_base_url`, and download with the same service token. After every artifact is durably stored,
+POST the completed job's exact `artifact_ack.body` to its `artifact_ack.url`. Reuse the same `idempotency_key` for an
+exact transport retry; using a new key creates new work. Do not acknowledge a partial download.
+
 ## Prompt versions and input schemas
 
 Prompt versions are immutable and coexist. Creation adds the first version. `PUT /api/prompts/services/{prompt_id}` appends a version when `definition` or `version` is supplied; it never replaces an existing version. Reuse fails with `duplicate_prompt_version`. `GET /api/prompts/services/{prompt_id}` exposes `current_version` and all versions.

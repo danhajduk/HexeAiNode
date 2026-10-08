@@ -1017,3 +1017,9 @@ Verification: JSON Schema discovery tests, capability declaration tests, targete
 #############
 All Tasks completed 10/07/2026 16:00:39
 #############
+###########
+Ad hoc documentation update
+Step objective: Publish the general image-generation and weather background execution protocols.
+What changed: Added general and weather requests, built-in CPU/GPU scenario catalog and selection precedence, Core token scopes, queued polling, artifact retrieval, acknowledgement, retry, cancellation, and custom-workflow limitations; added request examples and selection metadata to the Client Node V2 execution schema and live OpenAPI.
+Verification: FastAPI OpenAPI, task request, and strict prompt-input tests passed; JSON Schema parsing and live OpenAPI inspection passed.
+###########

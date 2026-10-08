@@ -151,6 +151,68 @@
       "maxLength": 128
     }
   },
+  "examples": [
+    {
+      "task_id": "image-product-001",
+      "idempotency_key": "image-product-001",
+      "task_family": "task.image_generation",
+      "requested_by": "node-image-client-example",
+      "service_id": "node-image-client-example",
+      "requested_provider": "local",
+      "inputs": {
+        "prompt": "Studio photograph of a ceramic coffee mug on a neutral surface",
+        "image_type": "product",
+        "quality": "medium",
+        "width": 1024,
+        "height": 1024,
+        "output_format": "png",
+        "artifact_lifetime": "short_lived",
+        "randomize_seed": true
+      },
+      "priority": "normal",
+      "queue": {
+        "importance": "normal",
+        "queue_class": "interactive"
+      },
+      "response_mode": "async_if_queued",
+      "timeout_s": 180,
+      "trace_id": "image-product-001"
+    },
+    {
+      "task_id": "weather-image-rain-night-001",
+      "idempotency_key": "weather-image-rain-night-001",
+      "prompt_id": "prompt.weather.condition_background",
+      "prompt_version": "v11.0",
+      "task_family": "task.image_generation",
+      "requested_by": "node-weather-example",
+      "service_id": "node-weather-example",
+      "requested_provider": "local",
+      "inputs": {
+        "image_type": "scenery",
+        "condition": "rain",
+        "day_night": "night",
+        "location_context": "Pacific Northwest suburban landscape",
+        "visual_guidance": "Steady rain, reflective surfaces, layered clouds, and cool nighttime lighting",
+        "scene_recipe": "Wide landscape with an open central composition and distant tree line",
+        "width": 1672,
+        "height": 944,
+        "quality": "low",
+        "output_format": "png",
+        "artifact_lifetime": "long_term",
+        "randomize_seed": true
+      },
+      "priority": "background",
+      "queue": {
+        "importance": "background",
+        "priority": "background",
+        "queue_class": "background"
+      },
+      "response_mode": "async_if_queued",
+      "job_name": "Weather background: rain/night",
+      "timeout_s": 180,
+      "trace_id": "weather-image-rain-night-001"
+    }
+  ],
   "$defs": {
     "taskFamily": {
       "type": "string",
