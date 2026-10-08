@@ -128,6 +128,29 @@ WEATHER_BACKGROUND_EXECUTION_EXAMPLE = {
     "timeout_s": 180,
     "trace_id": "weather-image-rain-night-001",
 }
+GENERAL_IMAGE_EXECUTION_EXAMPLE = {
+    "task_id": "image-product-001",
+    "idempotency_key": "image-product-001",
+    "task_family": "task.image_generation",
+    "requested_by": "node-image-client-example",
+    "service_id": "node-image-client-example",
+    "requested_provider": "local",
+    "inputs": {
+        "prompt": "Studio photograph of a ceramic coffee mug on a neutral surface",
+        "image_type": "product",
+        "quality": "medium",
+        "width": 1024,
+        "height": 1024,
+        "output_format": "png",
+        "artifact_lifetime": "short_lived",
+        "randomize_seed": True,
+    },
+    "priority": "normal",
+    "queue": {"importance": "normal", "queue_class": "interactive"},
+    "response_mode": "async_if_queued",
+    "timeout_s": 180,
+    "trace_id": "image-product-001",
+}
 
 
 def service_scope_for_route(*, method: str, path: str) -> str | None:
@@ -13939,8 +13962,7 @@ class NodeControlState:
             return f"routing_policy_{routing_mode}"
         return "provider_default_local" if queue_key == "local" else "provider_default_cloud"
 
-    @staticmethod
-    def _cpu_comfyui_queue_policy(*, request: TaskExecutionRequest, importance: str) -> dict:
+    def _cpu_comfyui_queue_policy(self, *, request: TaskExecutionRequest, importance: str) -> dict:
         task_family = str(request.task_family or "").strip().lower()
         is_image_generation = task_family in {"task.image_generation", "task.generation.image"}
         importance_key = str(importance or "normal").strip().lower()
@@ -13949,19 +13971,35 @@ class NodeControlState:
         provider_allowed = requested_provider in {"", "local", "comfyui", "comfyui_cpu"}
         constraints = request.constraints if isinstance(request.constraints, dict) else {}
         resolved_template = constraints.get("image_template_resolved") if isinstance(constraints.get("image_template_resolved"), dict) else {}
-        template_runtime = str(resolved_template.get("template_runtime") or "").strip().lower()
-        builtin_template = not resolved_template
-        cpu_template = template_runtime == "comfyui_cpu" or builtin_template
-        selected = bool(is_image_generation and priority_allowed and provider_allowed and cpu_template)
+        inputs = request.inputs if isinstance(request.inputs, dict) else {}
+        explicit_template_id = str(inputs.get("template_id") or "").strip()
+        template_runtime = ""
+        if explicit_template_id:
+            try:
+                template = self.get_comfyui_template_catalog_entry(template_id=explicit_template_id).get("template")
+            except ValueError:
+                template = None
+            if isinstance(template, dict):
+                template_runtime = str(template.get("runtime_id") or "").strip().lower()
+        if not template_runtime:
+            template_runtime = str(resolved_template.get("template_runtime") or "").strip().lower()
+        fixed_template_runtime = template_runtime in {"comfyui_cpu", "comfyui_gpu"}
+        builtin_template = not fixed_template_runtime
+        cpu_template = template_runtime == "comfyui_cpu"
+        selected = bool(
+            is_image_generation
+            and provider_allowed
+            and (cpu_template or (builtin_template and priority_allowed))
+        )
         reason = "eligible"
         if not is_image_generation:
             reason = "not_image_generation"
-        elif not priority_allowed:
-            reason = "priority_not_low_or_background"
         elif not provider_allowed:
             reason = "explicit_nonlocal_provider"
-        elif not cpu_template:
+        elif template_runtime == "comfyui_gpu":
             reason = "template_requires_gpu"
+        elif builtin_template and not priority_allowed:
+            reason = "priority_not_low_or_background"
         return {
             "selected": selected,
             "runtime_id": "comfyui_cpu",
@@ -13970,6 +14008,8 @@ class NodeControlState:
             "importance": importance_key,
             "allowed_importance": ["background", "low"],
             "template_runtime": template_runtime,
+            "explicit_template_id": explicit_template_id or None,
+            "fixed_template_runtime": fixed_template_runtime,
             "builtin_template": builtin_template,
             "reason": reason,
         }
@@ -18246,11 +18286,28 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                 "background_or_low_unbound_image": "visual_cpu",
                 "interactive_unbound_image": "visual_gpu",
                 "governed_template_binding": "registered_template_runtime",
+                "selection_order": [
+                    "inputs.template_id",
+                    "governed_prompt_template",
+                    "inputs.image_type",
+                    "generic_scenario",
+                ],
+                "installed_catalog_path": "/api/comfyui/templates",
+                "registered_catalog_path": "/api/image-templates",
             },
             "requestBody": {
                 "content": {
                     "application/json": {
                         "examples": {
+                            "general_image_generation": {
+                                "summary": "Queue hardware-independent product image generation",
+                                "description": (
+                                    "The caller supplies a semantic image_type and omits runtime_lane. Normal "
+                                    "importance selects the GPU product workflow; background or low importance "
+                                    "selects its CPU counterpart."
+                                ),
+                                "value": GENERAL_IMAGE_EXECUTION_EXAMPLE,
+                            },
                             "weather_background": {
                                 "summary": "Queue a hardware-independent weather background image",
                                 "description": (

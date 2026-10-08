@@ -1018,6 +1018,44 @@ class NodeControlApiTests(unittest.TestCase):
 
         asyncio.run(run_scenario())
 
+    def test_explicit_builtin_template_runtime_controls_visual_lane(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=self._FakeProviderRuntimeManager(),
+                    capability_runner=self._FakeCapabilityRunner(),
+                    comfyui_template_catalog_dir="config/comfyui/templates",
+                )
+                cases = (
+                    ("template.product.dreamshaper.v1", "normal", "visual_cpu"),
+                    ("template.product.realvisxl.v1", "background", "visual_gpu"),
+                )
+                for index, (template_id, priority, expected_queue) in enumerate(cases):
+                    with self.subTest(template_id=template_id, priority=priority):
+                        preview = await state.preview_direct_execution_route(
+                            request=TaskExecutionRequest.model_validate(
+                                {
+                                    "task_id": f"task-explicit-template-{index}",
+                                    "task_family": "task.image_generation",
+                                    "requested_by": "service.alpha",
+                                    "requested_provider": "local",
+                                    "inputs": {"prompt": "studio product image", "template_id": template_id},
+                                    "response_mode": "async_if_queued",
+                                    "priority": priority,
+                                    "trace_id": f"trace-explicit-template-{index}",
+                                }
+                            )
+                        )
+                        self.assertEqual(preview["queue"], expected_queue)
+                        self.assertTrue(
+                            preview["routing_decision"]["cpu_comfyui_policy"]["fixed_template_runtime"]
+                        )
+
+        asyncio.run(run_scenario())
+
     def test_normal_priority_image_generation_routes_to_visual_gpu_queue(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:
