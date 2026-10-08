@@ -448,6 +448,7 @@ class DirectExecutionAdmissionConfig:
 class VisualCpuAdmissionConfig:
     enabled: bool = True
     core_limit_percent: float = 50.0
+    max_pixels: int = 786_432
     min_memory_available_percent: float = 25.0
     max_swap_used_percent: float = 80.0
     max_load_percent: float = 65.0
@@ -462,6 +463,7 @@ class VisualCpuAdmissionConfig:
                 default=50.0,
                 minimum=1.0,
             ),
+            max_pixels=max(_env_int("HEXE_VISUAL_CPU_MAX_PIXELS", 786_432), 65_536),
             min_memory_available_percent=_bounded_percent(
                 _env_float("HEXE_VISUAL_CPU_MIN_MEMORY_AVAILABLE_PERCENT", 25.0),
                 default=25.0,
@@ -481,6 +483,7 @@ class VisualCpuAdmissionConfig:
         return {
             "enabled": self.enabled,
             "core_limit_percent": self.core_limit_percent,
+            "max_pixels": self.max_pixels,
             "min_memory_available_percent": self.min_memory_available_percent,
             "max_swap_used_percent": self.max_swap_used_percent,
             "max_load_percent": self.max_load_percent,
@@ -13989,10 +13992,16 @@ class NodeControlState:
         fixed_template_runtime = template_runtime in {"comfyui_cpu", "comfyui_gpu"}
         builtin_template = not fixed_template_runtime
         cpu_template = template_runtime == "comfyui_cpu"
+        width, height = self._direct_visual_runtime_dimensions(inputs=inputs)
+        requested_pixels = width * height if width is not None and height is not None else None
+        within_cpu_pixel_budget = (
+            requested_pixels is None
+            or requested_pixels <= self._visual_cpu_admission_config.max_pixels
+        )
         selected = bool(
             is_image_generation
             and provider_allowed
-            and (cpu_template or (builtin_template and priority_allowed))
+            and (cpu_template or (builtin_template and priority_allowed and within_cpu_pixel_budget))
         )
         reason = "eligible"
         if not is_image_generation:
@@ -14003,6 +14012,8 @@ class NodeControlState:
             reason = "template_requires_gpu"
         elif builtin_template and not priority_allowed:
             reason = "priority_not_low_or_background"
+        elif builtin_template and not within_cpu_pixel_budget:
+            reason = "image_dimensions_exceed_cpu_budget"
         return {
             "selected": selected,
             "runtime_id": "comfyui_cpu",
@@ -14010,6 +14021,9 @@ class NodeControlState:
             "task_family": task_family or None,
             "importance": importance_key,
             "allowed_importance": ["background", "low"],
+            "max_pixels": self._visual_cpu_admission_config.max_pixels,
+            "requested_pixels": requested_pixels,
+            "within_pixel_budget": within_cpu_pixel_budget,
             "template_runtime": template_runtime,
             "explicit_template_id": explicit_template_id or None,
             "fixed_template_runtime": fixed_template_runtime,

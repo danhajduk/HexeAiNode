@@ -1018,6 +1018,59 @@ class NodeControlApiTests(unittest.TestCase):
 
         asyncio.run(run_scenario())
 
+    def test_large_background_image_generation_selects_gpu_runtime(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                provider_runtime_manager = self._FakeProviderRuntimeManager()
+                provider_runtime_manager._resolved_tasks = ["task.image_generation"]
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=provider_runtime_manager,
+                    capability_runner=self._FakeCapabilityRunner(),
+                    comfyui_template_catalog_dir="config/comfyui/templates",
+                )
+                request = TaskExecutionRequest.model_validate(
+                    {
+                        "task_id": "task-background-weather-large",
+                        "task_family": "task.image_generation",
+                        "requested_by": "service.alpha",
+                        "requested_provider": "local",
+                        "inputs": {
+                            "prompt": "clear Pacific Northwest sky",
+                            "image_type": "scenery",
+                            "width": 1672,
+                            "height": 944,
+                            "quality": "low",
+                        },
+                        "response_mode": "async_if_queued",
+                        "priority": "background",
+                        "timeout_s": 180,
+                        "trace_id": "trace-background-weather-large",
+                    }
+                )
+
+                preview = await state.preview_direct_execution_route(request=request)
+                cpu_policy = preview["routing_decision"]["cpu_comfyui_policy"]
+
+                self.assertEqual(preview["queue"], "visual_gpu")
+                self.assertEqual(preview["local_runtime_assignment"]["runtime_id"], "comfyui_gpu")
+                self.assertFalse(cpu_policy["selected"])
+                self.assertEqual(cpu_policy["reason"], "image_dimensions_exceed_cpu_budget")
+                self.assertEqual(cpu_policy["requested_pixels"], 1_578_368)
+                self.assertEqual(cpu_policy["max_pixels"], 786_432)
+                self.assertEqual(
+                    state._direct_visual_runtime_requested_template_id(
+                        inputs=request.inputs,
+                        resolved_template={},
+                        runtime_lane="visual_gpu",
+                    ),
+                    "template.scenery_landscape.realvisxl.v1",
+                )
+
+        asyncio.run(run_scenario())
+
     def test_explicit_builtin_template_runtime_controls_visual_lane(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:

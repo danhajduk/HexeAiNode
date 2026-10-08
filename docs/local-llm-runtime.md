@@ -212,7 +212,9 @@ operator/internal maintenance smoke because training is local-only and intention
 CPU Visual Runtime is reserved for low-priority background image work. The direct execution queue exposes a
 `visual_cpu` lane with concurrency `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` defaulting to 1. Only `task.image_generation` or
 `task.generation.image` requests with `priority: "background"` or `priority: "low"` are eligible for that lane; normal
-and high-priority image work stays off the CPU Visual Runtime queue. Queue diagnostics include `queues.visual_cpu` with
+and high-priority image work stays off the CPU Visual Runtime queue. Hardware-independent requests must also be no larger
+than `HEXE_VISUAL_CPU_MAX_PIXELS` (default `786432`, or 1024x768); larger work automatically selects the paired GPU
+template and `visual_gpu` lane so its execution budget is achievable. An explicit CPU template remains CPU-bound. Queue diagnostics include `queues.visual_cpu` with
 queued depth, active job, and oldest queued age.
 
 GPU presets live in `config/comfyui-gpu-presets.json` and are exposed through:

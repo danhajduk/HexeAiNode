@@ -118,6 +118,7 @@ Backend runtime:
 - `HEXE_EXECUTION_QUEUE_CLOUD_CONCURRENCY` default `4`; max cloud queued jobs dispatched concurrently
 - `HEXE_COMFYUI_CPU_QUEUE_CONCURRENCY` default `1`; max CPU ComfyUI background image jobs dispatched concurrently
 - `HEXE_COMFYUI_CPU_CORE_LIMIT_PERCENT` default `50`; percentage of the process's detected/allowed logical CPUs assigned to CPU ComfyUI, rounded up with a minimum of one
+- `HEXE_VISUAL_CPU_MAX_PIXELS` default `786432` (1024x768); hardware-independent image requests above this size automatically use GPU ComfyUI because CPU generation cannot reliably finish within the standard execution budget; an explicitly selected CPU template remains CPU-bound
 - `HEXE_VISUAL_CPU_ADMISSION_ENABLED` default `true`; gates CPU image dispatch on host resource percentages
 - `HEXE_VISUAL_CPU_MIN_MEMORY_AVAILABLE_PERCENT` default `25`; CPU image jobs remain queued below this available-RAM percentage
 - `HEXE_VISUAL_CPU_MAX_SWAP_USED_PERCENT` default `80`; CPU image jobs remain queued at or above this swap-use percentage
