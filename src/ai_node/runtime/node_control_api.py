@@ -94,6 +94,40 @@ SERVICE_EXECUTION_PATHS = {
     "/api/execution/route-preview",
 }
 ASSISTANT_PROMPT_ID = "prompt.hexeinteraction.assistant"
+WEATHER_BACKGROUND_EXECUTION_EXAMPLE = {
+    "task_id": "weather-image-rain-night-001",
+    "idempotency_key": "weather-image-rain-night-001",
+    "prompt_id": "prompt.weather.condition_background",
+    "prompt_version": "v11.0",
+    "task_family": "task.image_generation",
+    "requested_by": "node-weather-example",
+    "service_id": "node-weather-example",
+    "requested_provider": "local",
+    "inputs": {
+        "image_type": "scenery",
+        "condition": "rain",
+        "day_night": "night",
+        "location_context": "Pacific Northwest suburban landscape",
+        "visual_guidance": "Steady rain, reflective surfaces, layered clouds, and cool nighttime lighting",
+        "scene_recipe": "Wide landscape with an open central composition and distant tree line",
+        "width": 1672,
+        "height": 944,
+        "quality": "low",
+        "output_format": "png",
+        "artifact_lifetime": "long_term",
+        "randomize_seed": True,
+    },
+    "priority": "background",
+    "queue": {
+        "importance": "background",
+        "priority": "background",
+        "queue_class": "background",
+    },
+    "response_mode": "async_if_queued",
+    "job_name": "Weather background: rain/night",
+    "timeout_s": 180,
+    "trace_id": "weather-image-rain-night-001",
+}
 
 
 def service_scope_for_route(*, method: str, path: str) -> str | None:
@@ -18196,7 +18230,42 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
             status_code = 503 if error_code in unavailable else 403 if error_code.startswith("service_token_") else 400
             raise HTTPException(status_code=status_code, detail=error_code) from exc
 
-    @app.post("/api/execution/direct")
+    @app.post(
+        "/api/execution/direct",
+        summary="Execute or queue an AI task",
+        description=(
+            "Execute a governed task synchronously or enqueue it when response_mode is async_if_queued. "
+            "For hardware-independent image generation, provide semantic inputs and queue importance but omit "
+            "queue.runtime_lane; the AI Node selects a compatible CPU or GPU built-in workflow. Background and "
+            "low-priority unbound image requests select CPU, while interactive unbound image requests select GPU. "
+            "An explicit governed image-template binding retains its registered runtime."
+        ),
+        openapi_extra={
+            "x-hexe-runtime-selection": {
+                "caller_supplies_runtime_lane": False,
+                "background_or_low_unbound_image": "visual_cpu",
+                "interactive_unbound_image": "visual_gpu",
+                "governed_template_binding": "registered_template_runtime",
+            },
+            "requestBody": {
+                "content": {
+                    "application/json": {
+                        "examples": {
+                            "weather_background": {
+                                "summary": "Queue a hardware-independent weather background image",
+                                "description": (
+                                    "The prompt owns background importance. The caller omits runtime_lane, so the "
+                                    "AI Node selects the CPU scenery workflow. requested_by and service_id must "
+                                    "equal the verified Core service-token subject."
+                                ),
+                                "value": WEATHER_BACKGROUND_EXECUTION_EXAMPLE,
+                            }
+                        }
+                    }
+                }
+            },
+        },
+    )
     async def post_execution_direct(
         payload: TaskExecutionRequest,
         authorization: str | None = Header(default=None),

@@ -571,6 +571,15 @@ class NodeControlFastApiTests(unittest.TestCase):
             self.assertIn("404", openapi["paths"]["/api/execution/jobs/{job_id}"]["get"]["responses"])
             self.assertIn("404", openapi["paths"]["/api/execution/jobs/{job_id}"]["delete"]["responses"])
             self.assertIn("404", openapi["paths"]["/api/execution/artifacts/ack"]["post"]["responses"])
+            direct_operation = openapi["paths"]["/api/execution/direct"]["post"]
+            weather_example = direct_operation["requestBody"]["content"]["application/json"]["examples"]["weather_background"]
+            self.assertEqual(weather_example["value"]["prompt_id"], "prompt.weather.condition_background")
+            self.assertEqual(weather_example["value"]["prompt_version"], "v11.0")
+            self.assertNotIn("runtime_lane", weather_example["value"]["queue"])
+            self.assertEqual(
+                direct_operation["x-hexe-runtime-selection"]["background_or_low_unbound_image"],
+                "visual_cpu",
+            )
 
             schema_response = client.get("/api/schemas/client-node/v2/prompt-register.v2.request.schema.json")
 
