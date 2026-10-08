@@ -232,6 +232,9 @@ wait_router() {
 
 load_model() {
   wait_router
+  if [[ "$(model_status_value 2>/dev/null || true)" == "loaded" ]]; then
+    return 0
+  fi
   uds_json_request POST /models/load "{\"model\":\"$LLAMACPP_VISION_MODEL_ALIAS\"}" >/dev/null
 }
 

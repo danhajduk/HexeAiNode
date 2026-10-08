@@ -161,11 +161,13 @@ the current queue runner cannot safely rebind an executable local runner into a 
 
 While the manual session is active, the node polls ComfyUI `/queue` through the Unix socket. Non-empty
 `queue_running` or `queue_pending` resets the idle timer. Once the queue is empty for
-`HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS` seconds, default `900`, the `comfyui_webui_idle_close` scheduler job closes the
+`HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS` seconds, default `300`, the `comfyui_webui_idle_close` scheduler job closes the
 manual Web UI session. `GET /api/services/status` includes `comfyui_webui.session.idle_seconds`,
 `idle_timeout_seconds`, and `auto_close_at_epoch` for UI countdowns. Idle auto-close shuts down the Web UI bridge,
 stops ComfyUI, waits for the ComfyUI sockets to disappear, clears the manual session marker, and then calls the normal
 vision residency path to reload the vision runtime when enabled.
+If the manual bridge exits unexpectedly, the idle scheduler still evaluates the persisted session against the live
+ComfyUI queue, releases an idle visual model after the same timeout, clears the stale marker, and restores Vision.
 
 Manual Web UI sessions use separate artifact folders so human/experimental outputs do not mix with governed normal OP
 generation. The default manual GPU paths are `runtime/manual/comfyui-gpu/input`,

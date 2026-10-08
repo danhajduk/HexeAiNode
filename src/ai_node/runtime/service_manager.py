@@ -20,7 +20,7 @@ LOCAL_LLM_DEFAULT_REVERT_IDLE_SECONDS = 900
 LOCAL_LLM_ALWAYS_ON_CHECK_INTERVAL_SECONDS = 60
 VISION_LLM_BUILTIN_DEFAULT_MODEL_ID = "qwen2.5-vl-3b-instruct-q4_k_m"
 VISUAL_TRAINING_CLIENT_IDLE_SECONDS = 30
-VISUAL_TRAINING_MANUAL_IDLE_SECONDS = 900
+VISUAL_TRAINING_MANUAL_IDLE_SECONDS = 300
 
 
 def _env_int(name: str, *, default: int) -> int:
@@ -1242,7 +1242,37 @@ class UserSystemdServiceManager:
     def close_comfyui_webui_if_idle(self) -> dict:
         session_status = self.comfyui_webui_session_status()
         if not session_status.get("manual_session_active"):
-            return {"closed": False, "reason": "manual_session_inactive", "session": session_status}
+            persisted_session = self._read_comfyui_webui_session()
+            persisted_state = str(persisted_session.get("state") or "").strip().lower()
+            if persisted_state not in {"active", "idle"}:
+                return {"closed": False, "reason": "manual_session_inactive", "session": session_status}
+            queue_state = self._comfyui_queue_state()
+            if queue_state.get("queue_active"):
+                self._write_comfyui_webui_session(
+                    state="active",
+                    reason="comfyui_queue_active",
+                    last_active_epoch=time.time(),
+                )
+                return {"closed": False, "reason": "queue_active", "session": self.comfyui_webui_session_status()}
+            session_status = {
+                **session_status,
+                **queue_state,
+                "runtime": persisted_session.get("runtime") or session_status.get("runtime"),
+            }
+            last_active_epoch = persisted_session.get("last_active_epoch")
+            try:
+                session_status["idle_seconds"] = max(time.time() - float(last_active_epoch), 0.0)
+            except (TypeError, ValueError):
+                self._write_comfyui_webui_session(
+                    state="idle",
+                    reason="stale_manual_session_queue_idle",
+                    last_active_epoch=time.time(),
+                )
+                return {
+                    "closed": False,
+                    "reason": "stale_session_idle_timer_started",
+                    "session": self.comfyui_webui_session_status(),
+                }
         if session_status.get("queue_active"):
             self._write_comfyui_webui_session(
                 state="active",
@@ -1260,10 +1290,7 @@ class UserSystemdServiceManager:
             return {"closed": False, "reason": "idle_timer_started", "session": self.comfyui_webui_session_status()}
         if float(idle_seconds) < self._comfyui_webui_idle_timeout_seconds:
             return {"closed": False, "reason": "idle_timeout_not_reached", "session": session_status}
-        result = self.release_local_scheduler_component(
-            component_id=self._comfyui_scheduler_component(),
-            request_metadata={"source": "comfyui_webui_idle_close", "target": "comfyui_webui"},
-        )
+        result = self.stop_comfyui_webui()
         vision_restore = self.request_local_scheduler_component(
             component_id="vision_llm",
             importance="normal",

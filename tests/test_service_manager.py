@@ -830,9 +830,9 @@ class ServiceManagerTests(unittest.TestCase):
             manager._write_comfyui_webui_session(state="idle", reason="test", last_active_epoch=100.0)
             calls = []
 
-            def _release_visual(**_kwargs):
-                calls.append("release_visual")
-                return {"status": "ok", "target": "visual_gpu", "result": "model_unloaded"}
+            def _stop_visual():
+                calls.append("stop_visual")
+                return {"status": "ok", "target": "comfyui_webui", "result": "stopped"}
 
             def _restore_vision(**_kwargs):
                 calls.append("restore_vision")
@@ -842,7 +842,7 @@ class ServiceManagerTests(unittest.TestCase):
                 patch("time.time", return_value=401.0),
                 patch.object(manager, "_comfyui_webui_status_without_session", return_value={"state": "running", "pid": 1234}),
                 patch.object(manager, "_uds_json_get", return_value={"queue_running": [], "queue_pending": []}),
-                patch.object(manager, "release_local_scheduler_component", side_effect=_release_visual) as fake_release,
+                patch.object(manager, "stop_comfyui_webui", side_effect=_stop_visual) as fake_stop,
                 patch.object(manager, "request_local_scheduler_component", side_effect=_restore_vision) as fake_restore,
             ):
                 result = manager.close_comfyui_webui_if_idle()
@@ -850,12 +850,41 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertTrue(result["closed"])
         self.assertEqual(result["reason"], "idle_timeout_reached")
         self.assertEqual(result["vision_restore"]["status"], "ok")
-        self.assertEqual(calls, ["release_visual", "restore_vision"])
-        fake_release.assert_called_once()
-        self.assertEqual(fake_release.call_args.kwargs["component_id"], "visual_gpu")
+        self.assertEqual(calls, ["stop_visual", "restore_vision"])
+        fake_stop.assert_called_once_with()
         fake_restore.assert_called_once()
         self.assertEqual(fake_restore.call_args.kwargs["component_id"], "vision_llm")
         self.assertEqual(fake_restore.call_args.kwargs["request_metadata"]["source"], "comfyui_webui_idle_close")
+
+    def test_comfyui_webui_idle_close_recovers_stale_session_after_bridge_disappears(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "HEXE_COMFYUI_WEBUI_SESSION_FILE": str(Path(tmp) / "session.json"),
+                "HEXE_COMFYUI_WEBUI_IDLE_TIMEOUT_SECONDS": "300",
+            },
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._write_comfyui_webui_session(
+                state="active",
+                reason="comfyui_queue_active",
+                last_active_epoch=100.0,
+            )
+            with (
+                patch("time.time", return_value=401.0),
+                patch.object(manager, "_comfyui_webui_status_without_session", return_value={"state": "stopped", "pid": None}),
+                patch.object(manager, "_uds_json_get", return_value={"queue_running": [], "queue_pending": []}),
+                patch.object(manager, "stop_comfyui_webui", side_effect=lambda: (manager._clear_comfyui_webui_session() or {"status": "ok"})) as fake_stop,
+                patch.object(manager, "request_local_scheduler_component", return_value={"status": "ok"}) as fake_restore,
+            ):
+                result = manager.close_comfyui_webui_if_idle()
+
+            self.assertTrue(result["closed"])
+            self.assertEqual(result["reason"], "idle_timeout_reached")
+            self.assertFalse(Path(manager._comfyui_webui_session_file).exists())
+            fake_stop.assert_called_once()
+            fake_restore.assert_called_once()
 
     def test_visual_training_client_idle_release_releases_client_owned_visual_runtime(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
