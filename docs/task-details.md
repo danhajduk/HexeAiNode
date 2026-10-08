@@ -1,5 +1,30 @@
 # Task Details
 
+## Task 1041
+Coordination request: `HEXE-REQ-20261008-A7F392`
+
+Title: Support automatic compatible runtime selection for weather backgrounds.
+
+Requested outcome:
+- Accept a hardware-independent `task.image_generation` request using `prompt.weather.condition_background` v11.0, scenery output, 1672x944 PNG, low quality, long-term lifetime, randomized seed, local-only routing, and background priority.
+- Keep CPU/GPU, template, runtime, checkpoint, and model selection owned by AI Node when Interaction supplies no hardware hints.
+- Complete generation without `manual_image_template_runtime_unsupported` or `visual_runtime_generation_timeout`.
+
+Dependencies:
+- Core-issued service authorization and the registered weather prompt must remain operational.
+- Interaction owns persistence of its final 1672x941 PNG/WebP display variant.
+
+Constraints:
+- Do not require Interaction to send `runtime_lane`, template, runtime, checkpoint, model, or CPU/GPU preference.
+- Preserve local-only resolution metadata and existing artifact lifecycle semantics.
+- Do not overwrite Interaction's existing clear/day images when generation fails.
+
+Acceptance:
+- A repeated Core-authorized, hardware-independent weather request automatically selects a compatible CPU or GPU path.
+- AI Node returns a completed job with a canonical image URL and local-only resolution metadata.
+- The generated artifact can be read and acknowledged.
+- Interaction persists a 1672x941 PNG/WebP variant without template/runtime incompatibility or generation timeout.
+
 ## Task 940
 Original task source: ad hoc operator request on 2026-06-04.
 
