@@ -1259,6 +1259,8 @@ class UserSystemdServiceManager:
             pass
         self._run_comfyui_control(self._comfyui_webui_runtime, "stop")
         self._wait_comfyui_runtime_stopped(runtime=self._comfyui_webui_runtime)
+        if self._comfyui_webui_runtime == "gpu":
+            self._clear_comfyui_gpu_vision_gate()
         self._clear_comfyui_webui_session()
         return {"target": "comfyui_webui", "result": "stopped", **self._comfyui_webui_status()}
 
@@ -2251,6 +2253,15 @@ class UserSystemdServiceManager:
         status = str(payload.get("status") or "").strip().lower()
         action = str(payload.get("action") or "").strip().lower()
         return bool(status == "ok" and action in {"unloading", "unloaded"})
+
+    def _clear_comfyui_gpu_vision_gate(self) -> None:
+        path = Path(self._comfyui_gpu_vision_gate_artifact or ".run/comfyui-gpu-vision-gate.json")
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
 
     def _comfyui_webui_status_without_session(self) -> dict:
         pid = self._read_pid_file(self._comfyui_webui_pid_file)

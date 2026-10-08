@@ -895,6 +895,28 @@ class ServiceManagerTests(unittest.TestCase):
         fake_stop.assert_called_once()
         fake_restore.assert_called_once()
 
+    def test_gpu_webui_stop_clears_vision_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            gate_path = Path(tmp) / "vision-gate.json"
+            gate_path.write_text('{"status":"ok","action":"unloaded"}', encoding="utf-8")
+            manager._comfyui_gpu_vision_gate_artifact = str(gate_path)
+            manager._comfyui_webui_runtime = "gpu"
+            manager._set_scheduler_control_active(True)
+            with (
+                patch.object(manager, "stop_comfyui_progress_listener"),
+                patch.object(manager, "_write_comfyui_webui_session"),
+                patch.object(manager, "_read_pid_file", return_value=None),
+                patch.object(manager, "_run_comfyui_control"),
+                patch.object(manager, "_wait_comfyui_runtime_stopped", return_value=True),
+                patch.object(manager, "_clear_comfyui_webui_session"),
+                patch.object(manager, "_comfyui_webui_status", return_value={"state": "stopped"}),
+            ):
+                manager.stop_comfyui_webui()
+            manager._set_scheduler_control_active(False)
+
+            self.assertFalse(gate_path.exists())
+
     def test_client_visual_job_can_request_five_minute_idle_lease(self):
         manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
         with (
