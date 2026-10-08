@@ -40,7 +40,17 @@
         "selected_provider": {"type": ["string", "null"]},
         "concrete_executor": {"type": ["string", "null"]},
         "selected_model": {"type": ["string", "null"]},
-        "runtime_lane": {"type": ["string", "null"]}
+        "runtime_lane": {"type": ["string", "null"]},
+        "visual_runtime_lifecycle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "reason", "keep_warm_seconds"],
+          "properties": {
+            "action": {"type": "string", "enum": ["closed", "retained", "unavailable"]},
+            "reason": {"type": "string"},
+            "keep_warm_seconds": {"type": "integer", "enum": [0, 300]}
+          }
+        }
       }
     },
     "completed_at": {"type": ["string", "null"], "format": "date-time"}

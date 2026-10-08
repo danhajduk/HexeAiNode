@@ -12714,6 +12714,7 @@ class NodeControlState:
     async def _execute_direct_visual_runtime_now(self, *, request: TaskExecutionRequest) -> dict:
         inputs = request.inputs if isinstance(request.inputs, dict) else {}
         artifact_lifetime = self._direct_visual_runtime_artifact_lifetime(inputs=inputs)
+        keep_warm_seconds = self._direct_visual_runtime_keep_warm_seconds(inputs=inputs)
         constraints = request.constraints if isinstance(request.constraints, dict) else {}
         resolved_template = (
             constraints.get("image_template_resolved")
@@ -12771,6 +12772,7 @@ class NodeControlState:
                 "task_id": request.task_id,
                 "task_family": request.task_family,
                 "runtime_lane": str(getattr(request.queue, "runtime_lane", "") or "visual_gpu"),
+                "keep_warm_seconds": keep_warm_seconds,
             },
         )
         submission = await self.submit_manual_image_generation(payload=payload)
@@ -12816,6 +12818,16 @@ class NodeControlState:
             canonical_image.update(retention)
         runtime_lane = "visual_cpu" if str(submission.get("runtime_id") or "") == "comfyui_cpu" else "visual_gpu"
         runtime_id = "comfyui_cpu" if runtime_lane == "visual_cpu" else "comfyui_gpu"
+        lifecycle = {
+            "action": "unavailable",
+            "reason": "service_manager_not_configured",
+            "keep_warm_seconds": keep_warm_seconds,
+        }
+        if self._service_manager is not None and hasattr(self._service_manager, "complete_comfyui_client_job"):
+            lifecycle = await asyncio.to_thread(
+                self._service_manager.complete_comfyui_client_job,
+                keep_warm_seconds=keep_warm_seconds,
+            )
         return {
             "task_id": request.task_id,
             "status": "completed",
@@ -12847,6 +12859,11 @@ class NodeControlState:
                 "runtime_lane": runtime_lane,
                 "template_id": submission.get("template_id"),
                 "prompt_id": submission.get("prompt_id"),
+                "visual_runtime_lifecycle": {
+                    "action": lifecycle.get("action"),
+                    "reason": lifecycle.get("reason"),
+                    "keep_warm_seconds": keep_warm_seconds,
+                },
             },
             "completed_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -13058,6 +13075,15 @@ class NodeControlState:
         if value not in {"short_lived", "long_term"}:
             raise ValueError("image_artifact_lifetime_invalid")
         return value
+
+    @staticmethod
+    def _direct_visual_runtime_keep_warm_seconds(*, inputs: dict) -> int:
+        value = inputs.get("keep_visual_runtime_warm")
+        if value is None:
+            return 0
+        if not isinstance(value, bool):
+            raise ValueError("keep_visual_runtime_warm_invalid")
+        return 300 if value else 0
 
     @staticmethod
     def _direct_visual_runtime_canonical_image(

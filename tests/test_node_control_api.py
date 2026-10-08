@@ -3134,6 +3134,27 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "image_artifact_lifetime_invalid"):
             NodeControlState._direct_visual_runtime_artifact_lifetime(inputs={"artifact_lifetime": "forever"})
 
+    def test_direct_visual_runtime_keep_warm_defaults_to_immediate_close(self):
+        self.assertEqual(NodeControlState._direct_visual_runtime_keep_warm_seconds(inputs={}), 0)
+        self.assertEqual(
+            NodeControlState._direct_visual_runtime_keep_warm_seconds(
+                inputs={"keep_visual_runtime_warm": False}
+            ),
+            0,
+        )
+
+    def test_direct_visual_runtime_keep_warm_enables_five_minute_idle_lease(self):
+        self.assertEqual(
+            NodeControlState._direct_visual_runtime_keep_warm_seconds(
+                inputs={"keep_visual_runtime_warm": True}
+            ),
+            300,
+        )
+        with self.assertRaisesRegex(ValueError, "keep_visual_runtime_warm_invalid"):
+            NodeControlState._direct_visual_runtime_keep_warm_seconds(
+                inputs={"keep_visual_runtime_warm": "true"}
+            )
+
     def test_manual_image_generation_status_reports_latest_job_completion(self):
         class _ManualImageServiceManager:
             def get_status(self):

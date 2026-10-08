@@ -129,6 +129,7 @@ A minimal hardware-independent request is:
     "height": 1024,
     "output_format": "png",
     "artifact_lifetime": "short_lived",
+    "keep_visual_runtime_warm": false,
     "randomize_seed": true
   },
   "priority": "normal",
@@ -178,6 +179,7 @@ Submit the registered weather prompt through `POST /api/execution/direct`:
     "quality": "low",
     "output_format": "png",
     "artifact_lifetime": "long_term",
+    "keep_visual_runtime_warm": true,
     "randomize_seed": true
   },
   "priority": "background",
@@ -249,6 +251,8 @@ Local artifact retrieval requires a Core service token with `ai.artifacts.read`;
 A completed asynchronous job containing images includes `artifact_ack` with the acknowledgement URL, method, and job-scoped request body. After every image has been downloaded and durably stored, the client posts that body to `POST /api/execution/artifacts/ack`. This means all job artifacts were retrieved and are no longer needed. The operation is idempotent, records `artifact_acknowledgement` on the job, and immediately deletes node-local artifact files; non-local artifact URLs are acknowledged but retained by their owning provider. Clients must not acknowledge after only a partial download.
 
 Image-generation inputs may include `artifact_lifetime`. Use `short_lived` for node-local artifacts that may be deleted after one hour, or `long_term` to use the node's general generated-image retention period. If omitted, the existing output-class retention policy remains in effect. Completed local image artifacts echo `artifact_lifetime`, `created_at`, and `expires_at` when an explicit lifetime was requested. Artifact acknowledgement can still delete either class earlier.
+
+Image-generation inputs may also include the boolean `keep_visual_runtime_warm`. It defaults to `false`: after the image is complete, the AI Node closes and unloads the selected CPU or GPU visual runtime and restores its default Vision runtime before returning the completed response. Set it to `true` when more image requests are expected; the selected visual runtime then remains available until its queue has been idle for 300 seconds. Each completed request with `keep_visual_runtime_warm=true` restarts that idle window. Visual responses expose the effective decision as `resolution_metadata.visual_runtime_lifecycle`, including `action` and `keep_warm_seconds`.
 
 Legacy `output.image` and `output.text` on visual results are compatibility fields and may be deprecated. Inline image bytes are not canonical.
 

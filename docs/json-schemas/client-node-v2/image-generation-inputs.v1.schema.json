@@ -24,6 +24,11 @@
       "enum": ["short_lived", "long_term"],
       "description": "Optional node-local artifact retention policy. short_lived expires after one hour; long_term uses the node's general generated-image retention. If omitted, the node's existing output-class policy applies."
     },
+    "keep_visual_runtime_warm": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, keep the selected CPU or GPU visual runtime available until it has been idle for 300 seconds so follow-up image requests can reuse it. When false or omitted, close and unload the visual runtime as soon as generation completes and restore the default Vision runtime."
+    },
     "quality": {
       "type": "string",
       "enum": ["low", "medium", "high"],

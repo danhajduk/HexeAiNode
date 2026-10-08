@@ -876,6 +876,57 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(fake_restore.call_args.kwargs["component_id"], "vision_llm")
         self.assertEqual(fake_restore.call_args.kwargs["request_metadata"]["source"], "comfyui_webui_idle_close")
 
+    def test_client_visual_job_closes_immediately_by_default(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+        with (
+            patch.object(
+                manager,
+                "comfyui_webui_session_status",
+                return_value={"manual_session_active": True, "runtime": "cpu", "queue_active": False},
+            ),
+            patch.object(manager, "stop_comfyui_webui", return_value={"result": "stopped"}) as fake_stop,
+            patch.object(manager, "request_local_scheduler_component", return_value={"status": "ok"}) as fake_restore,
+        ):
+            result = manager.complete_comfyui_client_job()
+
+        self.assertEqual(result["action"], "closed")
+        self.assertEqual(result["keep_warm_seconds"], 0)
+        self.assertEqual(manager._comfyui_webui_runtime, "cpu")
+        fake_stop.assert_called_once()
+        fake_restore.assert_called_once()
+
+    def test_client_visual_job_can_request_five_minute_idle_lease(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+        with (
+            patch("time.time", return_value=100.0),
+            patch.object(
+                manager,
+                "comfyui_webui_session_status",
+                side_effect=[
+                    {"manual_session_active": True, "runtime": "gpu", "queue_active": False},
+                    {
+                        "manual_session_active": True,
+                        "runtime": "gpu",
+                        "queue_active": False,
+                        "idle_timeout_seconds": 300,
+                    },
+                ],
+            ),
+            patch.object(manager, "_write_comfyui_webui_session") as fake_write,
+            patch.object(manager, "stop_comfyui_webui") as fake_stop,
+        ):
+            result = manager.complete_comfyui_client_job(keep_warm_seconds=300)
+
+        self.assertEqual(result["action"], "retained")
+        self.assertEqual(result["keep_warm_seconds"], 300)
+        fake_write.assert_called_once_with(
+            state="idle",
+            reason="client_requested_keep_warm",
+            last_active_epoch=100.0,
+            idle_timeout_seconds=300,
+        )
+        fake_stop.assert_not_called()
+
     def test_comfyui_webui_idle_close_recovers_stale_session_after_bridge_disappears(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             "os.environ",

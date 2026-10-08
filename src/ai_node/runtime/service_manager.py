@@ -1304,8 +1304,15 @@ class UserSystemdServiceManager:
                 last_active_epoch=time.time(),
             )
             return {"closed": False, "reason": "idle_timer_started", "session": self.comfyui_webui_session_status()}
-        if float(idle_seconds) < self._comfyui_webui_idle_timeout_seconds:
+        idle_timeout_seconds = max(
+            int(session_status.get("idle_timeout_seconds") or self._comfyui_webui_idle_timeout_seconds),
+            1,
+        )
+        if float(idle_seconds) < idle_timeout_seconds:
             return {"closed": False, "reason": "idle_timeout_not_reached", "session": session_status}
+        session_runtime = str(session_status.get("runtime") or "").strip().lower()
+        if session_runtime in {"cpu", "gpu"}:
+            self._comfyui_webui_runtime = session_runtime
         result = self.stop_comfyui_webui()
         vision_restore = self.request_local_scheduler_component(
             component_id="vision_llm",
@@ -1316,6 +1323,50 @@ class UserSystemdServiceManager:
             "closed": True,
             "reason": "idle_timeout_reached",
             "stop_result": result,
+            "vision_restore": vision_restore,
+        }
+
+    def complete_comfyui_client_job(self, *, keep_warm_seconds: int = 0) -> dict:
+        retention_seconds = max(int(keep_warm_seconds), 0)
+        session = self.comfyui_webui_session_status(include_queue=True)
+        session_runtime = str(session.get("runtime") or "").strip().lower()
+        if session_runtime in {"cpu", "gpu"}:
+            self._comfyui_webui_runtime = session_runtime
+        if session.get("queue_active"):
+            return {
+                "action": "retained",
+                "reason": "visual_queue_active",
+                "keep_warm_seconds": retention_seconds,
+                "session": session,
+            }
+        if retention_seconds > 0:
+            self._write_comfyui_webui_session(
+                state="idle",
+                reason="client_requested_keep_warm",
+                last_active_epoch=time.time(),
+                idle_timeout_seconds=retention_seconds,
+            )
+            return {
+                "action": "retained",
+                "reason": "client_requested_keep_warm",
+                "keep_warm_seconds": retention_seconds,
+                "session": self.comfyui_webui_session_status(),
+            }
+        self._set_scheduler_control_active(True)
+        try:
+            stop_result = self.stop_comfyui_webui()
+        finally:
+            self._set_scheduler_control_active(False)
+        vision_restore = self.request_local_scheduler_component(
+            component_id="vision_llm",
+            importance="normal",
+            request_metadata={"source": "comfyui_client_job_complete", "target": "vision_llm"},
+        )
+        return {
+            "action": "closed",
+            "reason": "client_job_complete",
+            "keep_warm_seconds": 0,
+            "stop_result": stop_result,
             "vision_restore": vision_restore,
         }
 
@@ -1844,15 +1895,19 @@ class UserSystemdServiceManager:
             last_active = None
         idle_seconds = None
         auto_close_at_epoch = None
+        try:
+            idle_timeout_seconds = max(int(payload.get("idle_timeout_seconds")), 1)
+        except (TypeError, ValueError):
+            idle_timeout_seconds = self._comfyui_webui_idle_timeout_seconds
         if manual_active and not queue_state.get("queue_active") and last_active is not None:
             idle_seconds = round(max(now_epoch - last_active, 0.0), 3)
-            auto_close_at_epoch = last_active + self._comfyui_webui_idle_timeout_seconds
+            auto_close_at_epoch = last_active + idle_timeout_seconds
         return {
             "manual_session_active": manual_active,
             "state": state or "inactive",
             "reason": payload.get("reason"),
             "runtime": payload.get("runtime") or self._comfyui_webui_runtime,
-            "idle_timeout_seconds": self._comfyui_webui_idle_timeout_seconds,
+            "idle_timeout_seconds": idle_timeout_seconds,
             "idle_seconds": idle_seconds,
             "auto_close_at_epoch": round(auto_close_at_epoch, 3) if auto_close_at_epoch is not None else None,
             "last_active_epoch": round(last_active, 3) if last_active is not None else None,
@@ -2109,6 +2164,7 @@ class UserSystemdServiceManager:
         state: str,
         reason: str,
         last_active_epoch: float | None = None,
+        idle_timeout_seconds: int | None = None,
     ) -> None:
         if not self._comfyui_webui_session_file:
             return
@@ -2118,13 +2174,18 @@ class UserSystemdServiceManager:
         now_epoch = time.time()
         if last_active_epoch is None:
             last_active_epoch = existing.get("last_active_epoch")
+        if idle_timeout_seconds is None:
+            try:
+                idle_timeout_seconds = max(int(existing.get("idle_timeout_seconds")), 1)
+            except (TypeError, ValueError):
+                idle_timeout_seconds = self._comfyui_webui_idle_timeout_seconds
         payload = {
             "state": str(state or "").strip() or "active",
             "reason": str(reason or "").strip() or None,
             "runtime": self._comfyui_webui_runtime,
             "socket_path": self._comfyui_socket_for_runtime(self._comfyui_webui_runtime),
             "manual_paths": self._comfyui_manual_paths(runtime=self._comfyui_webui_runtime),
-            "idle_timeout_seconds": self._comfyui_webui_idle_timeout_seconds,
+            "idle_timeout_seconds": max(int(idle_timeout_seconds), 1),
             "last_active_epoch": last_active_epoch if last_active_epoch is not None else now_epoch,
             "updated_at_epoch": now_epoch,
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
