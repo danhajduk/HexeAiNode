@@ -601,3 +601,4 @@ Task 1036: Publish complete execution endpoint metadata through Core capabilitie
 Task 1038: Correct the job not-found HTTP contract documentation - Completed on 09/27/2026 01:58
 Task 1039: Design family-aware AI memory - Completed on 10/02/2026 16:52
 Task 1040: Provide governed Assistant reasoning without owning orchestration - Completed on 10/07/2026 16:00
+Task 1041: Fix hardware-independent weather image generation timeout - Completed on 10/08/2026 11:45
