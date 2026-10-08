@@ -248,7 +248,13 @@ the resolved API workflow under `inputs.comfyui_workflow`. The effective request
 The direct local Visual Runtime uses the same registered `prompt_template` rendering and input/default merging as the
 OpenAI image-generation adapter, then falls back to request `prompt`, `text`, or message content.
 
-The default ComfyUI template catalog contains GPU avatar templates for profile prompt previews, final profile-aware generation, body-reference testing, and masked inpaint passes. `Avatar Head Face Preview`
+The default ComfyUI template catalog contains paired CPU/GPU text-to-image templates for six common scenarios:
+scenery/weather backgrounds, portraits, products/objects, illustrations, icons/graphics, and generic images. CPU variants
+use DreamShaper LCM and GPU variants use RealVisXL with SDXL-Lightning. For image-generation requests without a governed
+template binding, the node selects the scenario from `inputs.image_type` and selects CPU for `background`/`low`
+importance or GPU for interactive importance. Explicit governed template bindings continue to pin their registered
+runtime. The catalog also contains GPU avatar templates for profile prompt previews, final profile-aware generation,
+body-reference testing, and masked inpaint passes. `Avatar Head Face Preview`
 (`template.avatar_head_face_preview.realvisxl.v1`) is a text-only RealVisXL SDXL portrait workflow used by the Avatar Generation profile detail page to submit head/face prompt previews and record the resulting prompt id in preview history. `Simple Avatar Generation`
 
 Direct local `task.image_generation` requests may include the optional routing hint

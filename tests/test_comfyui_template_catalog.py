@@ -15,7 +15,7 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
 
         self.assertTrue(payload["configured"])
         self.assertEqual(payload["schema_version"], "1.0")
-        self.assertGreaterEqual(len(payload["templates"]), 7)
+        self.assertGreaterEqual(len(payload["templates"]), 19)
         templates_by_id = {template["template_id"]: template for template in payload["templates"]}
         scenery_template = templates_by_id["template.scenery_landscape.realvisxl.v1"]
         self.assertEqual(scenery_template["template_name"], "Landscape Scenery")
@@ -24,6 +24,20 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
         self.assertEqual(scenery_template["defaults"]["height"], 768)
         self.assertEqual(scenery_template["defaults"]["steps"], 4)
         self.assertTrue(scenery_template["validation"]["valid"])
+        expected_scenarios = {"scenery", "portrait", "product", "illustration", "icon", "generic"}
+        paired_scenarios = {}
+        for template in payload["templates"]:
+            metadata = template.get("metadata") or {}
+            scenario_id = metadata.get("scenario_id")
+            runtime_variant = metadata.get("runtime_variant")
+            if scenario_id in expected_scenarios and runtime_variant in {"cpu", "gpu"}:
+                paired_scenarios.setdefault(scenario_id, set()).add(runtime_variant)
+        self.assertEqual(set(paired_scenarios), expected_scenarios)
+        self.assertTrue(all(variants == {"cpu", "gpu"} for variants in paired_scenarios.values()))
+        cpu_scenery = templates_by_id["template.scenery_landscape.dreamshaper.v1"]
+        self.assertEqual(cpu_scenery["runtime_id"], "comfyui_cpu")
+        self.assertEqual(cpu_scenery["model_requirements"]["checkpoint"], "DreamShaper8_LCM.safetensors")
+        self.assertTrue(cpu_scenery["validation"]["valid"])
         head_face_template = templates_by_id["template.avatar_head_face_preview.realvisxl.v1"]
         self.assertEqual(head_face_template["template_name"], "Avatar Head Face Preview")
         self.assertEqual(head_face_template["runtime_id"], "comfyui_gpu")

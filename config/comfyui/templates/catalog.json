@@ -92,6 +92,8 @@
       },
       "output_scope": "normal",
       "metadata": {
+        "scenario_id": "scenery",
+        "runtime_variant": "gpu",
         "preset_family": "realvisxl_lightning",
         "domain": "scenery",
         "input_mode": "text",
@@ -100,6 +102,168 @@
         "reference_roles": [],
         "transparent_background": false
       }
+    },
+    {
+      "template_id": "template.scenery_landscape.dreamshaper.v1",
+      "template_name": "Landscape Scenery (CPU)",
+      "description": "CPU text-to-image workflow for weather, scenery, environmental backgrounds, and location plates.",
+      "runtime_id": "comfyui_cpu",
+      "api_workflow_path": "common-dreamshaper-cpu/api_workflow.json",
+      "variables": [
+        {"name": "positive_prompt", "type": "string", "required": true},
+        {"name": "negative_prompt", "type": "string"},
+        {"name": "output_name", "type": "string"},
+        {"name": "width", "type": "integer"},
+        {"name": "height", "type": "integer"},
+        {"name": "seed", "type": "integer"},
+        {"name": "steps", "type": "integer"},
+        {"name": "cfg", "type": "number"},
+        {"name": "denoise", "type": "number"}
+      ],
+      "defaults": {"negative_prompt": "people, portrait, text, logo, watermark, UI, low quality, blurry", "output_name": "landscape_scenery_cpu", "width": 768, "height": 512, "seed": null, "steps": 6, "cfg": 2.0, "denoise": 1},
+      "model_requirements": {"checkpoint": "DreamShaper8_LCM.safetensors", "loras": [], "vae": null, "controlnets": []},
+      "output_scope": "normal",
+      "metadata": {"scenario_id": "scenery", "runtime_variant": "cpu", "domain": "scenery", "input_mode": "text", "image_types": ["scenery", "environment", "background", "location", "weather"]}
+    },
+    {
+      "template_id": "template.portrait.realvisxl.v1",
+      "template_name": "Portrait (GPU)",
+      "description": "GPU text-to-image workflow for portraits and character headshots.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "scenery-landscape-realvisxl/api_workflow.json",
+      "variables": [
+        {"name": "positive_prompt", "type": "string", "required": true}, {"name": "negative_prompt", "type": "string"}, {"name": "output_name", "type": "string"}, {"name": "width", "type": "integer"}, {"name": "height", "type": "integer"}, {"name": "seed", "type": "integer"}, {"name": "steps", "type": "integer"}, {"name": "cfg", "type": "number"}, {"name": "denoise", "type": "number"}
+      ],
+      "defaults": {"negative_prompt": "text, logo, watermark, malformed face, extra limbs, low quality, blurry", "output_name": "portrait_gpu", "width": 768, "height": 1024, "seed": null, "steps": 4, "cfg": 1.2, "denoise": 1},
+      "model_requirements": {"checkpoint": "RealVisXL_V5.0_fp16.safetensors", "loras": ["sdxl_lightning_4step_lora.safetensors"], "vae": null, "controlnets": []},
+      "output_scope": "normal",
+      "metadata": {"scenario_id": "portrait", "runtime_variant": "gpu", "domain": "portrait", "input_mode": "text", "image_types": ["portrait", "person", "character", "headshot"]}
+    },
+    {
+      "template_id": "template.portrait.dreamshaper.v1",
+      "template_name": "Portrait (CPU)",
+      "description": "CPU text-to-image workflow for portraits and character headshots.",
+      "runtime_id": "comfyui_cpu",
+      "api_workflow_path": "common-dreamshaper-cpu/api_workflow.json",
+      "variables": [
+        {"name": "positive_prompt", "type": "string", "required": true}, {"name": "negative_prompt", "type": "string"}, {"name": "output_name", "type": "string"}, {"name": "width", "type": "integer"}, {"name": "height", "type": "integer"}, {"name": "seed", "type": "integer"}, {"name": "steps", "type": "integer"}, {"name": "cfg", "type": "number"}, {"name": "denoise", "type": "number"}
+      ],
+      "defaults": {"negative_prompt": "text, logo, watermark, malformed face, extra limbs, low quality, blurry", "output_name": "portrait_cpu", "width": 512, "height": 768, "seed": null, "steps": 6, "cfg": 2.0, "denoise": 1},
+      "model_requirements": {"checkpoint": "DreamShaper8_LCM.safetensors", "loras": [], "vae": null, "controlnets": []},
+      "output_scope": "normal",
+      "metadata": {"scenario_id": "portrait", "runtime_variant": "cpu", "domain": "portrait", "input_mode": "text", "image_types": ["portrait", "person", "character", "headshot"]}
+    },
+    {
+      "template_id": "template.product.realvisxl.v1",
+      "template_name": "Product and Object (GPU)",
+      "description": "GPU text-to-image workflow for isolated products and objects.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "scenery-landscape-realvisxl/api_workflow.json",
+      "variables": [
+        {"name": "positive_prompt", "type": "string", "required": true}, {"name": "negative_prompt", "type": "string"}, {"name": "output_name", "type": "string"}, {"name": "width", "type": "integer"}, {"name": "height", "type": "integer"}, {"name": "seed", "type": "integer"}, {"name": "steps", "type": "integer"}, {"name": "cfg", "type": "number"}, {"name": "denoise", "type": "number"}
+      ],
+      "defaults": {"negative_prompt": "people, hands, text, label, logo, watermark, clutter, low quality, blurry", "output_name": "product_gpu", "width": 1024, "height": 1024, "seed": null, "steps": 4, "cfg": 1.2, "denoise": 1},
+      "model_requirements": {"checkpoint": "RealVisXL_V5.0_fp16.safetensors", "loras": ["sdxl_lightning_4step_lora.safetensors"], "vae": null, "controlnets": []},
+      "output_scope": "normal",
+      "metadata": {"scenario_id": "product", "runtime_variant": "gpu", "domain": "product", "input_mode": "text", "image_types": ["product", "object", "item"]}
+    },
+    {
+      "template_id": "template.product.dreamshaper.v1",
+      "template_name": "Product and Object (CPU)",
+      "description": "CPU text-to-image workflow for isolated products and objects.",
+      "runtime_id": "comfyui_cpu",
+      "api_workflow_path": "common-dreamshaper-cpu/api_workflow.json",
+      "variables": [
+        {"name": "positive_prompt", "type": "string", "required": true}, {"name": "negative_prompt", "type": "string"}, {"name": "output_name", "type": "string"}, {"name": "width", "type": "integer"}, {"name": "height", "type": "integer"}, {"name": "seed", "type": "integer"}, {"name": "steps", "type": "integer"}, {"name": "cfg", "type": "number"}, {"name": "denoise", "type": "number"}
+      ],
+      "defaults": {"negative_prompt": "people, hands, text, label, logo, watermark, clutter, low quality, blurry", "output_name": "product_cpu", "width": 512, "height": 512, "seed": null, "steps": 6, "cfg": 2.0, "denoise": 1},
+      "model_requirements": {"checkpoint": "DreamShaper8_LCM.safetensors", "loras": [], "vae": null, "controlnets": []},
+      "output_scope": "normal",
+      "metadata": {"scenario_id": "product", "runtime_variant": "cpu", "domain": "product", "input_mode": "text", "image_types": ["product", "object", "item"]}
+    },
+    {
+      "template_id": "template.illustration.realvisxl.v1",
+      "template_name": "Illustration (GPU)",
+      "description": "GPU text-to-image workflow for editorial and concept illustrations.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "scenery-landscape-realvisxl/api_workflow.json",
+      "variables": [
+        {"name": "positive_prompt", "type": "string", "required": true}, {"name": "negative_prompt", "type": "string"}, {"name": "output_name", "type": "string"}, {"name": "width", "type": "integer"}, {"name": "height", "type": "integer"}, {"name": "seed", "type": "integer"}, {"name": "steps", "type": "integer"}, {"name": "cfg", "type": "number"}, {"name": "denoise", "type": "number"}
+      ],
+      "defaults": {"negative_prompt": "text, logo, watermark, photographic artifacts, low quality, blurry", "output_name": "illustration_gpu", "width": 1024, "height": 1024, "seed": null, "steps": 4, "cfg": 1.2, "denoise": 1},
+      "model_requirements": {"checkpoint": "RealVisXL_V5.0_fp16.safetensors", "loras": ["sdxl_lightning_4step_lora.safetensors"], "vae": null, "controlnets": []},
+      "output_scope": "normal",
+      "metadata": {"scenario_id": "illustration", "runtime_variant": "gpu", "domain": "illustration", "input_mode": "text", "image_types": ["illustration", "concept", "artwork"]}
+    },
+    {
+      "template_id": "template.illustration.dreamshaper.v1",
+      "template_name": "Illustration (CPU)",
+      "description": "CPU text-to-image workflow for editorial and concept illustrations.",
+      "runtime_id": "comfyui_cpu",
+      "api_workflow_path": "common-dreamshaper-cpu/api_workflow.json",
+      "variables": [
+        {"name": "positive_prompt", "type": "string", "required": true}, {"name": "negative_prompt", "type": "string"}, {"name": "output_name", "type": "string"}, {"name": "width", "type": "integer"}, {"name": "height", "type": "integer"}, {"name": "seed", "type": "integer"}, {"name": "steps", "type": "integer"}, {"name": "cfg", "type": "number"}, {"name": "denoise", "type": "number"}
+      ],
+      "defaults": {"negative_prompt": "text, logo, watermark, photographic artifacts, low quality, blurry", "output_name": "illustration_cpu", "width": 512, "height": 512, "seed": null, "steps": 6, "cfg": 2.0, "denoise": 1},
+      "model_requirements": {"checkpoint": "DreamShaper8_LCM.safetensors", "loras": [], "vae": null, "controlnets": []},
+      "output_scope": "normal",
+      "metadata": {"scenario_id": "illustration", "runtime_variant": "cpu", "domain": "illustration", "input_mode": "text", "image_types": ["illustration", "concept", "artwork"]}
+    },
+    {
+      "template_id": "template.icon.realvisxl.v1",
+      "template_name": "Icon and Graphic (GPU)",
+      "description": "GPU text-to-image workflow for simple icons and graphic assets without lettering.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "scenery-landscape-realvisxl/api_workflow.json",
+      "variables": [
+        {"name": "positive_prompt", "type": "string", "required": true}, {"name": "negative_prompt", "type": "string"}, {"name": "output_name", "type": "string"}, {"name": "width", "type": "integer"}, {"name": "height", "type": "integer"}, {"name": "seed", "type": "integer"}, {"name": "steps", "type": "integer"}, {"name": "cfg", "type": "number"}, {"name": "denoise", "type": "number"}
+      ],
+      "defaults": {"negative_prompt": "text, letters, numbers, logo, watermark, complex background, low quality, blurry", "output_name": "icon_gpu", "width": 768, "height": 768, "seed": null, "steps": 4, "cfg": 1.2, "denoise": 1},
+      "model_requirements": {"checkpoint": "RealVisXL_V5.0_fp16.safetensors", "loras": ["sdxl_lightning_4step_lora.safetensors"], "vae": null, "controlnets": []},
+      "output_scope": "normal",
+      "metadata": {"scenario_id": "icon", "runtime_variant": "gpu", "domain": "graphic", "input_mode": "text", "image_types": ["icon", "graphic", "symbol"]}
+    },
+    {
+      "template_id": "template.icon.dreamshaper.v1",
+      "template_name": "Icon and Graphic (CPU)",
+      "description": "CPU text-to-image workflow for simple icons and graphic assets without lettering.",
+      "runtime_id": "comfyui_cpu",
+      "api_workflow_path": "common-dreamshaper-cpu/api_workflow.json",
+      "variables": [
+        {"name": "positive_prompt", "type": "string", "required": true}, {"name": "negative_prompt", "type": "string"}, {"name": "output_name", "type": "string"}, {"name": "width", "type": "integer"}, {"name": "height", "type": "integer"}, {"name": "seed", "type": "integer"}, {"name": "steps", "type": "integer"}, {"name": "cfg", "type": "number"}, {"name": "denoise", "type": "number"}
+      ],
+      "defaults": {"negative_prompt": "text, letters, numbers, logo, watermark, complex background, low quality, blurry", "output_name": "icon_cpu", "width": 512, "height": 512, "seed": null, "steps": 6, "cfg": 2.0, "denoise": 1},
+      "model_requirements": {"checkpoint": "DreamShaper8_LCM.safetensors", "loras": [], "vae": null, "controlnets": []},
+      "output_scope": "normal",
+      "metadata": {"scenario_id": "icon", "runtime_variant": "cpu", "domain": "graphic", "input_mode": "text", "image_types": ["icon", "graphic", "symbol"]}
+    },
+    {
+      "template_id": "template.generic.realvisxl.v1",
+      "template_name": "Generic Text to Image (GPU)",
+      "description": "General-purpose GPU text-to-image workflow.",
+      "runtime_id": "comfyui_gpu",
+      "api_workflow_path": "scenery-landscape-realvisxl/api_workflow.json",
+      "variables": [
+        {"name": "positive_prompt", "type": "string", "required": true}, {"name": "negative_prompt", "type": "string"}, {"name": "output_name", "type": "string"}, {"name": "width", "type": "integer"}, {"name": "height", "type": "integer"}, {"name": "seed", "type": "integer"}, {"name": "steps", "type": "integer"}, {"name": "cfg", "type": "number"}, {"name": "denoise", "type": "number"}
+      ],
+      "defaults": {"negative_prompt": "text, logo, watermark, low quality, blurry, distorted", "output_name": "generic_gpu", "width": 1024, "height": 1024, "seed": null, "steps": 4, "cfg": 1.2, "denoise": 1},
+      "model_requirements": {"checkpoint": "RealVisXL_V5.0_fp16.safetensors", "loras": ["sdxl_lightning_4step_lora.safetensors"], "vae": null, "controlnets": []},
+      "output_scope": "normal",
+      "metadata": {"scenario_id": "generic", "runtime_variant": "gpu", "domain": "general", "input_mode": "text", "image_types": ["generic", "image"]}
+    },
+    {
+      "template_id": "template.generic.dreamshaper.v1",
+      "template_name": "Generic Text to Image (CPU)",
+      "description": "General-purpose CPU text-to-image workflow.",
+      "runtime_id": "comfyui_cpu",
+      "api_workflow_path": "common-dreamshaper-cpu/api_workflow.json",
+      "variables": [
+        {"name": "positive_prompt", "type": "string", "required": true}, {"name": "negative_prompt", "type": "string"}, {"name": "output_name", "type": "string"}, {"name": "width", "type": "integer"}, {"name": "height", "type": "integer"}, {"name": "seed", "type": "integer"}, {"name": "steps", "type": "integer"}, {"name": "cfg", "type": "number"}, {"name": "denoise", "type": "number"}
+      ],
+      "defaults": {"negative_prompt": "text, logo, watermark, low quality, blurry, distorted", "output_name": "generic_cpu", "width": 512, "height": 512, "seed": null, "steps": 6, "cfg": 2.0, "denoise": 1},
+      "model_requirements": {"checkpoint": "DreamShaper8_LCM.safetensors", "loras": [], "vae": null, "controlnets": []},
+      "output_scope": "normal",
+      "metadata": {"scenario_id": "generic", "runtime_variant": "cpu", "domain": "general", "input_mode": "text", "image_types": ["generic", "image"]}
     },
     {
       "template_id": "template.avatar_head_face_preview.realvisxl.v1",

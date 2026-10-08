@@ -977,6 +977,47 @@ class NodeControlApiTests(unittest.TestCase):
 
         asyncio.run(run_scenario())
 
+    def test_background_builtin_image_generation_selects_cpu_scenario_template(self):
+        async def run_scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                provider_runtime_manager = self._FakeProviderRuntimeManager()
+                provider_runtime_manager._resolved_tasks = ["task.image_generation"]
+                state = NodeControlState(
+                    lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-test")),
+                    config_path=str(Path(tmp) / "bootstrap_config.json"),
+                    logger=logging.getLogger("node-control-test"),
+                    provider_runtime_manager=provider_runtime_manager,
+                    capability_runner=self._FakeCapabilityRunner(),
+                    comfyui_template_catalog_dir="config/comfyui/templates",
+                )
+                request = TaskExecutionRequest.model_validate(
+                    {
+                        "task_id": "task-background-weather-builtin",
+                        "task_family": "task.image_generation",
+                        "requested_by": "service.alpha",
+                        "requested_provider": "local",
+                        "inputs": {"prompt": "rainy Pacific Northwest sky", "image_type": "weather"},
+                        "response_mode": "async_if_queued",
+                        "priority": "background",
+                        "trace_id": "trace-background-weather-builtin",
+                    }
+                )
+
+                preview = await state.preview_direct_execution_route(request=request)
+
+                self.assertEqual(preview["queue"], "visual_cpu")
+                self.assertTrue(preview["routing_decision"]["cpu_comfyui_policy"]["builtin_template"])
+                self.assertEqual(
+                    state._direct_visual_runtime_requested_template_id(
+                        inputs=request.inputs,
+                        resolved_template={},
+                        runtime_lane="visual_cpu",
+                    ),
+                    "template.scenery_landscape.dreamshaper.v1",
+                )
+
+        asyncio.run(run_scenario())
+
     def test_normal_priority_image_generation_routes_to_visual_gpu_queue(self):
         async def run_scenario():
             with tempfile.TemporaryDirectory() as tmp:
@@ -2840,11 +2881,16 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
             payload = state.manual_image_generation_status()
 
-        self.assertEqual(len(payload["templates"]), 9)
-        self.assertEqual(
-            {item["template_id"] for item in payload["templates"]},
+        self.assertGreaterEqual(len(payload["templates"]), 14)
+        self.assertTrue(all(template["runtime_id"] == "comfyui_gpu" for template in payload["templates"]))
+        self.assertTrue(
             {
                 "template.scenery_landscape.realvisxl.v1",
+                "template.portrait.realvisxl.v1",
+                "template.product.realvisxl.v1",
+                "template.illustration.realvisxl.v1",
+                "template.icon.realvisxl.v1",
+                "template.generic.realvisxl.v1",
                 "template.avatar_head_face_preview.realvisxl.v1",
                 "template.avatar_upper_torso_preview.realvisxl.v1",
                 "template.avatar_head_lora_epoch_review.realvisxl.v1",
@@ -2853,7 +2899,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 "template.avatar_profile_depth_pulid.realvisxl.v1",
                 "template.avatar_lustify_sdxl_inpaint.v1",
                 "template.avatar_base_unclothed_lustify_inpaint.v1",
-            },
+            }.issubset({item["template_id"] for item in payload["templates"]}),
         )
 
     def test_image_output_cleanup_applies_general_and_weather_retention(self):
@@ -8270,7 +8316,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 "short_lived",
             )
             self.assertEqual(state.submitted_payload.prompt, "gray cube")
-            self.assertEqual(state.submitted_payload.template_id, "template.avatar_head_face_preview.realvisxl.v1")
+            self.assertEqual(state.submitted_payload.template_id, "template.generic.realvisxl.v1")
             self.assertEqual(state.submitted_payload.scheduler_request_metadata["idle_policy"], "client_job")
 
     async def test_direct_local_scenery_generation_uses_generic_scenery_template(self):

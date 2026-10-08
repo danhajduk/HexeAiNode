@@ -12670,6 +12670,7 @@ class NodeControlState:
         template_id = self._direct_visual_runtime_requested_template_id(
             inputs=inputs,
             resolved_template=resolved_template,
+            runtime_lane=getattr(request.queue, "runtime_lane", None),
         )
         if not template_id:
             template_id = self._direct_visual_runtime_template_id()
@@ -12869,11 +12870,38 @@ class NodeControlState:
         return sorted(candidates, key=lambda item: (-item[0], item[1]))[0][1]
 
     @staticmethod
-    def _direct_visual_runtime_template_id_for_image_type(*, image_type: object) -> str:
+    def _direct_visual_runtime_template_id_for_image_type(
+        *,
+        image_type: object,
+        runtime_lane: object = "visual_gpu",
+    ) -> str:
         normalized_image_type = str(image_type or "").strip().lower()
-        if normalized_image_type == "scenery":
-            return "template.scenery_landscape.realvisxl.v1"
-        return ""
+        scenario_by_image_type = {
+            "scenery": "scenery_landscape",
+            "environment": "scenery_landscape",
+            "background": "scenery_landscape",
+            "location": "scenery_landscape",
+            "weather": "scenery_landscape",
+            "portrait": "portrait",
+            "person": "portrait",
+            "character": "portrait",
+            "headshot": "portrait",
+            "product": "product",
+            "object": "product",
+            "item": "product",
+            "illustration": "illustration",
+            "concept": "illustration",
+            "artwork": "illustration",
+            "icon": "icon",
+            "graphic": "icon",
+            "symbol": "icon",
+            "generic": "generic",
+            "image": "generic",
+        }
+        scenario = scenario_by_image_type.get(normalized_image_type, "generic")
+        if str(runtime_lane or "").strip().lower() == "visual_cpu":
+            return f"template.{scenario}.dreamshaper.v1"
+        return f"template.{scenario}.realvisxl.v1"
 
     @staticmethod
     def _direct_visual_runtime_quality_steps(*, quality: object) -> int | None:
@@ -12998,6 +13026,7 @@ class NodeControlState:
         *,
         inputs: dict,
         resolved_template: dict,
+        runtime_lane: object = "visual_gpu",
     ) -> str:
         explicit_template_id = str(inputs.get("template_id") or "").strip()
         if explicit_template_id:
@@ -13006,7 +13035,8 @@ class NodeControlState:
         if governed_template_id:
             return governed_template_id
         return cls._direct_visual_runtime_template_id_for_image_type(
-            image_type=inputs.get("image_type")
+            image_type=inputs.get("image_type"),
+            runtime_lane=runtime_lane,
         )
 
     async def _enqueue_direct_execution(self, *, request: TaskExecutionRequest) -> dict:
@@ -13885,8 +13915,9 @@ class NodeControlState:
         provider_allowed = requested_provider in {"", "local", "comfyui", "comfyui_cpu"}
         constraints = request.constraints if isinstance(request.constraints, dict) else {}
         resolved_template = constraints.get("image_template_resolved") if isinstance(constraints.get("image_template_resolved"), dict) else {}
-        template_runtime = str(resolved_template.get("template_runtime") or "comfyui_gpu").strip().lower()
-        cpu_template = template_runtime == "comfyui_cpu"
+        template_runtime = str(resolved_template.get("template_runtime") or "").strip().lower()
+        builtin_template = not resolved_template
+        cpu_template = template_runtime == "comfyui_cpu" or builtin_template
         selected = bool(is_image_generation and priority_allowed and provider_allowed and cpu_template)
         reason = "eligible"
         if not is_image_generation:
@@ -13905,6 +13936,7 @@ class NodeControlState:
             "importance": importance_key,
             "allowed_importance": ["background", "low"],
             "template_runtime": template_runtime,
+            "builtin_template": builtin_template,
             "reason": reason,
         }
 

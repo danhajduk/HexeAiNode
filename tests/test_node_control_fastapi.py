@@ -900,7 +900,7 @@ class NodeControlFastApiTests(unittest.TestCase):
                 catalog_response.json()["summary"]["template_count"],
                 len(catalog_response.json()["templates"]),
             )
-            self.assertEqual(catalog_response.json()["summary"]["template_count"], 9)
+            self.assertGreaterEqual(catalog_response.json()["summary"]["template_count"], 20)
             self.assertEqual(template_response.status_code, 200)
             template = template_response.json()["template"]
             self.assertEqual(template["template_id"], "template.avatar_body_depth_reference_transparent.realvisxl.v1")
