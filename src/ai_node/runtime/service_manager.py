@@ -1164,8 +1164,8 @@ class UserSystemdServiceManager:
                 self._set_scheduler_control_active(False)
             return {"target": "comfyui_webui", "result": started.get("result"), "request": request, "webui": started}
         current = self._comfyui_webui_status()
+        manual_mounts_active = self._comfyui_manual_mounts_active(runtime=self._comfyui_webui_runtime)
         if current.get("state") == "running":
-            manual_mounts_active = self._comfyui_manual_mounts_active(runtime=self._comfyui_webui_runtime)
             if manual_mounts_active is not False:
                 return {"target": "comfyui_webui", "result": "already_running", **current}
             self._logger.info(
@@ -1173,6 +1173,13 @@ class UserSystemdServiceManager:
                 self._comfyui_webui_runtime,
             )
             self.stop_comfyui_webui()
+        elif manual_mounts_active is False:
+            self._logger.info(
+                "recreating ComfyUI because the running container is not mounted to manual %s paths",
+                self._comfyui_webui_runtime,
+            )
+            self._run_comfyui_control(self._comfyui_webui_runtime, "stop")
+            self._wait_comfyui_runtime_stopped(runtime=self._comfyui_webui_runtime)
         script_path = self._comfyui_webui_bridge_script
         if not script_path or not os.path.exists(script_path):
             raise ValueError("ComfyUI web UI bridge script is not configured")

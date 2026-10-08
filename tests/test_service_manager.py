@@ -1265,6 +1265,45 @@ class ServiceManagerTests(unittest.TestCase):
             with patch("subprocess.run", return_value=_Completed(json.dumps(stale_mounts))):
                 self.assertFalse(manager._comfyui_manual_mounts_active(runtime="gpu"))
 
+    def test_comfyui_webui_start_recreates_normal_container_when_bridge_is_stopped(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "HEXE_COMFYUI_WEBUI_BRIDGE_SCRIPT": str(Path(tmp) / "bridge.py"),
+                "COMFYUI_GPU_SOCKET_PATH": str(Path(tmp) / "comfyui-gpu.sock"),
+            },
+            clear=False,
+        ):
+            Path(tmp, "bridge.py").touch()
+            Path(tmp, "comfyui-gpu.sock").touch()
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._set_scheduler_control_active(True)
+            with (
+                patch.object(
+                    manager,
+                    "_comfyui_webui_status",
+                    side_effect=[
+                        {"state": "stopped", "runtime": "gpu"},
+                        {"state": "running", "runtime": "gpu"},
+                    ],
+                ),
+                patch.object(manager, "_comfyui_manual_mounts_active", return_value=False),
+                patch.object(manager, "_run_comfyui_control") as fake_control,
+                patch.object(manager, "_wait_comfyui_runtime_stopped", return_value=True) as fake_wait,
+                patch.object(manager, "_write_comfyui_webui_session"),
+                patch("subprocess.Popen"),
+                patch("time.sleep"),
+            ):
+                result = manager.start_comfyui_webui()
+            manager._set_scheduler_control_active(False)
+
+        self.assertEqual(result["result"], "started")
+        self.assertEqual(
+            [call.args[:2] for call in fake_control.call_args_list],
+            [("gpu", "stop"), ("gpu", "ready")],
+        )
+        fake_wait.assert_called_once_with(runtime="gpu")
+
     def test_comfyui_webui_start_restarts_when_running_with_non_manual_mounts(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             "os.environ",
@@ -1280,6 +1319,7 @@ class ServiceManagerTests(unittest.TestCase):
             Path(tmp, "bridge.py").touch()
             Path(tmp, "comfyui-gpu.sock").touch()
             manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            manager._set_scheduler_control_active(True)
             running = {"state": "running", "runtime": "gpu", "socket_path": manager._comfyui_gpu_socket}
             with (
                 patch.object(manager, "_comfyui_webui_status", side_effect=[running, running]),
@@ -1291,6 +1331,7 @@ class ServiceManagerTests(unittest.TestCase):
                 patch("time.sleep"),
             ):
                 result = manager.start_comfyui_webui()
+            manager._set_scheduler_control_active(False)
 
         self.assertEqual(result["result"], "started")
         fake_stop.assert_called_once()
