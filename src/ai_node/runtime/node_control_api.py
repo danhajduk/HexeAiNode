@@ -11030,25 +11030,33 @@ class NodeControlState:
                 pass
 
     def _delete_manual_image_output_via_container(self, *, relative_path: str) -> None:
-        services = self.service_status_payload().get("services", {})
-        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
-        runtime = str(webui.get("runtime") or "gpu").strip().lower() if isinstance(webui, dict) else "gpu"
-        runtime_key = "comfyui_cpu" if runtime == "cpu" else "comfyui_gpu"
-        runtime_service = services.get(runtime_key) if isinstance(services, dict) else {}
-        container_name = (
-            str(runtime_service.get("container_name") or "").strip()
-            if isinstance(runtime_service, dict)
-            else ""
-        )
-        if not container_name and isinstance(webui, dict):
-            container_name = str(webui.get("container_name") or "").strip()
-        if not container_name:
-            raise ValueError("manual_output_delete_container_unavailable")
-        container_runtime = "cpu" if runtime == "cpu" else "gpu"
-        container_path = f"/runtime/{container_runtime}/output/{relative_path}"
+        safe_relative = self._safe_relative_path(relative_path)
+        output_dir = self._manual_image_output_dir()
+        relative_paths = [safe_relative]
+        for suffix in (".txt", ".json"):
+            relative_paths.append(safe_relative.with_suffix(suffix))
         docker_bin = str(os.environ.get("DOCKER_BIN") or "docker").strip() or "docker"
+        image = str(os.environ.get("COMFYUI_IMAGE") or "hexe-ai-node-comfyui:local").strip()
+        mounted_paths = [f"/output/{candidate.as_posix()}" for candidate in relative_paths]
         try:
-            subprocess.run([docker_bin, "exec", container_name, "rm", "-f", "--", container_path], check=True)
+            subprocess.run(
+                [
+                    docker_bin,
+                    "run",
+                    "--rm",
+                    "--volume",
+                    f"{output_dir}:/output:rw",
+                    "--entrypoint",
+                    "rm",
+                    image,
+                    "-f",
+                    "--",
+                    *mounted_paths,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
         except subprocess.CalledProcessError as exc:
             raise ValueError("manual_output_delete_failed") from exc
 

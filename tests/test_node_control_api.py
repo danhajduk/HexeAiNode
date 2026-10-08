@@ -3,6 +3,7 @@ import base64
 import json
 import logging
 import os
+import subprocess
 import tempfile
 import threading
 import time
@@ -7532,9 +7533,70 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(result["deleted"])
         run_command.assert_called_once_with(
-            ["docker", "exec", "hexe-ai-node-comfyui", "rm", "-f", "--", "/runtime/gpu/output/hexe/sample.png"],
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--volume",
+                f"{output_dir.resolve()}:/output:rw",
+                "--entrypoint",
+                "rm",
+                "hexe-ai-node-comfyui:local",
+                "-f",
+                "--",
+                "/output/hexe/sample.png",
+                "/output/hexe/sample.txt",
+                "/output/hexe/sample.json",
+            ],
             check=True,
+            capture_output=True,
+            text=True,
         )
+
+    def test_delete_manual_image_output_uses_disposable_container_after_runtime_stops(self):
+        class _StoppedManualImageServiceManager:
+            def get_status(self):
+                return {
+                    "comfyui_gpu": {"state": "stopped", "container_name": "hexe-ai-node-comfyui"},
+                    "comfyui_webui": {"state": "stopped", "runtime": "gpu"},
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = (Path(tmp) / "manual-output").resolve()
+            output_dir.mkdir()
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_StoppedManualImageServiceManager(),
+            )
+            with (
+                patch.object(state, "_manual_image_output_dir", return_value=output_dir),
+                patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0)) as run_command,
+            ):
+                state._delete_manual_image_output_via_container(relative_path="hexe/scenery/weather.png")
+
+        run_command.assert_called_once()
+        fallback = run_command.call_args
+        self.assertEqual(
+            fallback.args[0],
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--volume",
+                f"{output_dir}:/output:rw",
+                "--entrypoint",
+                "rm",
+                "hexe-ai-node-comfyui:local",
+                "-f",
+                "--",
+                "/output/hexe/scenery/weather.png",
+                "/output/hexe/scenery/weather.txt",
+                "/output/hexe/scenery/weather.json",
+            ],
+        )
+        self.assertEqual(fallback.kwargs, {"check": True, "capture_output": True, "text": True})
 
     async def test_benchmark_v2_switches_local_models_before_timed_execution(self):
         class _LocalBenchmarkServiceManager:
