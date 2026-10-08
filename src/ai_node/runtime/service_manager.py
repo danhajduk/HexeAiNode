@@ -418,6 +418,11 @@ class UserSystemdServiceManager:
             self._run_vision_llm_control("start")
             return {"target": "vision_llm", "result": "started"}
         if value == "comfyui_webui":
+            requested_runtime = self._comfyui_runtime_from_request_metadata(metadata=metadata)
+            if requested_runtime and requested_runtime != self._comfyui_webui_runtime:
+                if self._comfyui_webui_status().get("state") == "running":
+                    self.stop_comfyui_webui()
+                self._comfyui_webui_runtime = requested_runtime
             if not self._scheduler_control_active():
                 request = self.request_local_scheduler_component(
                     component_id=self._comfyui_scheduler_component(),
@@ -434,6 +439,17 @@ class UserSystemdServiceManager:
                 return {"target": "comfyui_webui", "result": started.get("result"), "request": request, "webui": started}
             return self.start_comfyui_webui()
         raise ValueError("unsupported start target")
+
+    @staticmethod
+    def _comfyui_runtime_from_request_metadata(*, metadata: dict) -> str | None:
+        runtime_lane = str(metadata.get("runtime_lane") or "").strip().lower().replace("-", "_")
+        component_id = str(metadata.get("component_id") or "").strip().lower().replace("-", "_")
+        requested = runtime_lane or component_id
+        if requested in {"visual_cpu", "comfyui_cpu", "cpu_comfyui"}:
+            return "cpu"
+        if requested in {"visual_gpu", "comfyui_gpu", "gpu_comfyui"}:
+            return "gpu"
+        return None
 
     def stop(self, *, target: str) -> dict:
         value = str(target or "").strip().lower()

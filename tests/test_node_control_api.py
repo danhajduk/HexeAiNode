@@ -3720,6 +3720,56 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["prompt_id"], "prompt-progress")
         self.assertEqual(service_manager.listener_calls, ["hexe-node-manual-image-ui"])
 
+    async def test_submit_manual_image_generation_accepts_cpu_template_on_cpu_runtime(self):
+        class _ManualImageServiceManager:
+            def __init__(self):
+                self.request_metadata = None
+
+            def get_status(self):
+                return {
+                    "comfyui_cpu": {"state": "running"},
+                    "comfyui_webui": {
+                        "state": "running",
+                        "runtime": "cpu",
+                        "socket_path": "/tmp/comfyui-cpu.sock",
+                        "manual_paths": {"output_dir": "runtime/manual/comfyui-cpu/output"},
+                    },
+                }
+
+            def start(self, *, target: str, request_metadata: dict | None = None):
+                self.request_metadata = request_metadata
+                return {"target": target, "result": "started"}
+
+            def ensure_comfyui_progress_listener(self, *, client_id: str | None = None):
+                return {"started": True, "client_id": client_id}
+
+        service_manager = _ManualImageServiceManager()
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=service_manager,
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            with patch.object(state, "_assert_manual_comfyui_takeover_ready"), patch.object(
+                state, "_manual_image_outputs", return_value=[]
+            ), patch.object(
+                state,
+                "_uds_json_request",
+                return_value={"prompt_id": "prompt-cpu", "number": 1},
+            ):
+                result = await state.submit_manual_image_generation(
+                    payload=ManualImageGenerationRequest(
+                        template_id="template.scenery_landscape.dreamshaper.v1",
+                        prompt="rainy Pacific Northwest sky",
+                        scheduler_request_metadata={"runtime_lane": "visual_cpu"},
+                    )
+                )
+
+        self.assertEqual(result["prompt_id"], "prompt-cpu")
+        self.assertEqual(service_manager.request_metadata["runtime_lane"], "visual_cpu")
+
     async def test_submit_manual_image_generation_queues_batch_with_randomized_seeds(self):
         class _ManualImageServiceManager:
             def get_status(self):

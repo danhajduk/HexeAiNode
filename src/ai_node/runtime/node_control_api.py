@@ -2030,8 +2030,11 @@ class NodeControlState:
         if not template_id:
             template_id = MANUAL_IMAGE_DEFAULT_TEMPLATE_ID
         template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
-        if str(template.get("runtime_id") or "") != "comfyui_gpu":
+        template_runtime_id = str(template.get("runtime_id") or "").strip().lower()
+        if template_runtime_id not in {"comfyui_gpu", "comfyui_cpu"}:
             raise ValueError("manual_image_template_runtime_unsupported")
+        if template_runtime_id != runtime_id:
+            raise ValueError("manual_image_template_runtime_mismatch")
         batch_count = self._manual_image_batch_count(payload.batch_count)
         outputs_before = self._manual_image_outputs(limit=24)
         submitted_at = datetime.now(timezone.utc).isoformat()

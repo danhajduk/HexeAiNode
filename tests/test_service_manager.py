@@ -159,6 +159,26 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(load["status"], "blocked")
         self.assertEqual(unload["result"], "service_manager_unconfigured")
 
+    def test_comfyui_webui_start_selects_cpu_runtime_from_requested_lane(self):
+        manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+        manager._comfyui_webui_runtime = "gpu"
+
+        with (
+            patch.object(manager, "_comfyui_webui_status", return_value={"state": "stopped"}),
+            patch.object(manager, "request_local_scheduler_component", return_value={"status": "ok"}) as fake_request,
+            patch.object(manager, "start_comfyui_webui", return_value={"result": "started", "runtime": "cpu"}) as fake_start,
+        ):
+            result = manager.start(
+                target="comfyui_webui",
+                request_metadata={"runtime_lane": "visual_cpu", "task_id": "task-image-cpu"},
+            )
+
+        self.assertEqual(manager._comfyui_webui_runtime, "cpu")
+        self.assertEqual(result["result"], "started")
+        self.assertEqual(fake_request.call_args.kwargs["component_id"], "visual_cpu")
+        self.assertEqual(fake_request.call_args.kwargs["request_metadata"]["task_id"], "task-image-cpu")
+        fake_start.assert_called_once()
+
     def test_local_scheduler_request_uses_model_residency_execution(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             "os.environ",
