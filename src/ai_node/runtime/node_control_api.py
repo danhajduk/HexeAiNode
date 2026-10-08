@@ -93,6 +93,7 @@ SERVICE_EXECUTION_PATHS = {
     "/api/execution/direct",
     "/api/execution/route-preview",
 }
+ASSISTANT_PROMPT_ID = "prompt.hexeinteraction.assistant"
 
 
 def service_scope_for_route(*, method: str, path: str) -> str | None:
@@ -127,6 +128,19 @@ def service_scope_for_route(*, method: str, path: str) -> str | None:
     if path == "/api/services/status" and method in {"GET", "HEAD"}:
         return "ai.services.read"
     return None
+
+
+def service_scope_alternatives_for_route(*, method: str, path: str) -> tuple[str, ...]:
+    primary = service_scope_for_route(method=method, path=path)
+    if primary is None:
+        return ()
+    normalized_path = str(path or "").rstrip("/") or "/"
+    normalized_method = str(method or "").upper()
+    if normalized_path == f"/api/prompts/services/{ASSISTANT_PROMPT_ID}" and normalized_method in {"GET", "HEAD"}:
+        return (primary, "service.execute:task.chat")
+    if normalized_path == "/api/prompts/services" and normalized_method == "POST":
+        return (primary, "service.execute:task.chat")
+    return (primary,)
 MANAGEMENT_ASSET_PREFIXES = (
     "/api/prompts/",
     "/api/image-templates",
@@ -311,6 +325,8 @@ class DirectExecutionAdmissionConfig:
     max_swap_used_ratio: float = 0.95
     max_memory_pressure_some_avg10: float = 5.0
     max_memory_pressure_full_avg10: float = 1.0
+    min_active_swap_io_pages: int = 128
+    min_active_swap_io_pages_per_second: float = 64.0
     warm_swap_used_ratio: float = 0.5
     hot_swap_used_ratio: float = 0.8
     max_load_per_cpu: float = 2.0
@@ -335,6 +351,10 @@ class DirectExecutionAdmissionConfig:
             max_memory_pressure_full_avg10=max(
                 0.0, _env_float("HEXE_DIRECT_EXECUTION_MAX_MEMORY_PRESSURE_FULL_AVG10", 1.0)
             ),
+            min_active_swap_io_pages=max(_env_int("HEXE_DIRECT_EXECUTION_MIN_ACTIVE_SWAP_IO_PAGES", 128), 1),
+            min_active_swap_io_pages_per_second=max(
+                0.0, _env_float("HEXE_DIRECT_EXECUTION_MIN_ACTIVE_SWAP_IO_PAGES_PER_SECOND", 64.0)
+            ),
             warm_swap_used_ratio=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_WARM_SWAP_USED_RATIO", 0.5)),
             hot_swap_used_ratio=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_HOT_SWAP_USED_RATIO", 0.8)),
             max_load_per_cpu=max(0.0, _env_float("HEXE_DIRECT_EXECUTION_MAX_LOAD_PER_CPU", 2.0)),
@@ -356,6 +376,8 @@ class DirectExecutionAdmissionConfig:
             "max_swap_used_ratio": self.max_swap_used_ratio,
             "max_memory_pressure_some_avg10": self.max_memory_pressure_some_avg10,
             "max_memory_pressure_full_avg10": self.max_memory_pressure_full_avg10,
+            "min_active_swap_io_pages": self.min_active_swap_io_pages,
+            "min_active_swap_io_pages_per_second": self.min_active_swap_io_pages_per_second,
             "warm_swap_used_ratio": self.warm_swap_used_ratio,
             "hot_swap_used_ratio": self.hot_swap_used_ratio,
             "max_load_per_cpu": self.max_load_per_cpu,
@@ -428,7 +450,7 @@ class DirectExecutionAdmissionGuard:
         self._logger = logger
         self._lock = Lock()
         self._resource_lock = Lock()
-        self._last_swap_io_counters: tuple[int, int] | None = None
+        self._last_swap_io_sample: tuple[int, int, float] | None = None
         self._in_flight = 0
         self._accepted_count = 0
         self._rejected_count = 0
@@ -628,12 +650,22 @@ class DirectExecutionAdmissionGuard:
         swap_out = resources.get("swap_out_pages")
         if swap_in is None or swap_out is None:
             return resources
-        current = (int(swap_in), int(swap_out))
+        sampled_at = time.monotonic()
+        current = (int(swap_in), int(swap_out), sampled_at)
         with self._resource_lock:
-            previous = self._last_swap_io_counters
-            self._last_swap_io_counters = current
+            previous = self._last_swap_io_sample
+            self._last_swap_io_sample = current
+        delta_pages = 0
+        elapsed_seconds = 0.0
+        if previous is not None:
+            delta_pages = max(current[0] - previous[0], 0) + max(current[1] - previous[1], 0)
+            elapsed_seconds = max(current[2] - previous[2], 0.001)
+        pages_per_second = delta_pages / elapsed_seconds if elapsed_seconds > 0 else 0.0
+        resources["swap_io_delta_pages"] = delta_pages
+        resources["swap_io_pages_per_second"] = round(pages_per_second, 3)
         resources["swap_io_active"] = bool(
-            previous is not None and (current[0] > previous[0] or current[1] > previous[1])
+            delta_pages >= self._config.min_active_swap_io_pages
+            and pages_per_second >= self._config.min_active_swap_io_pages_per_second
         )
         return resources
 
@@ -12081,6 +12113,20 @@ class NodeControlState:
             raise ValueError("service_token_audience_mismatch")
         return claims
 
+    async def authorize_service_access_any(self, *, service_token: str, required_scopes: tuple[str, ...]) -> dict:
+        last_error: ValueError | None = None
+        for required_scope in required_scopes:
+            try:
+                return await self.authorize_service_access(
+                    service_token=service_token,
+                    required_scope=required_scope,
+                )
+            except ValueError as exc:
+                last_error = exc
+                if str(exc) != "token_scope_insufficient":
+                    raise
+        raise last_error or ValueError("token_scope_insufficient")
+
     def record_request_metrics(self, *, duration_ms: float, status_code: int) -> None:
         if self._runtime_metrics is None:
             return
@@ -17363,15 +17409,15 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
 
     @app.middleware("http")
     async def _service_authorization_middleware(request: Request, call_next):
-        required_scope = service_scope_for_route(method=request.method, path=request.url.path)
-        if required_scope is None or not state.service_token_enforcement_enabled:
+        required_scopes = service_scope_alternatives_for_route(method=request.method, path=request.url.path)
+        if not required_scopes or not state.service_token_enforcement_enabled:
             return await call_next(request)
         if str(request.headers.get(MANAGEMENT_AUTHORIZATION_HEADER) or "").strip():
             return await call_next(request)
         try:
-            claims = await state.authorize_service_access(
+            claims = await state.authorize_service_access_any(
                 service_token=bearer_token(request.headers.get("Authorization")),
-                required_scope=required_scope,
+                required_scopes=required_scopes,
             )
         except HTTPException as exc:
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
@@ -18673,6 +18719,14 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
                     continue
                 operation["security"] = [{"CoreServiceBearer": []}]
                 operation["x-hexe-required-scopes"] = [required_scope]
+                if path == "/api/prompts/services/{prompt_id}" and method.lower() in {"get", "head"}:
+                    operation["x-hexe-scope-alternatives"] = {
+                        ASSISTANT_PROMPT_ID: ["service.execute:task.chat"]
+                    }
+                elif path == "/api/prompts/services" and method.lower() == "post":
+                    operation["x-hexe-scope-alternatives"] = {
+                        ASSISTANT_PROMPT_ID: ["service.execute:task.chat"]
+                    }
         app.openapi_schema = schema
         return schema
 

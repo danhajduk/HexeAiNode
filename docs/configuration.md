@@ -106,6 +106,8 @@ Backend runtime:
 - `HEXE_DIRECT_EXECUTION_MAX_SWAP_USED_RATIO` default `0.95`; considers swap usage high at or above this ratio, but rejects only when low available memory, memory PSI, or active swap I/O confirms current pressure
 - `HEXE_DIRECT_EXECUTION_MAX_MEMORY_PRESSURE_SOME_AVG10` default `5.0`; PSI `some` 10-second threshold used to confirm active swap pressure
 - `HEXE_DIRECT_EXECUTION_MAX_MEMORY_PRESSURE_FULL_AVG10` default `1.0`; PSI `full` 10-second threshold used to confirm active swap pressure
+- `HEXE_DIRECT_EXECUTION_MIN_ACTIVE_SWAP_IO_PAGES` default `128`; minimum pages moved between admission samples before swap I/O can confirm active pressure
+- `HEXE_DIRECT_EXECUTION_MIN_ACTIVE_SWAP_IO_PAGES_PER_SECOND` default `64.0`; minimum swap page rate, applied together with the page-count floor, before swap I/O confirms active pressure
 - `HEXE_DIRECT_EXECUTION_WARM_SWAP_USED_RATIO` default `0.5`; dynamic capacity enters warm tier at or above this swap ratio
 - `HEXE_DIRECT_EXECUTION_HOT_SWAP_USED_RATIO` default `0.8`; dynamic capacity enters hot tier at or above this swap ratio
 - `HEXE_DIRECT_EXECUTION_MAX_LOAD_PER_CPU` default `2.0`; rejects direct execution when 1-minute load divided by CPU count is at or above this value

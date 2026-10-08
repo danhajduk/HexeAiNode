@@ -38,6 +38,24 @@ class _IntrospectionClient:
         return SimpleNamespace(active=self.active, claims=self.claims if self.active else None, error_code=self.error_code)
 
 
+class _TaskChatOnlyIntrospectionClient(_IntrospectionClient):
+    async def introspect(self, **kwargs):
+        self.calls.append(kwargs)
+        allowed = kwargs["required_scopes"] == ["service.execute:task.chat"]
+        return SimpleNamespace(
+            active=allowed,
+            claims={
+                "sub": "node-caller",
+                "aud": "node-service:node-provider:local",
+                "scp": ["service.execute:task.chat"],
+                "provider_node_id": "node-provider",
+            }
+            if allowed
+            else None,
+            error_code=None if allowed else "token_scope_insufficient",
+        )
+
+
 class _PromptStore:
     def __init__(self):
         self.payload = {
@@ -169,6 +187,30 @@ class ServiceTokenEnforcementTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([prompt["prompt_id"] for prompt in prompts], ["prompt.owned"])
             self.assertEqual(introspection.calls[-1]["required_scopes"], ["ai.prompts.read"])
 
+    async def test_assistant_prompt_lookup_accepts_task_chat_execution_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            introspection = _TaskChatOnlyIntrospectionClient()
+            state = self._state(tmp, introspection, prompt_service_state_store=_PromptStore())
+            state.register_prompt_service(
+                prompt_id="prompt.hexeinteraction.assistant",
+                service_id="node-caller",
+                owner_service="node-caller",
+                owner_client_id="node-caller",
+                task_family="task.chat",
+            )
+            app = create_node_control_app(state=state, logger=logging.getLogger("test"))
+            with TestClient(app) as http:
+                response = http.get(
+                    "/api/prompts/services/prompt.hexeinteraction.assistant",
+                    headers={"Authorization": "Bearer issued-jwt"},
+                )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+                [call["required_scopes"] for call in introspection.calls],
+                [["ai.prompts.read"], ["service.execute:task.chat"]],
+            )
+
     async def test_openapi_declares_core_service_bearer_and_operation_scope(self):
         with tempfile.TemporaryDirectory() as tmp:
             app = create_node_control_app(
@@ -184,6 +226,11 @@ class ServiceTokenEnforcementTests(unittest.IsolatedAsyncioTestCase):
             operation = schema["paths"]["/api/prompts/services"]["get"]
             self.assertEqual(operation["security"], [{"CoreServiceBearer": []}])
             self.assertEqual(operation["x-hexe-required-scopes"], ["ai.prompts.read"])
+            assistant_operation = schema["paths"]["/api/prompts/services/{prompt_id}"]["get"]
+            self.assertEqual(
+                assistant_operation["x-hexe-scope-alternatives"],
+                {"prompt.hexeinteraction.assistant": ["service.execute:task.chat"]},
+            )
 
     async def test_job_polling_rejects_a_different_verified_owner(self):
         with tempfile.TemporaryDirectory() as tmp:

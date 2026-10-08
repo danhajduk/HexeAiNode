@@ -1801,6 +1801,26 @@ class NodeControlApiTests(unittest.TestCase):
         self.assertFalse(decision.accepted)
         self.assertEqual(decision.reason, "swap_pressure_high")
 
+    def test_direct_execution_does_not_treat_one_swapped_page_as_active_pressure(self):
+        samples = iter(
+            [
+                {"memory_available_mb": 4096, "swap_used_ratio": 1.0, "swap_in_pages": 100, "swap_out_pages": 200},
+                {"memory_available_mb": 4096, "swap_used_ratio": 1.0, "swap_in_pages": 101, "swap_out_pages": 200},
+            ]
+        )
+        guard = DirectExecutionAdmissionGuard(
+            config=DirectExecutionAdmissionConfig(max_swap_used_ratio=0.9),
+            resource_sampler=lambda: next(samples),
+        )
+
+        guard.snapshot()
+        decision = guard.try_acquire()
+
+        self.assertTrue(decision.accepted)
+        self.assertEqual(decision.resources["swap_io_delta_pages"], 1)
+        self.assertFalse(decision.resources["swap_io_active"])
+        guard.release()
+
     def test_compare_provider_execution_returns_per_provider_results(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = NodeLifecycle(logger=logging.getLogger("node-control-test"))
