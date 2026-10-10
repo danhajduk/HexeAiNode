@@ -3356,7 +3356,7 @@
 }
 
 .image-studio-generation-modal .manual-generation-progress-message {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.25;
 }
 
@@ -3370,7 +3370,7 @@
 .image-studio-generation-job-details h3 {
   grid-column: 1 / -1;
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .image-studio-generation-job-details > div {
@@ -3381,12 +3381,12 @@
 
 .image-studio-generation-job-details span {
   color: hsl(var(--sx-text-muted));
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .image-studio-generation-job-details code {
   overflow: hidden;
-  font-size: 12px;
+  font-size: 14px;
   text-overflow: ellipsis;
 }
 
@@ -3682,13 +3682,13 @@
   gap: 8px;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .image-studio-popup-magnitudes input {
   width: 62px;
   padding: 3px 5px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .image-studio-generation-seed-lock {
