@@ -347,6 +347,8 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Torso length");
     expect(markup).toContain("Miscellaneous");
     expect(markup).toContain("no tattoos");
+    expect(markup).toContain("image-studio-body-dropdown");
+    expect(markup).toContain("Automatic / none selected");
     expect(markup).not.toContain("Breast size");
     expect(markup).not.toContain("Pubic hair");
     expect(markup).toContain("Neck-down full-body foundation");

@@ -3607,6 +3607,10 @@
   width: 100%;
 }
 
+.image-studio-body-dropdown {
+  margin-top: 2px;
+}
+
 .image-studio-magnitude-scale {
   display: block;
   margin-top: 6px;

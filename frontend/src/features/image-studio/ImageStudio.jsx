@@ -1181,18 +1181,11 @@ export function ImageStudio({
     }
   }
 
-  function selectBodyFeature(group, option) {
-    let next = group.id === "pubic_hair_color" && option === "inherit from head hair"
-      ? { ...bodyFeatureSelections, pubic_hair_color: [] }
-      : nextBodyFeatureSelections(bodyFeatureSelections, group.id, option);
-    setBodyFeatureSelections(next);
-    updateCharacterBrief("body", composeBodyDescription(next, bodyCustomDetails, faceFeatureSelections));
-  }
-
   function setBodyFeaturePreset(group, option) {
     let next = { ...bodyFeatureSelections, [group.id]: option ? [option] : [] };
     if (group.id === "vulva_description" && option) next = { ...next, penis_description: [] };
     if (group.id === "penis_description" && option) next = { ...next, vulva_description: [] };
+    if (group.id === "pubic_hair" && option === "none") next = { ...next, pubic_hair_color: [] };
     setBodyFeatureSelections(next);
     updateCharacterBrief("body", composeBodyDescription(next, bodyCustomDetails, faceFeatureSelections));
   }
@@ -1931,17 +1924,13 @@ export function ImageStudio({
                               <small className="image-studio-magnitude-scale">0 = {magnitudeConfig.low} · 1 = {magnitudeConfig.high}</small>
                             </label>
                           </div>
-                        ) : <div className="image-studio-option-chips">
-                          {group.options.map((option) => {
-                            const inheritedPubicHairColor = group.id === "pubic_hair_color" && option === "inherit from head hair";
-                            const selected = inheritedPubicHairColor
-                              ? !(bodyFeatureSelections.pubic_hair_color || []).length
-                              : (bodyFeatureSelections[group.id] || []).includes(option);
-                            const inheritedHairColor = (faceFeatureSelections["hair color"] || [])[0];
-                            const label = inheritedPubicHairColor && inheritedHairColor ? `inherit (${inheritedHairColor})` : option;
-                            return <button className={selected ? "is-selected" : ""} type="button" aria-pressed={selected} key={option} onClick={() => selectBodyFeature(group, option)}>{label}</button>;
-                          })}
-                        </div>}
+                        ) : <label className="image-studio-trait-preset image-studio-body-dropdown">
+                          <span>Selection</span>
+                          <select value={(bodyFeatureSelections[group.id] || [])[0] || ""} onChange={(event) => setBodyFeaturePreset(group, event.target.value)}>
+                            <option value="">{group.id === "pubic_hair_color" ? `inherit from head hair${(faceFeatureSelections["hair color"] || [])[0] ? ` (${(faceFeatureSelections["hair color"] || [])[0]})` : ""}` : "Automatic / none selected"}</option>
+                            {group.options.filter((option) => option !== "inherit from head hair").map((option) => <option value={option} key={option}>{option}</option>)}
+                          </select>
+                        </label>}
                       </fieldset>
                     );})}
                     {adultIntimateFeaturesEnabled ? (
