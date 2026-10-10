@@ -91,9 +91,11 @@ class ImageStudioBodyPromptTests(unittest.TestCase):
 
     def test_misc_no_tattoos_and_head_hair_exclusion_are_compiled(self):
         prompt = compile_body_preview_prompt(
-            selections={"misc": ["no tattoos"]}, face_selections={}, custom_details="", context={},
+            selections={"misc": ["no tattoos"], "butt_shape": ["heart-shaped"]}, face_selections={}, custom_details="", context={},
         )
         self.assertIn("completely tattoo-free skin", prompt)
+        self.assertIn("lower-full A-shaped gluteal contour", prompt)
+        self.assertNotIn("heart-shaped gluteal", prompt)
         self.assertIn("No head, scalp, face, facial hair", prompt)
         self.assertIn("no hair hangs down", prompt)
 

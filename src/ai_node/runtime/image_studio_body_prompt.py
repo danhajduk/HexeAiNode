@@ -27,7 +27,13 @@ BODY_FEATURE_DESCRIPTIONS = {
     "breast_size": {value: f"{value} adult breast volume with realistic weight and proportions" for value in ("flat chest", "small", "medium", "large", "very large")},
     "breast_shape": {value: f"{value} adult breast contour with realistic soft-tissue behavior" for value in ("shallow", "round", "teardrop", "wide-set", "close-set", "pendulous")},
     "butt_size": {value: f"{value} gluteal volume proportionate to the pelvis and thighs" for value in ("flat", "small", "moderate", "full", "very full")},
-    "butt_shape": {value: f"{value} gluteal contour with realistic soft-tissue anatomy" for value in ("square", "round", "heart-shaped", "V-shaped", "athletic")},
+    "butt_shape": {
+        "square": "square gluteal contour with realistic soft-tissue anatomy",
+        "round": "round gluteal contour with realistic soft-tissue anatomy",
+        "heart-shaped": "lower-full A-shaped gluteal contour, widest across the lower outer curve and smoothly tapering toward the waist, with realistic soft-tissue anatomy",
+        "V-shaped": "V-shaped gluteal contour with realistic soft-tissue anatomy",
+        "athletic": "athletic gluteal contour with realistic soft-tissue anatomy",
+    },
     "pubic_hair": {
         "none": "no visible pubic hair",
         **{value: f"{value} adult pubic-hair amount and grooming" for value in ("closely trimmed", "trimmed", "natural", "full")},
