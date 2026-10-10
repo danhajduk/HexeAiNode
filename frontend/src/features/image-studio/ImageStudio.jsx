@@ -633,6 +633,7 @@ export function ImageStudio({
   onGenerateBodyPreview,
   onCreateFaceSeedBatch,
   onRefreshData,
+  onRefreshGeneration,
   onOpenLegacy,
   onClose,
 }) {
@@ -681,6 +682,7 @@ export function ImageStudio({
   const [faceSeedReviewBatchId, setFaceSeedReviewBatchId] = useState("");
   const [generationProgressOpen, setGenerationProgressOpen] = useState(initialGenerationProgressOpen);
   const [generationKind, setGenerationKind] = useState(initialGenerationKind);
+  const [generationRefreshBusy, setGenerationRefreshBusy] = useState(false);
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -1162,6 +1164,16 @@ export function ImageStudio({
     return result;
   }
 
+  async function forceRefreshGeneration() {
+    if (generationRefreshBusy || !onRefreshGeneration) return;
+    setGenerationRefreshBusy(true);
+    try {
+      await onRefreshGeneration();
+    } finally {
+      setGenerationRefreshBusy(false);
+    }
+  }
+
   async function refineAndRegenerateFacePreview() {
     if (!faceTweakInstruction.trim() || facePreviewSeed === undefined || facePreviewSeed === null || promptHelperBusy || facePreviewTracking) return;
     setFaceRefinementError("");
@@ -1511,9 +1523,14 @@ export function ImageStudio({
                       <><span>Portrait preview</span><p>Your selected face traits will be rendered here.</p></>
                     )}
                   </div>
-                  <button className="btn btn-primary" type="button" onClick={generateFacePreview} disabled={!nameConceptComplete || !characterBrief.appearance.trim() || characterSaveBusy || facePreviewTracking}>
-                    {facePreviewTracking ? "Generating preview…" : previewImageUrl ? "Generate another preview" : "Generate face preview"}
-                  </button>
+                  <div className="row">
+                    <button className="btn btn-primary" type="button" onClick={generateFacePreview} disabled={!nameConceptComplete || !characterBrief.appearance.trim() || characterSaveBusy || facePreviewTracking}>
+                      {facePreviewTracking ? "Generating preview…" : previewImageUrl ? "Generate another preview" : "Generate face preview"}
+                    </button>
+                    <button className="btn" type="button" onClick={forceRefreshGeneration} disabled={generationRefreshBusy || !onRefreshGeneration}>
+                      {generationRefreshBusy ? "Refreshing…" : "Refresh Preview"}
+                    </button>
+                  </div>
                   <div className="image-studio-face-preview-status" aria-live="polite">
                     <div className={`image-studio-generation-summary ${previewFailed ? "is-error" : previewCompleted ? "is-complete" : ""}`}>
                       <span>Current operation</span>
@@ -1593,9 +1610,14 @@ export function ImageStudio({
                   <div className="image-studio-face-preview-canvas">
                     {bodyPreviewImageUrl ? <img src={bodyPreviewImageUrl} alt={`Generated body reference for ${characterBrief.name || "character"}`} /> : <><span>Body reference</span><p>Your selected proportions will be rendered here.</p></>}
                   </div>
-                  <button className="btn btn-primary" type="button" onClick={generateBodyPreview} disabled={!characterBrief.body.trim() || characterSaveBusy || bodyPreviewTracking}>
-                    {bodyPreviewTracking ? "Generating body preview…" : bodyPreviewImageUrl ? "Generate again with saved seed" : "Generate body preview"}
-                  </button>
+                  <div className="row">
+                    <button className="btn btn-primary" type="button" onClick={generateBodyPreview} disabled={!characterBrief.body.trim() || characterSaveBusy || bodyPreviewTracking}>
+                      {bodyPreviewTracking ? "Generating body preview…" : bodyPreviewImageUrl ? "Generate again with saved seed" : "Generate body preview"}
+                    </button>
+                    <button className="btn" type="button" onClick={forceRefreshGeneration} disabled={generationRefreshBusy || !onRefreshGeneration}>
+                      {generationRefreshBusy ? "Refreshing…" : "Refresh Preview"}
+                    </button>
+                  </div>
                   <div className={`image-studio-generation-summary ${bodyPreviewCompleted ? "is-complete" : ""}`} aria-live="polite">
                     <span>Status</span><strong>{bodyPreviewStatus.replaceAll("_", " ")}</strong>
                     <small>{bodyPreviewTracking ? "Generation status refreshes automatically." : bodyPreviewCompleted ? `Body identity seed ${bodyPreviewSeed} saved.` : "Generate one neutral reference before continuing."}</small>
@@ -1639,7 +1661,12 @@ export function ImageStudio({
                 <h2 id="image-studio-generation-title">{generationKind === "body" ? "Body reference progress" : "Face preview progress"}</h2>
                 <p>Live status from the Visual Runtime and ComfyUI queue.</p>
               </div>
-              <button className="btn" type="button" onClick={() => setGenerationProgressOpen(false)}>Close</button>
+              <div className="row">
+                <button className="btn" type="button" onClick={forceRefreshGeneration} disabled={generationRefreshBusy || !onRefreshGeneration}>
+                  {generationRefreshBusy ? "Refreshing…" : "Refresh Preview"}
+                </button>
+                <button className="btn" type="button" onClick={() => setGenerationProgressOpen(false)}>Close</button>
+              </div>
             </header>
             <div className="manual-generation-status-row manual-generation-status-row-primary image-studio-generation-status-grid">
               <div className="manual-generation-status-item"><span>Visual Runtime</span><strong>{String(comfyService.state || "starting").replaceAll("_", " ")}</strong></div>

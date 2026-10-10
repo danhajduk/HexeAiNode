@@ -365,6 +365,7 @@ describe("ImageStudio", () => {
         initialGenerationProgressOpen
         initialGenerationKind="body"
         bodyPreviewTracking
+        onRefreshGeneration={() => Promise.resolve()}
         generationActivity={{
           generation_status: { progress: { percent: 50, value: 2, max: 4 }, session: { running_count: 1, pending_count: 0 } },
           latest_job: { status: "running", prompt_id: "prompt-123", progress_detail: { status: "sampling", percent: 50, value: 2, max: 4, label: "Sampling" } },
@@ -376,6 +377,7 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Live status from the Visual Runtime");
     expect(markup).toContain("50.0%");
     expect(markup).toContain("2 of 4");
+    expect(markup).toContain("Refresh Preview");
     expect(markup).toContain("Close");
   });
 

@@ -3133,6 +3133,7 @@ export default function App() {
           characterProfiles={Array.isArray(avatarGenerationPayload?.profiles) ? avatarGenerationPayload.profiles : []}
           characterSaveBusy={avatarGenerationBusy}
           onRefreshData={loadImageStudioData}
+          onRefreshGeneration={refreshImageStudioFacePreviewActivity}
           onImprovePrompt={onImproveManualImagePrompt}
           onInterviewQuestion={onCharacterInterviewQuestion}
           onSaveCharacterDraft={onSaveAvatarProfile}
