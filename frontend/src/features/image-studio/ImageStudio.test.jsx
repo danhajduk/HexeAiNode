@@ -395,9 +395,11 @@ describe("ImageStudio", () => {
     expect(femaleMarkup).toContain("Pubic hair color");
     expect(femaleMarkup).toContain("inherit from head hair");
     expect(femaleMarkup).toContain("External genital anatomy — vulva");
-    expect(femaleMarkup).not.toContain("External genital anatomy — penis");
+    expect(femaleMarkup).toContain("External genital anatomy — penis");
+    expect(femaleMarkup).toContain("mutually exclusive");
+    expect(maleMarkup).toContain("Breast size");
     expect(maleMarkup).toContain("External genital anatomy — penis");
-    expect(maleMarkup).not.toContain("External genital anatomy — vulva");
+    expect(maleMarkup).toContain("External genital anatomy — vulva");
     expect(sfwMarkup).not.toContain("Breast size");
     expect(sfwMarkup).not.toContain("Pubic hair");
     expect(sfwMarkup).not.toContain("External genital anatomy");
@@ -440,6 +442,24 @@ describe("ImageStudio", () => {
   it("unselects a body option when it is clicked again", () => {
     expect(nextBodyFeatureSelections({ build: ["curvy"] }, "build", "curvy")).toEqual({ build: [] });
     expect(nextBodyFeatureSelections({ build: ["curvy"] }, "build", "athletic")).toEqual({ build: ["athletic"] });
+  });
+
+  it("allows breast traits with penile anatomy but prevents dual genital anatomy", () => {
+    const withPenis = nextBodyFeatureSelections(
+      { breast_size: ["medium"], vulva_description: ["natural"] },
+      "penis_description",
+      "average",
+    );
+    expect(withPenis).toEqual({
+      breast_size: ["medium"],
+      vulva_description: [],
+      penis_description: ["average"],
+    });
+
+    const withVulva = nextBodyFeatureSelections(withPenis, "vulva_description", "natural");
+    expect(withVulva.breast_size).toEqual(["medium"]);
+    expect(withVulva.vulva_description).toEqual(["natural"]);
+    expect(withVulva.penis_description).toEqual([]);
   });
 
   it("shows a closable live generation progress dialog", () => {

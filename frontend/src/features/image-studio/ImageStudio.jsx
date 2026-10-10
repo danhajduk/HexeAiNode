@@ -224,7 +224,10 @@ const BODY_FEATURE_PROMPT_DESCRIPTIONS = {
 
 function nextBodyFeatureSelections(selections = {}, groupId, option) {
   const selected = selections[groupId] || [];
-  return { ...selections, [groupId]: selected.includes(option) ? [] : [option] };
+  let next = { ...selections, [groupId]: selected.includes(option) ? [] : [option] };
+  if (groupId === "vulva_description" && next.vulva_description?.length) next = { ...next, penis_description: [] };
+  if (groupId === "penis_description" && next.penis_description?.length) next = { ...next, vulva_description: [] };
+  return next;
 }
 
 function composeBodyDescription(selections = {}, customDetails = "", faceSelections = {}) {
@@ -880,8 +883,6 @@ export function ImageStudio({
   const adultIntimateFeaturesEnabled = characterBrief.age_group === "adult (18+)" && characterBrief.content_rating === "NSFW adult content";
   const visibleBodyFeatureGroups = BODY_FEATURE_GROUPS.filter((group) => {
     if (group.intimate && !adultIntimateFeaturesEnabled) return false;
-    if (group.anatomy === "vulva" && characterBrief.gender_identity === "male") return false;
-    if (group.anatomy === "penis" && characterBrief.gender_identity === "female") return false;
     return true;
   });
   const currentInterviewAnswer = activeInterviewStep.id === "name_concept"
@@ -1105,8 +1106,6 @@ export function ImageStudio({
     let next = group.id === "pubic_hair_color" && option === "inherit from head hair"
       ? { ...bodyFeatureSelections, pubic_hair_color: [] }
       : nextBodyFeatureSelections(bodyFeatureSelections, group.id, option);
-    if (group.id === "vulva_description" && next.vulva_description?.length) next = { ...next, penis_description: [] };
-    if (group.id === "penis_description" && next.penis_description?.length) next = { ...next, vulva_description: [] };
     setBodyFeatureSelections(next);
     updateCharacterBrief("body", composeBodyDescription(next, bodyCustomDetails, faceFeatureSelections));
   }
@@ -1792,6 +1791,7 @@ export function ImageStudio({
               <div className="image-studio-face-workspace">
                 <div className="image-studio-face-builder">
                   <p>Define the body foundation. Pose variations will be created later and will not change these proportions.</p>
+                  {adultIntimateFeaturesEnabled ? <p>Breast traits may be combined with either genital anatomy. Vulvar and penile anatomy are mutually exclusive; selecting one clears the other.</p> : null}
                   <div className="image-studio-face-options">
                     {visibleBodyFeatureGroups.map((group) => (
                       <fieldset key={group.id}>
