@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, latestSavedFacePreview, nextBodyFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, latestSavedFacePreview, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -485,6 +485,31 @@ describe("ImageStudio", () => {
     expect(markup).toContain("2 of 4");
     expect(markup).toContain("Refresh Preview");
     expect(markup).toContain("Close");
+  });
+
+  it("recognizes Escape and waits for an imported preview artifact", () => {
+    expect(isEscapeKey({ key: "Escape" })).toBe(true);
+    expect(isEscapeKey({ key: "Enter" })).toBe(false);
+    expect(previewArtifactReady({ status: "completed", url: "/preview.png", placeholder: false })).toBe(false);
+    expect(previewArtifactReady({ status: "completed", url: "/preview.svg", imported_at: "now", placeholder: true })).toBe(false);
+    expect(previewArtifactReady({ status: "completed", url: "/preview.png", imported_at: "now", placeholder: false })).toBe(true);
+  });
+
+  it("shows importing instead of done until the preview file is available", () => {
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialGenerationProgressOpen
+        initialGenerationKind="body"
+        bodyPreviewTracking
+        bodyPreviewResult={{ preview: { status: "submitted", prompt_id: "prompt-123" } }}
+        generationActivity={{ latest_job: { status: "completed", prompt_id: "prompt-123", progress_detail: { status: "completed", percent: 100 } } }}
+      />
+    );
+
+    expect(markup).toContain("importing preview");
+    expect(markup).toContain("still being saved and imported");
   });
 
   it("adds a rendering prompt that matches the initial character visual style", () => {

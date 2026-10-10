@@ -289,6 +289,20 @@ function buildBodyPreviewPayload(characterBrief, bodySelections, faceSelections,
   };
 }
 
+function previewArtifactReady(preview) {
+  return Boolean(
+    preview
+    && ["completed", "completed_with_fallback"].includes(String(preview.status || "").toLowerCase())
+    && preview.url
+    && preview.imported_at
+    && preview.placeholder !== true
+  );
+}
+
+function isEscapeKey(event) {
+  return event?.key === "Escape";
+}
+
 const FACE_FEATURE_OPTION_GROUPS = [
   { id: "apparent age", label: "Apparent age", options: ["teen", "young adult", "adult", "mature", "elderly"] },
   { id: "face shape", label: "Face shape", options: ["oval", "round", "square", "heart-shaped", "diamond", "oblong", "triangular", "soft angular"] },
@@ -988,12 +1002,15 @@ export function ImageStudio({
   const modalProgressPercent = Number(modalProgressDetail?.percent ?? generationProgress?.percent);
   const modalProgressValue = Number(modalProgressDetail?.value ?? generationProgress?.value);
   const modalProgressMax = Number(modalProgressDetail?.max ?? generationProgress?.max);
-  const modalStatus = String(
+  const rawModalStatus = String(
     modalProgressDetail?.status
       || ((progressMatchesJob || progressTracking) ? generationJob?.status : "")
       || progressPreview?.status
       || (progressTracking ? "preparing" : "idle")
   ).replaceAll("_", " ");
+  const progressArtifactReady = previewArtifactReady(progressPreview);
+  const renderFinished = ["completed", "completed with fallback", "done", "success"].includes(rawModalStatus.toLowerCase());
+  const modalStatus = renderFinished && !progressArtifactReady ? "importing preview" : rawModalStatus;
   const modalPercentLabel = Number.isFinite(modalProgressPercent)
     ? `${modalProgressPercent.toFixed(1)}%`
     : Number.isFinite(modalProgressValue) && Number.isFinite(modalProgressMax) && modalProgressMax > 0
@@ -1004,6 +1021,15 @@ export function ImageStudio({
     : Number.isFinite(modalProgressValue) && Number.isFinite(modalProgressMax) && modalProgressMax > 0
       ? Math.max(0, Math.min(100, (modalProgressValue / modalProgressMax) * 100))
       : 0;
+
+  useEffect(() => {
+    if (!generationProgressOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (isEscapeKey(event)) setGenerationProgressOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [generationProgressOpen]);
 
   useEffect(() => {
     onStudioRouteChange?.({
@@ -1922,7 +1948,9 @@ export function ImageStudio({
                 <div className="manual-generation-progress-detail"><span>Queue</span><code>{`${queueRunning} running / ${queuePending} pending`}</code></div>
               </div>
               <p className={`manual-generation-progress-message ${["failed", "error", "cancelled"].includes(modalStatus.toLowerCase()) ? "is-error" : ""}`}>
-                {modalProgressDetail?.message || modalProgressDetail?.failure_detail || modalProgressDetail?.failure_reason || (progressTracking ? "Generation status refreshes automatically. You may close this window without cancelling the job." : "Generation is no longer active.")}
+                {renderFinished && !progressArtifactReady
+                  ? "Rendering is complete. The preview file is still being saved and imported; this window will update when it is available."
+                  : modalProgressDetail?.message || modalProgressDetail?.failure_detail || modalProgressDetail?.failure_reason || (progressTracking ? "Generation status refreshes automatically. You may close this window without cancelling the job." : "Generation is no longer active.")}
               </p>
             </div>
           </section>
@@ -1983,4 +2011,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextBodyFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType };
