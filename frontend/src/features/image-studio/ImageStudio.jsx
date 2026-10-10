@@ -595,6 +595,8 @@ export function ImageStudio({
   initialInterviewOpen = false,
   initialInterviewStep = 0,
   initialFaceSeedReviewOpen = false,
+  initialGenerationProgressOpen = false,
+  initialGenerationKind = "face",
   runtimeStatus = null,
   generationActivity = null,
   facePreviewResult = null,
@@ -663,6 +665,8 @@ export function ImageStudio({
   const [faceSeedReviewOpen, setFaceSeedReviewOpen] = useState(initialFaceSeedReviewOpen);
   const [faceSeedReviewSelections, setFaceSeedReviewSelections] = useState([]);
   const [faceSeedReviewBatchId, setFaceSeedReviewBatchId] = useState("");
+  const [generationProgressOpen, setGenerationProgressOpen] = useState(initialGenerationProgressOpen);
+  const [generationKind, setGenerationKind] = useState(initialGenerationKind);
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -785,6 +789,30 @@ export function ImageStudio({
       || (facePreviewTracking ? "Live status refreshes automatically." : "Generate a preview to see live model and rendering details.")
   );
   const previewImageUrl = displayedFacePreview?.url ? `${apiBase}${displayedFacePreview.url}` : "";
+  const progressPreview = generationKind === "body" ? bodyPreview : facePreview;
+  const progressTracking = generationKind === "body" ? bodyPreviewTracking : facePreviewTracking;
+  const progressPromptId = String(progressPreview?.prompt_id || "").trim();
+  const progressMatchesJob = Boolean(progressPromptId && jobPromptIds.includes(progressPromptId));
+  const modalProgressDetail = generationJob?.progress_detail || {};
+  const modalProgressPercent = Number(modalProgressDetail?.percent ?? generationProgress?.percent);
+  const modalProgressValue = Number(modalProgressDetail?.value ?? generationProgress?.value);
+  const modalProgressMax = Number(modalProgressDetail?.max ?? generationProgress?.max);
+  const modalStatus = String(
+    modalProgressDetail?.status
+      || ((progressMatchesJob || progressTracking) ? generationJob?.status : "")
+      || progressPreview?.status
+      || (progressTracking ? "preparing" : "idle")
+  ).replaceAll("_", " ");
+  const modalPercentLabel = Number.isFinite(modalProgressPercent)
+    ? `${modalProgressPercent.toFixed(1)}%`
+    : Number.isFinite(modalProgressValue) && Number.isFinite(modalProgressMax) && modalProgressMax > 0
+      ? `${modalProgressValue}/${modalProgressMax}`
+      : progressTracking ? "working" : modalStatus;
+  const modalProgressWidth = Number.isFinite(modalProgressPercent)
+    ? Math.max(0, Math.min(100, modalProgressPercent))
+    : Number.isFinite(modalProgressValue) && Number.isFinite(modalProgressMax) && modalProgressMax > 0
+      ? Math.max(0, Math.min(100, (modalProgressValue / modalProgressMax) * 100))
+      : 0;
 
   useEffect(() => {
     const batchId = String(faceSeedBatch?.batch_id || "");
@@ -1082,6 +1110,8 @@ export function ImageStudio({
 
   async function generateFacePreview({ promptOverride = "", forceLockedSeed = false } = {}) {
     if (!characterBrief.appearance.trim() || characterSaveBusy || facePreviewTracking || !onGenerateFacePreview) return null;
+    setGenerationKind("face");
+    setGenerationProgressOpen(true);
     const savedProfile = await saveCharacterProgress();
     const profileId = savedProfile?.profile_id || characterProfileId;
     if (!profileId) return null;
@@ -1100,6 +1130,8 @@ export function ImageStudio({
 
   async function generateBodyPreview() {
     if (!characterBrief.body.trim() || characterSaveBusy || bodyPreviewTracking || !onGenerateBodyPreview) return null;
+    setGenerationKind("body");
+    setGenerationProgressOpen(true);
     const savedProfile = await saveCharacterProgress();
     const profileId = savedProfile?.profile_id || characterProfileId;
     if (!profileId) return null;
@@ -1581,6 +1613,46 @@ export function ImageStudio({
               </div>
             </footer>
             {draftSaveMessage ? <p className="image-studio-interview-save-status success">{draftSaveMessage}</p> : null}
+          </section>
+        </div>
+      ) : null}
+      {generationProgressOpen ? (
+        <div className="image-studio-modal-backdrop" role="presentation">
+          <section className="image-studio-generation-modal" role="dialog" aria-modal="true" aria-labelledby="image-studio-generation-title">
+            <header>
+              <div>
+                <span className="image-studio-eyebrow">Image Studio generation</span>
+                <h2 id="image-studio-generation-title">{generationKind === "body" ? "Body reference progress" : "Face preview progress"}</h2>
+                <p>Live status from the Visual Runtime and ComfyUI queue.</p>
+              </div>
+              <button className="btn" type="button" onClick={() => setGenerationProgressOpen(false)}>Close</button>
+            </header>
+            <div className="manual-generation-status-row manual-generation-status-row-primary image-studio-generation-status-grid">
+              <div className="manual-generation-status-item"><span>Visual Runtime</span><strong>{String(comfyService.state || "starting").replaceAll("_", " ")}</strong></div>
+              <div className="manual-generation-status-item"><span>Model</span><code>{modelName}</code></div>
+              <div className="manual-generation-status-item"><span>Queue</span><code>{`${queueRunning} running / ${queuePending} pending`}</code></div>
+              <div className="manual-generation-status-item"><span>Latest Job</span><strong>{modalStatus}</strong></div>
+            </div>
+            <div className="manual-generation-status-row manual-generation-status-row-secondary image-studio-generation-status-grid">
+              <div className="manual-generation-status-item"><span>Current Prompt</span><code>{modalProgressDetail?.prompt_id || generationSession?.running_prompt_id || generationJob?.prompt_id || progressPromptId || "waiting"}</code></div>
+              <div className="manual-generation-status-item"><span>Template</span><code>{generationKind === "body" ? "template.avatar_upper_torso_preview.realvisxl.v1" : "template.avatar_head_face_preview.realvisxl.v1"}</code></div>
+              <div className="manual-generation-status-item"><span>Stage</span><code>{String(modalProgressDetail?.phase || modalProgressDetail?.status || modalStatus)}</code></div>
+            </div>
+            <div className="manual-generation-progress-panel">
+              <div className="manual-generation-progress-heading"><span>Progress</span><code>{modalPercentLabel}</code></div>
+              <div className={`manual-generation-progress-track ${progressTracking && !modalProgressWidth ? "is-active" : ""}`} aria-label={`Generation progress ${modalProgressWidth.toFixed(0)}%`}>
+                <span style={{ width: modalProgressWidth ? `${modalProgressWidth}%` : undefined }} />
+              </div>
+              <div className="manual-generation-progress-details">
+                <div className="manual-generation-progress-detail"><span>Node</span><code>{modalProgressDetail?.label || modalProgressDetail?.node_class || "Preparing"}</code></div>
+                <div className="manual-generation-progress-detail"><span>Step</span><code>{Number.isFinite(modalProgressValue) && Number.isFinite(modalProgressMax) ? `${modalProgressValue} of ${modalProgressMax}` : "waiting"}</code></div>
+                <div className="manual-generation-progress-detail"><span>Prompt</span><code>{modalProgressDetail?.prompt_id || generationJob?.prompt_id || progressPromptId || "waiting"}</code></div>
+                <div className="manual-generation-progress-detail"><span>Queue</span><code>{`${queueRunning} running / ${queuePending} pending`}</code></div>
+              </div>
+              <p className={`manual-generation-progress-message ${["failed", "error", "cancelled"].includes(modalStatus.toLowerCase()) ? "is-error" : ""}`}>
+                {modalProgressDetail?.message || modalProgressDetail?.failure_detail || modalProgressDetail?.failure_reason || (progressTracking ? "Generation status refreshes automatically. You may close this window without cancelling the job." : "Generation is no longer active.")}
+              </p>
+            </div>
           </section>
         </div>
       ) : null}

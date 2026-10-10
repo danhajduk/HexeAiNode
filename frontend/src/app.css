@@ -3284,6 +3284,47 @@
   background: hsl(var(--sx-bg) / 0.55);
 }
 
+.image-studio-generation-modal {
+  width: min(1120px, 94vw);
+  max-height: 88vh;
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: var(--sx-radius-lg);
+  background: hsl(var(--sx-panel));
+  box-shadow: 0 24px 80px hsl(220 40% 2% / 0.6);
+}
+
+.image-studio-generation-modal > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.image-studio-generation-modal h2,
+.image-studio-generation-modal p {
+  margin: 0;
+}
+
+.image-studio-generation-modal header p {
+  margin-top: 6px;
+  color: hsl(var(--sx-text-muted));
+}
+
+.image-studio-generation-status-grid {
+  margin-bottom: 10px;
+}
+
+.image-studio-generation-status-grid.manual-generation-status-row-primary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.image-studio-generation-status-grid.manual-generation-status-row-secondary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .image-studio-face-preview-status > div {
   display: grid;
   gap: 2px;

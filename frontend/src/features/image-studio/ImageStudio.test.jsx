@@ -345,6 +345,29 @@ describe("ImageStudio", () => {
     expect(prompt).not.toContain("bodysuit");
   });
 
+  it("shows a closable live generation progress dialog", () => {
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialCreativeSetupOpen
+        initialGenerationProgressOpen
+        initialGenerationKind="body"
+        bodyPreviewTracking
+        generationActivity={{
+          generation_status: { progress: { percent: 50, value: 2, max: 4 }, session: { running_count: 1, pending_count: 0 } },
+          latest_job: { status: "running", prompt_id: "prompt-123", progress_detail: { status: "sampling", percent: 50, value: 2, max: 4, label: "Sampling" } },
+        }}
+      />
+    );
+
+    expect(markup).toContain("Body reference progress");
+    expect(markup).toContain("Live status from the Visual Runtime");
+    expect(markup).toContain("50.0%");
+    expect(markup).toContain("2 of 4");
+    expect(markup).toContain("Close");
+  });
+
   it("adds a rendering prompt that matches the initial character visual style", () => {
     const semiRealistic = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", visual_style: "semi-realistic", body: "curvy" });
     const anime = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", visual_style: "anime", body: "curvy" });
