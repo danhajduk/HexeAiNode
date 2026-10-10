@@ -1307,7 +1307,7 @@ export default function App() {
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
       setError(message);
-      return null;
+      return { error: message };
     } finally {
       setManualImageGenerationBusy(false);
     }

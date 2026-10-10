@@ -42,6 +42,7 @@ export function SyntheticAdultStudioCard({ payload = null, busy = false, result 
   const [bodyStrength, setBodyStrength] = useState("0.72");
   const [confirmedAdult, setConfirmedAdult] = useState(false);
   const [localStatus, setLocalStatus] = useState("");
+  const [localError, setLocalError] = useState("");
 
   const templateAvailable = asArray(payload?.templates).some((template) => template?.template_id === TEMPLATE_ID);
   const outputs = asArray(payload?.outputs).slice(0, 12);
@@ -60,29 +61,41 @@ export function SyntheticAdultStudioCard({ payload = null, busy = false, result 
 
   const referencePreview = useMemo(() => previewUrl || outputUrl(apiBase, reference), [apiBase, previewUrl, reference]);
 
-  async function submit(event) {
-    event.preventDefault();
-    if (!canSubmit) {
-      return;
-    }
+  async function uploadReferenceFile(file = referenceFile) {
+    if (!file) return reference;
+    setLocalError("");
     setLocalStatus("uploading_reference");
-    let selectedReference = reference;
-    if (referenceFile) {
+    try {
       const upload = await onUploadReference?.({
         category: "avatar",
         role: "body",
-        name: referenceFile.name.replace(/\.[^.]+$/, ""),
-        filename: referenceFile.name,
-        data_base64: await fileToDataUrl(referenceFile),
+        name: file.name.replace(/\.[^.]+$/, ""),
+        filename: file.name,
+        data_base64: await fileToDataUrl(file),
       });
-      selectedReference = upload?.reference || null;
+      const selectedReference = upload?.reference || null;
       if (!selectedReference?.input_image) {
         setLocalStatus("reference_upload_failed");
-        return;
+        setLocalError(upload?.error || "The reference could not be uploaded. Check the backend error shown above and try again.");
+        return null;
       }
       setReference(selectedReference);
       setReferenceFile(null);
+      setLocalStatus("reference_uploaded");
+      return selectedReference;
+    } catch (error) {
+      setLocalStatus("reference_upload_failed");
+      setLocalError(String(error?.message || error));
+      return null;
     }
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!canSubmit) return;
+    const selectedReference = referenceFile ? await uploadReferenceFile(referenceFile) : reference;
+    if (!selectedReference?.input_image) return;
+    setLocalError("");
     setLocalStatus("submitting");
     const numericSeed = String(seed).trim() ? Number.parseInt(seed, 10) : null;
     const submission = await onSubmit?.({
@@ -111,7 +124,7 @@ export function SyntheticAdultStudioCard({ payload = null, busy = false, result 
   }
 
   return (
-    <article className="card synthetic-adult-studio-card">
+    <article className="card synthetic-adult-studio-card operational-card-full-span">
       <CardHeader title="Synthetic Adult Studio" subtitle="Create local, body-guided images of an adult AI avatar for adult-profile publishing." />
 
       <form className="setup-form" onSubmit={submit}>
@@ -126,9 +139,16 @@ export function SyntheticAdultStudioCard({ payload = null, busy = false, result 
           <p className="muted tiny">Use only a fully synthetic avatar that clearly represents an adult. The same image guides facial identity, proportions, and pose silhouette.</p>
           <label className="avatar-upload-control">
             <span className="btn btn-primary">Choose Body Reference</span>
-            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { setReferenceFile(event.target.files?.[0] || null); setReference(null); }} />
+            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { setReferenceFile(event.target.files?.[0] || null); setReference(null); setLocalError(""); setLocalStatus(""); }} />
           </label>
+          {referenceFile ? (
+            <div className="row">
+              <span className="muted tiny">Selected: {referenceFile.name}</span>
+              <button className="btn" type="button" onClick={() => uploadReferenceFile()} disabled={busy}>Upload Reference</button>
+            </div>
+          ) : null}
           {referencePreview ? <img className="synthetic-adult-reference-preview" src={referencePreview} alt="Selected synthetic adult avatar reference" /> : null}
+          {localError ? <p className="error-text" role="alert">{localError}</p> : null}
         </section>
 
         <section>

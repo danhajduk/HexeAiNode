@@ -589,6 +589,7 @@ describe("OperationalDashboard", () => {
     );
 
     expect(markup).toContain("Synthetic Adult Studio");
+    expect(markup).toContain("operational-card-full-span");
     expect(markup).toContain("Choose Body Reference");
     expect(markup).toContain("Identity strength");
     expect(markup).toContain("Body/pose strength");
