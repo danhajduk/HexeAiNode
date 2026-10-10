@@ -1270,9 +1270,11 @@ export default function App() {
     try {
       const result = await apiPost("/api/manual-image-generation", payload);
       setManualImageGenerationResult(result);
+      return result;
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
       setError(message);
+      return null;
     } finally {
       setManualImageGenerationBusy(false);
     }
