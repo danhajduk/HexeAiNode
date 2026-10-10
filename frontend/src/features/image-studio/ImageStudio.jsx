@@ -2091,6 +2091,15 @@ export function ImageStudio({
                   <h3>Job details</h3>
                   <div><span>Submitted</span><code>{formatJobTime(progressSubmittedAt)}</code></div>
                   <div><span>Seed</span><code>{popupSeed ?? "waiting"}</code></div>
+                  {generationKind === "body" ? <div><span>Breast shape</span><code>{breastShape || "automatic"}</code></div> : null}
+                  <div><span>Checkpoint</span><code>{progressPreview?.checkpoint || modelName}</code></div>
+                  <div><span>Sampler</span><code>{progressPreview?.sampler_name || "runtime default"}{progressPreview?.scheduler ? ` / ${progressPreview.scheduler}` : ""}</code></div>
+                  <div><span>Sampling</span><code>{progressPreview?.steps ? `${progressPreview.steps} steps · CFG ${progressPreview.cfg ?? "—"}` : "waiting"}</code></div>
+                  <div><span>Canvas</span><code>{progressPreview?.width && progressPreview?.height ? `${progressPreview.width} × ${progressPreview.height}` : "waiting"}</code></div>
+                  <div><span>Profile</span><code>{characterProfileId ? `${characterProfileId} saved` : "saving"}</code></div>
+                  <div><span>Output</span><code>{progressArtifactReady ? "file available" : renderFinished ? "copying into character profile" : "waiting for render"}</code></div>
+                  <div><span>Imported</span><code>{formatJobTime(progressImportedAt)}</code></div>
+                  <div><span>Prompt ID</span><code title={progressPromptId}>{progressPromptId || "waiting"}</code></div>
                   {generationKind === "body" ? (
                     <div className="image-studio-popup-magnitudes">
                       <span>Magnitudes for Redo</span>
@@ -2118,15 +2127,6 @@ export function ImageStudio({
                       </div>
                     </div>
                   ) : null}
-                  {generationKind === "body" ? <div><span>Breast shape</span><code>{breastShape || "automatic"}</code></div> : null}
-                  <div><span>Checkpoint</span><code>{progressPreview?.checkpoint || modelName}</code></div>
-                  <div><span>Sampler</span><code>{progressPreview?.sampler_name || "runtime default"}{progressPreview?.scheduler ? ` / ${progressPreview.scheduler}` : ""}</code></div>
-                  <div><span>Sampling</span><code>{progressPreview?.steps ? `${progressPreview.steps} steps · CFG ${progressPreview.cfg ?? "—"}` : "waiting"}</code></div>
-                  <div><span>Canvas</span><code>{progressPreview?.width && progressPreview?.height ? `${progressPreview.width} × ${progressPreview.height}` : "waiting"}</code></div>
-                  <div><span>Profile</span><code>{characterProfileId ? `${characterProfileId} saved` : "saving"}</code></div>
-                  <div><span>Output</span><code>{progressArtifactReady ? "file available" : renderFinished ? "copying into character profile" : "waiting for render"}</code></div>
-                  <div><span>Imported</span><code>{formatJobTime(progressImportedAt)}</code></div>
-                  <div><span>Prompt ID</span><code title={progressPromptId}>{progressPromptId || "waiting"}</code></div>
                 </div>
               </div>
               <aside className="image-studio-generation-preview-pane">

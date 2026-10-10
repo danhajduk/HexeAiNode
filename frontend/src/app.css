@@ -3620,8 +3620,7 @@
   color: hsl(var(--sx-muted));
 }
 
-.image-studio-magnitude-grid,
-.image-studio-popup-magnitudes > div {
+.image-studio-magnitude-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -3652,6 +3651,9 @@
 }
 
 .image-studio-popup-magnitudes > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
   margin-top: 7px;
 }
 
