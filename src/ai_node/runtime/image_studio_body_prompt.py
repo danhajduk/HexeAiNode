@@ -20,15 +20,35 @@ BODY_FEATURE_DESCRIPTIONS = {
     "hips": {value: f"{value} with a natural pelvis and outer hip contour" for value in ("narrow hips", "balanced hips", "wide hips", "rounded hips", "angular hips")},
     "limbs": {value: f"{value} with anatomically coherent arm, leg, and torso balance" for value in ("short limbs", "balanced limbs", "long legs", "long arms", "long limbs")},
     "musculature": {value: f"{value} visible muscle volume and definition across the torso and limbs" for value in ("soft definition", "lightly toned", "athletic definition", "muscular", "strongly muscular")},
-    "body_hair": {value: f"{value} natural body hair distribution across the torso, arms, and legs" for value in ("none", "very light", "light", "natural", "moderate", "heavy")},
+    "body_hair": {
+        "none": "no visible body hair anywhere on the torso, arms, or legs",
+        **{value: f"{value} natural body hair distribution across the torso, arms, and legs" for value in ("very light", "light", "natural", "moderate", "heavy")},
+    },
     "breast_size": {value: f"{value} adult breast volume with realistic weight and proportions" for value in ("flat chest", "small", "medium", "large", "very large")},
     "breast_shape": {value: f"{value} adult breast contour with realistic soft-tissue behavior" for value in ("shallow", "round", "teardrop", "wide-set", "close-set", "pendulous")},
     "butt_size": {value: f"{value} gluteal volume proportionate to the pelvis and thighs" for value in ("flat", "small", "moderate", "full", "very full")},
     "butt_shape": {value: f"{value} gluteal contour with realistic soft-tissue anatomy" for value in ("square", "round", "heart-shaped", "V-shaped", "athletic")},
-    "pubic_hair": {value: f"{value} adult pubic-hair amount and grooming" for value in ("none", "closely trimmed", "trimmed", "natural", "full")},
+    "pubic_hair": {
+        "none": "no visible pubic hair",
+        **{value: f"{value} adult pubic-hair amount and grooming" for value in ("closely trimmed", "trimmed", "natural", "full")},
+    },
     "pubic_hair_color": {value: f"{value} pubic hair color" for value in ("black", "dark brown", "brown", "auburn", "copper", "red", "blonde", "platinum", "gray", "white")},
     "vulva_description": {value: f"{value} realistic adult external vulvar anatomy with natural variation" for value in ("subtle", "natural", "prominent")},
     "penis_description": {value: f"{value}-size flaccid adult penis with realistic external anatomy" for value in ("small", "average", "large")},
+    "misc": {"no tattoos": "completely tattoo-free skin across the entire visible body"},
+}
+
+MAGNITUDE_DESCRIPTIONS = {
+    "height": ("very short", "short", "average", "tall", "very tall", "overall stature and vertical proportions"),
+    "body_mass": ("very slender", "slender", "average", "full", "very heavy", "natural body mass and soft-tissue volume"),
+    "shoulder_width": ("very narrow", "narrow", "balanced", "broad", "very broad", "shoulder span relative to the torso and hips"),
+    "torso_length": ("very short", "short", "balanced", "long", "very long", "ribcage-to-pelvis torso length"),
+    "waist_width": ("very narrow", "narrow", "balanced", "broad", "very broad", "waist width relative to ribcage and hips"),
+    "hip_width": ("very narrow", "narrow", "balanced", "wide", "very wide", "pelvis and outer hip width"),
+    "limb_length": ("very short", "short", "balanced", "long", "very long", "arm and leg length relative to the torso"),
+    "musculature": ("very soft", "soft", "moderate", "muscular", "very muscular", "visible natural muscle volume and definition"),
+    "butt_size": ("very flat", "small", "moderate", "full", "very full", "gluteal volume relative to pelvis and thighs"),
+    "penis_size": ("very small", "small", "average", "large", "very large", "flaccid adult penis size with realistic external anatomy"),
 }
 
 STYLE_PROMPTS = {
@@ -61,12 +81,12 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
     face_selections = face_selections if isinstance(face_selections, dict) else {}
     context = context if isinstance(context, dict) else {}
     magnitudes = magnitudes if isinstance(magnitudes, dict) else {}
-    if selections.get("vulva_description") and selections.get("penis_description"):
+    if selections.get("vulva_description") and (selections.get("penis_description") or "penis_size" in magnitudes):
         raise ValueError("body_feature_anatomy_conflict")
 
     normalized_magnitudes = {}
     for magnitude_id, raw_value in magnitudes.items():
-        if magnitude_id != "breast_size":
+        if magnitude_id != "breast_size" and magnitude_id not in MAGNITUDE_DESCRIPTIONS:
             raise ValueError(f"body_feature_magnitude_invalid:{magnitude_id}")
         value = float(raw_value)
         if not 0.0 <= value <= 1.0:
@@ -85,7 +105,11 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
                 if group_id == "pubic_hair_color" and value == "inherit from head hair":
                     continue
                 raise ValueError(f"body_feature_option_invalid:{group_id}:{value}")
+            if group_id == "pubic_hair_color" and (selections.get("pubic_hair") or [None])[0] == "none":
+                continue
             if group_id in {"breast_size", "breast_shape"} and "breast_size" in normalized_magnitudes:
+                continue
+            if group_id == "penis_description" and "penis_size" in normalized_magnitudes:
                 continue
             emphasis = "1.45" if group_id in {"body_traits", "build", "breast_size", "breast_shape", "vulva_description", "penis_description"} else "1.25"
             details.append(f"({group_id.replace('_', ' ')}: {description}:{emphasis})")
@@ -97,6 +121,14 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
         shape = BODY_FEATURE_DESCRIPTIONS["breast_shape"].get(str(shape_values[0])) if shape_values else None
         shape_instruction = shape or "natural adult breast contour with realistic soft-tissue behavior"
         details.append(f"(breast anatomy: size magnitude {value:.2f} on a 0-to-1 scale, {label} adult breast volume with realistic weight and proportions; shape: {shape_instruction}:1.50)")
+
+    for magnitude_id, value in normalized_magnitudes.items():
+        if magnitude_id == "breast_size":
+            continue
+        bands = MAGNITUDE_DESCRIPTIONS[magnitude_id]
+        band_index = min(4, int(value * 5))
+        label = bands[band_index]
+        details.append(f"({magnitude_id.replace('_', ' ')} magnitude: {value:.2f} on a 0-to-1 scale, {label} {bands[5]}:1.40)")
 
     pubic_hair = selections.get("pubic_hair") or []
     explicit_pubic_color = selections.get("pubic_hair_color") or []
@@ -114,7 +146,7 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
         f"Character body: {context.get('age_group', '')} {context.get('gender_identity', '')}.",
         f"SELECTED BODY TRAITS — MUST MATCH EXACTLY: {'; '.join(details)}.",
         skin_instruction,
-        "STRICT CAMERA FRAMING: neck-down full-body reference, portrait orientation, zoomed out. Top edge crosses the base of the neck above both collarbones. Both shoulders, entire torso, pelvis, both complete legs, ankles, and both complete feet are inside the frame. Feet sit near the bottom margin. No head, no waist crop, no knee crop, no missing feet.",
+        "STRICT CAMERA FRAMING: neck-down full-body reference, portrait orientation, zoomed out. Top edge crosses the base of the neck above both collarbones. Both shoulders, entire torso, pelvis, both complete legs, ankles, and both complete feet are inside the frame. Feet sit near the bottom margin. No head, scalp, face, facial hair, beard, mustache, sideburns, or head hair is visible anywhere in the image; no hair hangs down from outside the frame. No waist crop, no knee crop, no missing feet.",
         "DEFINED REFERENCE POSE: relaxed anatomical A-pose facing the camera squarely. Stand upright with the spine and pelvis neutral, shoulders level and relaxed, feet hip-width apart and fully planted, toes pointing forward with only a slight natural outward angle, body weight distributed evenly across both legs, and knees straight but not locked. Hold both arms naturally 10 to 15 degrees away from the torso with soft elbows, palms facing inward toward the thighs, wrists neutral, and fingers gently separated. Keep the torso, waist, hips, hands, and inner leg contours clearly visible and unobscured.",
         "Clean healthy intact living skin with natural pores, subtle tonal variation, and uninterrupted soft-tissue transitions. Uniform natural skin surface without embedded objects, debris, colored spots, lesions, mosaic texture, or body paint. Normal human joints with no panel lines.",
         "Plain seamless neutral-gray studio background, visually separate from the body, no patterned wall, no camouflage, no reflected texture on skin.",

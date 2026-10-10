@@ -71,6 +71,32 @@ class ImageStudioBodyPromptTests(unittest.TestCase):
                 selections={}, face_selections={}, custom_details="", context={}, magnitudes={"breast_size": 1.1}
             )
 
+    def test_compiles_continuous_body_magnitudes(self):
+        prompt = compile_body_preview_prompt(
+            selections={"butt_shape": ["round"]},
+            face_selections={}, custom_details="", context={},
+            magnitudes={"height": 0.8, "hip_width": 0.7, "butt_size": 0.9},
+        )
+        self.assertIn("height magnitude: 0.80", prompt)
+        self.assertIn("hip width magnitude: 0.70", prompt)
+        self.assertIn("butt size magnitude: 0.90", prompt)
+        self.assertIn("round gluteal contour", prompt)
+
+    def test_none_pubic_hair_suppresses_explicit_and_inherited_color(self):
+        prompt = compile_body_preview_prompt(
+            selections={"pubic_hair": ["none"], "pubic_hair_color": ["black"]},
+            face_selections={"hair color": ["auburn"]}, custom_details="", context={},
+        )
+        self.assertNotIn("pubic hair color", prompt)
+
+    def test_misc_no_tattoos_and_head_hair_exclusion_are_compiled(self):
+        prompt = compile_body_preview_prompt(
+            selections={"misc": ["no tattoos"]}, face_selections={}, custom_details="", context={},
+        )
+        self.assertIn("completely tattoo-free skin", prompt)
+        self.assertIn("No head, scalp, face, facial hair", prompt)
+        self.assertIn("no hair hangs down", prompt)
+
     def test_routes_explicit_adult_anatomy_to_adult_capable_checkpoint(self):
         self.assertEqual(body_preview_checkpoint({"breast_size": ["large"]}), "RealVisXL_V5.0_fp16.safetensors")
         self.assertEqual(body_preview_checkpoint({"vulva_description": ["natural"]}), "lustifySDXLNSFWSFW_v20.safetensors")

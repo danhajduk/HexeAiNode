@@ -93,6 +93,20 @@ const BODY_FEATURE_GROUPS = [
   { id: "pubic_hair_color", label: "Pubic hair color", description: "Defaults to the selected head-hair color, with an optional independent override.", intimate: true, options: ["inherit from head hair", "black", "dark brown", "brown", "auburn", "copper", "red", "blonde", "platinum", "gray", "white"] },
   { id: "vulva_description", label: "External genital anatomy — vulva", description: "Adult external vulvar anatomy for the body reference.", intimate: true, anatomy: "vulva", options: ["subtle", "natural", "prominent"] },
   { id: "penis_description", label: "External genital anatomy — penis", description: "Adult external penile anatomy for the body reference.", intimate: true, anatomy: "penis", options: ["small", "average", "large"] },
+  { id: "misc", label: "Miscellaneous", description: "Additional body-reference constraints that do not belong to a size or shape group.", options: ["no tattoos"] },
+];
+
+const BODY_MAGNITUDE_CONFIGS = [
+  { id: "height", label: "Height", low: "very short", high: "very tall" },
+  { id: "body_mass", label: "Body mass", low: "very slender", high: "very heavy" },
+  { id: "shoulder_width", label: "Shoulder width", low: "very narrow", high: "very broad" },
+  { id: "torso_length", label: "Torso length", low: "very short", high: "very long" },
+  { id: "waist_width", label: "Waist width", low: "very narrow", high: "very broad" },
+  { id: "hip_width", label: "Hip width", low: "very narrow", high: "very wide" },
+  { id: "limb_length", label: "Limb length", low: "very short", high: "very long" },
+  { id: "musculature", label: "Musculature", low: "very soft", high: "very muscular" },
+  { id: "butt_size", label: "Butt fullness", low: "very flat", high: "very full" },
+  { id: "penis_size", label: "Penis size", low: "very small", high: "very large", intimate: true },
 ];
 
 const INTIMATE_BODY_FEATURE_IDS = new Set(["breast_size", "breast_shape", "pubic_hair", "pubic_hair_color", "vulva_description", "penis_description"]);
@@ -227,12 +241,13 @@ function nextBodyFeatureSelections(selections = {}, groupId, option) {
   let next = { ...selections, [groupId]: selected.includes(option) ? [] : [option] };
   if (groupId === "vulva_description" && next.vulva_description?.length) next = { ...next, penis_description: [] };
   if (groupId === "penis_description" && next.penis_description?.length) next = { ...next, vulva_description: [] };
+  if (groupId === "pubic_hair" && option === "none" && next.pubic_hair?.length) next = { ...next, pubic_hair_color: [] };
   return next;
 }
 
 function composeBodyDescription(selections = {}, customDetails = "", faceSelections = {}) {
   const parts = BODY_FEATURE_GROUPS.flatMap((group) => (selections[group.id] || []).map((value) => {
-    if (group.id === "pubic_hair_color" && value === "inherit from head hair") return [];
+    if (group.id === "pubic_hair_color" && (value === "inherit from head hair" || (selections.pubic_hair || []).includes("none"))) return [];
     return `${group.label.toLowerCase()}: ${value}`;
   }));
   const pubicHairSelected = (selections.pubic_hair || []).some((value) => value !== "none");
@@ -926,6 +941,7 @@ export function ImageStudio({
     return true;
   });
   const breastShapeGroup = BODY_FEATURE_GROUPS.find((group) => group.id === "breast_shape");
+  const visibleMagnitudeConfigs = BODY_MAGNITUDE_CONFIGS.filter((config) => !config.intimate || adultIntimateFeaturesEnabled);
   const currentInterviewAnswer = activeInterviewStep.id === "name_concept"
     ? [
       characterBrief.name,
@@ -1042,7 +1058,6 @@ export function ImageStudio({
   const progressImportedAt = String(progressPreview?.imported_at || "");
   const popupSeed = progressPreview?.seed_text ?? progressPreview?.seed;
   const keepPopupSeed = generationKind === "body" ? bodySeedLocked || Boolean(bodySeedInput.trim()) : faceSeedLocked;
-  const breastMagnitude = bodyFeatureMagnitudes.breast_size;
   const breastShape = (bodyFeatureSelections.breast_shape || [])[0];
   const formatJobTime = (value) => value ? new Date(value).toLocaleString() : "waiting";
 
@@ -1431,7 +1446,8 @@ export function ImageStudio({
       setDraftSaveMessage("Character saved. Submitting body reference preview…");
       const result = await onGenerateBodyPreview(profileId, {
         ...buildBodyPreviewPayload(characterBrief, bodyFeatureSelections, faceFeatureSelections, bodyCustomDetails, bodyFeatureMagnitudes),
-        negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, hair, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, skin lesions, rash, sores, colored spots, confetti, embedded debris, mosaic skin, camouflage texture, body paint, patterned skin, patterned background, dramatic pose, fashion pose, contrapposto, hip cocked, leaning body, twisted torso, crossed arms, crossed legs, hands on hips, hands behind back, hands covering torso, bent raised knee, walking pose, action pose, extreme foreshortening, text, watermark, child, teen, underage",
+        negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, scalp, head hair, hair hanging into frame, facial hair, beard, mustache, sideburns, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, skin lesions, rash, sores, colored spots, confetti, embedded debris, mosaic skin, camouflage texture, body paint, patterned skin, patterned background, dramatic pose, fashion pose, contrapposto, hip cocked, leaning body, twisted torso, crossed arms, crossed legs, hands on hips, hands behind back, hands covering torso, bent raised knee, walking pose, action pose, extreme foreshortening, text, watermark, child, teen, underage"
+          + ((bodyFeatureSelections.misc || []).includes("no tattoos") ? ", tattoo, tattoos, body art, inked skin" : ""),
         seed: bodySeedInput.trim() || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null ? bodyPreviewSeed : null),
         lock_seed: Boolean(bodySeedInput.trim()) || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null),
         width: 768,
@@ -1927,6 +1943,32 @@ export function ImageStudio({
                         </div>
                       </fieldset>
                     ) : null}
+                    <fieldset className="image-studio-magnitude-control">
+                      <legend>Body magnitudes<small>Optional 0–1 measurements. Leave unset to use the descriptive selection only.</small></legend>
+                      <div className="image-studio-magnitude-grid">
+                        {visibleMagnitudeConfigs.map((config) => (
+                          <label key={config.id}>
+                            <span>{config.label}</span>
+                            <input
+                              aria-label={`${config.label} magnitude`}
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              value={bodyFeatureMagnitudes[config.id] ?? 0.5}
+                              onChange={(event) => setBodyFeatureMagnitudes((current) => ({ ...current, [config.id]: Number(event.target.value) }))}
+                            />
+                            <strong>{bodyFeatureMagnitudes[config.id] === undefined ? "Automatic" : bodyFeatureMagnitudes[config.id].toFixed(2)}</strong>
+                            <small>{config.low} → {config.high}</small>
+                            <button className="btn" type="button" disabled={bodyFeatureMagnitudes[config.id] === undefined} onClick={() => setBodyFeatureMagnitudes((current) => {
+                              const next = { ...current };
+                              delete next[config.id];
+                              return next;
+                            })}>Automatic</button>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
                   </div>
                   <label className="image-studio-full-field">Additional body details<textarea rows={3} value={bodyCustomDetails} onChange={(event) => updateBodyCustomDetails(event.target.value)} /></label>
                   <div className="image-studio-face-summary"><span>Combined body description</span><p>{characterBrief.body || "Choose body characteristics to build the reference description."}</p></div>
@@ -2059,7 +2101,33 @@ export function ImageStudio({
                   <h3>Job details</h3>
                   <div><span>Submitted</span><code>{formatJobTime(progressSubmittedAt)}</code></div>
                   <div><span>Seed</span><code>{popupSeed ?? "waiting"}</code></div>
-                  {generationKind === "body" ? <div><span>Breast magnitude</span><code>{breastMagnitude === undefined ? "automatic" : `${breastMagnitude.toFixed(2)} — ${magnitudeLabel(breastMagnitude)}`}</code></div> : null}
+                  {generationKind === "body" ? (
+                    <div className="image-studio-popup-magnitudes">
+                      <span>Magnitudes for Redo</span>
+                      <div>
+                        {[{ id: "breast_size", label: "Breast size" }, ...visibleMagnitudeConfigs].map((config) => (
+                          <label key={config.id}>
+                            {config.label}
+                            <input
+                              aria-label={`${config.label} popup magnitude`}
+                              type="number"
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              placeholder="auto"
+                              value={bodyFeatureMagnitudes[config.id] ?? ""}
+                              onChange={(event) => setBodyFeatureMagnitudes((current) => {
+                                const next = { ...current };
+                                if (event.target.value === "") delete next[config.id];
+                                else next[config.id] = Math.max(0, Math.min(1, Number(event.target.value)));
+                                return next;
+                              })}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   {generationKind === "body" ? <div><span>Breast shape</span><code>{breastShape || "automatic"}</code></div> : null}
                   <div><span>Checkpoint</span><code>{progressPreview?.checkpoint || modelName}</code></div>
                   <div><span>Sampler</span><code>{progressPreview?.sampler_name || "runtime default"}{progressPreview?.scheduler ? ` / ${progressPreview.scheduler}` : ""}</code></div>

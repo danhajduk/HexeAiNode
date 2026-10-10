@@ -342,6 +342,11 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Body hair");
     expect(markup).toContain("Butt fullness");
     expect(markup).toContain("Butt shape");
+    expect(markup).toContain("Body magnitudes");
+    expect(markup).toContain("Shoulder width");
+    expect(markup).toContain("Torso length");
+    expect(markup).toContain("Miscellaneous");
+    expect(markup).toContain("no tattoos");
     expect(markup).not.toContain("Breast size");
     expect(markup).not.toContain("Pubic hair");
     expect(markup).toContain("Neck-down full-body foundation");
@@ -396,7 +401,7 @@ describe("ImageStudio", () => {
     expect(femaleMarkup).toContain("Breast shape &amp; size");
     expect(femaleMarkup).toContain("Size magnitude");
     expect(femaleMarkup).toContain("teardrop");
-    expect(femaleMarkup.match(/image-studio-magnitude-control/g)).toHaveLength(1);
+    expect(femaleMarkup.match(/Breast shape &amp; size/g)).toHaveLength(1);
     expect(femaleMarkup).toContain("Automatic");
     expect(femaleMarkup).toContain("Pubic hair");
     expect(femaleMarkup).toContain("Pubic hair color");
@@ -498,8 +503,10 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Job details");
     expect(markup).toContain("Submitted");
     expect(markup).toContain("Seed");
-    expect(markup).toContain("Breast magnitude");
+    expect(markup).toContain("Breast size");
     expect(markup).toContain("Breast shape");
+    expect(markup).toContain("Magnitudes for Redo");
+    expect(markup).toContain("Torso length");
     expect(markup).toContain("Profile");
     expect(markup).toContain("Output");
   });
@@ -565,6 +572,12 @@ describe("ImageStudio", () => {
     expect(magnitudeLabel(0)).toBe("Very small");
     expect(magnitudeLabel(0.72)).toBe("Large");
     expect(magnitudeLabel(1)).toBe("Very large");
+  });
+
+  it("does not describe pubic hair color when pubic hair is none", () => {
+    expect(composeBodyDescription(
+      { pubic_hair: ["none"], pubic_hair_color: ["black"] }, "", { "hair color": ["auburn"] }
+    )).not.toContain("pubic hair color");
   });
 
   it("does not show a previous completed job while a new submission is being saved", () => {
