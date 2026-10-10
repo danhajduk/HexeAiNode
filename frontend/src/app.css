@@ -3577,6 +3577,16 @@
   accent-color: hsl(var(--sx-accent));
 }
 
+.image-studio-feature-with-magnitude {
+  align-self: start;
+}
+
+.image-studio-magnitude-scale {
+  display: block;
+  margin-top: 6px;
+  color: hsl(var(--sx-muted));
+}
+
 .image-studio-magnitude-grid,
 .image-studio-popup-magnitudes > div {
   display: grid;

@@ -97,16 +97,16 @@ const BODY_FEATURE_GROUPS = [
 ];
 
 const BODY_MAGNITUDE_CONFIGS = [
-  { id: "height", label: "Height", low: "very short", high: "very tall" },
-  { id: "body_mass", label: "Body mass", low: "very slender", high: "very heavy" },
-  { id: "shoulder_width", label: "Shoulder width", low: "very narrow", high: "very broad" },
-  { id: "torso_length", label: "Torso length", low: "very short", high: "very long" },
-  { id: "waist_width", label: "Waist width", low: "very narrow", high: "very broad" },
-  { id: "hip_width", label: "Hip width", low: "very narrow", high: "very wide" },
-  { id: "limb_length", label: "Limb length", low: "very short", high: "very long" },
-  { id: "musculature", label: "Musculature", low: "very soft", high: "very muscular" },
-  { id: "butt_size", label: "Butt fullness", low: "very flat", high: "very full" },
-  { id: "penis_size", label: "Penis size", low: "very small", high: "very large", intimate: true },
+  { id: "height", groupId: "height", label: "Height", low: "very short", high: "very tall" },
+  { id: "body_mass", groupId: "build", label: "Body mass", low: "very slender", high: "very heavy" },
+  { id: "shoulder_width", groupId: "shoulders", label: "Shoulder width", low: "very narrow", high: "very broad" },
+  { id: "torso_length", groupId: "torso", label: "Torso length", low: "very short", high: "very long" },
+  { id: "waist_width", groupId: "waist", label: "Waist width", low: "very narrow", high: "very broad" },
+  { id: "hip_width", groupId: "hips", label: "Hip width", low: "very narrow", high: "very wide" },
+  { id: "limb_length", groupId: "limbs", label: "Limb length", low: "very short", high: "very long" },
+  { id: "musculature", groupId: "musculature", label: "Musculature amount", low: "very soft", high: "very muscular" },
+  { id: "butt_size", groupId: "butt_shape", label: "Butt fullness", low: "very flat", high: "very full" },
+  { id: "penis_size", groupId: "penis_description", label: "Penis size", low: "very small", high: "very large", intimate: true },
 ];
 
 const INTIMATE_BODY_FEATURE_IDS = new Set(["breast_size", "breast_shape", "pubic_hair", "pubic_hair_color", "vulva_description", "penis_description"]);
@@ -937,7 +937,7 @@ export function ImageStudio({
   const adultIntimateFeaturesEnabled = characterBrief.age_group === "adult (18+)" && characterBrief.content_rating === "NSFW adult content";
   const visibleBodyFeatureGroups = BODY_FEATURE_GROUPS.filter((group) => {
     if (group.intimate && !adultIntimateFeaturesEnabled) return false;
-    if (["breast_size", "breast_shape"].includes(group.id)) return false;
+    if (["breast_size", "breast_shape", "butt_size"].includes(group.id)) return false;
     return true;
   });
   const breastShapeGroup = BODY_FEATURE_GROUPS.find((group) => group.id === "breast_shape");
@@ -1887,8 +1887,10 @@ export function ImageStudio({
                   <p>Define the body foundation. Pose variations will be created later and will not change these proportions.</p>
                   {adultIntimateFeaturesEnabled ? <p>Breast traits may be combined with either genital anatomy. Vulvar and penile anatomy are mutually exclusive; selecting one clears the other.</p> : null}
                   <div className="image-studio-face-options">
-                    {visibleBodyFeatureGroups.map((group) => (
-                      <fieldset key={group.id}>
+                    {visibleBodyFeatureGroups.map((group) => {
+                      const magnitudeConfig = visibleMagnitudeConfigs.find((config) => config.groupId === group.id);
+                      return (
+                      <fieldset key={group.id} className={magnitudeConfig ? "image-studio-feature-with-magnitude" : ""}>
                         <legend>{group.label}<small>{group.description}</small></legend>
                         <div className="image-studio-option-chips">
                           {group.options.map((option) => {
@@ -1901,8 +1903,29 @@ export function ImageStudio({
                             return <button className={selected ? "is-selected" : ""} type="button" aria-pressed={selected} key={option} onClick={() => selectBodyFeature(group, option)}>{label}</button>;
                           })}
                         </div>
+                        {magnitudeConfig ? <>
+                          <span className="image-studio-magnitude-label">{magnitudeConfig.label} magnitude</span>
+                          <div className="image-studio-magnitude-row">
+                            <input
+                              aria-label={`${magnitudeConfig.label} magnitude`}
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              value={bodyFeatureMagnitudes[magnitudeConfig.id] ?? 0.5}
+                              onChange={(event) => setBodyFeatureMagnitudes((current) => ({ ...current, [magnitudeConfig.id]: Number(event.target.value) }))}
+                            />
+                            <strong>{bodyFeatureMagnitudes[magnitudeConfig.id] === undefined ? "Automatic" : bodyFeatureMagnitudes[magnitudeConfig.id].toFixed(2)}</strong>
+                            <button className="btn" type="button" disabled={bodyFeatureMagnitudes[magnitudeConfig.id] === undefined} onClick={() => setBodyFeatureMagnitudes((current) => {
+                              const next = { ...current };
+                              delete next[magnitudeConfig.id];
+                              return next;
+                            })}>Use automatic</button>
+                          </div>
+                          <small className="image-studio-magnitude-scale">0 = {magnitudeConfig.low} · 1 = {magnitudeConfig.high}</small>
+                        </> : null}
                       </fieldset>
-                    ))}
+                    );})}
                     {adultIntimateFeaturesEnabled ? (
                       <fieldset className="image-studio-magnitude-control">
                         <legend>Breast shape &amp; size<small>Choose the contour and optionally set numeric volume in one combined definition.</small></legend>
@@ -1943,32 +1966,6 @@ export function ImageStudio({
                         </div>
                       </fieldset>
                     ) : null}
-                    <fieldset className="image-studio-magnitude-control">
-                      <legend>Body magnitudes<small>Optional 0–1 measurements. Leave unset to use the descriptive selection only.</small></legend>
-                      <div className="image-studio-magnitude-grid">
-                        {visibleMagnitudeConfigs.map((config) => (
-                          <label key={config.id}>
-                            <span>{config.label}</span>
-                            <input
-                              aria-label={`${config.label} magnitude`}
-                              type="range"
-                              min="0"
-                              max="1"
-                              step="0.01"
-                              value={bodyFeatureMagnitudes[config.id] ?? 0.5}
-                              onChange={(event) => setBodyFeatureMagnitudes((current) => ({ ...current, [config.id]: Number(event.target.value) }))}
-                            />
-                            <strong>{bodyFeatureMagnitudes[config.id] === undefined ? "Automatic" : bodyFeatureMagnitudes[config.id].toFixed(2)}</strong>
-                            <small>{config.low} → {config.high}</small>
-                            <button className="btn" type="button" disabled={bodyFeatureMagnitudes[config.id] === undefined} onClick={() => setBodyFeatureMagnitudes((current) => {
-                              const next = { ...current };
-                              delete next[config.id];
-                              return next;
-                            })}>Automatic</button>
-                          </label>
-                        ))}
-                      </div>
-                    </fieldset>
                   </div>
                   <label className="image-studio-full-field">Additional body details<textarea rows={3} value={bodyCustomDetails} onChange={(event) => updateBodyCustomDetails(event.target.value)} /></label>
                   <div className="image-studio-face-summary"><span>Combined body description</span><p>{characterBrief.body || "Choose body characteristics to build the reference description."}</p></div>

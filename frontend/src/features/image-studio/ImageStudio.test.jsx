@@ -342,7 +342,7 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Body hair");
     expect(markup).toContain("Butt fullness");
     expect(markup).toContain("Butt shape");
-    expect(markup).toContain("Body magnitudes");
+    expect(markup).not.toContain("Body magnitudes");
     expect(markup).toContain("Shoulder width");
     expect(markup).toContain("Torso length");
     expect(markup).toContain("Miscellaneous");
