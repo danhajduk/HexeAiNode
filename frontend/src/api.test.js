@@ -17,7 +17,10 @@ describe("getApiBase", () => {
       },
     });
 
-    expect(getApiBase()).toBe("https://core.example/api/nodes/proxy/node-123");
+    expect(getApiBase()).toBe("https://core.example/nodes/proxy/node-123");
+    expect(`${getApiBase()}/api/node/status`).toBe(
+      "https://core.example/nodes/proxy/node-123/api/node/status"
+    );
   });
 
   it("does not treat the retired node UI mount as a Core proxy", () => {
