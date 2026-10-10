@@ -90,11 +90,12 @@ const BODY_FEATURE_GROUPS = [
   { id: "butt_size", label: "Butt fullness", description: "Gluteal volume relative to the waist, pelvis, and thighs.", options: ["flat", "small", "moderate", "full", "very full"] },
   { id: "butt_shape", label: "Butt shape", description: "Gluteal contour and definition viewed as part of the body silhouette.", options: ["square", "round", "heart-shaped", "V-shaped", "athletic"] },
   { id: "pubic_hair", label: "Pubic hair", description: "Adult pubic-hair amount and grooming.", intimate: true, options: ["none", "closely trimmed", "trimmed", "natural", "full"] },
+  { id: "pubic_hair_color", label: "Pubic hair color", description: "Defaults to the selected head-hair color, with an optional independent override.", intimate: true, options: ["inherit from head hair", "black", "dark brown", "brown", "auburn", "copper", "red", "blonde", "platinum", "gray", "white"] },
   { id: "vulva_description", label: "External genital anatomy — vulva", description: "Adult external vulvar anatomy for the body reference.", intimate: true, anatomy: "vulva", options: ["subtle", "natural", "prominent"] },
   { id: "penis_description", label: "External genital anatomy — penis", description: "Adult external penile anatomy for the body reference.", intimate: true, anatomy: "penis", options: ["small", "average", "large"] },
 ];
 
-const INTIMATE_BODY_FEATURE_IDS = new Set(["breast_size", "breast_shape", "pubic_hair", "vulva_description", "penis_description"]);
+const INTIMATE_BODY_FEATURE_IDS = new Set(["breast_size", "breast_shape", "pubic_hair", "pubic_hair_color", "vulva_description", "penis_description"]);
 
 const BODY_FEATURE_PROMPT_DESCRIPTIONS = {
   body_traits: {
@@ -206,6 +207,9 @@ const BODY_FEATURE_PROMPT_DESCRIPTIONS = {
     natural: "natural adult pubic-hair distribution and density",
     full: "full dense natural adult pubic hair",
   },
+  pubic_hair_color: Object.fromEntries([
+    "black", "dark brown", "brown", "auburn", "copper", "red", "blonde", "platinum", "gray", "white",
+  ].map((value) => [value, `${value} pubic hair color`])),
   vulva_description: {
     subtle: "subtle natural adult external vulvar anatomy with minimal prominence",
     natural: "natural realistic adult external vulvar anatomy with ordinary anatomical variation",
@@ -223,11 +227,21 @@ function nextBodyFeatureSelections(selections = {}, groupId, option) {
   return { ...selections, [groupId]: selected.includes(option) ? [] : [option] };
 }
 
-function composeBodyDescription(selections = {}, customDetails = "") {
+function composeBodyDescription(selections = {}, customDetails = "", faceSelections = {}) {
   const parts = BODY_FEATURE_GROUPS.flatMap((group) => (selections[group.id] || []).map((value) => {
+    if (group.id === "pubic_hair_color" && value === "inherit from head hair") return [];
     const description = BODY_FEATURE_PROMPT_DESCRIPTIONS[group.id]?.[value] || value;
     return `${group.label.toLowerCase()}: ${description}`;
   }));
+  const pubicHairSelected = (selections.pubic_hair || []).some((value) => value !== "none");
+  const explicitColor = (selections.pubic_hair_color || []).find((value) => value !== "inherit from head hair");
+  const inheritedColor = Array.isArray(faceSelections["hair color"])
+    ? faceSelections["hair color"][0]
+    : faceSelections["hair color"];
+  if (pubicHairSelected && (explicitColor || inheritedColor)) {
+    const color = explicitColor || inheritedColor;
+    parts.push(`pubic hair color: ${color} pubic hair color${explicitColor ? "" : ", inherited from head hair"}`);
+  }
   if (String(customDetails || "").trim()) parts.push(String(customDetails).trim());
   return parts.join("; ");
 }
@@ -1068,7 +1082,7 @@ export function ImageStudio({
     if (!intimateAllowed) {
       const nextBodySelections = Object.fromEntries(Object.entries(bodyFeatureSelections).filter(([key]) => !INTIMATE_BODY_FEATURE_IDS.has(key)));
       setBodyFeatureSelections(nextBodySelections);
-      nextBrief.body = composeBodyDescription(nextBodySelections, bodyCustomDetails);
+      nextBrief.body = composeBodyDescription(nextBodySelections, bodyCustomDetails, faceFeatureSelections);
     }
     setCharacterBrief(nextBrief);
     setPromptDraft("");
@@ -1082,19 +1096,24 @@ export function ImageStudio({
     const next = { ...faceFeatureSelections, [group.id]: nextValues };
     setFaceFeatureSelections(next);
     updateCharacterBrief("appearance", composeFaceDescription(next, faceCustomDetails, faceFeatureCatalog));
+    if (group.id === "hair color" && (bodyFeatureSelections.pubic_hair || []).some((value) => value !== "none")) {
+      updateCharacterBrief("body", composeBodyDescription(bodyFeatureSelections, bodyCustomDetails, next));
+    }
   }
 
   function selectBodyFeature(group, option) {
-    let next = nextBodyFeatureSelections(bodyFeatureSelections, group.id, option);
+    let next = group.id === "pubic_hair_color" && option === "inherit from head hair"
+      ? { ...bodyFeatureSelections, pubic_hair_color: [] }
+      : nextBodyFeatureSelections(bodyFeatureSelections, group.id, option);
     if (group.id === "vulva_description" && next.vulva_description?.length) next = { ...next, penis_description: [] };
     if (group.id === "penis_description" && next.penis_description?.length) next = { ...next, vulva_description: [] };
     setBodyFeatureSelections(next);
-    updateCharacterBrief("body", composeBodyDescription(next, bodyCustomDetails));
+    updateCharacterBrief("body", composeBodyDescription(next, bodyCustomDetails, faceFeatureSelections));
   }
 
   function updateBodyCustomDetails(value) {
     setBodyCustomDetails(value);
-    updateCharacterBrief("body", composeBodyDescription(bodyFeatureSelections, value));
+    updateCharacterBrief("body", composeBodyDescription(bodyFeatureSelections, value, faceFeatureSelections));
   }
 
   function updateFaceCustomDetails(value) {
@@ -1779,8 +1798,13 @@ export function ImageStudio({
                         <legend>{group.label}<small>{group.description}</small></legend>
                         <div className="image-studio-option-chips">
                           {group.options.map((option) => {
-                            const selected = (bodyFeatureSelections[group.id] || []).includes(option);
-                            return <button className={selected ? "is-selected" : ""} type="button" aria-pressed={selected} key={option} onClick={() => selectBodyFeature(group, option)}>{option}</button>;
+                            const inheritedPubicHairColor = group.id === "pubic_hair_color" && option === "inherit from head hair";
+                            const selected = inheritedPubicHairColor
+                              ? !(bodyFeatureSelections.pubic_hair_color || []).length
+                              : (bodyFeatureSelections[group.id] || []).includes(option);
+                            const inheritedHairColor = (faceFeatureSelections["hair color"] || [])[0];
+                            const label = inheritedPubicHairColor && inheritedHairColor ? `inherit (${inheritedHairColor})` : option;
+                            return <button className={selected ? "is-selected" : ""} type="button" aria-pressed={selected} key={option} onClick={() => selectBodyFeature(group, option)}>{label}</button>;
                           })}
                         </div>
                       </fieldset>

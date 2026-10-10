@@ -392,6 +392,8 @@ describe("ImageStudio", () => {
 
     expect(femaleMarkup).toContain("Breast size");
     expect(femaleMarkup).toContain("Pubic hair");
+    expect(femaleMarkup).toContain("Pubic hair color");
+    expect(femaleMarkup).toContain("inherit from head hair");
     expect(femaleMarkup).toContain("External genital anatomy — vulva");
     expect(femaleMarkup).not.toContain("External genital anatomy — penis");
     expect(maleMarkup).toContain("External genital anatomy — penis");
@@ -414,6 +416,25 @@ describe("ImageStudio", () => {
       .toContain("natural teardrop breast shape");
     expect(composeBodyDescription({ body_hair: ["natural"], breast_size: ["medium"], breast_shape: ["teardrop"], butt_shape: ["round"] }))
       .toContain("round gluteal contour");
+  });
+
+  it("inherits pubic hair color from face hair unless explicitly overridden", () => {
+    const inherited = composeBodyDescription(
+      { pubic_hair: ["natural"] },
+      "",
+      { "hair color": ["auburn"] },
+    );
+    const overridden = composeBodyDescription(
+      { pubic_hair: ["natural"], pubic_hair_color: ["black"] },
+      "",
+      { "hair color": ["auburn"] },
+    );
+
+    expect(inherited).toContain("pubic hair color: auburn pubic hair color, inherited from head hair");
+    expect(overridden).toContain("pubic hair color: black pubic hair color");
+    expect(overridden).not.toContain("inherited from head hair");
+    expect(composeBodyDescription({ pubic_hair: ["none"] }, "", { "hair color": ["auburn"] }))
+      .not.toContain("pubic hair color:");
   });
 
   it("unselects a body option when it is clicked again", () => {
