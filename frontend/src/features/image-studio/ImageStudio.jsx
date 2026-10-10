@@ -84,7 +84,17 @@ const BODY_FEATURE_GROUPS = [
   { id: "hips", label: "Hips", description: "Pelvis width and outer hip contour.", options: ["narrow hips", "balanced hips", "wide hips", "rounded hips", "angular hips"] },
   { id: "limbs", label: "Limb proportions", description: "Relative arm and leg length.", options: ["short limbs", "balanced limbs", "long legs", "long arms", "long limbs"] },
   { id: "musculature", label: "Musculature", description: "Visible muscle volume and definition, independent of overall body size.", options: ["soft definition", "lightly toned", "athletic definition", "muscular", "strongly muscular"] },
+  { id: "body_hair", label: "Body hair", description: "Visible natural hair on the torso, arms, and legs.", options: ["none", "very light", "light", "natural", "moderate", "heavy"] },
+  { id: "breast_size", label: "Breast size", description: "Adult breast volume relative to the chest and frame.", intimate: true, options: ["flat chest", "small", "medium", "large", "very large"] },
+  { id: "breast_shape", label: "Breast shape", description: "Adult breast contour and placement, independent of size.", intimate: true, options: ["shallow", "round", "teardrop", "wide-set", "close-set", "pendulous"] },
+  { id: "butt_size", label: "Butt fullness", description: "Gluteal volume relative to the waist, pelvis, and thighs.", options: ["flat", "small", "moderate", "full", "very full"] },
+  { id: "butt_shape", label: "Butt shape", description: "Gluteal contour and definition viewed as part of the body silhouette.", options: ["square", "round", "heart-shaped", "V-shaped", "athletic"] },
+  { id: "pubic_hair", label: "Pubic hair", description: "Adult pubic-hair amount and grooming.", intimate: true, options: ["none", "closely trimmed", "trimmed", "natural", "full"] },
+  { id: "vulva_description", label: "External genital anatomy — vulva", description: "Adult external vulvar anatomy for the body reference.", intimate: true, anatomy: "vulva", options: ["subtle", "natural", "prominent"] },
+  { id: "penis_description", label: "External genital anatomy — penis", description: "Adult external penile anatomy for the body reference.", intimate: true, anatomy: "penis", options: ["small", "average", "large"] },
 ];
+
+const INTIMATE_BODY_FEATURE_IDS = new Set(["breast_size", "breast_shape", "pubic_hair", "vulva_description", "penis_description"]);
 
 const BODY_FEATURE_PROMPT_DESCRIPTIONS = {
   body_traits: {
@@ -151,6 +161,60 @@ const BODY_FEATURE_PROMPT_DESCRIPTIONS = {
     "athletic definition": "clear athletic muscle definition with firm limbs and a naturally fit torso",
     muscular: "visibly muscular physique with developed shoulders, arms, abdomen, and legs",
     "strongly muscular": "strongly muscular physique with pronounced muscle volume and definition throughout the body",
+  },
+  body_hair: {
+    none: "no visible body hair on the torso, arms, or legs",
+    "very light": "very light sparse natural body hair, barely visible on close inspection",
+    light: "light natural body hair on the arms and legs with minimal torso hair",
+    natural: "natural adult body-hair distribution on the torso, arms, and legs",
+    moderate: "moderate clearly visible body hair across the torso, arms, and legs",
+    heavy: "heavy dense natural body hair across the torso, arms, and legs",
+  },
+  breast_size: {
+    "flat chest": "flat adult chest with minimal breast projection",
+    small: "small adult breasts proportionate to the chest and frame",
+    medium: "medium adult breasts proportionate to the chest and frame",
+    large: "large adult breasts with natural weight proportionate to the frame",
+    "very large": "very large adult breasts with realistic weight, gravity, and soft-tissue behavior",
+  },
+  breast_shape: {
+    shallow: "shallow breast shape with broad base and gentle projection",
+    round: "round breast shape with even upper and lower fullness",
+    teardrop: "natural teardrop breast shape with softer upper slope and fuller lower contour",
+    "wide-set": "wide-set breasts with visible natural spacing across the chest",
+    "close-set": "close-set breasts with narrow natural spacing across the chest",
+    pendulous: "pendulous natural breast shape with realistic gravity and lower fullness",
+  },
+  butt_size: {
+    flat: "flat gluteal profile with minimal rear projection",
+    small: "small gluteal volume proportionate to the pelvis and thighs",
+    moderate: "moderate gluteal volume with balanced projection",
+    full: "full gluteal volume with pronounced but natural projection",
+    "very full": "very full gluteal volume with substantial natural projection and soft-tissue weight",
+  },
+  butt_shape: {
+    square: "square gluteal contour with balanced upper and lower width",
+    round: "round gluteal contour with smooth even fullness",
+    "heart-shaped": "heart-shaped gluteal contour, fuller low and outer curve tapering toward the waist",
+    "V-shaped": "V-shaped gluteal contour tapering from broader upper hips toward the lower crease",
+    athletic: "athletic lifted gluteal contour with firm muscular definition",
+  },
+  pubic_hair: {
+    none: "no visible pubic hair",
+    "closely trimmed": "very closely trimmed adult pubic hair",
+    trimmed: "neatly trimmed adult pubic hair with a natural outline",
+    natural: "natural adult pubic-hair distribution and density",
+    full: "full dense natural adult pubic hair",
+  },
+  vulva_description: {
+    subtle: "subtle natural adult external vulvar anatomy with minimal prominence",
+    natural: "natural realistic adult external vulvar anatomy with ordinary anatomical variation",
+    prominent: "prominent but realistic adult external vulvar anatomy with clear natural contours",
+  },
+  penis_description: {
+    small: "small flaccid adult penis with realistic external anatomy",
+    average: "average-size flaccid adult penis with realistic external anatomy",
+    large: "large flaccid adult penis with realistic proportions and external anatomy",
   },
 };
 
@@ -675,6 +739,7 @@ export function ImageStudio({
   initialCharacterProfileId = "",
   initialGenerationProgressOpen = false,
   initialGenerationKind = "face",
+  initialCharacterBrief = null,
   runtimeStatus = null,
   generationActivity = null,
   facePreviewResult = null,
@@ -720,6 +785,7 @@ export function ImageStudio({
     expression: "",
     background: "transparent background, isolated full-body character",
     quality: "consistent identity, detailed face, natural hands, high quality",
+    ...(initialCharacterBrief || {}),
   });
   const [promptDraft, setPromptDraft] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("low quality, blurry, distorted face, extra limbs, malformed hands, watermark, text");
@@ -743,6 +809,7 @@ export function ImageStudio({
   const [bodyFeatureSelections, setBodyFeatureSelections] = useState({});
   const [bodyCustomDetails, setBodyCustomDetails] = useState("");
   const [bodySeedLocked, setBodySeedLocked] = useState(false);
+  const [bodySeedInput, setBodySeedInput] = useState("");
   const [faceSeedReviewOpen, setFaceSeedReviewOpen] = useState(initialFaceSeedReviewOpen);
   const [faceSeedReviewSelections, setFaceSeedReviewSelections] = useState([]);
   const [faceSeedReviewBatchId, setFaceSeedReviewBatchId] = useState("");
@@ -789,6 +856,13 @@ export function ImageStudio({
   const activeInterviewStep = CHARACTER_INTERVIEW_STEPS[interviewStep];
   const characterFoundationComplete = CHARACTER_FOUNDATION_GROUPS.every((group) => Boolean(characterBrief[group.id]));
   const nameConceptComplete = Boolean(characterBrief.name.trim() && characterBrief.concept.trim() && characterFoundationComplete);
+  const adultIntimateFeaturesEnabled = characterBrief.age_group === "adult (18+)" && characterBrief.content_rating === "NSFW adult content";
+  const visibleBodyFeatureGroups = BODY_FEATURE_GROUPS.filter((group) => {
+    if (group.intimate && !adultIntimateFeaturesEnabled) return false;
+    if (group.anatomy === "vulva" && characterBrief.gender_identity === "male") return false;
+    if (group.anatomy === "penis" && characterBrief.gender_identity === "female") return false;
+    return true;
+  });
   const currentInterviewAnswer = activeInterviewStep.id === "name_concept"
     ? [
       characterBrief.name,
@@ -982,7 +1056,14 @@ export function ImageStudio({
   }
 
   function selectCharacterFoundation(field, value) {
-    setCharacterBrief((current) => applyCharacterFoundation(current, field, value));
+    const nextBrief = applyCharacterFoundation(characterBrief, field, value);
+    const intimateAllowed = nextBrief.age_group === "adult (18+)" && nextBrief.content_rating === "NSFW adult content";
+    if (!intimateAllowed) {
+      const nextBodySelections = Object.fromEntries(Object.entries(bodyFeatureSelections).filter(([key]) => !INTIMATE_BODY_FEATURE_IDS.has(key)));
+      setBodyFeatureSelections(nextBodySelections);
+      nextBrief.body = composeBodyDescription(nextBodySelections, bodyCustomDetails);
+    }
+    setCharacterBrief(nextBrief);
     setPromptDraft("");
   }
 
@@ -997,7 +1078,9 @@ export function ImageStudio({
   }
 
   function selectBodyFeature(group, option) {
-    const next = nextBodyFeatureSelections(bodyFeatureSelections, group.id, option);
+    let next = nextBodyFeatureSelections(bodyFeatureSelections, group.id, option);
+    if (group.id === "vulva_description" && next.vulva_description?.length) next = { ...next, penis_description: [] };
+    if (group.id === "penis_description" && next.penis_description?.length) next = { ...next, vulva_description: [] };
     setBodyFeatureSelections(next);
     updateCharacterBrief("body", composeBodyDescription(next, bodyCustomDetails));
   }
@@ -1249,10 +1332,10 @@ export function ImageStudio({
     const result = await onGenerateBodyPreview(profileId, {
       prompt: buildBodyPreviewPrompt(characterBrief),
       negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, hair, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, dramatic pose, text, watermark, child, teen, underage",
-      seed: bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null ? bodyPreviewSeed : null,
-      lock_seed: bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null,
-      width: 768,
-      height: 1152,
+      seed: bodySeedInput.trim() || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null ? bodyPreviewSeed : null),
+      lock_seed: Boolean(bodySeedInput.trim()) || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null),
+      width: 640,
+      height: 1536,
     });
     if (result) setDraftSaveMessage("Body preview submitted. Its seed will be saved with the character.");
     return result;
@@ -1684,7 +1767,7 @@ export function ImageStudio({
                 <div className="image-studio-face-builder">
                   <p>Define the body foundation. Pose variations will be created later and will not change these proportions.</p>
                   <div className="image-studio-face-options">
-                    {BODY_FEATURE_GROUPS.map((group) => (
+                    {visibleBodyFeatureGroups.map((group) => (
                       <fieldset key={group.id}>
                         <legend>{group.label}<small>{group.description}</small></legend>
                         <div className="image-studio-option-chips">
@@ -1717,6 +1800,10 @@ export function ImageStudio({
                     <small>{bodyPreviewTracking ? "Generation status refreshes automatically." : bodyPreviewCompleted ? `Body identity seed ${bodyPreviewSeed} saved.` : "Generate one neutral reference before continuing."}</small>
                   </div>
                   <div className="image-studio-seed-controls">
+                    <label>
+                      Body seed
+                      <input inputMode="numeric" value={bodySeedInput} onChange={(event) => setBodySeedInput(event.target.value.replace(/[^0-9]/g, ""))} placeholder={bodyPreviewSeed !== undefined && bodyPreviewSeed !== null ? String(bodyPreviewSeed) : "Blank = random seed"} />
+                    </label>
                     <label>
                       <input type="checkbox" checked={bodySeedLocked} onChange={(event) => setBodySeedLocked(event.target.checked)} disabled={bodyPreviewSeed === undefined || bodyPreviewSeed === null} />
                       Lock body seed <code>{bodyPreviewSeed ?? "not generated"}</code>

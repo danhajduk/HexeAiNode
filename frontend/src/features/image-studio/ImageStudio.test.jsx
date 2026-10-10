@@ -339,6 +339,11 @@ describe("ImageStudio", () => {
     expect(markup).toContain("pronounced masculine");
     expect(markup).toContain("Limb proportions");
     expect(markup).toContain("Visible muscle volume and definition");
+    expect(markup).toContain("Body hair");
+    expect(markup).toContain("Butt fullness");
+    expect(markup).toContain("Butt shape");
+    expect(markup).not.toContain("Breast size");
+    expect(markup).not.toContain("Pubic hair");
     expect(markup).toContain("Neck-down full-body foundation");
     expect(markup).toContain("424242");
     expect(markup).toContain("Generate again with saved seed");
@@ -353,6 +358,49 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Leave unlocked to try a fresh composition");
   });
 
+  it("shows adult intimate body controls only for an adult NSFW character", () => {
+    const femaleMarkup = renderToStaticMarkup(
+      <ImageStudio
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialCreativeSetupOpen
+        initialInterviewOpen
+        initialInterviewStep={2}
+        initialCharacterBrief={{ age_group: "adult (18+)", content_rating: "NSFW adult content", gender_identity: "female" }}
+      />
+    );
+    const maleMarkup = renderToStaticMarkup(
+      <ImageStudio
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialCreativeSetupOpen
+        initialInterviewOpen
+        initialInterviewStep={2}
+        initialCharacterBrief={{ age_group: "adult (18+)", content_rating: "NSFW adult content", gender_identity: "male" }}
+      />
+    );
+    const sfwMarkup = renderToStaticMarkup(
+      <ImageStudio
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialCreativeSetupOpen
+        initialInterviewOpen
+        initialInterviewStep={2}
+        initialCharacterBrief={{ age_group: "adult (18+)", content_rating: "SFW", gender_identity: "female" }}
+      />
+    );
+
+    expect(femaleMarkup).toContain("Breast size");
+    expect(femaleMarkup).toContain("Pubic hair");
+    expect(femaleMarkup).toContain("External genital anatomy — vulva");
+    expect(femaleMarkup).not.toContain("External genital anatomy — penis");
+    expect(maleMarkup).toContain("External genital anatomy — penis");
+    expect(maleMarkup).not.toContain("External genital anatomy — vulva");
+    expect(sfwMarkup).not.toContain("Breast size");
+    expect(sfwMarkup).not.toContain("Pubic hair");
+    expect(sfwMarkup).not.toContain("External genital anatomy");
+  });
+
   it("expands body-trait selections into explicit anatomy instructions", () => {
     expect(composeBodyDescription({ body_traits: ["pronounced feminine"], build: ["curvy"] }))
       .toContain("fuller natural chest silhouette, narrow defined waist, rounded wider hips");
@@ -362,6 +410,10 @@ describe("ImageStudio", () => {
       .toContain("tall stature with elongated vertical proportions");
     expect(composeBodyDescription({ height: ["tall"], build: ["curvy"], musculature: ["lightly toned"] }))
       .toContain("subtle definition in the arms, abdomen, and legs");
+    expect(composeBodyDescription({ body_hair: ["natural"], breast_size: ["medium"], breast_shape: ["teardrop"], butt_shape: ["round"] }))
+      .toContain("natural teardrop breast shape");
+    expect(composeBodyDescription({ body_hair: ["natural"], breast_size: ["medium"], breast_shape: ["teardrop"], butt_shape: ["round"] }))
+      .toContain("round gluteal contour");
   });
 
   it("unselects a body option when it is clicked again", () => {
