@@ -169,14 +169,14 @@
     "class_type": "SaveImage",
     "inputs": {
       "images": ["15", 0],
-      "filename_prefix": "hexe/avatar_body_depth_transparent/{{avatar_name}}_seed{{seed}}_rgb"
+      "filename_prefix": "{{output_directory}}/{{avatar_name}}_seed{{seed}}_rgb"
     }
   },
   "24": {
     "class_type": "SaveImage",
     "inputs": {
       "images": ["19", 0],
-      "filename_prefix": "hexe/avatar_body_depth_transparent/{{avatar_name}}_seed{{seed}}"
+      "filename_prefix": "{{output_directory}}/{{avatar_name}}_seed{{seed}}"
     }
   }
 }

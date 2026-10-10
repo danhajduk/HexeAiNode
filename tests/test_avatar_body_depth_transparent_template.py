@@ -89,6 +89,7 @@ REQUIRED_PLACEHOLDERS = {
     "{{denoise}}",
     "{{bg_removal_model}}",
     "{{avatar_name}}",
+    "{{output_directory}}",
 }
 PLACEHOLDER_PATTERN = re.compile(r"{{[^{}]+}}")
 
@@ -163,11 +164,11 @@ class AvatarBodyDepthTransparentTemplateTests(unittest.TestCase):
         self.assertLess(list(workflow).index("20"), list(workflow).index("19"))
         self.assertEqual(
             workflow["16"]["inputs"]["filename_prefix"],
-            "hexe/avatar_body_depth_transparent/{{avatar_name}}_seed{{seed}}_rgb",
+            "{{output_directory}}/{{avatar_name}}_seed{{seed}}_rgb",
         )
         self.assertEqual(
             workflow["24"]["inputs"]["filename_prefix"],
-            "hexe/avatar_body_depth_transparent/{{avatar_name}}_seed{{seed}}",
+            "{{output_directory}}/{{avatar_name}}_seed{{seed}}",
         )
 
         self.assertEqual(workflow["3"]["inputs"]["width"], "{{width}}")

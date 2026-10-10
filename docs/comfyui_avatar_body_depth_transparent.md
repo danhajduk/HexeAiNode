@@ -273,6 +273,9 @@ submits one to twelve randomized prompt variations through
 `template.synthetic_adult_body_reference.realvisxl.v1`. The screen exposes output
 size, batch count, seed, identity strength, and body/pose strength, and requires
 an explicit synthetic-adult confirmation before submission.
+Generated files from this studio are isolated under `hexe/nsfw/` in the manual
+ComfyUI output directory. Its generated-image gallery remains visible at the
+bottom of the page even before the first result is available.
 
 ## Manual Progress Status
 

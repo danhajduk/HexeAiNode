@@ -45,7 +45,9 @@ export function SyntheticAdultStudioCard({ payload = null, busy = false, result 
   const [localError, setLocalError] = useState("");
 
   const templateAvailable = asArray(payload?.templates).some((template) => template?.template_id === TEMPLATE_ID);
-  const outputs = asArray(payload?.outputs).slice(0, 12);
+  const outputs = asArray(payload?.outputs)
+    .filter((output) => String(output?.relative_path || "").startsWith("hexe/nsfw/"))
+    .slice(0, 12);
   const latestJob = payload?.latest_job || result || {};
   const canSubmit = templateAvailable && confirmedAdult && Boolean(referenceFile || reference) && Boolean(prompt.trim()) && !busy;
 
@@ -114,6 +116,7 @@ export function SyntheticAdultStudioCard({ payload = null, busy = false, result 
       randomize_reference_strengths: false,
       template_variables: {
         avatar_name: "synthetic_adult",
+        output_directory: "hexe/nsfw",
         face_reference_image: selectedReference.input_image,
         body_reference_image: selectedReference.input_image,
         face_strength: Number.parseFloat(identityStrength) || 0.82,
@@ -186,17 +189,18 @@ export function SyntheticAdultStudioCard({ payload = null, busy = false, result 
         </div>
       </form>
 
-      {outputs.length ? (
-        <section>
-          <h3>Recent outputs</h3>
+      <section className="synthetic-adult-output-gallery">
+          <h3>Generated images</h3>
+          {!outputs.length ? <p className="muted">Generated images will appear here.</p> : null}
+          {outputs.length ? (
           <div className="avatar-reference-card-grid">
             {outputs.map((output) => {
               const url = outputUrl(apiBase, output);
               return url ? <a href={url} target="_blank" rel="noreferrer" key={output.relative_path || url}><img src={url} alt="Generated synthetic adult avatar" /></a> : null;
             })}
           </div>
-        </section>
-      ) : null}
+          ) : null}
+      </section>
     </article>
   );
 }

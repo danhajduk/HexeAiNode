@@ -722,6 +722,12 @@
           "description": "Filesystem-safe avatar name used in output filenames."
         },
         {
+          "name": "output_directory",
+          "type": "string",
+          "required": false,
+          "description": "ComfyUI output subdirectory for generated images."
+        },
+        {
           "name": "bg_removal_model",
           "type": "string",
           "required": false,
@@ -767,6 +773,7 @@
       "defaults": {
         "negative_prompt": "busy background, detailed background, cropped head, cropped face, cropped body, out of frame, close-up crop, torso crop, missing legs, missing feet, different body shape, changed identity, altered face, low quality, blurry, distorted face, distorted hands, extra limbs, malformed body, watermark, text",
         "avatar_name": "avatar",
+        "output_directory": "hexe/avatar_body_depth_transparent",
         "bg_removal_model": "birefnet.safetensors",
         "width": 768,
         "height": 1152,
@@ -1080,6 +1087,7 @@
         { "name": "bg_removal_model", "type": "string", "required": false, "description": "Background-removal model filename." },
         { "name": "negative_prompt", "type": "string", "required": false, "description": "Prompt terms to suppress." },
         { "name": "avatar_name", "type": "string", "required": false, "description": "Filesystem-safe output name." },
+        { "name": "output_directory", "type": "string", "required": false, "description": "ComfyUI output subdirectory for this studio." },
         { "name": "width", "type": "integer", "required": false, "description": "Output width." },
         { "name": "height", "type": "integer", "required": false, "description": "Output height." },
         { "name": "seed", "type": "integer", "required": false, "description": "Sampler seed." },
@@ -1090,6 +1098,7 @@
       "defaults": {
         "negative_prompt": "child, teen, underage, youthful, changed identity, different body shape, cropped head, cropped body, missing legs, missing feet, distorted anatomy, extra limbs, malformed hands, blurry, low quality, watermark, text",
         "avatar_name": "synthetic_adult",
+        "output_directory": "hexe/nsfw",
         "bg_removal_model": "birefnet.safetensors",
         "width": 768,
         "height": 1152,

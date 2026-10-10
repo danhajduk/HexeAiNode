@@ -73,6 +73,7 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
         self.assertEqual(synthetic_adult_template["output_scope"], "manual")
         self.assertTrue(synthetic_adult_template["metadata"]["synthetic_adult_only"])
         self.assertEqual(synthetic_adult_template["metadata"]["reference_roles"], ["face", "body"])
+        self.assertEqual(synthetic_adult_template["defaults"]["output_directory"], "hexe/nsfw")
         self.assertTrue(synthetic_adult_template["validation"]["valid"])
         self.assertEqual(template["model_requirements"]["other"]["identity_model"], "ip-adapter_pulid_sdxl_fp16.safetensors")
         self.assertEqual(template["model_requirements"]["other"]["insightface_model"], "antelopev2")

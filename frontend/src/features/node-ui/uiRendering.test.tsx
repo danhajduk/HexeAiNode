@@ -595,6 +595,8 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("Body/pose strength");
     expect(markup).toContain("fully synthetic avatar represented as age 25+");
     expect(markup).toContain("Generate Images");
+    expect(markup).toContain("Generated images");
+    expect(markup).toContain("Generated images will appear here.");
   });
 
   it("shows saved avatar profiles as cards on the second avatar generation tab", () => {
