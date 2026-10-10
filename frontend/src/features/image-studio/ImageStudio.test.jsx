@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, latestSavedFacePreview, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, latestSavedFacePreview, magnitudeLabel, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -391,6 +391,8 @@ describe("ImageStudio", () => {
     );
 
     expect(femaleMarkup).toContain("Breast size");
+    expect(femaleMarkup).toContain("Breast size magnitude");
+    expect(femaleMarkup).toContain("Automatic");
     expect(femaleMarkup).toContain("Pubic hair");
     expect(femaleMarkup).toContain("Pubic hair color");
     expect(femaleMarkup).toContain("inherit from head hair");
@@ -544,12 +546,34 @@ describe("ImageStudio", () => {
       { build: ["athletic"], pubic_hair: ["natural"] },
       { "skin tone": ["olive"], "hair color": ["auburn"] },
       "long fingers",
+      { breast_size: 0.72 },
     )).toEqual({
       body_feature_selections: { build: ["athletic"], pubic_hair: ["natural"] },
+      body_feature_magnitudes: { breast_size: 0.72 },
       face_feature_selections: { "skin tone": ["olive"], "hair color": ["auburn"] },
       body_custom_details: "long fingers",
       character_context: { age_group: "adult (18+)", gender_identity: "female", visual_style: "realistic", content_rating: undefined },
     });
+    expect(magnitudeLabel(0)).toBe("Very small");
+    expect(magnitudeLabel(0.72)).toBe("Large");
+    expect(magnitudeLabel(1)).toBe("Very large");
+  });
+
+  it("does not show a previous completed job while a new submission is being saved", () => {
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialGenerationProgressOpen
+        initialGenerationKind="body"
+        initialGenerationSubmissionStage="saving profile"
+        bodyPreviewResult={{ preview: { status: "completed", prompt_id: "old-prompt", seed: 123, url: "/old.png", imported_at: "now" } }}
+        generationActivity={{ generation_status: { progress: { percent: 100 } }, latest_job: { status: "completed", prompt_id: "old-prompt", progress_detail: { status: "completed", percent: 100 } } }}
+      />
+    );
+    expect(markup).toContain("saving profile");
+    expect(markup).toContain("Saving the current character selections before submission.");
+    expect(markup).not.toContain("100.0%");
+    expect(markup).not.toContain("old-prompt");
+    expect(markup).not.toContain("/old.png");
   });
 
   it("forces SFW when an adult character is changed to an under-18 age group", () => {

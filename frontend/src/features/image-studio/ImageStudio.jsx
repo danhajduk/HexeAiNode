@@ -275,9 +275,10 @@ function buildBodyPreviewPrompt(characterBrief, faceSelections = {}, faceCatalog
   ].filter(Boolean).join("\n");
 }
 
-function buildBodyPreviewPayload(characterBrief, bodySelections, faceSelections, customDetails) {
+function buildBodyPreviewPayload(characterBrief, bodySelections, faceSelections, customDetails, bodyMagnitudes = {}) {
   return {
     body_feature_selections: bodySelections,
+    body_feature_magnitudes: bodyMagnitudes,
     face_feature_selections: faceSelections,
     body_custom_details: customDetails,
     character_context: {
@@ -301,6 +302,14 @@ function previewArtifactReady(preview) {
 
 function isEscapeKey(event) {
   return event?.key === "Escape";
+}
+
+function magnitudeLabel(value) {
+  if (value < 0.2) return "Very small";
+  if (value < 0.4) return "Small";
+  if (value <= 0.6) return "Moderate";
+  if (value <= 0.8) return "Large";
+  return "Very large";
 }
 
 const FACE_FEATURE_OPTION_GROUPS = [
@@ -790,6 +799,7 @@ export function ImageStudio({
   initialCharacterProfileId = "",
   initialGenerationProgressOpen = false,
   initialGenerationKind = "face",
+  initialGenerationSubmissionStage = "",
   initialCharacterBrief = null,
   runtimeStatus = null,
   generationActivity = null,
@@ -858,6 +868,7 @@ export function ImageStudio({
   const [faceRefinementStatus, setFaceRefinementStatus] = useState("");
   const [faceRefinementError, setFaceRefinementError] = useState("");
   const [bodyFeatureSelections, setBodyFeatureSelections] = useState({});
+  const [bodyFeatureMagnitudes, setBodyFeatureMagnitudes] = useState({});
   const [bodyCustomDetails, setBodyCustomDetails] = useState("");
   const [bodySeedLocked, setBodySeedLocked] = useState(false);
   const [bodySeedInput, setBodySeedInput] = useState("");
@@ -867,6 +878,7 @@ export function ImageStudio({
   const [generationProgressOpen, setGenerationProgressOpen] = useState(initialGenerationProgressOpen);
   const [generationKind, setGenerationKind] = useState(initialGenerationKind);
   const [generationRefreshBusy, setGenerationRefreshBusy] = useState(false);
+  const [generationSubmissionStage, setGenerationSubmissionStage] = useState(initialGenerationSubmissionStage);
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -910,6 +922,7 @@ export function ImageStudio({
   const adultIntimateFeaturesEnabled = characterBrief.age_group === "adult (18+)" && characterBrief.content_rating === "NSFW adult content";
   const visibleBodyFeatureGroups = BODY_FEATURE_GROUPS.filter((group) => {
     if (group.intimate && !adultIntimateFeaturesEnabled) return false;
+    if (group.id === "breast_size") return false;
     return true;
   });
   const currentInterviewAnswer = activeInterviewStep.id === "name_concept"
@@ -994,16 +1007,18 @@ export function ImageStudio({
       || (facePreviewTracking ? "Live status refreshes automatically." : "Generate a preview to see live model and rendering details.")
   );
   const previewImageUrl = displayedFacePreview?.url ? `${apiBase}${displayedFacePreview.url}` : "";
-  const progressPreview = generationKind === "body" ? bodyPreview : facePreview;
+  const progressPreview = generationSubmissionStage ? null : generationKind === "body" ? bodyPreview : facePreview;
   const progressTracking = generationKind === "body" ? bodyPreviewTracking : facePreviewTracking;
   const progressPromptId = String(progressPreview?.prompt_id || "").trim();
   const progressMatchesJob = Boolean(progressPromptId && jobPromptIds.includes(progressPromptId));
-  const modalProgressDetail = generationJob?.progress_detail || {};
-  const modalProgressPercent = Number(modalProgressDetail?.percent ?? generationProgress?.percent);
-  const modalProgressValue = Number(modalProgressDetail?.value ?? generationProgress?.value);
-  const modalProgressMax = Number(modalProgressDetail?.max ?? generationProgress?.max);
+  const modalProgressDetail = generationSubmissionStage ? {} : generationJob?.progress_detail || {};
+  const modalProgressPercent = generationSubmissionStage ? Number.NaN : Number(modalProgressDetail?.percent ?? generationProgress?.percent);
+  const modalProgressValue = generationSubmissionStage ? Number.NaN : Number(modalProgressDetail?.value ?? generationProgress?.value);
+  const modalProgressMax = generationSubmissionStage ? Number.NaN : Number(modalProgressDetail?.max ?? generationProgress?.max);
   const rawModalStatus = String(
-    modalProgressDetail?.status
+    generationSubmissionStage
+      ? generationSubmissionStage
+      : modalProgressDetail?.status
       || ((progressMatchesJob || progressTracking) ? generationJob?.status : "")
       || progressPreview?.status
       || (progressTracking ? "preparing" : "idle")
@@ -1060,6 +1075,7 @@ export function ImageStudio({
     setFaceCustomDetails(savedFeatures?.custom_details || "");
     setFacePromptDraft(savedFeatures?.llm_refinement || "");
     setBodyFeatureSelections(savedBodyFeatures?.selections || {});
+    setBodyFeatureMagnitudes(savedBodyFeatures?.magnitudes || {});
     setBodyCustomDetails(savedBodyFeatures?.custom_details || "");
   }, [initialCharacterProfileId, characterProfiles, faceFeatureCatalog, characterBrief.name]);
 
@@ -1190,6 +1206,7 @@ export function ImageStudio({
         body_feature_catalog: {
           schema_version: "1.0",
           selections: bodyFeatureSelections,
+          magnitudes: bodyFeatureMagnitudes,
           custom_details: bodyCustomDetails,
           expanded_description: characterBrief.body,
         },
@@ -1227,6 +1244,7 @@ export function ImageStudio({
     setFaceCustomDetails(savedFeatures?.custom_details || "");
     setFacePromptDraft(savedFeatures?.llm_refinement || "");
     setBodyFeatureSelections(savedBodyFeatures?.selections || {});
+    setBodyFeatureMagnitudes(savedBodyFeatures?.magnitudes || {});
     setBodyCustomDetails(savedBodyFeatures?.custom_details || "");
     setCharacterProfileId(profile.profile_id || "");
     setPromptDraft("");
@@ -1373,40 +1391,52 @@ export function ImageStudio({
     if (!characterBrief.appearance.trim() || characterSaveBusy || facePreviewTracking || !onGenerateFacePreview) return null;
     setGenerationKind("face");
     setGenerationProgressOpen(true);
-    const savedProfile = await saveCharacterProgress();
-    const profileId = savedProfile?.profile_id || characterProfileId;
-    if (!profileId) return null;
-    setDraftSaveMessage("Character saved. Submitting face preview…");
-    const locked = forceLockedSeed || faceSeedLocked;
-    const seed = facePreview?.seed_text || facePreview?.seed;
-    const refinement = promptOverride || facePromptDraft;
-    const result = await onGenerateFacePreview(profileId, {
-      refinement,
-      seed: locked && seed !== undefined && seed !== null ? seed : null,
-      lock_seed: locked && seed !== undefined && seed !== null,
-    });
-    if (result) setDraftSaveMessage("Face preview submitted.");
-    return result;
+    setGenerationSubmissionStage("saving profile");
+    try {
+      const savedProfile = await saveCharacterProgress();
+      const profileId = savedProfile?.profile_id || characterProfileId;
+      if (!profileId) return null;
+      setGenerationSubmissionStage("submitting to ComfyUI");
+      setDraftSaveMessage("Character saved. Submitting face preview…");
+      const locked = forceLockedSeed || faceSeedLocked;
+      const seed = facePreview?.seed_text || facePreview?.seed;
+      const refinement = promptOverride || facePromptDraft;
+      const result = await onGenerateFacePreview(profileId, {
+        refinement,
+        seed: locked && seed !== undefined && seed !== null ? seed : null,
+        lock_seed: locked && seed !== undefined && seed !== null,
+      });
+      if (result) setDraftSaveMessage("Face preview submitted.");
+      return result;
+    } finally {
+      setGenerationSubmissionStage("");
+    }
   }
 
   async function generateBodyPreview() {
     if (!characterBrief.body.trim() || characterSaveBusy || bodyPreviewTracking || !onGenerateBodyPreview) return null;
     setGenerationKind("body");
     setGenerationProgressOpen(true);
-    const savedProfile = await saveCharacterProgress();
-    const profileId = savedProfile?.profile_id || characterProfileId;
-    if (!profileId) return null;
-    setDraftSaveMessage("Character saved. Submitting body reference preview…");
-    const result = await onGenerateBodyPreview(profileId, {
-      ...buildBodyPreviewPayload(characterBrief, bodyFeatureSelections, faceFeatureSelections, bodyCustomDetails),
-      negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, hair, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, skin lesions, rash, sores, colored spots, confetti, embedded debris, mosaic skin, camouflage texture, body paint, patterned skin, patterned background, dramatic pose, text, watermark, child, teen, underage",
-      seed: bodySeedInput.trim() || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null ? bodyPreviewSeed : null),
-      lock_seed: Boolean(bodySeedInput.trim()) || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null),
-      width: 768,
-      height: 1344,
-    });
-    if (result) setDraftSaveMessage("Body preview submitted. Its seed will be saved with the character.");
-    return result;
+    setGenerationSubmissionStage("saving profile");
+    try {
+      const savedProfile = await saveCharacterProgress();
+      const profileId = savedProfile?.profile_id || characterProfileId;
+      if (!profileId) return null;
+      setGenerationSubmissionStage("submitting to ComfyUI");
+      setDraftSaveMessage("Character saved. Submitting body reference preview…");
+      const result = await onGenerateBodyPreview(profileId, {
+        ...buildBodyPreviewPayload(characterBrief, bodyFeatureSelections, faceFeatureSelections, bodyCustomDetails, bodyFeatureMagnitudes),
+        negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, hair, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, skin lesions, rash, sores, colored spots, confetti, embedded debris, mosaic skin, camouflage texture, body paint, patterned skin, patterned background, dramatic pose, text, watermark, child, teen, underage",
+        seed: bodySeedInput.trim() || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null ? bodyPreviewSeed : null),
+        lock_seed: Boolean(bodySeedInput.trim()) || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null),
+        width: 768,
+        height: 1344,
+      });
+      if (result) setDraftSaveMessage("Body preview submitted. Its seed will be saved with the character.");
+      return result;
+    } finally {
+      setGenerationSubmissionStage("");
+    }
   }
 
   async function forceRefreshGeneration() {
@@ -1852,6 +1882,38 @@ export function ImageStudio({
                         </div>
                       </fieldset>
                     ))}
+                    {adultIntimateFeaturesEnabled ? (
+                      <fieldset className="image-studio-magnitude-control">
+                        <legend>Breast size magnitude<small>Optional numeric volume; breast shape remains a separate selection.</small></legend>
+                        <div className="image-studio-magnitude-row">
+                          <input
+                            aria-label="Breast size magnitude"
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={bodyFeatureMagnitudes.breast_size ?? 0.5}
+                            onChange={(event) => {
+                              const value = Number(event.target.value);
+                              setBodyFeatureMagnitudes((current) => ({ ...current, breast_size: value }));
+                            }}
+                          />
+                          <strong>{bodyFeatureMagnitudes.breast_size === undefined ? "Automatic" : `${bodyFeatureMagnitudes.breast_size.toFixed(2)} — ${magnitudeLabel(bodyFeatureMagnitudes.breast_size)}`}</strong>
+                          <button
+                            className="btn"
+                            type="button"
+                            disabled={bodyFeatureMagnitudes.breast_size === undefined}
+                            onClick={() => setBodyFeatureMagnitudes((current) => {
+                              const next = { ...current };
+                              delete next.breast_size;
+                              return next;
+                            })}
+                          >
+                            Use automatic
+                          </button>
+                        </div>
+                      </fieldset>
+                    ) : null}
                   </div>
                   <label className="image-studio-full-field">Additional body details<textarea rows={3} value={bodyCustomDetails} onChange={(event) => updateBodyCustomDetails(event.target.value)} /></label>
                   <div className="image-studio-face-summary"><span>Combined body description</span><p>{characterBrief.body || "Choose body characteristics to build the reference description."}</p></div>
@@ -1941,7 +2003,7 @@ export function ImageStudio({
               <div className="manual-generation-status-item"><span>Latest Job</span><strong>{modalStatus}</strong></div>
             </div>
             <div className="manual-generation-status-row manual-generation-status-row-secondary image-studio-generation-status-grid">
-              <div className="manual-generation-status-item"><span>Current Prompt</span><code>{modalProgressDetail?.prompt_id || generationSession?.running_prompt_id || generationJob?.prompt_id || progressPromptId || "waiting"}</code></div>
+              <div className="manual-generation-status-item"><span>Current Prompt</span><code>{generationSubmissionStage ? "waiting" : modalProgressDetail?.prompt_id || generationSession?.running_prompt_id || generationJob?.prompt_id || progressPromptId || "waiting"}</code></div>
               <div className="manual-generation-status-item"><span>Template</span><code>{generationKind === "body" ? "template.avatar_upper_torso_preview.realvisxl.v1" : "template.avatar_head_face_preview.realvisxl.v1"}</code></div>
               <div className="manual-generation-status-item"><span>Stage</span><code>{String(modalProgressDetail?.phase || modalProgressDetail?.status || modalStatus)}</code></div>
             </div>
@@ -1953,11 +2015,13 @@ export function ImageStudio({
               <div className="manual-generation-progress-details">
                 <div className="manual-generation-progress-detail"><span>Node</span><code>{modalProgressDetail?.label || modalProgressDetail?.node_class || "Preparing"}</code></div>
                 <div className="manual-generation-progress-detail"><span>Step</span><code>{Number.isFinite(modalProgressValue) && Number.isFinite(modalProgressMax) ? `${modalProgressValue} of ${modalProgressMax}` : "waiting"}</code></div>
-                <div className="manual-generation-progress-detail"><span>Prompt</span><code>{modalProgressDetail?.prompt_id || generationJob?.prompt_id || progressPromptId || "waiting"}</code></div>
+                <div className="manual-generation-progress-detail"><span>Prompt</span><code>{generationSubmissionStage ? "waiting" : modalProgressDetail?.prompt_id || generationJob?.prompt_id || progressPromptId || "waiting"}</code></div>
                 <div className="manual-generation-progress-detail"><span>Queue</span><code>{`${queueRunning} running / ${queuePending} pending`}</code></div>
               </div>
               <p className={`manual-generation-progress-message ${["failed", "error", "cancelled"].includes(modalStatus.toLowerCase()) ? "is-error" : ""}`}>
-                {renderFinished && !progressArtifactReady
+                {generationSubmissionStage
+                  ? generationSubmissionStage === "saving profile" ? "Saving the current character selections before submission." : "Submitting the new workflow to ComfyUI."
+                  : renderFinished && !progressArtifactReady
                   ? "Rendering is complete. The preview file is still being saved and imported; this window will update when it is available."
                   : modalProgressDetail?.message || modalProgressDetail?.failure_detail || modalProgressDetail?.failure_reason || (progressTracking ? "Generation status refreshes automatically. You may close this window without cancelling the job." : "Generation is no longer active.")}
               </p>
@@ -2042,4 +2106,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, magnitudeLabel, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType };

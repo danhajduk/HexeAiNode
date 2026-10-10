@@ -3551,6 +3551,28 @@
   color: hsl(var(--sx-text));
 }
 
+.image-studio-magnitude-control {
+  grid-column: 1 / -1;
+}
+
+.image-studio-magnitude-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, auto) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.image-studio-magnitude-row input[type="range"] {
+  width: 100%;
+  accent-color: hsl(var(--sx-accent));
+}
+
+@media (max-width: 640px) {
+  .image-studio-magnitude-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .image-studio-face-summary {
   display: grid;
   gap: 5px;

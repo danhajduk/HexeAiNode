@@ -46,6 +46,25 @@ class ImageStudioBodyPromptTests(unittest.TestCase):
                 context={},
             )
 
+    def test_numeric_breast_magnitude_overrides_categorical_size(self):
+        prompt = compile_body_preview_prompt(
+            selections={"breast_size": ["small"], "breast_shape": ["teardrop"]},
+            face_selections={},
+            custom_details="",
+            context={},
+            magnitudes={"breast_size": 0.72},
+        )
+        self.assertIn("breast size magnitude: 0.72", prompt)
+        self.assertIn("large adult breast volume", prompt)
+        self.assertNotIn("small adult breast volume", prompt)
+        self.assertIn("teardrop adult breast contour", prompt)
+
+    def test_rejects_out_of_range_body_magnitude(self):
+        with self.assertRaisesRegex(ValueError, "body_feature_magnitude_out_of_range:breast_size"):
+            compile_body_preview_prompt(
+                selections={}, face_selections={}, custom_details="", context={}, magnitudes={"breast_size": 1.1}
+            )
+
     def test_routes_explicit_adult_anatomy_to_adult_capable_checkpoint(self):
         self.assertEqual(body_preview_checkpoint({"breast_size": ["large"]}), "RealVisXL_V5.0_fp16.safetensors")
         self.assertEqual(body_preview_checkpoint({"vulva_description": ["natural"]}), "lustifySDXLNSFWSFW_v20.safetensors")

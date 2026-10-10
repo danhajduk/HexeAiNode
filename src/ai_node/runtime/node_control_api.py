@@ -3185,6 +3185,7 @@ class NodeControlState:
                 face_selections=payload.face_feature_selections,
                 custom_details=payload.body_custom_details,
                 context=payload.character_context,
+                magnitudes=payload.body_feature_magnitudes,
             )
         else:
             prompt = str(payload.prompt or "").strip() or self._avatar_profile_upper_torso_prompt_from_parts(
@@ -17289,6 +17290,7 @@ class AvatarProfileHeadPreviewRequest(BaseModel):
     width: int | None = None
     height: int | None = None
     body_feature_selections: dict[str, list[str]] | None = None
+    body_feature_magnitudes: dict[str, float] | None = None
     face_feature_selections: dict[str, list[str]] | None = None
     body_custom_details: str | None = None
     character_context: dict[str, str] | None = None
