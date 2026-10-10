@@ -1189,6 +1189,14 @@ export function ImageStudio({
     updateCharacterBrief("body", composeBodyDescription(next, bodyCustomDetails, faceFeatureSelections));
   }
 
+  function setBodyFeaturePreset(group, option) {
+    let next = { ...bodyFeatureSelections, [group.id]: option ? [option] : [] };
+    if (group.id === "vulva_description" && option) next = { ...next, penis_description: [] };
+    if (group.id === "penis_description" && option) next = { ...next, vulva_description: [] };
+    setBodyFeatureSelections(next);
+    updateCharacterBrief("body", composeBodyDescription(next, bodyCustomDetails, faceFeatureSelections));
+  }
+
   function updateBodyCustomDetails(value) {
     setBodyCustomDetails(value);
     updateCharacterBrief("body", composeBodyDescription(bodyFeatureSelections, value, faceFeatureSelections));
@@ -1892,7 +1900,38 @@ export function ImageStudio({
                       return (
                       <fieldset key={group.id} className={magnitudeConfig ? "image-studio-feature-with-magnitude" : ""}>
                         <legend>{group.label}<small>{group.description}</small></legend>
-                        <div className="image-studio-option-chips">
+                        {magnitudeConfig ? (
+                          <div className="image-studio-compact-trait-row">
+                            <label className="image-studio-trait-preset">
+                              <span>{group.id === "butt_shape" ? "Shape" : "Preset / type"}</span>
+                              <select value={(bodyFeatureSelections[group.id] || [])[0] || ""} onChange={(event) => setBodyFeaturePreset(group, event.target.value)}>
+                                <option value="">Automatic</option>
+                                {group.options.map((option) => <option value={option} key={option}>{option}</option>)}
+                              </select>
+                            </label>
+                            <label className="image-studio-trait-slider">
+                              <span>{magnitudeConfig.label} magnitude</span>
+                              <div className="image-studio-magnitude-row">
+                                <input
+                                  aria-label={`${magnitudeConfig.label} magnitude`}
+                                  type="range"
+                                  min="0"
+                                  max="1"
+                                  step="0.01"
+                                  value={bodyFeatureMagnitudes[magnitudeConfig.id] ?? 0.5}
+                                  onChange={(event) => setBodyFeatureMagnitudes((current) => ({ ...current, [magnitudeConfig.id]: Number(event.target.value) }))}
+                                />
+                                <strong>{bodyFeatureMagnitudes[magnitudeConfig.id] === undefined ? "Automatic" : bodyFeatureMagnitudes[magnitudeConfig.id].toFixed(2)}</strong>
+                                <button className="btn" type="button" disabled={bodyFeatureMagnitudes[magnitudeConfig.id] === undefined} onClick={() => setBodyFeatureMagnitudes((current) => {
+                                  const next = { ...current };
+                                  delete next[magnitudeConfig.id];
+                                  return next;
+                                })}>Use automatic</button>
+                              </div>
+                              <small className="image-studio-magnitude-scale">0 = {magnitudeConfig.low} · 1 = {magnitudeConfig.high}</small>
+                            </label>
+                          </div>
+                        ) : <div className="image-studio-option-chips">
                           {group.options.map((option) => {
                             const inheritedPubicHairColor = group.id === "pubic_hair_color" && option === "inherit from head hair";
                             const selected = inheritedPubicHairColor
@@ -1902,67 +1941,32 @@ export function ImageStudio({
                             const label = inheritedPubicHairColor && inheritedHairColor ? `inherit (${inheritedHairColor})` : option;
                             return <button className={selected ? "is-selected" : ""} type="button" aria-pressed={selected} key={option} onClick={() => selectBodyFeature(group, option)}>{label}</button>;
                           })}
-                        </div>
-                        {magnitudeConfig ? <>
-                          <span className="image-studio-magnitude-label">{magnitudeConfig.label} magnitude</span>
-                          <div className="image-studio-magnitude-row">
-                            <input
-                              aria-label={`${magnitudeConfig.label} magnitude`}
-                              type="range"
-                              min="0"
-                              max="1"
-                              step="0.01"
-                              value={bodyFeatureMagnitudes[magnitudeConfig.id] ?? 0.5}
-                              onChange={(event) => setBodyFeatureMagnitudes((current) => ({ ...current, [magnitudeConfig.id]: Number(event.target.value) }))}
-                            />
-                            <strong>{bodyFeatureMagnitudes[magnitudeConfig.id] === undefined ? "Automatic" : bodyFeatureMagnitudes[magnitudeConfig.id].toFixed(2)}</strong>
-                            <button className="btn" type="button" disabled={bodyFeatureMagnitudes[magnitudeConfig.id] === undefined} onClick={() => setBodyFeatureMagnitudes((current) => {
-                              const next = { ...current };
-                              delete next[magnitudeConfig.id];
-                              return next;
-                            })}>Use automatic</button>
-                          </div>
-                          <small className="image-studio-magnitude-scale">0 = {magnitudeConfig.low} · 1 = {magnitudeConfig.high}</small>
-                        </> : null}
+                        </div>}
                       </fieldset>
                     );})}
                     {adultIntimateFeaturesEnabled ? (
                       <fieldset className="image-studio-magnitude-control">
                         <legend>Breast shape &amp; size<small>Choose the contour and optionally set numeric volume in one combined definition.</small></legend>
-                        <span className="image-studio-magnitude-label">Shape</span>
-                        <div className="image-studio-option-chips">
-                          {breastShapeGroup.options.map((option) => {
-                            const selected = (bodyFeatureSelections.breast_shape || []).includes(option);
-                            return <button className={selected ? "is-selected" : ""} type="button" aria-pressed={selected} key={option} onClick={() => selectBodyFeature(breastShapeGroup, option)}>{option}</button>;
-                          })}
-                        </div>
-                        <span className="image-studio-magnitude-label">Size magnitude</span>
-                        <div className="image-studio-magnitude-row">
-                          <input
-                            aria-label="Breast size magnitude"
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.01"
-                            value={bodyFeatureMagnitudes.breast_size ?? 0.5}
-                            onChange={(event) => {
-                              const value = Number(event.target.value);
-                              setBodyFeatureMagnitudes((current) => ({ ...current, breast_size: value }));
-                            }}
-                          />
-                          <strong>{bodyFeatureMagnitudes.breast_size === undefined ? "Automatic" : `${bodyFeatureMagnitudes.breast_size.toFixed(2)} — ${magnitudeLabel(bodyFeatureMagnitudes.breast_size)}`}</strong>
-                          <button
-                            className="btn"
-                            type="button"
-                            disabled={bodyFeatureMagnitudes.breast_size === undefined}
-                            onClick={() => setBodyFeatureMagnitudes((current) => {
-                              const next = { ...current };
-                              delete next.breast_size;
-                              return next;
-                            })}
-                          >
-                            Use automatic
-                          </button>
+                        <div className="image-studio-compact-trait-row">
+                          <label className="image-studio-trait-preset">
+                            <span>Shape</span>
+                            <select value={(bodyFeatureSelections.breast_shape || [])[0] || ""} onChange={(event) => setBodyFeaturePreset(breastShapeGroup, event.target.value)}>
+                              <option value="">Automatic</option>
+                              {breastShapeGroup.options.map((option) => <option value={option} key={option}>{option}</option>)}
+                            </select>
+                          </label>
+                          <label className="image-studio-trait-slider">
+                            <span>Size magnitude</span>
+                            <div className="image-studio-magnitude-row">
+                              <input aria-label="Breast size magnitude" type="range" min="0" max="1" step="0.01" value={bodyFeatureMagnitudes.breast_size ?? 0.5} onChange={(event) => setBodyFeatureMagnitudes((current) => ({ ...current, breast_size: Number(event.target.value) }))} />
+                              <strong>{bodyFeatureMagnitudes.breast_size === undefined ? "Automatic" : `${bodyFeatureMagnitudes.breast_size.toFixed(2)} — ${magnitudeLabel(bodyFeatureMagnitudes.breast_size)}`}</strong>
+                              <button className="btn" type="button" disabled={bodyFeatureMagnitudes.breast_size === undefined} onClick={() => setBodyFeatureMagnitudes((current) => {
+                                const next = { ...current };
+                                delete next.breast_size;
+                                return next;
+                              })}>Use automatic</button>
+                            </div>
+                          </label>
                         </div>
                       </fieldset>
                     ) : null}

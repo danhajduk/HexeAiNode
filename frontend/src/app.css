@@ -3579,6 +3579,32 @@
 
 .image-studio-feature-with-magnitude {
   align-self: start;
+  grid-column: 1 / -1;
+}
+
+.image-studio-compact-trait-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(320px, 1.3fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.image-studio-trait-preset,
+.image-studio-trait-slider {
+  display: grid;
+  gap: 7px;
+}
+
+.image-studio-trait-preset > span,
+.image-studio-trait-slider > span {
+  color: hsl(var(--sx-muted));
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.image-studio-trait-preset select {
+  width: 100%;
 }
 
 .image-studio-magnitude-scale {
@@ -3642,6 +3668,10 @@
 
 @media (max-width: 640px) {
   .image-studio-magnitude-row {
+    grid-template-columns: 1fr;
+  }
+
+  .image-studio-compact-trait-row {
     grid-template-columns: 1fr;
   }
 
