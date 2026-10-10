@@ -251,7 +251,9 @@ export default function App() {
 
   async function loadStatus() {
     const lastUpdatedAt = new Date().toISOString();
-    const includeAvatarGeneration = imageStudioOpen || resolveOperationalSection(routeHash) === "avatar_generation";
+    const operationalSection = resolveOperationalSection(routeHash);
+    const includeAvatarGeneration = imageStudioOpen || operationalSection === "avatar_generation";
+    const includeManualImageInventory = ["manual_image", "synthetic_adult_studio"].includes(operationalSection);
     let nodePayload = null;
     try {
       nodePayload = await apiGet("/api/node/status");
@@ -336,7 +338,7 @@ export default function App() {
       apiGet("/api/prompts/services"),
       apiGet("/api/image-templates"),
       comfyuiTemplatesRequest,
-      apiGet("/api/manual-image-generation/activity"),
+      apiGet(includeManualImageInventory ? "/api/manual-image-generation" : "/api/manual-image-generation/activity"),
       includeAvatarGeneration ? apiGet("/api/avatar-generation") : Promise.resolve(null),
       apiGet("/api/execution/queues"),
       apiAdminGet("/api/capabilities/diagnostics"),
@@ -453,7 +455,16 @@ export default function App() {
     setPromptServicesPayload(promptServicesPayload);
     setImageTemplatePayload(imageTemplatesPayload);
     setComfyuiTemplateCatalogPayload(comfyuiTemplatesPayload);
-    setManualImageGenerationPayload(manualImageGenerationPayload);
+    setManualImageGenerationPayload((current) => ({
+      ...(current || {}),
+      ...(manualImageGenerationPayload || {}),
+      outputs: Array.isArray(manualImageGenerationPayload?.outputs)
+        ? manualImageGenerationPayload.outputs
+        : current?.outputs || [],
+      references: Array.isArray(manualImageGenerationPayload?.references)
+        ? manualImageGenerationPayload.references
+        : current?.references || [],
+    }));
     setManualGenerationRuntimeStatus(servicePayload);
     if (includeAvatarGeneration) {
       setAvatarGenerationPayload(avatarGenerationPayload);
