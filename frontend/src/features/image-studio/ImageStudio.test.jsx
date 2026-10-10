@@ -337,10 +337,21 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Neck-down full-body foundation");
     expect(markup).toContain("424242");
     expect(markup).toContain("Generate again with saved seed");
-    const prompt = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", body: "tall; athletic" });
-    expect(prompt).toContain("no head and no face");
-    expect(prompt).toContain("base of the neck through both feet");
-    expect(prompt).toContain("head completely outside the top of the frame");
+    const prompt = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", visual_style: "realistic", body: "tall; athletic" });
+    expect(prompt).toContain("Strict neck-down crop");
+    expect(prompt).toContain("Photorealistic natural human body");
+    expect(prompt).toContain("top image boundary at the base of the neck");
+    expect(prompt).toContain("entire head remains outside the canvas");
+    expect(prompt).not.toContain("bodysuit");
+  });
+
+  it("adds a rendering prompt that matches the initial character visual style", () => {
+    const semiRealistic = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", visual_style: "semi-realistic", body: "curvy" });
+    const anime = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", visual_style: "anime", body: "curvy" });
+
+    expect(semiRealistic).toContain("Polished semi-realistic human character body");
+    expect(anime).toContain("Clean anime character body design");
+    expect(anime).toContain("BODY PROPORTIONS: curvy");
   });
 
   it("forces SFW when an adult character is changed to an under-18 age group", () => {

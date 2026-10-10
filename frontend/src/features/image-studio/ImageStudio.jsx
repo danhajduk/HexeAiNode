@@ -91,15 +91,23 @@ function composeBodyDescription(selections = {}, customDetails = "") {
   return parts.join("; ");
 }
 
+const BODY_PREVIEW_STYLE_PROMPTS = {
+  realistic: "Photorealistic natural human body, lifelike intact skin covering the entire visible body, realistic human joints and proportions, subtle natural skin texture and tonal variation, professional studio photography.",
+  "semi-realistic": "Polished semi-realistic human character body, intact natural-looking skin, believable human joints and proportions, softly stylized forms, high-quality character concept art.",
+  anime: "Clean anime character body design, intact continuous skin, coherent anime anatomy and proportions, smooth cel-shaded rendering, polished character reference art.",
+};
+
 function buildBodyPreviewPrompt(characterBrief) {
+  const visualStyle = String(characterBrief.visual_style || "semi-realistic").trim().toLowerCase();
+  const stylePrompt = BODY_PREVIEW_STYLE_PROMPTS[visualStyle] || BODY_PREVIEW_STYLE_PROMPTS["semi-realistic"];
   return [
-    "EXACTLY ONE ADULT BODY. Neck-down full-body anatomy reference, no head and no face, never a collage or character sheet.",
+    "EXACTLY ONE HUMAN BODY. Strict neck-down crop; the image begins below the chin at the base of the neck. No head, face, jaw, mouth, eyes, or hair anywhere in the image.",
     `Character body: ${characterBrief.age_group} ${characterBrief.gender_identity}.`,
     `BODY PROPORTIONS: ${characterBrief.body}.`,
-    "Frame from the base of the neck through both feet. Entire shoulders, torso, arms, hands, hips, legs, and feet visible; head completely outside the top of the frame.",
-    "Neutral standing body-reference posture, shoulders level, arms relaxed and separated from torso, legs and proportions clearly visible.",
-    "Simple close-fitting neutral bodysuit, no loose layers, clean studio background, even lighting, realistic anatomy.",
-    `Visual style: ${characterBrief.visual_style}.`,
+    "Composition: crop through the neck itself, with the top image boundary at the base of the neck; shoulders, torso, arms, hands, hips, legs, and feet visible. The entire head remains outside the canvas.",
+    "Neutral standing body-reference posture, shoulders level, arms relaxed and separated from the torso, with the selected body proportions clearly visible and unobscured.",
+    "Continuous organic body surface with no panel lines, artificial seams, exposed anatomy, mechanical parts, mannequin joints, or clothing details.",
+    stylePrompt,
   ].filter(Boolean).join("\n");
 }
 
@@ -1098,7 +1106,7 @@ export function ImageStudio({
     setDraftSaveMessage("Character saved. Submitting body reference preview…");
     const result = await onGenerateBodyPreview(profileId, {
       prompt: buildBodyPreviewPrompt(characterBrief),
-      negative_prompt: "head, face, eyes, mouth, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, loose clothing, bulky clothing, dramatic pose, text, watermark, child, teen, underage",
+      negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, hair, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, dramatic pose, text, watermark, child, teen, underage",
       seed: bodyPreviewSeed ?? null,
       lock_seed: bodyPreviewSeed !== undefined && bodyPreviewSeed !== null,
       width: 768,
