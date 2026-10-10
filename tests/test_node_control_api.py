@@ -6353,6 +6353,53 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(event_call["payload"]["data"]["endpoint_id"], "all")
         self.assertIn("completion_event_published_at", imported_preview)
 
+    def test_avatar_generation_compiles_adult_body_preview_sampling_settings(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {"comfyui_webui": {"state": "running", "runtime": "gpu", "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir}}}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+            )
+            state._node_id = "node-test"
+            state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Body Test"))
+
+            async def _submit_manual_image_generation(*, payload):
+                self.assertEqual(payload.steps, 28)
+                self.assertEqual(payload.cfg, 5.5)
+                self.assertEqual(payload.width, 768)
+                self.assertEqual(payload.height, 1344)
+                self.assertEqual(payload.template_variables["checkpoint"], "lustifySDXLNSFWSFW_v20.safetensors")
+                self.assertEqual(payload.template_variables["lightning_strength"], 0.0)
+                self.assertEqual(payload.template_variables["sampler_name"], "dpmpp_2m_sde")
+                self.assertEqual(payload.template_variables["scheduler"], "karras")
+                return {"status": "submitted", "prompt_id": "body-prompt", "prompt_ids": ["body-prompt"], "submissions": [{"seed": 42}]}
+
+            state.submit_manual_image_generation = _submit_manual_image_generation
+            result = asyncio.run(state.create_avatar_profile_upper_torso_preview(
+                profile_id="Body_Test",
+                payload=AvatarProfileHeadPreviewRequest(
+                    body_feature_selections={"build": ["curvy"], "vulva_description": ["natural"]},
+                    face_feature_selections={"skin tone": ["light"]},
+                    character_context={"age_group": "adult (18+)", "gender_identity": "female", "visual_style": "realistic"},
+                    width=768,
+                    height=1344,
+                ),
+            ))
+
+        self.assertEqual(result["status"], "upper_torso_preview_submitted")
+        self.assertEqual(result["preview"]["checkpoint"], "lustifySDXLNSFWSFW_v20.safetensors")
+
     def test_avatar_generation_imports_head_preview_rgb_without_background_removal(self):
         class _AvatarProfileServiceManager:
             def __init__(self, input_dir: str, output_dir: str, socket_path: str):

@@ -3081,12 +3081,8 @@ class NodeControlState:
             negative_prompt = str(defaults.get("negative_prompt") or "").strip()
         width = int(payload.width or defaults.get("width") or 512)
         height = int(payload.height or defaults.get("height") or 512)
-        selected_body_features = payload.body_feature_selections if isinstance(payload.body_feature_selections, dict) else {}
-        checkpoint = body_preview_checkpoint(selected_body_features)
-        explicit_adult_anatomy = checkpoint == "lustifySDXLNSFWSFW_v20.safetensors"
-        sampling = body_preview_sampling_settings(selected_body_features)
-        steps = int(sampling["steps"] if explicit_adult_anatomy else defaults.get("steps") or sampling["steps"])
-        cfg = float(sampling["cfg"] if explicit_adult_anatomy else defaults.get("cfg") or sampling["cfg"])
+        steps = int(defaults.get("steps") or 4)
+        cfg = float(defaults.get("cfg") or 1.2)
         denoise = float(defaults.get("denoise") or 1.0)
         lock_seed = bool(payload.lock_seed)
         requested_seed = self._coerce_manual_image_seed(payload.seed) if payload.seed is not None else None
@@ -3204,8 +3200,12 @@ class NodeControlState:
             negative_prompt = str(defaults.get("negative_prompt") or "").strip()
         width = int(payload.width or defaults.get("width") or 512)
         height = int(payload.height or defaults.get("height") or 512)
-        steps = int(defaults.get("steps") or 4)
-        cfg = float(defaults.get("cfg") or 1.2)
+        selected_body_features = payload.body_feature_selections if isinstance(payload.body_feature_selections, dict) else {}
+        checkpoint = body_preview_checkpoint(selected_body_features)
+        explicit_adult_anatomy = checkpoint == "lustifySDXLNSFWSFW_v20.safetensors"
+        sampling = body_preview_sampling_settings(selected_body_features)
+        steps = int(sampling["steps"] if explicit_adult_anatomy else defaults.get("steps") or sampling["steps"])
+        cfg = float(sampling["cfg"] if explicit_adult_anatomy else defaults.get("cfg") or sampling["cfg"])
         denoise = float(defaults.get("denoise") or 1.0)
         requested_seed = self._coerce_manual_image_seed(payload.seed) if payload.seed is not None else None
         lightning_strength = sampling["lightning_strength"]
