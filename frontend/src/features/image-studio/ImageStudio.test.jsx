@@ -343,11 +343,14 @@ describe("ImageStudio", () => {
     expect(markup).toContain("424242");
     expect(markup).toContain("Generate again with saved seed");
     const prompt = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", visual_style: "realistic", body: "tall; athletic" });
-    expect(prompt).toContain("Strict neck-down crop");
-    expect(prompt).toContain("Photorealistic natural human body");
-    expect(prompt).toContain("top image boundary at the base of the neck");
-    expect(prompt).toContain("entire head remains outside the canvas");
+    expect(prompt).toContain("exactly one living human person");
+    expect(prompt).toContain("real living human person");
+    expect(prompt).toContain("natural camera crop at the base of the neck");
+    expect(prompt).toContain("head naturally outside the canvas");
+    expect(prompt).toContain("skin with pores");
     expect(prompt).not.toContain("bodysuit");
+    expect(markup).toContain("Lock body seed");
+    expect(markup).toContain("Leave unlocked to try a fresh composition");
   });
 
   it("expands body-trait selections into explicit anatomy instructions", () => {

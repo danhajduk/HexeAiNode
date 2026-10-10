@@ -169,7 +169,7 @@ function composeBodyDescription(selections = {}, customDetails = "") {
 }
 
 const BODY_PREVIEW_STYLE_PROMPTS = {
-  realistic: "Photorealistic natural human body, lifelike intact skin covering the entire visible body, realistic human joints and proportions, subtle natural skin texture and tonal variation, professional studio photography.",
+  realistic: "Photograph of a real living human person, natural skin pores and fine texture, subtle blemishes and tonal variation, slight natural asymmetry, realistic soft-tissue transitions at every joint, professional studio photography without a mannequin or CGI appearance.",
   "semi-realistic": "Polished semi-realistic human character body, intact natural-looking skin, believable human joints and proportions, softly stylized forms, high-quality character concept art.",
   anime: "Clean anime character body design, intact continuous skin, coherent anime anatomy and proportions, smooth cel-shaded rendering, polished character reference art.",
 };
@@ -178,12 +178,12 @@ function buildBodyPreviewPrompt(characterBrief) {
   const visualStyle = String(characterBrief.visual_style || "semi-realistic").trim().toLowerCase();
   const stylePrompt = BODY_PREVIEW_STYLE_PROMPTS[visualStyle] || BODY_PREVIEW_STYLE_PROMPTS["semi-realistic"];
   return [
-    "EXACTLY ONE HUMAN BODY. Strict neck-down crop; the image begins below the chin at the base of the neck. No head, face, jaw, mouth, eyes, or hair anywhere in the image.",
+    "Studio image of exactly one living human person. The camera frame begins at the collarbones and base of the neck; the person's head is naturally above and fully outside the image boundary.",
     `Character body: ${characterBrief.age_group} ${characterBrief.gender_identity}.`,
     `BODY PROPORTIONS: ${characterBrief.body}.`,
-    "Composition: crop through the neck itself, with the top image boundary at the base of the neck; shoulders, torso, arms, hands, hips, legs, and feet visible. The entire head remains outside the canvas.",
+    "Composition: natural camera crop at the base of the neck, showing the complete body from both shoulders through both feet. Keep the head naturally outside the canvas without creating a severed or artificial neck.",
     "Neutral standing body-reference posture, shoulders level, arms relaxed and separated from the torso, with the selected body proportions clearly visible and unobscured.",
-    "Continuous organic body surface with no panel lines, artificial seams, exposed anatomy, mechanical parts, mannequin joints, or clothing details.",
+    "Authentic living skin with pores, fine body hair, subtle veins, small natural imperfections, and uninterrupted soft-tissue transitions. Normal human elbows, wrists, hips, knees, and ankles with no molded joints or panel lines.",
     stylePrompt,
   ].filter(Boolean).join("\n");
 }
@@ -740,6 +740,7 @@ export function ImageStudio({
   const [faceRefinementError, setFaceRefinementError] = useState("");
   const [bodyFeatureSelections, setBodyFeatureSelections] = useState({});
   const [bodyCustomDetails, setBodyCustomDetails] = useState("");
+  const [bodySeedLocked, setBodySeedLocked] = useState(false);
   const [faceSeedReviewOpen, setFaceSeedReviewOpen] = useState(initialFaceSeedReviewOpen);
   const [faceSeedReviewSelections, setFaceSeedReviewSelections] = useState([]);
   const [faceSeedReviewBatchId, setFaceSeedReviewBatchId] = useState("");
@@ -1218,8 +1219,8 @@ export function ImageStudio({
     const result = await onGenerateBodyPreview(profileId, {
       prompt: buildBodyPreviewPrompt(characterBrief),
       negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, hair, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, dramatic pose, text, watermark, child, teen, underage",
-      seed: bodyPreviewSeed ?? null,
-      lock_seed: bodyPreviewSeed !== undefined && bodyPreviewSeed !== null,
+      seed: bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null ? bodyPreviewSeed : null,
+      lock_seed: bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null,
       width: 768,
       height: 1152,
     });
@@ -1685,7 +1686,13 @@ export function ImageStudio({
                     <span>Status</span><strong>{bodyPreviewStatus.replaceAll("_", " ")}</strong>
                     <small>{bodyPreviewTracking ? "Generation status refreshes automatically." : bodyPreviewCompleted ? `Body identity seed ${bodyPreviewSeed} saved.` : "Generate one neutral reference before continuing."}</small>
                   </div>
-                  <div className="image-studio-seed-controls"><p>Body seed: <code>{bodyPreviewSeed ?? "not generated"}</code></p></div>
+                  <div className="image-studio-seed-controls">
+                    <label>
+                      <input type="checkbox" checked={bodySeedLocked} onChange={(event) => setBodySeedLocked(event.target.checked)} disabled={bodyPreviewSeed === undefined || bodyPreviewSeed === null} />
+                      Lock body seed <code>{bodyPreviewSeed ?? "not generated"}</code>
+                    </label>
+                    <p>Leave unlocked to try a fresh composition. Lock only when refining a result whose overall anatomy and framing are already good.</p>
+                  </div>
                 </aside>
               </div>
             ) : (
