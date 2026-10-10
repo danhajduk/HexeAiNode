@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, latestSavedFacePreview, nextBodyFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, latestSavedFacePreview, nextBodyFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -405,19 +405,19 @@ describe("ImageStudio", () => {
     expect(sfwMarkup).not.toContain("External genital anatomy");
   });
 
-  it("expands body-trait selections into explicit anatomy instructions", () => {
+  it("keeps body descriptions as concise frontend selections", () => {
     expect(composeBodyDescription({ body_traits: ["pronounced feminine"], build: ["curvy"] }))
-      .toContain("fuller natural chest silhouette, narrow defined waist, rounded wider hips");
+      .toContain("feminine / masculine traits: pronounced feminine");
     expect(composeBodyDescription({ body_traits: ["masculine"], build: ["athletic"] }))
-      .toContain("broader shoulders, a flatter chest silhouette, straighter waist, narrower hips");
+      .toContain("overall build: athletic");
     expect(composeBodyDescription({ height: ["tall"], build: ["curvy"], musculature: ["lightly toned"] }))
-      .toContain("tall stature with elongated vertical proportions");
+      .toContain("height: tall");
     expect(composeBodyDescription({ height: ["tall"], build: ["curvy"], musculature: ["lightly toned"] }))
-      .toContain("subtle definition in the arms, abdomen, and legs");
+      .toContain("musculature: lightly toned");
     expect(composeBodyDescription({ body_hair: ["natural"], breast_size: ["medium"], breast_shape: ["teardrop"], butt_shape: ["round"] }))
-      .toContain("natural teardrop breast shape");
+      .toContain("breast shape: teardrop");
     expect(composeBodyDescription({ body_hair: ["natural"], breast_size: ["medium"], breast_shape: ["teardrop"], butt_shape: ["round"] }))
-      .toContain("round gluteal contour");
+      .toContain("butt shape: round");
   });
 
   it("inherits pubic hair color from face hair unless explicitly overridden", () => {
@@ -432,9 +432,9 @@ describe("ImageStudio", () => {
       { "hair color": ["auburn"] },
     );
 
-    expect(inherited).toContain("pubic hair color: auburn pubic hair color, inherited from head hair");
-    expect(overridden).toContain("pubic hair color: black pubic hair color");
-    expect(overridden).not.toContain("inherited from head hair");
+    expect(inherited).toContain("pubic hair color: auburn (inherited from head hair)");
+    expect(overridden).toContain("pubic hair color: black");
+    expect(overridden).not.toContain("(inherited from head hair)");
     expect(composeBodyDescription({ pubic_hair: ["none"] }, "", { "hair color": ["auburn"] }))
       .not.toContain("pubic hair color:");
   });
@@ -504,6 +504,20 @@ describe("ImageStudio", () => {
 
     expect(prompt).toContain("INHERITED FACE SKIN TONE: olive natural skin tone with realistic tonal variation");
     expect(prompt).toContain("across the neck and entire body");
+  });
+
+  it("submits structured body selections for backend prompt compilation", () => {
+    expect(buildBodyPreviewPayload(
+      { age_group: "adult (18+)", gender_identity: "female", visual_style: "realistic", body: "ignored summary" },
+      { build: ["athletic"], pubic_hair: ["natural"] },
+      { "skin tone": ["olive"], "hair color": ["auburn"] },
+      "long fingers",
+    )).toEqual({
+      body_feature_selections: { build: ["athletic"], pubic_hair: ["natural"] },
+      face_feature_selections: { "skin tone": ["olive"], "hair color": ["auburn"] },
+      body_custom_details: "long fingers",
+      character_context: { age_group: "adult (18+)", gender_identity: "female", visual_style: "realistic" },
+    });
   });
 
   it("forces SFW when an adult character is changed to an under-18 age group", () => {

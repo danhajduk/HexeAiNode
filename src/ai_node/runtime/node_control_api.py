@@ -66,6 +66,7 @@ from ai_node.runtime.capability_resolver import load_task_graph
 from ai_node.runtime.execution_telemetry import ExecutionTelemetryPublisher
 from ai_node.runtime.execution_queue import ExecutionQueueService
 from ai_node.runtime.prompt_construction import render_prompt_template
+from ai_node.runtime.image_studio_body_prompt import compile_body_preview_prompt
 from ai_node.runtime.task_execution_service import TaskExecutionService
 from ai_node.runtime.user_message_publisher import preview_completed_user_message
 from ai_node.runtime.capability_declaration_runner import (
@@ -3178,10 +3179,18 @@ class NodeControlState:
             prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
             fallback_prompt=str(payload.prompt or workspace.get("prompt") or "").strip(),
         )
-        prompt = str(payload.prompt or "").strip() or self._avatar_profile_upper_torso_prompt_from_parts(
-            prompt_parts=prompt_parts,
-            profile=metadata,
-        )
+        if isinstance(payload.body_feature_selections, dict):
+            prompt = compile_body_preview_prompt(
+                selections=payload.body_feature_selections,
+                face_selections=payload.face_feature_selections,
+                custom_details=payload.body_custom_details,
+                context=payload.character_context,
+            )
+        else:
+            prompt = str(payload.prompt or "").strip() or self._avatar_profile_upper_torso_prompt_from_parts(
+                prompt_parts=prompt_parts,
+                profile=metadata,
+            )
         if not prompt:
             prompt = self._avatar_profile_default_upper_torso_prompt(profile=metadata)
         negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
@@ -3231,6 +3240,7 @@ class NodeControlState:
             "cfg": cfg,
             "denoise": denoise,
             "prompt": prompt,
+            "body_feature_selections": payload.body_feature_selections,
             "prompt_parts": prompt_parts,
             "negative_prompt": negative_prompt,
             "submitted_at": submitted_at,
@@ -17261,6 +17271,10 @@ class AvatarProfileHeadPreviewRequest(BaseModel):
     lock_seed: bool | None = False
     width: int | None = None
     height: int | None = None
+    body_feature_selections: dict[str, list[str]] | None = None
+    face_feature_selections: dict[str, list[str]] | None = None
+    body_custom_details: str | None = None
+    character_context: dict[str, str] | None = None
 
 
 class AvatarProfileHeadSeedBatchRequest(BaseModel):

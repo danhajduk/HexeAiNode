@@ -233,8 +233,7 @@ function nextBodyFeatureSelections(selections = {}, groupId, option) {
 function composeBodyDescription(selections = {}, customDetails = "", faceSelections = {}) {
   const parts = BODY_FEATURE_GROUPS.flatMap((group) => (selections[group.id] || []).map((value) => {
     if (group.id === "pubic_hair_color" && value === "inherit from head hair") return [];
-    const description = BODY_FEATURE_PROMPT_DESCRIPTIONS[group.id]?.[value] || value;
-    return `${group.label.toLowerCase()}: ${description}`;
+    return `${group.label.toLowerCase()}: ${value}`;
   }));
   const pubicHairSelected = (selections.pubic_hair || []).some((value) => value !== "none");
   const explicitColor = (selections.pubic_hair_color || []).find((value) => value !== "inherit from head hair");
@@ -243,7 +242,7 @@ function composeBodyDescription(selections = {}, customDetails = "", faceSelecti
     : faceSelections["hair color"];
   if (pubicHairSelected && (explicitColor || inheritedColor)) {
     const color = explicitColor || inheritedColor;
-    parts.push(`pubic hair color: ${color} pubic hair color${explicitColor ? "" : ", inherited from head hair"}`);
+    parts.push(`pubic hair color: ${color}${explicitColor ? "" : " (inherited from head hair)"}`);
   }
   if (String(customDetails || "").trim()) parts.push(String(customDetails).trim());
   return parts.join("; ");
@@ -274,6 +273,19 @@ function buildBodyPreviewPrompt(characterBrief, faceSelections = {}, faceCatalog
     "Authentic living skin with pores, fine body hair, subtle veins, small natural imperfections, and uninterrupted soft-tissue transitions. Normal human elbows, wrists, hips, knees, and ankles with no molded joints or panel lines.",
     stylePrompt,
   ].filter(Boolean).join("\n");
+}
+
+function buildBodyPreviewPayload(characterBrief, bodySelections, faceSelections, customDetails) {
+  return {
+    body_feature_selections: bodySelections,
+    face_feature_selections: faceSelections,
+    body_custom_details: customDetails,
+    character_context: {
+      age_group: characterBrief.age_group,
+      gender_identity: characterBrief.gender_identity,
+      visual_style: characterBrief.visual_style,
+    },
+  };
 }
 
 const FACE_FEATURE_OPTION_GROUPS = [
@@ -1355,7 +1367,7 @@ export function ImageStudio({
     if (!profileId) return null;
     setDraftSaveMessage("Character saved. Submitting body reference preview…");
     const result = await onGenerateBodyPreview(profileId, {
-      prompt: buildBodyPreviewPrompt(characterBrief, faceFeatureSelections, faceFeatureCatalog),
+      ...buildBodyPreviewPayload(characterBrief, bodyFeatureSelections, faceFeatureSelections, bodyCustomDetails),
       negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, hair, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, dramatic pose, text, watermark, child, teen, underage",
       seed: bodySeedInput.trim() || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null ? bodyPreviewSeed : null),
       lock_seed: Boolean(bodySeedInput.trim()) || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null),
@@ -1970,4 +1982,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextBodyFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextBodyFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
