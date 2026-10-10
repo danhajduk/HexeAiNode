@@ -117,7 +117,7 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
                 continue
             if group_id == "penis_description" and "penis_size" in normalized_magnitudes:
                 continue
-            emphasis = "1.45" if group_id in {"body_traits", "build", "breast_size", "breast_shape", "vulva_description", "penis_description"} else "1.25"
+            emphasis = "1.40" if group_id in {"body_traits", "build"} else "1.30" if group_id in {"breast_size", "breast_shape", "vulva_description", "penis_description"} else "1.25"
             details.append(f"({group_id.replace('_', ' ')}: {description}:{emphasis})")
 
     if "breast_size" in normalized_magnitudes:
@@ -126,7 +126,7 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
         shape_values = selections.get("breast_shape") or []
         shape = BODY_FEATURE_DESCRIPTIONS["breast_shape"].get(str(shape_values[0])) if shape_values else None
         shape_instruction = shape or "natural adult breast contour with realistic soft-tissue behavior"
-        details.append(f"(breast anatomy: size magnitude {value:.2f} on a 0-to-1 scale, {label} adult breast volume with realistic weight and proportions; shape: {shape_instruction}:1.50)")
+        details.append(f"(breast anatomy: size magnitude {value:.2f} on a 0-to-1 scale, {label} adult breast volume with realistic weight and proportions; shape: {shape_instruction}:1.35)")
 
     for magnitude_id, value in normalized_magnitudes.items():
         if magnitude_id == "breast_size":
@@ -149,10 +149,10 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
     style = str(context.get("visual_style") or "semi-realistic").strip().lower()
     return "\n".join(filter(None, (
         "Studio image of exactly one living human person. The camera frame begins at the collarbones and base of the neck; the person's head is naturally above and fully outside the image boundary.",
+        "STRICT CAMERA FRAMING: (extreme long shot, entire body visible from the base of the neck through every toe:1.60), (camera far away:1.50), vertical canvas, generous clear space around the body. The subject occupies no more than 85 percent of the image height. Top edge crosses the base of the neck above both collarbones. Both shoulders, entire torso, pelvis, both complete legs, ankles, both complete feet, and all ten toes are inside the frame. Feet sit above the bottom margin with visible space below the toes. No head, scalp, face, facial hair, beard, mustache, sideburns, or head hair is visible anywhere in the image; no hair hangs down from outside the frame. No shoulder crop, waist crop, knee crop, ankle crop, foot crop, or toe crop.",
         f"Character body: {context.get('age_group', '')} {context.get('gender_identity', '')}.",
         f"SELECTED BODY TRAITS — MUST MATCH EXACTLY: {'; '.join(details)}.",
         skin_instruction,
-        "STRICT CAMERA FRAMING: neck-down full-body reference, portrait orientation, zoomed out. Top edge crosses the base of the neck above both collarbones. Both shoulders, entire torso, pelvis, both complete legs, ankles, and both complete feet are inside the frame. Feet sit near the bottom margin. No head, scalp, face, facial hair, beard, mustache, sideburns, or head hair is visible anywhere in the image; no hair hangs down from outside the frame. No waist crop, no knee crop, no missing feet.",
         "DEFINED REFERENCE POSE: relaxed anatomical A-pose facing the camera squarely. Stand upright with the spine and pelvis neutral, shoulders level and relaxed, feet hip-width apart and fully planted, toes pointing forward with only a slight natural outward angle, body weight distributed evenly across both legs, and knees straight but not locked. Hold both arms naturally 10 to 15 degrees away from the torso with soft elbows, palms facing inward toward the thighs, wrists neutral, and fingers gently separated. Keep the torso, waist, hips, hands, and inner leg contours clearly visible and unobscured.",
         "Clean healthy intact living skin with natural pores, subtle tonal variation, and uninterrupted soft-tissue transitions. Uniform natural skin surface without embedded objects, debris, colored spots, lesions, mosaic texture, or body paint. Normal human joints with no panel lines.",
         "Plain seamless neutral-gray studio background, visually separate from the body, no patterned wall, no camouflage, no reflected texture on skin.",

@@ -21,6 +21,12 @@ class ImageStudioBodyPromptTests(unittest.TestCase):
         self.assertIn("feet hip-width apart", prompt)
         self.assertIn("weight distributed evenly across both legs", prompt)
         self.assertIn("palms facing inward", prompt)
+        self.assertIn("extreme long shot", prompt)
+        self.assertIn("all ten toes", prompt)
+        self.assertIn("no more than 85 percent", prompt)
+        self.assertIn("vertical canvas", prompt)
+        self.assertNotIn("portrait orientation", prompt)
+        self.assertLess(prompt.index("STRICT CAMERA FRAMING"), prompt.index("SELECTED BODY TRAITS"))
 
     def test_explicit_pubic_hair_color_overrides_inheritance(self):
         prompt = compile_body_preview_prompt(
