@@ -672,6 +672,7 @@ export function ImageStudio({
   initialInterviewOpen = false,
   initialInterviewStep = 0,
   initialFaceSeedReviewOpen = false,
+  initialCharacterProfileId = "",
   initialGenerationProgressOpen = false,
   initialGenerationKind = "face",
   runtimeStatus = null,
@@ -697,6 +698,7 @@ export function ImageStudio({
   onCreateFaceSeedBatch,
   onRefreshData,
   onRefreshGeneration,
+  onStudioRouteChange,
   onOpenLegacy,
   onClose,
 }) {
@@ -732,7 +734,7 @@ export function ImageStudio({
   const [faceFeatureSelections, setFaceFeatureSelections] = useState({});
   const [faceCustomDetails, setFaceCustomDetails] = useState("");
   const [draftSaveMessage, setDraftSaveMessage] = useState("");
-  const [characterProfileId, setCharacterProfileId] = useState("");
+  const [characterProfileId, setCharacterProfileId] = useState(initialCharacterProfileId);
   const [facePromptDraft, setFacePromptDraft] = useState("");
   const [faceTweakInstruction, setFaceTweakInstruction] = useState("");
   const [faceSeedLocked, setFaceSeedLocked] = useState(false);
@@ -893,6 +895,34 @@ export function ImageStudio({
     : Number.isFinite(modalProgressValue) && Number.isFinite(modalProgressMax) && modalProgressMax > 0
       ? Math.max(0, Math.min(100, (modalProgressValue / modalProgressMax) * 100))
       : 0;
+
+  useEffect(() => {
+    onStudioRouteChange?.({
+      creationType,
+      characterPath,
+      templateId: selectedTemplateId,
+      profileId: characterProfileId,
+      interviewStep,
+      creativeSetupOpen,
+      interviewOpen,
+      progressKind: generationProgressOpen ? generationKind : "",
+    });
+  }, [creationType, characterPath, selectedTemplateId, characterProfileId, interviewStep, creativeSetupOpen, interviewOpen, generationProgressOpen, generationKind]);
+
+  useEffect(() => {
+    if (!initialCharacterProfileId || !characterProfiles.length || characterBrief.name) return;
+    const profile = characterProfiles.find((item) => String(item?.profile_id || "") === String(initialCharacterProfileId));
+    const savedBrief = characterDraftBrief(profile);
+    if (!profile || !savedBrief) return;
+    const savedFeatures = characterDraftFeatureCatalog(profile);
+    const savedBodyFeatures = characterDraftBodyFeatureCatalog(profile);
+    setCharacterBrief((current) => ({ ...current, ...savedBrief }));
+    setFaceFeatureSelections(savedFeatures?.selections || inferFaceFeatureSelections(savedBrief.appearance, faceFeatureCatalog));
+    setFaceCustomDetails(savedFeatures?.custom_details || "");
+    setFacePromptDraft(savedFeatures?.llm_refinement || "");
+    setBodyFeatureSelections(savedBodyFeatures?.selections || {});
+    setBodyCustomDetails(savedBodyFeatures?.custom_details || "");
+  }, [initialCharacterProfileId, characterProfiles, faceFeatureCatalog, characterBrief.name]);
 
   useEffect(() => {
     const batchId = String(faceSeedBatch?.batch_id || "");

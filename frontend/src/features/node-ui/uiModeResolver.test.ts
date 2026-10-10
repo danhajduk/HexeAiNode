@@ -4,10 +4,12 @@ import { resolveUiMode, resolveUiRouteIntent } from "./uiModeResolver";
 import {
   buildAvatarGenerationProfileRoute,
   buildImageStudioRoute,
+  buildImageStudioStateRoute,
   buildOperationalRoute,
   buildSetupRoute,
   isProviderSetupRoute,
   isImageStudioRoute,
+  resolveImageStudioRouteState,
   isSetupRoute,
   resolveAvatarGenerationDetailTab,
   resolveAvatarGenerationProfileId,
@@ -100,6 +102,31 @@ describe("uiRoutes", () => {
     expect(buildAvatarGenerationProfileRoute("Hexe", "head_face")).toBe("#/dashboard/avatar_generation/Hexe/Face");
     expect(buildOperationalRoute("diagnostics")).toBe("#/dashboard/diagnostics");
     expect(buildImageStudioRoute()).toBe("#/image-studio");
+  });
+
+  it("round-trips Image Studio page and job state through the URL", () => {
+    const route = buildImageStudioStateRoute({
+      creationType: "character",
+      characterPath: "create_new",
+      templateId: "template.avatar",
+      profileId: "Hexe Main",
+      interviewStep: 2,
+      creativeSetupOpen: true,
+      interviewOpen: true,
+      progressKind: "body",
+    });
+
+    expect(isImageStudioRoute(route)).toBe(true);
+    expect(resolveImageStudioRouteState(route)).toEqual({
+      creationType: "character",
+      characterPath: "create_new",
+      templateId: "template.avatar",
+      profileId: "Hexe Main",
+      interviewStep: 2,
+      creativeSetupOpen: true,
+      interviewOpen: true,
+      progressKind: "body",
+    });
   });
 
   it("resolves operational sections and setup helpers", () => {

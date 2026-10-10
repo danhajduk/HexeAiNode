@@ -78,9 +78,52 @@ export function buildImageStudioRoute(): string {
   return "#/image-studio";
 }
 
+export type ImageStudioRouteState = {
+  creationType?: string;
+  characterPath?: string;
+  templateId?: string;
+  profileId?: string;
+  interviewStep?: number;
+  creativeSetupOpen?: boolean;
+  interviewOpen?: boolean;
+  progressKind?: "face" | "body" | "";
+};
+
+export function buildImageStudioStateRoute(state: ImageStudioRouteState = {}): string {
+  const params = new URLSearchParams();
+  if (state.creationType) params.set("type", state.creationType);
+  if (state.characterPath) params.set("path", state.characterPath);
+  if (state.templateId) params.set("template", state.templateId);
+  if (state.profileId) params.set("profile", state.profileId);
+  if (Number.isInteger(state.interviewStep) && Number(state.interviewStep) >= 0) params.set("step", String(state.interviewStep));
+  if (state.creativeSetupOpen) params.set("setup", "1");
+  if (state.interviewOpen) params.set("interview", "1");
+  if (state.progressKind === "face" || state.progressKind === "body") params.set("progress", state.progressKind);
+  const query = params.toString();
+  return `${buildImageStudioRoute()}${query ? `?${query}` : ""}`;
+}
+
+export function resolveImageStudioRouteState(routeHash?: string | null): ImageStudioRouteState {
+  const raw = String(routeHash || "").trim();
+  const query = raw.includes("?") ? raw.slice(raw.indexOf("?") + 1) : "";
+  const params = new URLSearchParams(query);
+  const step = Number.parseInt(params.get("step") || "", 10);
+  const progress = params.get("progress") || "";
+  return {
+    creationType: params.get("type") || "",
+    characterPath: params.get("path") || "",
+    templateId: params.get("template") || "",
+    profileId: params.get("profile") || "",
+    interviewStep: Number.isInteger(step) && step >= 0 ? step : 0,
+    creativeSetupOpen: params.get("setup") === "1",
+    interviewOpen: params.get("interview") === "1",
+    progressKind: progress === "face" || progress === "body" ? progress : "",
+  };
+}
+
 export function isImageStudioRoute(routeHash?: string | null): boolean {
   const normalized = String(routeHash || "").trim().toLowerCase();
-  return normalized === buildImageStudioRoute() || normalized.startsWith(`${buildImageStudioRoute()}/`);
+  return normalized === buildImageStudioRoute() || normalized.startsWith(`${buildImageStudioRoute()}/`) || normalized.startsWith(`${buildImageStudioRoute()}?`);
 }
 
 export function buildAvatarGenerationProfileRoute(

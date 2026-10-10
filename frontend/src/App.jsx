@@ -9,6 +9,7 @@ import { resolveUiMode } from "./features/node-ui/uiModeResolver";
 import {
   buildOperationalRoute,
   buildImageStudioRoute,
+  buildImageStudioStateRoute,
   buildAvatarGenerationProfileRoute,
   buildSetupRoute,
   resolveDefaultRouteHashForMode,
@@ -16,6 +17,7 @@ import {
   resolveAvatarGenerationProfileId,
   resolveOperationalSection,
   isImageStudioRoute,
+  resolveImageStudioRouteState,
   shouldArmSetupCompletionRedirect,
   shouldAutoRedirectCompletedSetup,
 } from "./features/node-ui/uiRoutes";
@@ -154,6 +156,7 @@ export default function App() {
   const setupCompletionRedirectArmedRef = useRef(false);
   const [routeHash, setRouteHash] = useState(() => window.location.hash || "#/");
   const imageStudioOpen = isImageStudioRoute(routeHash);
+  const imageStudioRouteState = resolveImageStudioRouteState(routeHash);
   const [backendStatus, setBackendStatus] = useState("loading");
   const [pendingApprovalUrl, setPendingApprovalUrl] = useState("");
   const [nodeId, setNodeId] = useState("");
@@ -3115,6 +3118,15 @@ export default function App() {
 
       {imageStudioOpen ? (
         <ImageStudio
+          initialCreationType={imageStudioRouteState.creationType}
+          initialCharacterPath={imageStudioRouteState.characterPath}
+          initialSelectedTemplateId={imageStudioRouteState.templateId}
+          initialCreativeSetupOpen={imageStudioRouteState.creativeSetupOpen}
+          initialInterviewOpen={imageStudioRouteState.interviewOpen}
+          initialInterviewStep={imageStudioRouteState.interviewStep}
+          initialCharacterProfileId={imageStudioRouteState.profileId}
+          initialGenerationProgressOpen={Boolean(imageStudioRouteState.progressKind)}
+          initialGenerationKind={imageStudioRouteState.progressKind || "face"}
           templates={Array.isArray(comfyuiTemplateCatalogPayload?.templates) ? comfyuiTemplateCatalogPayload.templates : []}
           faceFeatureCatalog={imageStudioFaceFeatureCatalog}
           runtimeStatus={manualGenerationRuntimeStatus}
@@ -3134,6 +3146,13 @@ export default function App() {
           characterSaveBusy={avatarGenerationBusy}
           onRefreshData={loadImageStudioData}
           onRefreshGeneration={refreshImageStudioFacePreviewActivity}
+          onStudioRouteChange={(state) => {
+            const nextRoute = buildImageStudioStateRoute(state);
+            if (nextRoute !== window.location.hash) {
+              window.history.replaceState(null, "", nextRoute);
+              setRouteHash(nextRoute);
+            }
+          }}
           onImprovePrompt={onImproveManualImagePrompt}
           onInterviewQuestion={onCharacterInterviewQuestion}
           onSaveCharacterDraft={onSaveAvatarProfile}
