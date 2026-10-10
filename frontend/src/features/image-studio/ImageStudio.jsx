@@ -284,6 +284,7 @@ function buildBodyPreviewPayload(characterBrief, bodySelections, faceSelections,
       age_group: characterBrief.age_group,
       gender_identity: characterBrief.gender_identity,
       visual_style: characterBrief.visual_style,
+      content_rating: characterBrief.content_rating,
     },
   };
 }

@@ -516,7 +516,7 @@ describe("ImageStudio", () => {
       body_feature_selections: { build: ["athletic"], pubic_hair: ["natural"] },
       face_feature_selections: { "skin tone": ["olive"], "hair color": ["auburn"] },
       body_custom_details: "long fingers",
-      character_context: { age_group: "adult (18+)", gender_identity: "female", visual_style: "realistic" },
+      character_context: { age_group: "adult (18+)", gender_identity: "female", visual_style: "realistic", content_rating: undefined },
     });
   });
 

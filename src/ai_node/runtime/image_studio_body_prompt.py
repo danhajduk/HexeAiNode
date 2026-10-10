@@ -38,6 +38,13 @@ STYLE_PROMPTS = {
 }
 
 
+def body_preview_checkpoint(selections: dict | None) -> str:
+    selections = selections if isinstance(selections, dict) else {}
+    if selections.get("vulva_description") or selections.get("penis_description"):
+        return "lustifySDXLNSFWSFW_v20.safetensors"
+    return "RealVisXL_V5.0_fp16.safetensors"
+
+
 def compile_body_preview_prompt(*, selections: dict | None, face_selections: dict | None, custom_details: str | None, context: dict | None) -> str:
     selections = selections if isinstance(selections, dict) else {}
     face_selections = face_selections if isinstance(face_selections, dict) else {}
@@ -57,7 +64,8 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
                 if group_id == "pubic_hair_color" and value == "inherit from head hair":
                     continue
                 raise ValueError(f"body_feature_option_invalid:{group_id}:{value}")
-            details.append(f"{group_id.replace('_', ' ')}: {description}")
+            emphasis = "1.45" if group_id in {"body_traits", "build", "breast_size", "breast_shape", "vulva_description", "penis_description"} else "1.25"
+            details.append(f"({group_id.replace('_', ' ')}: {description}:{emphasis})")
 
     pubic_hair = selections.get("pubic_hair") or []
     explicit_pubic_color = selections.get("pubic_hair_color") or []
@@ -73,9 +81,9 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
     return "\n".join(filter(None, (
         "Studio image of exactly one living human person. The camera frame begins at the collarbones and base of the neck; the person's head is naturally above and fully outside the image boundary.",
         f"Character body: {context.get('age_group', '')} {context.get('gender_identity', '')}.",
-        f"BODY PROPORTIONS: {'; '.join(details)}.",
+        f"SELECTED BODY TRAITS — MUST MATCH EXACTLY: {'; '.join(details)}.",
         skin_instruction,
-        "Composition: natural camera crop at the base of the neck, showing the complete body from both shoulders through both feet. Keep the head naturally outside the canvas without creating a severed or artificial neck.",
+        "STRICT CAMERA FRAMING: neck-down full-body reference, portrait orientation, zoomed out. Top edge crosses the base of the neck above both collarbones. Both shoulders, entire torso, pelvis, both complete legs, ankles, and both complete feet are inside the frame. Feet sit near the bottom margin. No head, no waist crop, no knee crop, no missing feet.",
         "Neutral standing body-reference posture, arms relaxed and separated from the torso, selected proportions clearly visible and unobscured.",
         "Authentic living skin with pores, fine body hair, subtle veins, small natural imperfections, and uninterrupted soft-tissue transitions. Normal human joints with no panel lines.",
         STYLE_PROMPTS.get(style, STYLE_PROMPTS["semi-realistic"]),

@@ -66,7 +66,7 @@ from ai_node.runtime.capability_resolver import load_task_graph
 from ai_node.runtime.execution_telemetry import ExecutionTelemetryPublisher
 from ai_node.runtime.execution_queue import ExecutionQueueService
 from ai_node.runtime.prompt_construction import render_prompt_template
-from ai_node.runtime.image_studio_body_prompt import compile_body_preview_prompt
+from ai_node.runtime.image_studio_body_prompt import body_preview_checkpoint, compile_body_preview_prompt
 from ai_node.runtime.task_execution_service import TaskExecutionService
 from ai_node.runtime.user_message_publisher import preview_completed_user_message
 from ai_node.runtime.capability_declaration_runner import (
@@ -3204,6 +3204,8 @@ class NodeControlState:
         cfg = float(defaults.get("cfg") or 1.2)
         denoise = float(defaults.get("denoise") or 1.0)
         requested_seed = self._coerce_manual_image_seed(payload.seed) if payload.seed is not None else None
+        selected_body_features = payload.body_feature_selections if isinstance(payload.body_feature_selections, dict) else {}
+        checkpoint = body_preview_checkpoint(selected_body_features)
         avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
         submitted_at = datetime.now(timezone.utc).isoformat()
         generation = await self.submit_manual_image_generation(
@@ -3220,7 +3222,7 @@ class NodeControlState:
                 batch_count=1,
                 seed=requested_seed,
                 randomize_seed=requested_seed is None,
-                template_variables={"avatar_name": avatar_name},
+                template_variables={"avatar_name": avatar_name, "checkpoint": checkpoint},
             )
         )
         now = datetime.now(timezone.utc).isoformat()
@@ -3243,6 +3245,7 @@ class NodeControlState:
             "body_feature_selections": payload.body_feature_selections,
             "prompt_parts": prompt_parts,
             "negative_prompt": negative_prompt,
+            "checkpoint": checkpoint,
             "submitted_at": submitted_at,
             "created_at": now,
         }
