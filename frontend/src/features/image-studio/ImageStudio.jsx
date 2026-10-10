@@ -922,9 +922,10 @@ export function ImageStudio({
   const adultIntimateFeaturesEnabled = characterBrief.age_group === "adult (18+)" && characterBrief.content_rating === "NSFW adult content";
   const visibleBodyFeatureGroups = BODY_FEATURE_GROUPS.filter((group) => {
     if (group.intimate && !adultIntimateFeaturesEnabled) return false;
-    if (group.id === "breast_size") return false;
+    if (["breast_size", "breast_shape"].includes(group.id)) return false;
     return true;
   });
+  const breastShapeGroup = BODY_FEATURE_GROUPS.find((group) => group.id === "breast_shape");
   const currentInterviewAnswer = activeInterviewStep.id === "name_concept"
     ? [
       characterBrief.name,
@@ -1888,7 +1889,15 @@ export function ImageStudio({
                     ))}
                     {adultIntimateFeaturesEnabled ? (
                       <fieldset className="image-studio-magnitude-control">
-                        <legend>Breast size magnitude<small>Optional numeric volume; breast shape remains a separate selection.</small></legend>
+                        <legend>Breast shape &amp; size<small>Choose the contour and optionally set numeric volume in one combined definition.</small></legend>
+                        <span className="image-studio-magnitude-label">Shape</span>
+                        <div className="image-studio-option-chips">
+                          {breastShapeGroup.options.map((option) => {
+                            const selected = (bodyFeatureSelections.breast_shape || []).includes(option);
+                            return <button className={selected ? "is-selected" : ""} type="button" aria-pressed={selected} key={option} onClick={() => selectBodyFeature(breastShapeGroup, option)}>{option}</button>;
+                          })}
+                        </div>
+                        <span className="image-studio-magnitude-label">Size magnitude</span>
                         <div className="image-studio-magnitude-row">
                           <input
                             aria-label="Breast size magnitude"

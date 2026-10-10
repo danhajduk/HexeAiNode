@@ -393,8 +393,10 @@ describe("ImageStudio", () => {
       />
     );
 
-    expect(femaleMarkup).toContain("Breast size");
-    expect(femaleMarkup).toContain("Breast size magnitude");
+    expect(femaleMarkup).toContain("Breast shape &amp; size");
+    expect(femaleMarkup).toContain("Size magnitude");
+    expect(femaleMarkup).toContain("teardrop");
+    expect(femaleMarkup.match(/image-studio-magnitude-control/g)).toHaveLength(1);
     expect(femaleMarkup).toContain("Automatic");
     expect(femaleMarkup).toContain("Pubic hair");
     expect(femaleMarkup).toContain("Pubic hair color");
@@ -402,7 +404,7 @@ describe("ImageStudio", () => {
     expect(femaleMarkup).toContain("External genital anatomy — vulva");
     expect(femaleMarkup).toContain("External genital anatomy — penis");
     expect(femaleMarkup).toContain("mutually exclusive");
-    expect(maleMarkup).toContain("Breast size");
+    expect(maleMarkup).toContain("Breast shape &amp; size");
     expect(maleMarkup).toContain("External genital anatomy — penis");
     expect(maleMarkup).toContain("External genital anatomy — vulva");
     expect(sfwMarkup).not.toContain("Breast size");

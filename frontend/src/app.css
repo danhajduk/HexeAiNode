@@ -3555,6 +3555,16 @@
   grid-column: 1 / -1;
 }
 
+.image-studio-magnitude-label {
+  display: block;
+  margin: 12px 0 7px;
+  color: hsl(var(--sx-muted));
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .image-studio-magnitude-row {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(150px, auto) auto;
