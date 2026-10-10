@@ -10,6 +10,7 @@ import { RuntimeServicesCard } from "./cards/RuntimeServicesCard";
 import { LocalResidencyCard } from "./cards/LocalResidencyCard";
 import { ManualImageGenerationCard } from "./cards/ManualImageGenerationCard";
 import { AvatarGenerationCard } from "./cards/AvatarGenerationCard";
+import { SyntheticAdultStudioCard } from "./cards/SyntheticAdultStudioCard";
 import { RecentActivityCard } from "./cards/RecentActivityCard";
 import { ClientCostCard } from "./cards/ClientCostCard";
 import { OperationalActionsCard } from "./cards/OperationalActionsCard";
@@ -116,6 +117,7 @@ export function OperationalDashboard({
   runtimeServicesProps,
   manualImageGenerationProps,
   avatarGenerationProps,
+  syntheticAdultStudioProps,
   operationalActions,
   activityItems = [],
   clientCostItems = [],
@@ -223,6 +225,8 @@ export function OperationalDashboard({
         {currentSection === "manual_image" ? <ManualImageGenerationCard {...manualImageGenerationProps} /> : null}
 
         {currentSection === "avatar_generation" ? <AvatarGenerationCard {...avatarGenerationProps} /> : null}
+
+        {currentSection === "synthetic_adult_studio" ? <SyntheticAdultStudioCard {...syntheticAdultStudioProps} /> : null}
 
         {currentSection === "activity" ? (
           <>

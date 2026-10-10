@@ -263,6 +263,17 @@ hexe/avatar_base_unclothed/{{avatar_name}}_seed{{seed}}
 
 The `_rgb` file is a fallback for background-removal OOM or node failure. If the transparent output is written successfully, the node cleans up the `_rgb` file and its LoRA sidecars from manual output listings.
 
+## Synthetic Adult Studio
+
+The dashboard route `/dashboard/synthetic_adult_studio` provides a focused local
+workflow for fully synthetic avatars represented as adults age 25 or older. It
+uploads one body reference into the manual avatar library, uses that image for
+both PuLID identity guidance and Depth Anything/ControlNet body guidance, and
+submits one to twelve randomized prompt variations through
+`template.synthetic_adult_body_reference.realvisxl.v1`. The screen exposes output
+size, batch count, seed, identity strength, and body/pose strength, and requires
+an explicit synthetic-adult confirmation before submission.
+
 ## Manual Progress Status
 
 The manual image status API exposes `latest_job.progress_detail` and mirrors it into

@@ -2654,6 +2654,7 @@ export default function App() {
     ["image_studio", "Image Studio ↗"],
     ["manual_image", "Manual Images (Legacy)"],
     ["avatar_generation", "Avatar Generation"],
+    ["synthetic_adult_studio", "Synthetic Adult Studio"],
     ["activity", "Activity"],
     ["clients", "Clients"],
     ["scheduled", "Scheduled Tasks"],
@@ -2921,6 +2922,18 @@ export default function App() {
       onBackToProfiles: () => {
         window.location.hash = buildOperationalRoute("avatar_generation");
       },
+      onRefresh: loadStatus,
+    },
+    syntheticAdultStudioProps: {
+      payload: {
+        ...(manualImageGenerationPayload || {}),
+        templates: Array.isArray(comfyuiTemplateCatalogPayload?.templates) ? comfyuiTemplateCatalogPayload.templates : [],
+      },
+      busy: manualImageGenerationBusy,
+      result: manualImageGenerationResult,
+      apiBase: getApiBase(),
+      onUploadReference: onUploadManualImageReference,
+      onSubmit: onSubmitManualImageGeneration,
       onRefresh: loadStatus,
     },
     operationalActions,

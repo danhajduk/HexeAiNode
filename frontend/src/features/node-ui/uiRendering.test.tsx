@@ -572,6 +572,30 @@ describe("OperationalDashboard", () => {
     expect(markup).not.toContain("Manual Image Generation");
   });
 
+  it("shows the dedicated synthetic adult studio", () => {
+    const markup = renderToStaticMarkup(
+      <OperationalDashboard
+        {...buildOperationalProps({
+          currentSection: "synthetic_adult_studio",
+          syntheticAdultStudioProps: {
+            payload: {
+              templates: [{ template_id: "template.synthetic_adult_body_reference.realvisxl.v1" }],
+              outputs: [],
+              latest_job: {},
+            },
+          },
+        })}
+      />
+    );
+
+    expect(markup).toContain("Synthetic Adult Studio");
+    expect(markup).toContain("Choose Body Reference");
+    expect(markup).toContain("Identity strength");
+    expect(markup).toContain("Body/pose strength");
+    expect(markup).toContain("fully synthetic avatar represented as age 25+");
+    expect(markup).toContain("Generate Images");
+  });
+
   it("shows saved avatar profiles as cards on the second avatar generation tab", () => {
     const markup = renderToStaticMarkup(
       <OperationalDashboard

@@ -5,6 +5,7 @@ export type OperationalSection =
   | "jobs_queue"
   | "manual_image"
   | "avatar_generation"
+  | "synthetic_adult_studio"
   | "activity"
   | "clients"
   | "scheduled"
@@ -21,6 +22,7 @@ const OPERATIONAL_SECTIONS: OperationalSection[] = [
   "jobs_queue",
   "manual_image",
   "avatar_generation",
+  "synthetic_adult_studio",
   "activity",
   "clients",
   "scheduled",

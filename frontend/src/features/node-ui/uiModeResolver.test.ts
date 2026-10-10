@@ -95,6 +95,7 @@ describe("uiRoutes", () => {
     expect(buildOperationalRoute("manual_image")).toBe("#/dashboard/manual_image");
     expect(buildOperationalRoute("jobs_queue")).toBe("#/dashboard/jobs_queue");
     expect(buildOperationalRoute("avatar_generation")).toBe("#/dashboard/avatar_generation");
+    expect(buildOperationalRoute("synthetic_adult_studio")).toBe("#/dashboard/synthetic_adult_studio");
     expect(buildAvatarGenerationProfileRoute("Jane Avatar")).toBe("#/dashboard/avatar_generation/Jane%20Avatar");
     expect(buildAvatarGenerationProfileRoute("Hexe", "head_face")).toBe("#/dashboard/avatar_generation/Hexe/Face");
     expect(buildOperationalRoute("diagnostics")).toBe("#/dashboard/diagnostics");
@@ -106,6 +107,7 @@ describe("uiRoutes", () => {
     expect(resolveOperationalSection("#/dashboard/jobs_queue")).toBe("jobs_queue");
     expect(resolveOperationalSection("#/dashboard/manual_image")).toBe("manual_image");
     expect(resolveOperationalSection("#/dashboard/avatar_generation")).toBe("avatar_generation");
+    expect(resolveOperationalSection("#/dashboard/synthetic_adult_studio")).toBe("synthetic_adult_studio");
     expect(resolveOperationalSection("#/dashboard/avatar_generation/Jane_Avatar")).toBe("avatar_generation");
     expect(resolveAvatarGenerationProfileId("#/dashboard/avatar_generation/Jane%20Avatar")).toBe("Jane Avatar");
     expect(resolveAvatarGenerationProfileId("#/dashboard/avatar_generation/Hexe/Face")).toBe("Hexe");

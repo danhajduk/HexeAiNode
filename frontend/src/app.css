@@ -1177,6 +1177,29 @@
   gap: 12px;
 }
 
+.synthetic-adult-studio-card {
+  display: grid;
+  gap: 18px;
+}
+
+.synthetic-adult-reference-preview {
+  display: block;
+  width: min(100%, 360px);
+  max-height: 520px;
+  margin-top: 12px;
+  object-fit: contain;
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: 12px;
+  background: color-mix(in oklab, hsl(var(--sx-panel)) 85%, black);
+}
+
+.synthetic-adult-studio-card .avatar-reference-card-grid img {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
 .avatar-reference-section {
   display: grid;
   gap: 10px;
