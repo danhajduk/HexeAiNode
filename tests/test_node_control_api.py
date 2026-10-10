@@ -4380,8 +4380,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         class _ReferenceServiceManager:
             def __init__(self, input_dir: str):
                 self.input_dir = input_dir
+                self.status_calls = 0
 
             def get_status(self):
+                self.status_calls += 1
                 return {
                     "comfyui_webui": {
                         "state": "running",
@@ -4408,6 +4410,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     data_base64=base64.b64encode(b"png-data").decode("ascii"),
                 )
             )
+            self.assertEqual(state._service_manager.status_calls, 1)
             status = state.manual_image_generation_status()
 
         reference = result["reference"]

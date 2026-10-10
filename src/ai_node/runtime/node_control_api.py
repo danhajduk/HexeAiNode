@@ -2388,8 +2388,12 @@ class NodeControlState:
         )
         return {
             "status": "uploaded",
-            "reference": self._manual_image_reference_payload(path=target_path, metadata=metadata),
-            "references": self._manual_image_references(limit=48),
+            "reference": self._manual_image_reference_payload(
+                path=target_path,
+                metadata=metadata,
+                references_root=references_root,
+            ),
+            "references": self._manual_image_references(limit=48, references_root=references_root),
         }
 
     def manual_image_reference_response(self, *, relative_path: str) -> FileResponse:
@@ -11394,17 +11398,26 @@ class NodeControlState:
             if updated != records:
                 self._write_image_artifact_retention_records_unlocked(updated)
 
-    def _manual_image_references(self, *, limit: int) -> list[dict]:
-        root = self._manual_image_reference_root()
+    def _manual_image_references(self, *, limit: int, references_root: Path | None = None) -> list[dict]:
+        root = references_root or self._manual_image_reference_root()
         if not root.exists():
             return []
         allowed_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
         files = [path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in allowed_suffixes]
         files.sort(key=lambda item: item.stat().st_mtime, reverse=True)
-        return [self._manual_image_reference_payload(path=path) for path in files[: max(int(limit), 1)]]
+        return [
+            self._manual_image_reference_payload(path=path, references_root=root)
+            for path in files[: max(int(limit), 1)]
+        ]
 
-    def _manual_image_reference_payload(self, *, path: Path, metadata: dict | None = None) -> dict:
-        root = self._manual_image_reference_root()
+    def _manual_image_reference_payload(
+        self,
+        *,
+        path: Path,
+        metadata: dict | None = None,
+        references_root: Path | None = None,
+    ) -> dict:
+        root = references_root or self._manual_image_reference_root()
         stat = path.stat()
         relative = path.relative_to(root).as_posix()
         if metadata is None:
