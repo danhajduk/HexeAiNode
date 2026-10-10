@@ -6051,7 +6051,7 @@ class NodeControlState:
             target_path = (target_dir / filename).resolve()
             if profile_dir not in target_path.parents:
                 raise ValueError("avatar_head_lora_dataset_path_invalid")
-            shutil.copyfile(output_path, target_path)
+            self._copy_manual_output_for_import(output_path=output_path, target_path=target_path)
             relative_name = f"{target_subdir}/{filename}"
             input_image = (target_path.relative_to(input_dir)).as_posix()
             url = f"/api/avatar-generation/profiles/{self._safe_filename_component(profile_dir.name)}/references/head_face/{relative_name}"
@@ -6076,6 +6076,7 @@ class NodeControlState:
             )
             updated_record["lora_meta"] = lora_meta
             self._write_avatar_head_lora_approved_dataset_meta(profile_dir=profile_dir, record=updated_record)
+            self._delete_imported_manual_output(output_path=output_path, output_dir=output_dir)
             updated_records.append(updated_record)
             changed = True
         ready_count = sum(1 for item in updated_records if str(item.get("status") or "") == "ready")
@@ -9088,7 +9089,7 @@ class NodeControlState:
             target_path = (preview_dir / filename).resolve()
             if profile_dir not in target_path.parents:
                 raise ValueError("avatar_upper_torso_preview_path_invalid")
-            shutil.copyfile(output_path, target_path)
+            self._copy_manual_output_for_import(output_path=output_path, target_path=target_path)
             relative_name = f"{target_subdir}/{filename}"
             source_output = output_path.relative_to(output_dir).as_posix() if output_dir in output_path.parents else str(output_path)
             sidecar = self._avatar_head_face_preview_sidecar(
@@ -9106,6 +9107,7 @@ class NodeControlState:
                 json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
+            self._delete_imported_manual_output(output_path=output_path, output_dir=output_dir)
             updated_history.append(
                 {
                     **preview,
@@ -9397,7 +9399,7 @@ class NodeControlState:
             target_path = (preview_dir / filename).resolve()
             if profile_dir not in target_path.parents:
                 raise ValueError("avatar_head_face_preview_path_invalid")
-            shutil.copyfile(output_path, target_path)
+            self._copy_manual_output_for_import(output_path=output_path, target_path=target_path)
             relative_name = f"{target_subdir}/{filename}"
             source_output = output_path.relative_to(output_dir).as_posix() if output_dir in output_path.parents else str(output_path)
             rgb_fallback = self._avatar_head_face_preview_is_rgb_fallback_path(path=output_path)
@@ -9425,6 +9427,7 @@ class NodeControlState:
                 json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
+            self._delete_imported_manual_output(output_path=output_path, output_dir=output_dir)
             completed_preview = {
                     **preview,
                     "status": "completed_with_fallback" if rgb_fallback and not skip_background_removal else "completed",
@@ -10051,8 +10054,8 @@ class NodeControlState:
         depth_path = (depth_dir / depth_filename).resolve()
         if profile_dir not in body_path.parents or profile_dir not in depth_path.parents:
             raise ValueError("avatar_body_depth_profile_path_invalid")
-        shutil.copyfile(nobg_output, body_path)
-        shutil.copyfile(depth_output, depth_path)
+        self._copy_manual_output_for_import(output_path=nobg_output, target_path=body_path)
+        self._copy_manual_output_for_import(output_path=depth_output, target_path=depth_path)
         source_filename = Path(str(item.get("source_filename") or "")).name
         source_name = str(item.get("source_name") or Path(source_filename).stem or "Body").strip()
         body_metadata = {
@@ -10086,6 +10089,9 @@ class NodeControlState:
         }
         body_path.with_suffix(body_path.suffix + ".json").write_text(json.dumps(body_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         depth_path.with_suffix(depth_path.suffix + ".json").write_text(json.dumps(depth_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        output_dir = self._manual_image_output_dir()
+        self._delete_imported_manual_output(output_path=nobg_output, output_dir=output_dir)
+        self._delete_imported_manual_output(output_path=depth_output, output_dir=output_dir)
         if replace_source_images and str(item.get("source_role") or "") == "body_depth" and source_filename and source_filename != body_filename:
             source_path = (profile_dir / "refs" / "body_depth" / source_filename).resolve()
             if profile_dir in source_path.parents and source_path.exists() and source_path.is_file():
@@ -11264,6 +11270,30 @@ class NodeControlState:
                 }
             )
         return outputs
+
+    def _delete_imported_manual_output(self, *, output_path: Path, output_dir: Path) -> None:
+        """Delete a ComfyUI output and its sidecars after a verified profile import."""
+        output_dir = output_dir.resolve()
+        output_path = output_path.resolve()
+        if output_dir not in output_path.parents:
+            raise ValueError("manual_image_import_source_outside_output_dir")
+        for path in (output_path, output_path.with_suffix(".txt"), output_path.with_suffix(".json")):
+            if not path.exists():
+                continue
+            relative = path.relative_to(output_dir).as_posix()
+            try:
+                path.unlink()
+            except PermissionError:
+                self._delete_manual_image_output_via_container(relative_path=relative)
+            if path.exists():
+                raise ValueError("manual_image_import_source_delete_failed")
+
+    @staticmethod
+    def _copy_manual_output_for_import(*, output_path: Path, target_path: Path) -> None:
+        """Copy an output into a profile and verify the complete payload before cleanup."""
+        shutil.copyfile(output_path, target_path)
+        if not target_path.is_file() or target_path.stat().st_size != output_path.stat().st_size:
+            raise ValueError("manual_image_import_copy_verification_failed")
 
     def cleanup_manual_image_outputs(self, *, now_timestamp: float | None = None) -> dict:
         output_dir = self._manual_image_output_dir()
