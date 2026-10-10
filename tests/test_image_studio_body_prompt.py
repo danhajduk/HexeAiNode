@@ -17,6 +17,10 @@ class ImageStudioBodyPromptTests(unittest.TestCase):
         self.assertIn("INHERITED FACE SKIN TONE: olive", prompt)
         self.assertIn("long fingers", prompt)
         self.assertIn("real living human person", prompt)
+        self.assertIn("relaxed anatomical A-pose", prompt)
+        self.assertIn("feet hip-width apart", prompt)
+        self.assertIn("weight distributed evenly across both legs", prompt)
+        self.assertIn("palms facing inward", prompt)
 
     def test_explicit_pubic_hair_color_overrides_inheritance(self):
         prompt = compile_body_preview_prompt(

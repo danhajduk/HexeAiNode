@@ -353,6 +353,9 @@ describe("ImageStudio", () => {
     expect(prompt).toContain("natural camera crop at the base of the neck");
     expect(prompt).toContain("head naturally outside the canvas");
     expect(prompt).toContain("skin with pores");
+    expect(prompt).toContain("relaxed anatomical A-pose");
+    expect(prompt).toContain("feet hip-width apart");
+    expect(prompt).toContain("palms inward");
     expect(prompt).not.toContain("bodysuit");
     expect(markup).toContain("Lock body seed");
     expect(markup).toContain("Leave unlocked to try a fresh composition");
