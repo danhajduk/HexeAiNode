@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, latestSavedFacePreview, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, latestSavedFacePreview, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -333,6 +333,10 @@ describe("ImageStudio", () => {
 
     expect(markup).toContain("Define the body foundation");
     expect(markup).toContain("Overall build");
+    expect(markup).toContain("Feminine / masculine traits");
+    expect(markup).toContain("pronounced feminine");
+    expect(markup).toContain("androgynous");
+    expect(markup).toContain("pronounced masculine");
     expect(markup).toContain("Limb proportions");
     expect(markup).toContain("Neck-down full-body foundation");
     expect(markup).toContain("424242");
@@ -343,6 +347,13 @@ describe("ImageStudio", () => {
     expect(prompt).toContain("top image boundary at the base of the neck");
     expect(prompt).toContain("entire head remains outside the canvas");
     expect(prompt).not.toContain("bodysuit");
+  });
+
+  it("expands body-trait selections into explicit anatomy instructions", () => {
+    expect(composeBodyDescription({ body_traits: ["pronounced feminine"], build: ["curvy"] }))
+      .toContain("fuller natural chest silhouette, narrow defined waist, rounded wider hips");
+    expect(composeBodyDescription({ body_traits: ["masculine"], build: ["athletic"] }))
+      .toContain("broader shoulders, a flatter chest silhouette, straighter waist, narrower hips");
   });
 
   it("shows a closable live generation progress dialog", () => {

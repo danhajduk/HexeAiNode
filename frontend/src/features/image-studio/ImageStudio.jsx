@@ -75,6 +75,7 @@ const CHARACTER_FOUNDATION_GROUPS = [
 ];
 
 const BODY_FEATURE_GROUPS = [
+  { id: "body_traits", label: "Feminine / masculine traits", options: ["pronounced feminine", "feminine", "androgynous", "masculine", "pronounced masculine"] },
   { id: "height", label: "Height", options: ["short", "below average", "average", "tall", "very tall"] },
   { id: "build", label: "Overall build", options: ["slender", "lean", "average", "athletic", "curvy", "stocky", "heavyset"] },
   { id: "shoulders", label: "Shoulders", options: ["narrow", "balanced", "broad", "softly rounded", "angular"] },
@@ -85,8 +86,21 @@ const BODY_FEATURE_GROUPS = [
   { id: "musculature", label: "Musculature", options: ["soft definition", "lightly toned", "athletic definition", "muscular", "strongly muscular"] },
 ];
 
+const BODY_FEATURE_PROMPT_DESCRIPTIONS = {
+  body_traits: {
+    "pronounced feminine": "pronounced feminine body traits with a fuller natural chest silhouette, narrow defined waist, rounded wider hips, fuller thighs, and soft body contours",
+    feminine: "feminine body traits with a natural chest silhouette, defined waist, rounded hips, and softly curved body contours",
+    androgynous: "androgynous body traits with a neutral chest silhouette, balanced shoulders and hips, subtle waist definition, and even body contours",
+    masculine: "masculine body traits with broader shoulders, a flatter chest silhouette, straighter waist, narrower hips, and firmer body contours",
+    "pronounced masculine": "pronounced masculine body traits with broad shoulders and chest, strong upper-body taper, straight narrow waist and hips, and angular muscular contours",
+  },
+};
+
 function composeBodyDescription(selections = {}, customDetails = "") {
-  const parts = BODY_FEATURE_GROUPS.flatMap((group) => (selections[group.id] || []).map((value) => `${group.label.toLowerCase()}: ${value}`));
+  const parts = BODY_FEATURE_GROUPS.flatMap((group) => (selections[group.id] || []).map((value) => {
+    const description = BODY_FEATURE_PROMPT_DESCRIPTIONS[group.id]?.[value] || value;
+    return `${group.label.toLowerCase()}: ${description}`;
+  }));
   if (String(customDetails || "").trim()) parts.push(String(customDetails).trim());
   return parts.join("; ");
 }
@@ -1711,4 +1725,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
