@@ -455,6 +455,16 @@ describe("ImageStudio", () => {
     expect(anime).toContain("BODY PROPORTIONS: curvy");
   });
 
+  it("inherits the selected face skin tone in the body prompt", () => {
+    const prompt = buildBodyPreviewPrompt(
+      { age_group: "adult (18+)", gender_identity: "female", visual_style: "realistic", body: "athletic" },
+      { "skin tone": ["olive"] },
+    );
+
+    expect(prompt).toContain("INHERITED FACE SKIN TONE: olive natural skin tone with realistic tonal variation");
+    expect(prompt).toContain("across the neck and entire body");
+  });
+
   it("forces SFW when an adult character is changed to an under-18 age group", () => {
     expect(applyCharacterFoundation(
       { age_group: "adult (18+)", content_rating: "NSFW adult content" },

@@ -238,13 +238,20 @@ const BODY_PREVIEW_STYLE_PROMPTS = {
   anime: "Clean anime character body design, intact continuous skin, coherent anime anatomy and proportions, smooth cel-shaded rendering, polished character reference art.",
 };
 
-function buildBodyPreviewPrompt(characterBrief) {
+function buildBodyPreviewPrompt(characterBrief, faceSelections = {}, faceCatalog = null) {
   const visualStyle = String(characterBrief.visual_style || "semi-realistic").trim().toLowerCase();
   const stylePrompt = BODY_PREVIEW_STYLE_PROMPTS[visualStyle] || BODY_PREVIEW_STYLE_PROMPTS["semi-realistic"];
+  const selectedSkinTone = Array.isArray(faceSelections["skin tone"])
+    ? faceSelections["skin tone"][0]
+    : faceSelections["skin tone"];
+  const skinTonePrompt = selectedSkinTone
+    ? catalogFeaturePromptDescription(faceCatalog, "skin tone", selectedSkinTone)
+    : "";
   return [
     "Studio image of exactly one living human person. The camera frame begins at the collarbones and base of the neck; the person's head is naturally above and fully outside the image boundary.",
     `Character body: ${characterBrief.age_group} ${characterBrief.gender_identity}.`,
     `BODY PROPORTIONS: ${characterBrief.body}.`,
+    skinTonePrompt && `INHERITED FACE SKIN TONE: ${skinTonePrompt}. Match this skin tone consistently across the neck and entire body, with natural regional variation from lighting and circulation only.`,
     "Composition: natural camera crop at the base of the neck, showing the complete body from both shoulders through both feet. Keep the head naturally outside the canvas without creating a severed or artificial neck.",
     "Neutral standing body-reference posture, shoulders level, arms relaxed and separated from the torso, with the selected body proportions clearly visible and unobscured.",
     "Authentic living skin with pores, fine body hair, subtle veins, small natural imperfections, and uninterrupted soft-tissue transitions. Normal human elbows, wrists, hips, knees, and ankles with no molded joints or panel lines.",
@@ -1330,7 +1337,7 @@ export function ImageStudio({
     if (!profileId) return null;
     setDraftSaveMessage("Character saved. Submitting body reference preview…");
     const result = await onGenerateBodyPreview(profileId, {
-      prompt: buildBodyPreviewPrompt(characterBrief),
+      prompt: buildBodyPreviewPrompt(characterBrief, faceFeatureSelections, faceFeatureCatalog),
       negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, hair, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, dramatic pose, text, watermark, child, teen, underage",
       seed: bodySeedInput.trim() || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null ? bodyPreviewSeed : null),
       lock_seed: Boolean(bodySeedInput.trim()) || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null),
