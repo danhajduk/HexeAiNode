@@ -5,7 +5,7 @@ function getProxiedNodeApiBase() {
     return "";
   }
   const nodeId = decodeURIComponent(match[1]);
-  return `${window.location.origin}/api/nodes/${nodeId}`;
+  return `${window.location.origin}/api/nodes/proxy/${nodeId}`;
 }
 
 export function getApiBase() {
