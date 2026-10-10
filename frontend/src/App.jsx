@@ -251,6 +251,7 @@ export default function App() {
 
   async function loadStatus() {
     const lastUpdatedAt = new Date().toISOString();
+    const includeAvatarGeneration = imageStudioOpen || resolveOperationalSection(routeHash) === "avatar_generation";
     let nodePayload = null;
     try {
       nodePayload = await apiGet("/api/node/status");
@@ -336,7 +337,7 @@ export default function App() {
       apiGet("/api/image-templates"),
       comfyuiTemplatesRequest,
       apiGet("/api/manual-image-generation/activity"),
-      apiGet("/api/avatar-generation"),
+      includeAvatarGeneration ? apiGet("/api/avatar-generation") : Promise.resolve(null),
       apiGet("/api/execution/queues"),
       apiAdminGet("/api/capabilities/diagnostics"),
     ]);
@@ -419,7 +420,7 @@ export default function App() {
     if (manualImageGenerationStatusResult.status !== "fulfilled") {
       partialFailures.push("manual_image_generation_unavailable");
     }
-    if (avatarGenerationStatusResult.status !== "fulfilled") {
+    if (includeAvatarGeneration && avatarGenerationStatusResult.status !== "fulfilled") {
       partialFailures.push("avatar_generation_unavailable");
     }
     if (executionQueueResult.status !== "fulfilled") {
@@ -454,7 +455,9 @@ export default function App() {
     setComfyuiTemplateCatalogPayload(comfyuiTemplatesPayload);
     setManualImageGenerationPayload(manualImageGenerationPayload);
     setManualGenerationRuntimeStatus(servicePayload);
-    setAvatarGenerationPayload(avatarGenerationPayload);
+    if (includeAvatarGeneration) {
+      setAvatarGenerationPayload(avatarGenerationPayload);
+    }
     setGovernanceStatusPayload(governancePayload);
     setBudgetStatePayload(budgetPayload);
     setProviderBudgetSummaries(summarizeProviderBudgets({ providerConfig: providerPayload, budgetState: budgetPayload }));
@@ -1302,7 +1305,10 @@ export default function App() {
     setError("");
     try {
       const result = await apiPost("/api/manual-image-generation/references", payload);
-      await loadStatus();
+      setManualImageGenerationPayload((current) => ({
+        ...(current || {}),
+        references: Array.isArray(result?.references) ? result.references : current?.references || [],
+      }));
       return result;
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
