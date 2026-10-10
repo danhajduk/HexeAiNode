@@ -484,7 +484,14 @@ describe("ImageStudio", () => {
     expect(markup).toContain("50.0%");
     expect(markup).toContain("2 of 4");
     expect(markup).toContain("Refresh Preview");
+    expect(markup).toContain("Redo");
     expect(markup).toContain("Close");
+    expect(markup).toContain("Generated preview");
+    expect(markup).toContain("Job details");
+    expect(markup).toContain("Submitted");
+    expect(markup).toContain("Seed");
+    expect(markup).toContain("Profile");
+    expect(markup).toContain("Output");
   });
 
   it("recognizes Escape and waits for an imported preview artifact", () => {

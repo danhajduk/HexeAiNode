@@ -3257,6 +3257,9 @@ class NodeControlState:
             "prompt_parts": prompt_parts,
             "negative_prompt": negative_prompt,
             "checkpoint": checkpoint,
+            "sampler_name": sampler_name,
+            "scheduler": scheduler,
+            "lightning_strength": lightning_strength,
             "submitted_at": submitted_at,
             "created_at": now,
         }

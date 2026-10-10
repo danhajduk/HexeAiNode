@@ -6399,6 +6399,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["status"], "upper_torso_preview_submitted")
         self.assertEqual(result["preview"]["checkpoint"], "lustifySDXLNSFWSFW_v20.safetensors")
+        self.assertEqual(result["preview"]["sampler_name"], "dpmpp_2m_sde")
+        self.assertEqual(result["preview"]["scheduler"], "karras")
+        self.assertEqual(result["preview"]["lightning_strength"], 0.0)
 
     def test_avatar_generation_imports_head_preview_rgb_without_background_removal(self):
         class _AvatarProfileServiceManager:

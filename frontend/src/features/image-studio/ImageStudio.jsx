@@ -1021,6 +1021,10 @@ export function ImageStudio({
     : Number.isFinite(modalProgressValue) && Number.isFinite(modalProgressMax) && modalProgressMax > 0
       ? Math.max(0, Math.min(100, (modalProgressValue / modalProgressMax) * 100))
       : 0;
+  const progressImageUrl = progressArtifactReady && progressPreview?.url ? `${apiBase}${progressPreview.url}` : "";
+  const progressSubmittedAt = String(progressPreview?.submitted_at || generationJob?.submitted_at || "");
+  const progressImportedAt = String(progressPreview?.imported_at || "");
+  const formatJobTime = (value) => value ? new Date(value).toLocaleString() : "waiting";
 
   useEffect(() => {
     if (!generationProgressOpen) return undefined;
@@ -1922,9 +1926,14 @@ export function ImageStudio({
                 <button className="btn" type="button" onClick={forceRefreshGeneration} disabled={generationRefreshBusy || !onRefreshGeneration}>
                   {generationRefreshBusy ? "Refreshing…" : "Refresh Preview"}
                 </button>
+                <button className="btn btn-primary" type="button" onClick={() => generationKind === "body" ? generateBodyPreview() : generateFacePreview()} disabled={progressTracking || characterSaveBusy}>
+                  Redo
+                </button>
                 <button className="btn" type="button" onClick={() => setGenerationProgressOpen(false)}>Close</button>
               </div>
             </header>
+            <div className="image-studio-generation-modal-content">
+              <div className="image-studio-generation-modal-main">
             <div className="manual-generation-status-row manual-generation-status-row-primary image-studio-generation-status-grid">
               <div className="manual-generation-status-item"><span>Visual Runtime</span><strong>{String(comfyService.state || "starting").replaceAll("_", " ")}</strong></div>
               <div className="manual-generation-status-item"><span>Model</span><code>{modelName}</code></div>
@@ -1952,6 +1961,28 @@ export function ImageStudio({
                   ? "Rendering is complete. The preview file is still being saved and imported; this window will update when it is available."
                   : modalProgressDetail?.message || modalProgressDetail?.failure_detail || modalProgressDetail?.failure_reason || (progressTracking ? "Generation status refreshes automatically. You may close this window without cancelling the job." : "Generation is no longer active.")}
               </p>
+            </div>
+                <div className="image-studio-generation-job-details">
+                  <h3>Job details</h3>
+                  <div><span>Submitted</span><code>{formatJobTime(progressSubmittedAt)}</code></div>
+                  <div><span>Seed</span><code>{progressPreview?.seed_text || progressPreview?.seed || "waiting"}</code></div>
+                  <div><span>Checkpoint</span><code>{progressPreview?.checkpoint || modelName}</code></div>
+                  <div><span>Sampler</span><code>{progressPreview?.sampler_name || "runtime default"}{progressPreview?.scheduler ? ` / ${progressPreview.scheduler}` : ""}</code></div>
+                  <div><span>Sampling</span><code>{progressPreview?.steps ? `${progressPreview.steps} steps · CFG ${progressPreview.cfg ?? "—"}` : "waiting"}</code></div>
+                  <div><span>Canvas</span><code>{progressPreview?.width && progressPreview?.height ? `${progressPreview.width} × ${progressPreview.height}` : "waiting"}</code></div>
+                  <div><span>Profile</span><code>{characterProfileId ? `${characterProfileId} saved` : "saving"}</code></div>
+                  <div><span>Output</span><code>{progressArtifactReady ? "file available" : renderFinished ? "copying into character profile" : "waiting for render"}</code></div>
+                  <div><span>Imported</span><code>{formatJobTime(progressImportedAt)}</code></div>
+                  <div><span>Prompt ID</span><code title={progressPromptId}>{progressPromptId || "waiting"}</code></div>
+                </div>
+              </div>
+              <aside className="image-studio-generation-preview-pane">
+                <span className="image-studio-eyebrow">Generated preview</span>
+                <div className="image-studio-generation-preview-frame">
+                  {progressImageUrl ? <img src={progressImageUrl} alt={`${generationKind} generation preview`} /> : <><strong>{renderFinished ? "Importing image…" : "Preview pending"}</strong><p>The image will appear here after it has been copied into the character profile.</p></>}
+                </div>
+                {progressArtifactReady ? <a className="btn" href={progressImageUrl} target="_blank" rel="noreferrer">Open full image</a> : null}
+              </aside>
             </div>
           </section>
         </div>
