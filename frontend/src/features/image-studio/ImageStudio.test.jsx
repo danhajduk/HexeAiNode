@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, latestSavedFacePreview, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, latestSavedFacePreview, nextBodyFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -338,6 +338,7 @@ describe("ImageStudio", () => {
     expect(markup).toContain("androgynous");
     expect(markup).toContain("pronounced masculine");
     expect(markup).toContain("Limb proportions");
+    expect(markup).toContain("Visible muscle volume and definition");
     expect(markup).toContain("Neck-down full-body foundation");
     expect(markup).toContain("424242");
     expect(markup).toContain("Generate again with saved seed");
@@ -354,6 +355,15 @@ describe("ImageStudio", () => {
       .toContain("fuller natural chest silhouette, narrow defined waist, rounded wider hips");
     expect(composeBodyDescription({ body_traits: ["masculine"], build: ["athletic"] }))
       .toContain("broader shoulders, a flatter chest silhouette, straighter waist, narrower hips");
+    expect(composeBodyDescription({ height: ["tall"], build: ["curvy"], musculature: ["lightly toned"] }))
+      .toContain("tall stature with elongated vertical proportions");
+    expect(composeBodyDescription({ height: ["tall"], build: ["curvy"], musculature: ["lightly toned"] }))
+      .toContain("subtle definition in the arms, abdomen, and legs");
+  });
+
+  it("unselects a body option when it is clicked again", () => {
+    expect(nextBodyFeatureSelections({ build: ["curvy"] }, "build", "curvy")).toEqual({ build: [] });
+    expect(nextBodyFeatureSelections({ build: ["curvy"] }, "build", "athletic")).toEqual({ build: ["athletic"] });
   });
 
   it("shows a closable live generation progress dialog", () => {

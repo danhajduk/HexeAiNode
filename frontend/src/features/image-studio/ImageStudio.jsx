@@ -75,15 +75,15 @@ const CHARACTER_FOUNDATION_GROUPS = [
 ];
 
 const BODY_FEATURE_GROUPS = [
-  { id: "body_traits", label: "Feminine / masculine traits", options: ["pronounced feminine", "feminine", "androgynous", "masculine", "pronounced masculine"] },
-  { id: "height", label: "Height", options: ["short", "below average", "average", "tall", "very tall"] },
-  { id: "build", label: "Overall build", options: ["slender", "lean", "average", "athletic", "curvy", "stocky", "heavyset"] },
-  { id: "shoulders", label: "Shoulders", options: ["narrow", "balanced", "broad", "softly rounded", "angular"] },
-  { id: "torso", label: "Torso", options: ["short torso", "balanced torso", "long torso", "straight torso", "tapered torso"] },
-  { id: "waist", label: "Waist", options: ["subtle waist", "defined waist", "narrow waist", "straight waist", "broad waist"] },
-  { id: "hips", label: "Hips", options: ["narrow hips", "balanced hips", "wide hips", "rounded hips", "angular hips"] },
-  { id: "limbs", label: "Limb proportions", options: ["short limbs", "balanced limbs", "long legs", "long arms", "long limbs"] },
-  { id: "musculature", label: "Musculature", options: ["soft definition", "lightly toned", "athletic definition", "muscular", "strongly muscular"] },
+  { id: "body_traits", label: "Feminine / masculine traits", description: "Overall chest, waist, hip, shoulder, and contour presentation.", options: ["pronounced feminine", "feminine", "androgynous", "masculine", "pronounced masculine"] },
+  { id: "height", label: "Height", description: "Perceived stature and vertical proportions.", options: ["short", "below average", "average", "tall", "very tall"] },
+  { id: "build", label: "Overall build", description: "Overall body mass, breadth, and silhouette.", options: ["slender", "lean", "average", "athletic", "curvy", "stocky", "heavyset"] },
+  { id: "shoulders", label: "Shoulders", description: "Shoulder width, slope, and outline.", options: ["narrow", "balanced", "broad", "softly rounded", "angular"] },
+  { id: "torso", label: "Torso", description: "Ribcage length and upper-body taper.", options: ["short torso", "balanced torso", "long torso", "straight torso", "tapered torso"] },
+  { id: "waist", label: "Waist", description: "Waist width and definition relative to the torso and hips.", options: ["subtle waist", "defined waist", "narrow waist", "straight waist", "broad waist"] },
+  { id: "hips", label: "Hips", description: "Pelvis width and outer hip contour.", options: ["narrow hips", "balanced hips", "wide hips", "rounded hips", "angular hips"] },
+  { id: "limbs", label: "Limb proportions", description: "Relative arm and leg length.", options: ["short limbs", "balanced limbs", "long legs", "long arms", "long limbs"] },
+  { id: "musculature", label: "Musculature", description: "Visible muscle volume and definition, independent of overall body size.", options: ["soft definition", "lightly toned", "athletic definition", "muscular", "strongly muscular"] },
 ];
 
 const BODY_FEATURE_PROMPT_DESCRIPTIONS = {
@@ -94,7 +94,70 @@ const BODY_FEATURE_PROMPT_DESCRIPTIONS = {
     masculine: "masculine body traits with broader shoulders, a flatter chest silhouette, straighter waist, narrower hips, and firmer body contours",
     "pronounced masculine": "pronounced masculine body traits with broad shoulders and chest, strong upper-body taper, straight narrow waist and hips, and angular muscular contours",
   },
+  height: {
+    short: "short stature with compact vertical proportions and naturally shorter leg-to-torso balance",
+    "below average": "below-average stature with slightly compact vertical proportions",
+    average: "average stature with balanced vertical proportions",
+    tall: "tall stature with elongated vertical proportions and visibly longer leg line",
+    "very tall": "very tall stature with strongly elongated but anatomically coherent vertical proportions",
+  },
+  build: {
+    slender: "slender build with a narrow frame, low body mass, and delicate body contours",
+    lean: "lean build with low body fat, streamlined contours, and subtle structural definition",
+    average: "average build with moderate body mass and naturally balanced contours",
+    athletic: "athletic build with fit proportions, functional muscle tone, and balanced body mass",
+    curvy: "curvy build with fuller chest, hips, and thighs plus a visibly defined waist",
+    stocky: "stocky build with a broad compact frame, substantial torso, and sturdy limbs",
+    heavyset: "heavyset build with high body mass, a broad torso, full limbs, and soft natural contours",
+  },
+  shoulders: {
+    narrow: "narrow shoulder span relative to the torso and hips",
+    balanced: "balanced shoulder width proportionate to the torso and hips",
+    broad: "broad shoulder span with a wide upper-body silhouette",
+    "softly rounded": "softly sloping rounded shoulders without sharp bony angles",
+    angular: "angular shoulders with clearly defined clavicle and shoulder transitions",
+  },
+  torso: {
+    "short torso": "short ribcage-to-pelvis distance with a compact midsection",
+    "balanced torso": "balanced ribcage-to-pelvis length with natural proportions",
+    "long torso": "long ribcage-to-pelvis distance with an elongated midsection",
+    "straight torso": "straight torso silhouette with minimal inward taper",
+    "tapered torso": "torso visibly tapering from the upper body toward the waist",
+  },
+  waist: {
+    "subtle waist": "gently indicated waist with a mild inward curve",
+    "defined waist": "clearly defined waist with visible inward contour between ribcage and hips",
+    "narrow waist": "distinctly narrow waist relative to the ribcage and hips",
+    "straight waist": "straight waist with little difference between torso and waist width",
+    "broad waist": "broad waist with substantial midsection width",
+  },
+  hips: {
+    "narrow hips": "narrow pelvis and hip width with a slim lower-body silhouette",
+    "balanced hips": "balanced hip width proportionate to shoulders and torso",
+    "wide hips": "wide pelvis and pronounced outer hip width",
+    "rounded hips": "rounded hip contours with a smooth curved transition into the thighs",
+    "angular hips": "angular hip contours with more defined pelvic landmarks",
+  },
+  limbs: {
+    "short limbs": "proportionally shorter arms and legs with a compact reach",
+    "balanced limbs": "arms and legs of balanced anatomically average length",
+    "long legs": "proportionally long legs with an elevated hip line and elongated lower body",
+    "long arms": "proportionally long arms with extended reach while retaining natural anatomy",
+    "long limbs": "proportionally long arms and legs with an elongated silhouette",
+  },
+  musculature: {
+    "soft definition": "soft natural musculature with minimal visible separation and gently rounded contours",
+    "lightly toned": "light muscle tone with subtle definition in the arms, abdomen, and legs",
+    "athletic definition": "clear athletic muscle definition with firm limbs and a naturally fit torso",
+    muscular: "visibly muscular physique with developed shoulders, arms, abdomen, and legs",
+    "strongly muscular": "strongly muscular physique with pronounced muscle volume and definition throughout the body",
+  },
 };
+
+function nextBodyFeatureSelections(selections = {}, groupId, option) {
+  const selected = selections[groupId] || [];
+  return { ...selections, [groupId]: selected.includes(option) ? [] : [option] };
+}
 
 function composeBodyDescription(selections = {}, customDetails = "") {
   const parts = BODY_FEATURE_GROUPS.flatMap((group) => (selections[group.id] || []).map((value) => {
@@ -903,7 +966,7 @@ export function ImageStudio({
   }
 
   function selectBodyFeature(group, option) {
-    const next = { ...bodyFeatureSelections, [group.id]: [option] };
+    const next = nextBodyFeatureSelections(bodyFeatureSelections, group.id, option);
     setBodyFeatureSelections(next);
     updateCharacterBrief("body", composeBodyDescription(next, bodyCustomDetails));
   }
@@ -1592,7 +1655,7 @@ export function ImageStudio({
                   <div className="image-studio-face-options">
                     {BODY_FEATURE_GROUPS.map((group) => (
                       <fieldset key={group.id}>
-                        <legend>{group.label}</legend>
+                        <legend>{group.label}<small>{group.description}</small></legend>
                         <div className="image-studio-option-chips">
                           {group.options.map((option) => {
                             const selected = (bodyFeatureSelections[group.id] || []).includes(option);
@@ -1752,4 +1815,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, nextBodyFeatureSelections, nextIncompleteInterviewStep, templateCharacterPath, templateCreationType };
