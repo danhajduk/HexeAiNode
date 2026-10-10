@@ -58,10 +58,12 @@ class ImageStudioBodyPromptTests(unittest.TestCase):
             context={},
             magnitudes={"breast_size": 0.72},
         )
-        self.assertIn("breast size magnitude: 0.72", prompt)
+        self.assertIn("breast anatomy: size magnitude 0.72", prompt)
         self.assertIn("large adult breast volume", prompt)
         self.assertNotIn("small adult breast volume", prompt)
         self.assertIn("teardrop adult breast contour", prompt)
+        self.assertIn("shape: teardrop adult breast contour", prompt)
+        self.assertNotIn("(breast shape:", prompt)
 
     def test_rejects_out_of_range_body_magnitude(self):
         with self.assertRaisesRegex(ValueError, "body_feature_magnitude_out_of_range:breast_size"):

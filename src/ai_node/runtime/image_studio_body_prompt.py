@@ -64,10 +64,17 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
     if selections.get("vulva_description") and selections.get("penis_description"):
         raise ValueError("body_feature_anatomy_conflict")
 
+    normalized_magnitudes = {}
+    for magnitude_id, raw_value in magnitudes.items():
+        if magnitude_id != "breast_size":
+            raise ValueError(f"body_feature_magnitude_invalid:{magnitude_id}")
+        value = float(raw_value)
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"body_feature_magnitude_out_of_range:{magnitude_id}")
+        normalized_magnitudes[magnitude_id] = value
+
     details = []
     for group_id, values in selections.items():
-        if group_id == "breast_size" and "breast_size" in magnitudes:
-            continue
         if group_id not in BODY_FEATURE_DESCRIPTIONS:
             raise ValueError(f"body_feature_group_invalid:{group_id}")
         if not isinstance(values, list):
@@ -78,17 +85,18 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
                 if group_id == "pubic_hair_color" and value == "inherit from head hair":
                     continue
                 raise ValueError(f"body_feature_option_invalid:{group_id}:{value}")
+            if group_id in {"breast_size", "breast_shape"} and "breast_size" in normalized_magnitudes:
+                continue
             emphasis = "1.45" if group_id in {"body_traits", "build", "breast_size", "breast_shape", "vulva_description", "penis_description"} else "1.25"
             details.append(f"({group_id.replace('_', ' ')}: {description}:{emphasis})")
 
-    for magnitude_id, raw_value in magnitudes.items():
-        if magnitude_id != "breast_size":
-            raise ValueError(f"body_feature_magnitude_invalid:{magnitude_id}")
-        value = float(raw_value)
-        if not 0.0 <= value <= 1.0:
-            raise ValueError(f"body_feature_magnitude_out_of_range:{magnitude_id}")
+    if "breast_size" in normalized_magnitudes:
+        value = normalized_magnitudes["breast_size"]
         label = "very small" if value < 0.2 else "small" if value < 0.4 else "moderate" if value <= 0.6 else "large" if value <= 0.8 else "very large"
-        details.append(f"(breast size magnitude: {value:.2f} on a 0-to-1 scale, {label} adult breast volume with realistic weight and proportions:1.50)")
+        shape_values = selections.get("breast_shape") or []
+        shape = BODY_FEATURE_DESCRIPTIONS["breast_shape"].get(str(shape_values[0])) if shape_values else None
+        shape_instruction = shape or "natural adult breast contour with realistic soft-tissue behavior"
+        details.append(f"(breast anatomy: size magnitude {value:.2f} on a 0-to-1 scale, {label} adult breast volume with realistic weight and proportions; shape: {shape_instruction}:1.50)")
 
     pubic_hair = selections.get("pubic_hair") or []
     explicit_pubic_color = selections.get("pubic_hair_color") or []

@@ -1039,6 +1039,10 @@ export function ImageStudio({
   const progressImageUrl = progressArtifactReady && progressPreview?.url ? `${apiBase}${progressPreview.url}` : "";
   const progressSubmittedAt = String(progressPreview?.submitted_at || generationJob?.submitted_at || "");
   const progressImportedAt = String(progressPreview?.imported_at || "");
+  const popupSeed = progressPreview?.seed_text ?? progressPreview?.seed;
+  const keepPopupSeed = generationKind === "body" ? bodySeedLocked || Boolean(bodySeedInput.trim()) : faceSeedLocked;
+  const breastMagnitude = bodyFeatureMagnitudes.breast_size;
+  const breastShape = (bodyFeatureSelections.breast_shape || [])[0];
   const formatJobTime = (value) => value ? new Date(value).toLocaleString() : "waiting";
 
   useEffect(() => {
@@ -1985,6 +1989,22 @@ export function ImageStudio({
                 <p>Live status from the Visual Runtime and ComfyUI queue.</p>
               </div>
               <div className="row">
+                <label className="image-studio-generation-seed-lock">
+                  <input
+                    type="checkbox"
+                    checked={keepPopupSeed}
+                    disabled={popupSeed === undefined || popupSeed === null}
+                    onChange={(event) => {
+                      if (generationKind === "body") {
+                        setBodySeedLocked(event.target.checked);
+                        if (!event.target.checked) setBodySeedInput("");
+                      } else {
+                        setFaceSeedLocked(event.target.checked);
+                      }
+                    }}
+                  />
+                  Keep seed for Redo
+                </label>
                 <button className="btn" type="button" onClick={forceRefreshGeneration} disabled={generationRefreshBusy || !onRefreshGeneration}>
                   {generationRefreshBusy ? "Refreshing…" : "Refresh Preview"}
                 </button>
@@ -2029,7 +2049,9 @@ export function ImageStudio({
                 <div className="image-studio-generation-job-details">
                   <h3>Job details</h3>
                   <div><span>Submitted</span><code>{formatJobTime(progressSubmittedAt)}</code></div>
-                  <div><span>Seed</span><code>{progressPreview?.seed_text || progressPreview?.seed || "waiting"}</code></div>
+                  <div><span>Seed</span><code>{popupSeed ?? "waiting"}</code></div>
+                  {generationKind === "body" ? <div><span>Breast magnitude</span><code>{breastMagnitude === undefined ? "automatic" : `${breastMagnitude.toFixed(2)} — ${magnitudeLabel(breastMagnitude)}`}</code></div> : null}
+                  {generationKind === "body" ? <div><span>Breast shape</span><code>{breastShape || "automatic"}</code></div> : null}
                   <div><span>Checkpoint</span><code>{progressPreview?.checkpoint || modelName}</code></div>
                   <div><span>Sampler</span><code>{progressPreview?.sampler_name || "runtime default"}{progressPreview?.scheduler ? ` / ${progressPreview.scheduler}` : ""}</code></div>
                   <div><span>Sampling</span><code>{progressPreview?.steps ? `${progressPreview.steps} steps · CFG ${progressPreview.cfg ?? "—"}` : "waiting"}</code></div>

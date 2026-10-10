@@ -490,11 +490,14 @@ describe("ImageStudio", () => {
     expect(markup).toContain("2 of 4");
     expect(markup).toContain("Refresh Preview");
     expect(markup).toContain("Redo");
+    expect(markup).toContain("Keep seed for Redo");
     expect(markup).toContain("Close");
     expect(markup).toContain("Generated preview");
     expect(markup).toContain("Job details");
     expect(markup).toContain("Submitted");
     expect(markup).toContain("Seed");
+    expect(markup).toContain("Breast magnitude");
+    expect(markup).toContain("Breast shape");
     expect(markup).toContain("Profile");
     expect(markup).toContain("Output");
   });

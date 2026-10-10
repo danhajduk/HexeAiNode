@@ -3567,6 +3567,13 @@
   accent-color: hsl(var(--sx-accent));
 }
 
+.image-studio-generation-seed-lock {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  white-space: nowrap;
+}
+
 @media (max-width: 640px) {
   .image-studio-magnitude-row {
     grid-template-columns: 1fr;
