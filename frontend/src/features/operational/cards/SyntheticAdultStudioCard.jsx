@@ -10,6 +10,14 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function safeProjectName(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/^[_\.]+|[_\.]+$/g, "")
+    .slice(0, 80);
+}
+
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -30,6 +38,7 @@ function outputUrl(apiBase, output) {
 
 export function SyntheticAdultStudioCard({ payload = null, busy = false, result = null, apiBase = "", onUploadReference, onSubmit, onRefresh }) {
   const [referenceFile, setReferenceFile] = useState(null);
+  const [projectName, setProjectName] = useState("");
   const [reference, setReference] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -45,11 +54,13 @@ export function SyntheticAdultStudioCard({ payload = null, busy = false, result 
   const [localError, setLocalError] = useState("");
 
   const templateAvailable = asArray(payload?.templates).some((template) => template?.template_id === TEMPLATE_ID);
+  const safeName = safeProjectName(projectName);
+  const outputDirectory = safeName ? `hexe/nsfw/${safeName}/posed` : "";
   const outputs = asArray(payload?.outputs)
-    .filter((output) => String(output?.relative_path || "").startsWith("hexe/nsfw/"))
+    .filter((output) => outputDirectory && String(output?.relative_path || "").startsWith(`${outputDirectory}/`))
     .slice(0, 12);
   const latestJob = payload?.latest_job || result || {};
-  const canSubmit = templateAvailable && confirmedAdult && Boolean(referenceFile || reference) && Boolean(prompt.trim()) && !busy;
+  const canSubmit = templateAvailable && confirmedAdult && Boolean(safeName) && Boolean(referenceFile || reference) && Boolean(prompt.trim()) && !busy;
 
   useEffect(() => {
     if (!referenceFile) {
@@ -115,12 +126,12 @@ export function SyntheticAdultStudioCard({ payload = null, busy = false, result 
       randomize_seed: !Number.isFinite(numericSeed),
       randomize_reference_strengths: false,
       template_variables: {
-        avatar_name: "synthetic_adult",
-        output_directory: "hexe/nsfw",
+        avatar_name: safeName,
+        output_directory: outputDirectory,
         face_reference_image: selectedReference.input_image,
         body_reference_image: selectedReference.input_image,
-        face_strength: Number.parseFloat(identityStrength) || 0.82,
-        body_depth_strength: Number.parseFloat(bodyStrength) || 0.72,
+        face_strength: Number.isFinite(Number.parseFloat(identityStrength)) ? Number.parseFloat(identityStrength) : 0.82,
+        body_depth_strength: Number.isFinite(Number.parseFloat(bodyStrength)) ? Number.parseFloat(bodyStrength) : 0.72,
       },
     });
     setLocalStatus(submission ? "submitted" : "submission_failed");
@@ -136,6 +147,15 @@ export function SyntheticAdultStudioCard({ payload = null, busy = false, result 
           <span>Workflow</span><StatusBadge value={templateAvailable ? "ready" : "missing"} />
           <span>Latest Job</span><StatusBadge value={latestJob.status || localStatus || "idle"} />
         </div>
+
+        <section>
+          <h3>Avatar project</h3>
+          <label>
+            Avatar name
+            <input value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="e.g. Luna" required />
+          </label>
+          <p className="muted tiny">Folder: {outputDirectory || "hexe/nsfw/<avatar-name>/posed"}</p>
+        </section>
 
         <section className="avatar-reference-upload-panel">
           <h3>1. Body reference</h3>
@@ -191,7 +211,8 @@ export function SyntheticAdultStudioCard({ payload = null, busy = false, result 
 
       <section className="synthetic-adult-output-gallery">
           <h3>Generated images</h3>
-          {!outputs.length ? <p className="muted">Generated images will appear here.</p> : null}
+          {!safeName ? <p className="muted">Enter an avatar name to open its posed-image folder.</p> : null}
+          {safeName && !outputs.length ? <p className="muted">Generated images will appear here.</p> : null}
           {outputs.length ? (
           <div className="avatar-reference-card-grid">
             {outputs.map((output) => {

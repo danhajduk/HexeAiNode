@@ -11097,6 +11097,12 @@ class NodeControlState:
                     values[name] = self._coerce_manual_template_variable_value(variable=variables[name], value=value)
         if "avatar_name" in variables:
             values["avatar_name"] = self._safe_filename_component(values.get("avatar_name") or "avatar")
+        if "output_directory" in variables:
+            output_directory = str(values.get("output_directory") or "").replace("\\", "/").strip("/")
+            parts = Path(output_directory).parts
+            if not parts or ".." in parts or any(part in {"", "."} for part in parts):
+                raise ValueError("manual_image_output_directory_invalid")
+            values["output_directory"] = "/".join(self._safe_filename_component(part) for part in parts)
         if "input_image" in variables:
             values["input_image"] = input_image
         for name, variable in variables.items():

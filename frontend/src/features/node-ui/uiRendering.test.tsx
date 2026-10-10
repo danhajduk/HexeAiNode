@@ -589,6 +589,8 @@ describe("OperationalDashboard", () => {
     );
 
     expect(markup).toContain("Synthetic Adult Studio");
+    expect(markup).toContain("Avatar name");
+    expect(markup).toContain("hexe/nsfw/&lt;avatar-name&gt;/posed");
     expect(markup).toContain("operational-card-full-span");
     expect(markup).toContain("Choose Body Reference");
     expect(markup).toContain("Identity strength");
@@ -596,7 +598,7 @@ describe("OperationalDashboard", () => {
     expect(markup).toContain("fully synthetic avatar represented as age 25+");
     expect(markup).toContain("Generate Images");
     expect(markup).toContain("Generated images");
-    expect(markup).toContain("Generated images will appear here.");
+    expect(markup).toContain("Enter an avatar name to open its posed-image folder.");
   });
 
   it("shows saved avatar profiles as cards on the second avatar generation tab", () => {
