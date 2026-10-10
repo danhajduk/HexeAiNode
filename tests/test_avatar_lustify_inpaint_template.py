@@ -38,8 +38,9 @@ REQUIRED_PLACEHOLDERS = {
     "{{cfg}}",
     "{{denoise}}",
     "{{avatar_name}}",
+    "{{output_directory}}",
 }
-BASE_REQUIRED_PLACEHOLDERS = (REQUIRED_PLACEHOLDERS - {"{{input_image}}"}) | {"{{source_image}}"}
+BASE_REQUIRED_PLACEHOLDERS = (REQUIRED_PLACEHOLDERS - {"{{input_image}}", "{{output_directory}}"}) | {"{{source_image}}"}
 
 
 def _template() -> dict:
@@ -83,7 +84,7 @@ class AvatarLustifyInpaintTemplateTests(unittest.TestCase):
         self.assertEqual(workflow["7"]["inputs"]["latent_image"], ["6", 0])
         self.assertEqual(
             workflow["9"]["inputs"]["filename_prefix"],
-            "hexe/avatar_lustify_inpaint/{{avatar_name}}_seed{{seed}}",
+            "{{output_directory}}/{{avatar_name}}_seed{{seed}}",
         )
         self.assertEqual(_collect_placeholders(workflow), REQUIRED_PLACEHOLDERS)
 
@@ -111,6 +112,7 @@ class AvatarLustifyInpaintTemplateTests(unittest.TestCase):
                     input_image="references/avatar/base.png",
                     template_variables={
                         "avatar_name": "Jane Doe",
+                        "output_directory": "hexe/nsfw/Jane_Doe/redressed",
                         "mask_image": "references/avatar/mask.png",
                         "mask_channel": "alpha",
                         "grow_mask_by": "12",
@@ -133,7 +135,7 @@ class AvatarLustifyInpaintTemplateTests(unittest.TestCase):
         self.assertEqual(workflow["7"]["inputs"]["denoise"], 0.68)
         self.assertEqual(workflow["7"]["inputs"]["sampler_name"], "euler")
         self.assertEqual(workflow["7"]["inputs"]["scheduler"], "normal")
-        self.assertEqual(workflow["9"]["inputs"]["filename_prefix"], "hexe/avatar_lustify_inpaint/Jane_Doe_seed123")
+        self.assertEqual(workflow["9"]["inputs"]["filename_prefix"], "hexe/nsfw/Jane_Doe/redressed/Jane_Doe_seed123")
 
     def test_base_unclothed_template_uses_prefilled_source_and_mask_variables(self):
         workflow = _base_template()

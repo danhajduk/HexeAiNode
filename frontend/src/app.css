@@ -1200,6 +1200,52 @@
   border-radius: 10px;
 }
 
+.synthetic-adult-output-choice {
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+  color: inherit;
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: 12px;
+  background: hsl(var(--sx-panel));
+  cursor: pointer;
+}
+
+.synthetic-adult-output-choice.selected {
+  border-color: hsl(var(--sx-accent));
+  box-shadow: 0 0 0 2px color-mix(in oklab, hsl(var(--sx-accent)) 30%, transparent);
+}
+
+.synthetic-adult-mask-workspace {
+  display: grid;
+  gap: 12px;
+}
+
+.synthetic-adult-mask-canvas-wrap {
+  position: relative;
+  width: min(100%, 620px);
+  overflow: hidden;
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: 12px;
+  background: #111;
+  touch-action: none;
+}
+
+.synthetic-adult-mask-canvas-wrap img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.synthetic-adult-mask-canvas-wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
 .avatar-reference-section {
   display: grid;
   gap: 10px;

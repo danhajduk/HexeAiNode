@@ -1492,6 +1492,12 @@
           "description": "Filesystem-safe avatar name used in output filenames."
         },
         {
+          "name": "output_directory",
+          "type": "string",
+          "required": false,
+          "description": "Relative ComfyUI output directory for redressed images."
+        },
+        {
           "name": "seed",
           "type": "integer",
           "required": false,
@@ -1519,6 +1525,7 @@
       "defaults": {
         "negative_prompt": "out of mask changes, changed face, changed hands, changed background, extra fabric, broken straps, distorted body, distorted anatomy, blurry, low quality, watermark, text, child, teen, underage",
         "avatar_name": "avatar",
+        "output_directory": "hexe/avatar_lustify_inpaint",
         "checkpoint_name": "lustifySDXLNSFW_v20-inpainting.safetensors",
         "mask_channel": "red",
         "grow_mask_by": 8,

@@ -67,7 +67,7 @@
     "class_type": "SaveImage",
     "inputs": {
       "images": ["8", 0],
-      "filename_prefix": "hexe/avatar_lustify_inpaint/{{avatar_name}}_seed{{seed}}"
+      "filename_prefix": "{{output_directory}}/{{avatar_name}}_seed{{seed}}"
     }
   }
 }
