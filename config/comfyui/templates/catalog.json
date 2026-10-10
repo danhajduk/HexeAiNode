@@ -424,6 +424,24 @@
           "description": "SDXL checkpoint selected by the backend for SFW or explicit adult body anatomy."
         },
         {
+          "name": "lightning_strength",
+          "type": "number",
+          "required": false,
+          "description": "Lightning LoRA strength; disabled for native multi-step adult-checkpoint sampling."
+        },
+        {
+          "name": "sampler_name",
+          "type": "string",
+          "required": false,
+          "description": "ComfyUI sampler selected for the active checkpoint."
+        },
+        {
+          "name": "scheduler",
+          "type": "string",
+          "required": false,
+          "description": "ComfyUI scheduler selected for the active checkpoint."
+        },
+        {
           "name": "steps",
           "type": "integer",
           "required": false,
@@ -446,6 +464,9 @@
         "negative_prompt": "low quality, blurry, distorted body, distorted torso, distorted arms, extra limbs, cropped shoulders, cropped torso, loose clothing, bulky clothing, jacket, coat, text, watermark, child, teen, underage",
         "avatar_name": "avatar_upper_torso_preview",
         "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
+        "lightning_strength": 1.0,
+        "sampler_name": "euler",
+        "scheduler": "sgm_uniform",
         "width": 512,
         "height": 512,
         "seed": null,

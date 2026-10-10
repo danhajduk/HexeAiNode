@@ -1,6 +1,6 @@
 import unittest
 
-from ai_node.runtime.image_studio_body_prompt import body_preview_checkpoint, compile_body_preview_prompt
+from ai_node.runtime.image_studio_body_prompt import body_preview_checkpoint, body_preview_sampling_settings, compile_body_preview_prompt
 
 
 class ImageStudioBodyPromptTests(unittest.TestCase):
@@ -50,6 +50,13 @@ class ImageStudioBodyPromptTests(unittest.TestCase):
         self.assertEqual(body_preview_checkpoint({"breast_size": ["large"]}), "RealVisXL_V5.0_fp16.safetensors")
         self.assertEqual(body_preview_checkpoint({"vulva_description": ["natural"]}), "lustifySDXLNSFWSFW_v20.safetensors")
         self.assertEqual(body_preview_checkpoint({"penis_description": ["average"]}), "lustifySDXLNSFWSFW_v20.safetensors")
+        self.assertEqual(body_preview_sampling_settings({"vulva_description": ["natural"]}), {
+            "steps": 28,
+            "cfg": 5.5,
+            "lightning_strength": 0.0,
+            "sampler_name": "dpmpp_2m_sde",
+            "scheduler": "karras",
+        })
 
 
 if __name__ == "__main__":

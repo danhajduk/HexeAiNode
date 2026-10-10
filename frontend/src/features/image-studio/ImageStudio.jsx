@@ -1395,11 +1395,11 @@ export function ImageStudio({
     setDraftSaveMessage("Character saved. Submitting body reference preview…");
     const result = await onGenerateBodyPreview(profileId, {
       ...buildBodyPreviewPayload(characterBrief, bodyFeatureSelections, faceFeatureSelections, bodyCustomDetails),
-      negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, hair, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, dramatic pose, text, watermark, child, teen, underage",
+      negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, hair, facial features, portrait, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped feet, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, skin lesions, rash, sores, colored spots, confetti, embedded debris, mosaic skin, camouflage texture, body paint, patterned skin, patterned background, dramatic pose, text, watermark, child, teen, underage",
       seed: bodySeedInput.trim() || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null ? bodyPreviewSeed : null),
       lock_seed: Boolean(bodySeedInput.trim()) || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null),
-      width: 640,
-      height: 1536,
+      width: 768,
+      height: 1344,
     });
     if (result) setDraftSaveMessage("Body preview submitted. Its seed will be saved with the character.");
     return result;

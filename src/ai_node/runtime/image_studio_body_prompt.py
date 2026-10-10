@@ -45,6 +45,17 @@ def body_preview_checkpoint(selections: dict | None) -> str:
     return "RealVisXL_V5.0_fp16.safetensors"
 
 
+def body_preview_sampling_settings(selections: dict | None) -> dict:
+    explicit_adult_anatomy = body_preview_checkpoint(selections) == "lustifySDXLNSFWSFW_v20.safetensors"
+    return {
+        "steps": 28 if explicit_adult_anatomy else 4,
+        "cfg": 5.5 if explicit_adult_anatomy else 1.2,
+        "lightning_strength": 0.0 if explicit_adult_anatomy else 1.0,
+        "sampler_name": "dpmpp_2m_sde" if explicit_adult_anatomy else "euler",
+        "scheduler": "karras" if explicit_adult_anatomy else "sgm_uniform",
+    }
+
+
 def compile_body_preview_prompt(*, selections: dict | None, face_selections: dict | None, custom_details: str | None, context: dict | None) -> str:
     selections = selections if isinstance(selections, dict) else {}
     face_selections = face_selections if isinstance(face_selections, dict) else {}
@@ -85,6 +96,7 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
         skin_instruction,
         "STRICT CAMERA FRAMING: neck-down full-body reference, portrait orientation, zoomed out. Top edge crosses the base of the neck above both collarbones. Both shoulders, entire torso, pelvis, both complete legs, ankles, and both complete feet are inside the frame. Feet sit near the bottom margin. No head, no waist crop, no knee crop, no missing feet.",
         "Neutral standing body-reference posture, arms relaxed and separated from the torso, selected proportions clearly visible and unobscured.",
-        "Authentic living skin with pores, fine body hair, subtle veins, small natural imperfections, and uninterrupted soft-tissue transitions. Normal human joints with no panel lines.",
+        "Clean healthy intact living skin with natural pores, subtle tonal variation, and uninterrupted soft-tissue transitions. Uniform natural skin surface without embedded objects, debris, colored spots, lesions, mosaic texture, or body paint. Normal human joints with no panel lines.",
+        "Plain seamless neutral-gray studio background, visually separate from the body, no patterned wall, no camouflage, no reflected texture on skin.",
         STYLE_PROMPTS.get(style, STYLE_PROMPTS["semi-realistic"]),
     )))
