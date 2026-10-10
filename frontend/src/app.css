@@ -2545,7 +2545,8 @@
 .image-studio-shell {
   display: grid;
   gap: 22px;
-  width: min(1320px, 100%);
+  width: 90vw;
+  max-width: none;
   margin: 0 auto;
 }
 
@@ -2889,7 +2890,8 @@
 .image-studio-interview-modal {
   display: grid;
   gap: 20px;
-  width: min(1180px, 96vw);
+  width: 90vw;
+  box-sizing: border-box;
   max-height: calc(100vh - 48px);
   overflow-y: auto;
   padding: 24px;
@@ -3285,7 +3287,8 @@
 }
 
 .image-studio-generation-modal {
-  width: min(1120px, 94vw);
+  width: 90vw;
+  box-sizing: border-box;
   max-height: 88vh;
   overflow: auto;
   padding: 20px;
@@ -3727,6 +3730,12 @@
 }
 
 @media (max-width: 760px) {
+  .image-studio-shell,
+  .image-studio-interview-modal,
+  .image-studio-generation-modal {
+    width: calc(100vw - 20px);
+  }
+
   .image-studio-interview-launch,
   .image-studio-interview-modal > header {
     align-items: stretch;
