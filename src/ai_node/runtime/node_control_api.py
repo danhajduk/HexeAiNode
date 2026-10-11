@@ -9439,12 +9439,22 @@ class NodeControlState:
         return found
 
     def _avatar_head_face_seed_batch_queue_snapshot(self) -> dict:
-        services = self.service_status_payload().get("services", {})
-        webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
-        socket_path = str(webui.get("socket_path") or "").strip() if isinstance(webui, dict) else ""
+        runtime = str(os.environ.get("HEXE_COMFYUI_WEBUI_RUNTIME") or "gpu").strip().lower()
+        socket_dir = str(os.environ.get("COMFYUI_SOCKET_DIR") or "/run/hexe/ai-node").strip()
+        socket_path = str(
+            os.environ.get("COMFYUI_CPU_SOCKET_PATH" if runtime == "cpu" else "COMFYUI_GPU_SOCKET_PATH")
+            or f"{socket_dir}/comfyui-{'cpu' if runtime == 'cpu' else 'gpu'}.sock"
+        ).strip()
         socket_available = bool(socket_path and Path(socket_path).is_socket())
+        if not socket_available:
+            services = self.service_status_payload().get("services", {})
+            webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+            discovered_socket_path = str(webui.get("socket_path") or "").strip() if isinstance(webui, dict) else ""
+            if discovered_socket_path:
+                socket_path = discovered_socket_path
+                socket_available = Path(socket_path).is_socket()
         session: dict = {}
-        if self._service_manager is not None and hasattr(self._service_manager, "comfyui_webui_generation_status"):
+        if not socket_available and self._service_manager is not None and hasattr(self._service_manager, "comfyui_webui_generation_status"):
             try:
                 generation_status = self._service_manager.comfyui_webui_generation_status()
             except Exception:
