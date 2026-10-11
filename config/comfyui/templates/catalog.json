@@ -1132,8 +1132,8 @@
     },
     {
       "template_id": "template.avatar_head_lora_pose_depth_control.realvisxl.v1",
-      "template_name": "Avatar Head LoRA Pose + Depth Control",
-      "description": "RGB head/face LoRA dataset workflow combining SDXL OpenPose and generated depth guidance for pitch-sensitive head poses.",
+      "template_name": "Avatar Head LoRA Depth Control",
+      "description": "RGB head/face LoRA dataset workflow using generated SDXL depth guidance for pitch-sensitive head poses.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-head-lora-pose-depth-control-realvisxl/api_workflow.json",
       "variables": [
@@ -1192,9 +1192,9 @@
         "pose_end": 0.55,
         "pose_controlnet": "controlnet-openpose-sdxl-1.0.safetensors",
         "depth_reference_image": "",
-        "depth_strength": 0.25,
+        "depth_strength": 0.55,
         "depth_start": 0,
-        "depth_end": 0.7,
+        "depth_end": 1.0,
         "depth_controlnet": "controlnet-depth-sdxl-1.0-fp16.safetensors",
         "depth_anything_model": "depth_anything_v2_vits.pth",
         "depth_resolution": 512
@@ -1203,11 +1203,11 @@
         "checkpoint": "RealVisXL_V5.0_fp16.safetensors",
         "loras": ["sdxl_lightning_4step_lora.safetensors"],
         "vae": null,
-        "controlnets": ["controlnet-openpose-sdxl-1.0.safetensors", "controlnet-depth-sdxl-1.0-fp16.safetensors"],
+        "controlnets": ["controlnet-depth-sdxl-1.0-fp16.safetensors"],
         "other": {
           "nodes": ["CheckpointLoaderSimple", "LoraLoader", "CLIPTextEncode", "LoadImage", "PulidModelLoader", "PulidEvaClipLoader", "PulidInsightFaceLoader", "ApplyPulidAdvanced", "ResizeAndPadImage", "DepthAnythingV2Preprocessor", "ControlNetLoader", "ControlNetApplyAdvanced", "EmptyLatentImage", "KSampler", "VAEDecode", "SaveImage"],
           "identity_model": "ip-adapter_pulid_sdxl_fp16.safetensors",
-          "pose_preservation": "openpose_plus_depth_controlnet"
+          "pose_preservation": "depth_controlnet"
         }
       },
       "output_scope": "manual",

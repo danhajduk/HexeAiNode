@@ -9256,7 +9256,7 @@ class NodeControlState:
         depth_reference_image = str(pose.get("depth_guide_image") or "").strip()
         if depth_reference_image:
             depth_reference_image = self._ensure_avatar_lora_pose_guide(relative_image=depth_reference_image)
-        template_id = (
+        template_id = str(pose.get("template_id") or "").strip() or (
             AVATAR_HEAD_FACE_LORA_POSE_DEPTH_CONTROL_TEMPLATE_ID
             if depth_reference_image
             else AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID

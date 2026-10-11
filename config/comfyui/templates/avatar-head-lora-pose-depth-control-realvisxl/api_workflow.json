@@ -9,16 +9,12 @@
   "14": {"class_type": "PulidEvaClipLoader", "inputs": {}},
   "15": {"class_type": "PulidInsightFaceLoader", "inputs": {"provider": "{{pulid_provider}}"}},
   "16": {"class_type": "ApplyPulidAdvanced", "inputs": {"model": ["2", 0], "pulid": ["13", 0], "eva_clip": ["14", 0], "face_analysis": ["15", 0], "image": ["9", 0], "weight": "{{face_strength}}", "projection": "{{pulid_projection}}", "fidelity": "{{pulid_fidelity}}", "noise": "{{pulid_noise}}", "start_at": "{{pulid_start_at}}", "end_at": "{{pulid_end_at}}"}},
-  "20": {"class_type": "LoadImage", "inputs": {"image": "{{pose_reference_image}}"}},
-  "21": {"class_type": "ResizeAndPadImage", "inputs": {"image": ["20", 0], "target_width": "{{width}}", "target_height": "{{height}}", "padding_color": "black", "interpolation": "nearest-exact"}},
-  "22": {"class_type": "ControlNetLoader", "inputs": {"control_net_name": "{{pose_controlnet}}"}},
   "24": {"class_type": "LoadImage", "inputs": {"image": "{{depth_reference_image}}"}},
   "25": {"class_type": "ResizeAndPadImage", "inputs": {"image": ["24", 0], "target_width": "{{width}}", "target_height": "{{height}}", "padding_color": "white", "interpolation": "lanczos"}},
   "26": {"class_type": "DepthAnythingV2Preprocessor", "inputs": {"image": ["25", 0], "ckpt_name": "{{depth_anything_model}}", "resolution": "{{depth_resolution}}"}},
   "27": {"class_type": "ControlNetLoader", "inputs": {"control_net_name": "{{depth_controlnet}}"}},
   "28": {"class_type": "ControlNetApplyAdvanced", "inputs": {"positive": ["4", 0], "negative": ["5", 0], "control_net": ["27", 0], "image": ["26", 0], "strength": "{{depth_strength}}", "start_percent": "{{depth_start}}", "end_percent": "{{depth_end}}"}},
-  "23": {"class_type": "ControlNetApplyAdvanced", "inputs": {"positive": ["28", 0], "negative": ["28", 1], "control_net": ["22", 0], "image": ["21", 0], "strength": "{{pose_strength}}", "start_percent": "{{pose_start}}", "end_percent": "{{pose_end}}"}},
-  "6": {"class_type": "KSampler", "inputs": {"model": ["16", 0], "positive": ["23", 0], "negative": ["23", 1], "latent_image": ["3", 0], "seed": "{{seed}}", "steps": "{{steps}}", "cfg": "{{cfg}}", "sampler_name": "euler", "scheduler": "sgm_uniform", "denoise": "{{denoise}}"}},
+  "6": {"class_type": "KSampler", "inputs": {"model": ["16", 0], "positive": ["28", 0], "negative": ["28", 1], "latent_image": ["3", 0], "seed": "{{seed}}", "steps": "{{steps}}", "cfg": "{{cfg}}", "sampler_name": "euler", "scheduler": "sgm_uniform", "denoise": "{{denoise}}"}},
   "7": {"class_type": "VAEDecode", "inputs": {"samples": ["6", 0], "vae": ["1", 2]}},
   "8": {"class_type": "SaveImage", "inputs": {"images": ["7", 0], "filename_prefix": "hexe/avatar_head_face_preview/{{avatar_name}}_seed{{seed}}_rgb"}}
 }
