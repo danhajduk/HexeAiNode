@@ -165,18 +165,19 @@
     {
       "pose_id": "slight_down",
       "label": "Slight Down",
-      "prompt": "head-and-shoulders portrait, head held upright without roll, chin lowered slightly, face pitched subtly downward, eyes looking naturally toward the camera",
-      "geometry_prompt": "subtle 10 to 15 degree downward head pitch, chin slightly closer to the neck, forehead slightly nearer the camera than the chin, both eyes fully readable, level shoulders in a relaxed natural posture",
+      "prompt": "head-and-shoulders portrait, head held upright without sideways roll, chin clearly lowered, face pitched downward, eyes looking slightly downward below the camera",
+      "geometry_prompt": "clear 20 to 25 degree downward head pitch, forehead visibly nearer the camera than the chin, shortened visible distance between chin and neck, upper eyelids more visible from the elevated camera view, both eyes readable, level shoulders in a relaxed natural posture",
       "guide_image": "system/lora-pose-guides/face/slight_down_dense.png",
-      "pose_strength": 0.5,
+      "pose_strength": 0.7,
       "negative_remove": ["tilted head"],
-      "negative_add": ["raised chin", "upward head angle", "head roll", "raised shoulders", "hunched shoulders", "chin pressed into chest", "extreme downward angle"],
+      "negative_add": ["direct camera eye contact", "level head pitch", "raised chin", "upward head angle", "head roll", "raised shoulders", "hunched shoulders", "chin pressed into chest", "extreme downward angle"],
       "prompt_replacements": {
-        "Front-facing head-and-shoulders composition": "head-and-shoulders composition with a subtle downward head pitch",
-        "symmetrical neutral pose": "upright head with no sideways roll and a subtle downward pitch"
+        "Front-facing head-and-shoulders composition": "head-and-shoulders composition with a clear downward head pitch",
+        "eyes looking directly at camera": "eyes looking slightly downward below the camera",
+        "symmetrical neutral pose": "upright head with no sideways roll and a clear downward pitch"
       },
       "variation_replacements": {},
-      "review_rule": "Require a natural 10 to 15 degree downward head pitch with level relaxed shoulders, no sideways roll, both eyes readable, and identity preserved. Reject a level or upward-facing head, hunched or raised shoulders, chin pressed into the chest, or an extreme downward angle."
+      "review_rule": "Require a clearly visible 20 to 25 degree downward head pitch and slightly lowered gaze with level relaxed shoulders, no sideways roll, both eyes readable, and identity preserved. Reject a level forward-facing or upward-facing head, direct camera gaze that hides the pitch, hunched or raised shoulders, chin pressed into the chest, or an extreme downward angle."
     },
     {
       "pose_id": "slight_up",
