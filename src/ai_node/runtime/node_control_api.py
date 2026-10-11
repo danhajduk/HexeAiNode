@@ -3942,7 +3942,7 @@ class NodeControlState:
             poses
             and (
                 str(dataset.get("seed_strategy") or "") != "profile_face_seed"
-                or str(dataset.get("variation_strategy") or "") != "controlled_ten_v1"
+                or str(dataset.get("variation_strategy") or "") != "controlled_ten_v2"
             )
             and not any(bool(item.get("approved")) for pose in poses if isinstance(pose, dict) for item in list(pose.get("items") or []) if isinstance(item, dict))
         ):
@@ -4182,8 +4182,11 @@ class NodeControlState:
             )
             while len(existing_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
                 identity_source_seed = face_profile_seed
-                seed = face_profile_seed
                 slot_index = len(existing_items) + 1
+                seed_offset = zlib.crc32(f"{pose_id}:{slot_index}".encode("utf-8")) + slot_index
+                seed = (int(face_profile_seed) + seed_offset) % (2**63)
+                if seed == face_profile_seed:
+                    seed = (seed + slot_index) % (2**63)
                 item_token = uuid.uuid4().hex[:10]
                 output_avatar_name = self._safe_filename_component(f"{avatar_name}_lora_{pose_id}_{item_token}")
                 pose_prompt = str(active_pose.get("pose_prompt") or "").strip()
@@ -4286,9 +4289,9 @@ class NodeControlState:
             "seed_set": lora_seed_set,
             "batch_size": AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE,
             "required_per_pose": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
-            "seed_strategy": "profile_face_seed",
+            "seed_strategy": "profile_face_anchor_with_candidate_seeds",
             "generation_seed": face_profile_seed,
-            "variation_strategy": "controlled_ten_v1",
+            "variation_strategy": "controlled_ten_v2",
             "training_manifest": training_manifest,
             "training_status": training_manifest.get("status") if isinstance(training_manifest, dict) else dataset.get("training_status"),
             "training_job": training_job,
