@@ -1304,6 +1304,10 @@ class NodeControlState:
             _env_int("HEXE_VISUAL_TRAINING_CLIENT_IDLE_CHECK_INTERVAL_SECONDS", 5),
             1,
         )
+        self._avatar_lora_dispatch_interval_seconds = max(
+            _env_int("HEXE_AVATAR_LORA_DISPATCH_INTERVAL_SECONDS", 1),
+            1,
+        )
         self._manual_image_generation_job_path = Path(
             os.environ.get("HEXE_MANUAL_IMAGE_GENERATION_JOB_PATH")
             or self._config_path.parent / "manual_image_generation_job.json"
@@ -17010,6 +17014,15 @@ class NodeControlState:
             readiness_critical=False,
         )
         self._internal_scheduler.register_interval_task(
+            task_id="avatar_lora_dispatch",
+            display_name="Image Studio LoRA Dispatcher",
+            interval_seconds=self._avatar_lora_dispatch_interval_seconds,
+            schedule_name="interval_seconds",
+            schedule_detail=f"Every {self._avatar_lora_dispatch_interval_seconds} seconds while LoRA work is active",
+            task_kind="local_recurring",
+            readiness_critical=False,
+        )
+        self._internal_scheduler.register_interval_task(
             task_id="image_output_cleanup",
             display_name="Generated Image Output Cleanup",
             interval_seconds=self._image_output_cleanup_interval_seconds,
@@ -17183,6 +17196,11 @@ class NodeControlState:
                 initial_delay_seconds=self._visual_training_client_idle_check_interval_seconds,
             )
             self._internal_scheduler.start_interval_task(
+                task_id="avatar_lora_dispatch",
+                coroutine_factory=self._avatar_lora_dispatch_job_once,
+                initial_delay_seconds=0,
+            )
+            self._internal_scheduler.start_interval_task(
                 task_id="image_output_cleanup",
                 coroutine_factory=self._image_output_cleanup_job_once,
                 initial_delay_seconds=0,
@@ -17235,6 +17253,57 @@ class NodeControlState:
 
     async def _image_output_cleanup_job_once(self) -> dict:
         return await asyncio.to_thread(self.cleanup_manual_image_outputs)
+
+    @staticmethod
+    def _avatar_profile_has_active_lora_work(metadata: dict) -> bool:
+        workspaces = metadata.get("prompt_workspaces") if isinstance(metadata.get("prompt_workspaces"), dict) else {}
+        active_statuses = {"local_queued", "pending", "submitted", "queued", "running"}
+        for section in ("head_face", "upper_torso"):
+            workspace = workspaces.get(section) if isinstance(workspaces.get(section), dict) else {}
+            dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
+            items = [
+                item
+                for pose in list(dataset.get("poses") or [])
+                if isinstance(pose, dict)
+                for item in list(pose.get("items") or [])
+                if isinstance(item, dict)
+            ]
+            epoch_review = dataset.get("epoch_review") if isinstance(dataset.get("epoch_review"), dict) else {}
+            items.extend(item for item in list(epoch_review.get("previews") or []) if isinstance(item, dict))
+            if any(str(item.get("status") or "").strip().lower() in active_statuses for item in items):
+                return True
+        return False
+
+    def _refresh_active_avatar_lora_profiles_once(self) -> dict:
+        root = self._avatar_profile_root()
+        if not root.exists():
+            return {"status": "idle", "active_profile_count": 0, "refreshed_profile_count": 0}
+        selected_profile_id = self._selected_avatar_profile_id()
+        active_profile_ids: list[str] = []
+        refreshed_profile_ids: list[str] = []
+        for profile_dir in root.iterdir():
+            if not profile_dir.is_dir():
+                continue
+            metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
+            if not metadata or not self._avatar_profile_has_active_lora_work(metadata):
+                continue
+            profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
+            active_profile_ids.append(profile_id)
+            profile = self._avatar_profile_payload(
+                profile_dir=profile_dir,
+                selected_profile_id=selected_profile_id,
+            )
+            if profile:
+                refreshed_profile_ids.append(profile_id)
+        return {
+            "status": "active" if active_profile_ids else "idle",
+            "active_profile_count": len(active_profile_ids),
+            "refreshed_profile_count": len(refreshed_profile_ids),
+            "active_profile_ids": active_profile_ids,
+        }
+
+    async def _avatar_lora_dispatch_job_once(self) -> dict:
+        return await asyncio.to_thread(self._refresh_active_avatar_lora_profiles_once)
 
     async def _status_telemetry_job_once(self) -> dict | None:
         if self._capability_runner is None or not hasattr(self._capability_runner, "emit_periodic_status_telemetry"):

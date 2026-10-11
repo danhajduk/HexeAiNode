@@ -5928,6 +5928,69 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(dispatched)
         submit.assert_not_called()
 
+    def test_avatar_lora_background_dispatch_refreshes_only_active_profiles(self):
+        state = NodeControlState(
+            lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+            config_path="/tmp/nonexistent-hexe-config.json",
+            logger=logging.getLogger("node-control-api-test"),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            active_dir = root / "Active"
+            idle_dir = root / "Idle"
+            active_dir.mkdir()
+            idle_dir.mkdir()
+            active_metadata = {
+                "profile_id": "Active",
+                "prompt_workspaces": {
+                    "head_face": {
+                        "lora_dataset": {
+                            "poses": [{"items": [{"status": "local_queued"}]}],
+                        }
+                    }
+                },
+            }
+            idle_metadata = {
+                "profile_id": "Idle",
+                "prompt_workspaces": {
+                    "head_face": {
+                        "lora_dataset": {
+                            "poses": [{"items": [{"status": "completed"}]}],
+                        }
+                    }
+                },
+            }
+            with patch.object(state, "_avatar_profile_root", return_value=root), patch.object(
+                state,
+                "_avatar_profile_metadata",
+                side_effect=lambda profile_dir: active_metadata if profile_dir == active_dir else idle_metadata,
+            ), patch.object(state, "_selected_avatar_profile_id", return_value="Active"), patch.object(
+                state,
+                "_avatar_profile_payload",
+                return_value={"profile_id": "Active"},
+            ) as refresh:
+                result = state._refresh_active_avatar_lora_profiles_once()
+
+        self.assertEqual(result["status"], "active")
+        self.assertEqual(result["active_profile_ids"], ["Active"])
+        self.assertEqual(refresh.call_count, 1)
+        self.assertEqual(refresh.call_args.kwargs["profile_dir"], active_dir)
+
+    def test_avatar_lora_active_work_includes_epoch_review(self):
+        self.assertTrue(
+            NodeControlState._avatar_profile_has_active_lora_work(
+                {
+                    "prompt_workspaces": {
+                        "upper_torso": {
+                            "lora_dataset": {
+                                "epoch_review": {"previews": [{"status": "running"}]},
+                            }
+                        }
+                    }
+                }
+            )
+        )
+
     def test_avatar_lora_dispatch_uses_live_queue_over_stale_session(self):
         service_manager = SimpleNamespace(
             comfyui_webui_generation_status=lambda: {
