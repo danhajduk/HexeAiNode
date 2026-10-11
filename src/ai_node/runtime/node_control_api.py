@@ -9037,12 +9037,12 @@ class NodeControlState:
             "face LoRA dataset image": "single-subject portrait image",
         }
         for source, target in replacements.items():
-            cleaned = cleaned.replace(source, target)
+            cleaned = re.sub(re.escape(str(source)), lambda _match: str(target), cleaned, flags=re.IGNORECASE)
         pose = next((item for item in cls._image_studio_lora_pose_catalog("face") if str(item.get("pose_id") or "") == pose_id), {})
         pose_replacements = pose.get("prompt_replacements") if isinstance(pose.get("prompt_replacements"), dict) else {}
         if pose_replacements:
             for source, target in pose_replacements.items():
-                cleaned = cleaned.replace(str(source), str(target))
+                cleaned = re.sub(re.escape(str(source)), lambda _match: str(target), cleaned, flags=re.IGNORECASE)
             return cleaned
         if pose_id == "front_smile":
             for source, target in {
@@ -9178,9 +9178,9 @@ class NodeControlState:
             "template_id": AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID,
             "pose_reference_image": pose_reference_image,
             "pose_controlnet": str(defaults.get("pose_controlnet") or "controlnet-openpose-sdxl-1.0.safetensors"),
-            "pose_strength": float(defaults.get("pose_strength") if defaults.get("pose_strength") is not None else 0.85),
-            "pose_start": float(defaults.get("pose_start") if defaults.get("pose_start") is not None else 0),
-            "pose_end": float(defaults.get("pose_end") if defaults.get("pose_end") is not None else 0.8),
+            "pose_strength": float(pose.get("pose_strength") if pose.get("pose_strength") is not None else defaults.get("pose_strength") if defaults.get("pose_strength") is not None else 0.85),
+            "pose_start": float(pose.get("pose_start") if pose.get("pose_start") is not None else defaults.get("pose_start") if defaults.get("pose_start") is not None else 0),
+            "pose_end": float(pose.get("pose_end") if pose.get("pose_end") is not None else defaults.get("pose_end") if defaults.get("pose_end") is not None else 0.8),
         }
 
     def _ensure_avatar_lora_pose_guide(self, *, relative_image: str) -> str:

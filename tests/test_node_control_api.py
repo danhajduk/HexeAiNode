@@ -5997,6 +5997,21 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(variation["pose_strength"], 0.8)
             self.assertIn("catalog review rule", review)
 
+    def test_avatar_lora_three_quarter_prompt_removes_case_variant_frontal_conflicts(self):
+        prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(
+            prompt=(
+                "Front-facing head-and-shoulders composition, eyes looking directly at camera, "
+                "symmetrical neutral pose, centered face, entire head visible."
+            ),
+            pose_id="three_quarter_left",
+        )
+
+        self.assertNotIn("Front-facing", prompt)
+        self.assertNotIn("directly at camera", prompt)
+        self.assertNotIn("symmetrical neutral pose", prompt)
+        self.assertIn("left three-quarter head pose", prompt)
+        self.assertIn("slightly off camera toward the left edge", prompt)
+
     def test_avatar_lora_prompt_avoids_reference_sheet_composition(self):
         prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(
             prompt="identity reference sheet, 512x512 face LoRA dataset image, pose-varied avatar training reference",
