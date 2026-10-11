@@ -5731,7 +5731,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                         "template.avatar_head_lora_pose_depth_control.realvisxl.v1",
                     )
                     self.assertEqual(control["depth_strength"], 0.55)
-                    self.assertEqual(control["depth_end"], 1.0)
+                    self.assertEqual(control["depth_end"], 0.65)
+                    self.assertEqual(control["identity_strength"], 0.7)
+                    self.assertEqual(control["identity_end"], 1.0)
                     self.assertTrue(control["depth_reference_image"])
                     self.assertTrue((input_dir / control["depth_reference_image"]).is_file())
                 else:

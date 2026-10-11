@@ -4351,10 +4351,15 @@ class NodeControlState:
                 pose_base_prompt = self._avatar_head_lora_dataset_pose_base_prompt(prompt=prompt, pose_id=pose_id)
                 pose_geometry_prompt = self._avatar_head_lora_dataset_pose_geometry_prompt(pose_id=pose_id)
                 pose_control = self._avatar_head_lora_dataset_pose_control(pose_id=pose_id)
+                pose_identity_strength = float(
+                    pose_control.get("identity_strength")
+                    if pose_control.get("identity_strength") is not None
+                    else identity_control.get("face_strength") or 0.55
+                )
                 variation = self._avatar_head_lora_dataset_variation(
                     slot_index=slot_index,
                     cfg=cfg,
-                    face_strength=float(identity_control.get("face_strength") or 0.55),
+                    face_strength=pose_identity_strength,
                     pose_strength=float(pose_control.get("pose_strength") or 0.42),
                     pose_id=pose_id,
                 )
@@ -4397,6 +4402,11 @@ class NodeControlState:
                             for key, value in {
                                 **identity_control,
                                 "face_strength": variation["face_strength"],
+                                "pulid_end_at": (
+                                    pose_control.get("identity_end")
+                                    if pose_control.get("identity_end") is not None
+                                    else identity_control.get("pulid_end_at")
+                                ),
                                 "pose_reference_image": pose_control.get("pose_reference_image"),
                                 "pose_controlnet": pose_control.get("pose_controlnet"),
                                 "pose_strength": variation["pose_strength"],
@@ -9280,6 +9290,8 @@ class NodeControlState:
             "depth_end": float(pose.get("depth_end") if pose.get("depth_end") is not None else defaults.get("depth_end") if defaults.get("depth_end") is not None else 0.7) if depth_reference_image else None,
             "depth_anything_model": str(defaults.get("depth_anything_model") or "depth_anything_v2_vits.pth") if depth_reference_image else "",
             "depth_resolution": int(defaults.get("depth_resolution") or 512) if depth_reference_image else None,
+            "identity_strength": float(pose["identity_strength"]) if pose.get("identity_strength") is not None else None,
+            "identity_end": float(pose["identity_end"]) if pose.get("identity_end") is not None else None,
         }
 
     def _ensure_avatar_lora_pose_guide(self, *, relative_image: str) -> str:

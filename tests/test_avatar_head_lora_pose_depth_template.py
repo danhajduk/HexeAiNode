@@ -60,7 +60,9 @@ class AvatarHeadLoraPoseDepthTemplateTests(unittest.TestCase):
                 "template.avatar_head_lora_pose_depth_control.realvisxl.v1",
             )
             self.assertEqual(pose["depth_strength"], 0.55)
-            self.assertEqual(pose["depth_end"], 1.0)
+            self.assertEqual(pose["depth_end"], 0.65)
+            self.assertEqual(pose["identity_strength"], 0.7)
+            self.assertEqual(pose["identity_end"], 1.0)
             source = Path("config/image-studio/lora-pose-guides") / pose[
                 "depth_guide_image"
             ].removeprefix("system/lora-pose-guides/")

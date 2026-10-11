@@ -173,7 +173,9 @@
       "depth_guide_image": "system/lora-pose-guides/face/depth-source/slight_down.png",
       "depth_strength": 0.55,
       "depth_start": 0,
-      "depth_end": 1.0,
+      "depth_end": 0.65,
+      "identity_strength": 0.7,
+      "identity_end": 1.0,
       "negative_remove": ["tilted head"],
       "negative_add": ["looking at camera", "direct camera eye contact", "face aimed at camera", "level head pitch", "raised chin", "upward head angle", "head roll", "overhead camera", "high-angle camera", "camera looking down", "raised shoulders", "hunched shoulders", "chin hidden against chest", "extreme downward angle", "distorted face", "compressed face", "warped facial features", "misaligned eyes", "deformed jaw"],
       "prompt_replacements": {
@@ -195,7 +197,9 @@
       "depth_guide_image": "system/lora-pose-guides/face/depth-source/slight_up.png",
       "depth_strength": 0.55,
       "depth_start": 0,
-      "depth_end": 1.0,
+      "depth_end": 0.65,
+      "identity_strength": 0.7,
+      "identity_end": 1.0,
       "negative_remove": ["tilted head"],
       "negative_add": ["lowered chin", "downward head angle", "head roll", "raised shoulders", "hunched shoulders", "extreme upward angle"],
       "prompt_replacements": {
