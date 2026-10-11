@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, isGenerateShortcut, latestSavedFacePreview, magnitudeLabel, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, isGenerateShortcut, latestSavedFacePreview, magnitudeLabel, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType, versionedPreviewUrl } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -533,6 +533,14 @@ describe("ImageStudio", () => {
     expect(previewArtifactReady({ status: "completed", url: "/preview.png", imported_at: "now", placeholder: false })).toBe(true);
   });
 
+  it("cache-busts stable preview filenames with the generation prompt id", () => {
+    expect(versionedPreviewUrl("/node", {
+      url: "/references/upper_torso/last.png",
+      prompt_id: "new prompt/id",
+      imported_at: "later",
+    })).toBe("/node/references/upper_torso/last.png?v=new%20prompt%2Fid");
+  });
+
   it("shows importing instead of done until the preview file is available", () => {
     const markup = renderToStaticMarkup(
       <ImageStudio
@@ -655,7 +663,7 @@ describe("ImageStudio", () => {
     );
 
     expect(markup).toContain("current-body");
-    expect(markup).toContain("/references/upper_torso/last.png");
+    expect(markup).toContain("/references/upper_torso/last.png?v=current-body");
     expect(markup).not.toContain("/old.png");
   });
 

@@ -315,6 +315,15 @@ function previewArtifactReady(preview) {
   );
 }
 
+function versionedPreviewUrl(apiBase, preview) {
+  const path = String(preview?.url || "").trim();
+  if (!path) return "";
+  const version = String(preview?.prompt_id || preview?.imported_at || preview?.preview_id || "").trim();
+  const url = `${apiBase}${path}`;
+  if (!version) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}`;
+}
+
 function GenerationPreviewPlaceholder({ active = false, importing = false }) {
   const title = importing ? "Importing image…" : active ? "Generating preview…" : "Preview pending";
   return (
@@ -993,7 +1002,7 @@ export function ImageStudio({
   const bodyPreviewCompleted = ["completed", "completed_with_fallback"].includes(bodyPreviewStatus.toLowerCase());
   const bodyPreviewImageUrl = bodyPreviewTracking || (generationKind === "body" && generationSubmissionStage)
     ? ""
-    : bodyPreview?.url ? `${apiBase}${bodyPreview.url}` : "";
+    : versionedPreviewUrl(apiBase, bodyPreview);
   const bodyPreviewRevealId = String(bodyPreview?.prompt_id || bodyPreview?.preview_id || bodyPreview?.url || "");
   const bodyPreviewRevealed = Boolean(bodyPreviewRevealId && revealedBodyPreviewId === bodyPreviewRevealId);
   const facePreviewSeed = facePreview?.seed_text || facePreview?.seed;
@@ -1049,7 +1058,7 @@ export function ImageStudio({
       || progressDetail?.failure_reason
       || (facePreviewTracking ? "Live status refreshes automatically." : "Generate a preview to see live model and rendering details.")
   );
-  const previewImageUrl = displayedFacePreview?.url ? `${apiBase}${displayedFacePreview.url}` : "";
+  const previewImageUrl = versionedPreviewUrl(apiBase, displayedFacePreview);
   const progressPreview = generationSubmissionStage ? null : generationKind === "body" ? bodyPreview : facePreview;
   const progressTracking = generationKind === "body" ? bodyPreviewTracking : facePreviewTracking;
   const progressPromptId = String(progressPreview?.prompt_id || "").trim();
@@ -1088,7 +1097,7 @@ export function ImageStudio({
     : Number.isFinite(modalProgressValue) && Number.isFinite(modalProgressMax) && modalProgressMax > 0
       ? Math.max(0, Math.min(100, (modalProgressValue / modalProgressMax) * 100))
       : 0;
-  const progressImageUrl = progressArtifactReady && progressPreview?.url ? `${apiBase}${progressPreview.url}` : "";
+  const progressImageUrl = progressArtifactReady ? versionedPreviewUrl(apiBase, progressPreview) : "";
   const progressBodyRevealId = String(progressPreview?.prompt_id || progressPreview?.preview_id || progressPreview?.url || "");
   const progressBodyRevealed = generationKind !== "body" || Boolean(progressBodyRevealId && revealedBodyPreviewId === progressBodyRevealId);
   const progressSubmittedAt = String(progressPreview?.submitted_at || generationJob?.submitted_at || "");
@@ -2290,4 +2299,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, isGenerateShortcut, magnitudeLabel, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, isGenerateShortcut, magnitudeLabel, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType, versionedPreviewUrl };
