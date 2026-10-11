@@ -178,7 +178,7 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Identity bootstrap required before generation");
   });
 
-  it("offers a six-step character interview with optional local LLM guidance", () => {
+  it("offers a seven-step character workflow with optional local LLM guidance", () => {
     const template = {
       template_id: "template.avatar_body_depth_reference_transparent.realvisxl.v1",
       template_name: "Simple Avatar Generation",
@@ -206,7 +206,7 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Let the local LLM ask guiding questions");
     expect(markup).toContain("Check answer with LLM");
     expect(markup).toContain("Continue anyway");
-    expect(markup).toContain("1 of 6");
+    expect(markup).toContain("1 of 7");
     expect(markup).toContain("Gender");
     expect(markup).toContain("Non-binary");
     expect(markup).toContain("Semi-realistic");
@@ -728,13 +728,13 @@ describe("ImageStudio", () => {
     expect(markup).not.toContain("/old.png");
   });
 
-  it("offers the Face LoRA dataset as the next step after a completed body reference", () => {
+  it("places the Face LoRA dataset at step 4 after the body reference", () => {
     const markup = renderToStaticMarkup(
       <ImageStudio
         initialCreationType="character"
         initialCharacterPath="create_new"
         initialInterviewOpen
-        initialInterviewStep={2}
+        initialInterviewStep={3}
         initialCharacterProfileId="Nova"
         initialCharacterBrief={{
           name: "Nova",
@@ -754,7 +754,10 @@ describe("ImageStudio", () => {
       />
     );
 
-    expect(markup).toContain("Continue to Face LoRA dataset");
+    expect(markup).toContain("Face LoRA dataset");
+    expect(markup).toContain("4 of 7");
+    expect(markup).toContain("Generate pose batch");
+    expect(markup).not.toContain("What should the character wear");
   });
 
   it("forces SFW when an adult character is changed to an under-18 age group", () => {
