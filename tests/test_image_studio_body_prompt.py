@@ -17,10 +17,13 @@ class ImageStudioBodyPromptTests(unittest.TestCase):
         self.assertIn("INHERITED FACE SKIN TONE: olive", prompt)
         self.assertIn("long fingers", prompt)
         self.assertIn("real living human person", prompt)
-        self.assertIn("relaxed anatomical A-pose", prompt)
+        self.assertIn("symmetrical front-facing anatomical A-pose", prompt)
         self.assertIn("feet hip-width apart", prompt)
-        self.assertIn("weight distributed evenly across both legs", prompt)
+        self.assertIn("weight distributed exactly evenly across both", prompt)
         self.assertIn("palms facing inward", prompt)
+        self.assertIn("symmetrical front-facing anatomical A-pose:1.60", prompt)
+        self.assertIn("no torso twist, hip shift, lean, or contrapposto", prompt)
+        self.assertIn("body weight distributed exactly evenly", prompt)
         self.assertIn("extreme long shot", prompt)
         self.assertIn("all ten toes", prompt)
         self.assertIn("no more than 85 percent", prompt)
@@ -37,16 +40,6 @@ class ImageStudioBodyPromptTests(unittest.TestCase):
         )
         self.assertIn("black pubic hair color", prompt)
         self.assertNotIn("auburn pubic hair color", prompt)
-
-    def test_custom_pose_replaces_the_default_a_pose(self):
-        prompt = compile_body_preview_prompt(
-            selections={"build": ["athletic"]},
-            face_selections={},
-            custom_details="",
-            context={"pose_prompt": "natural three-quarter stance with both feet fully visible"},
-        )
-        self.assertIn("natural three-quarter stance with both feet fully visible", prompt)
-        self.assertNotIn("relaxed anatomical A-pose facing the camera squarely", prompt)
 
     def test_rejects_conflicting_genital_anatomy(self):
         with self.assertRaisesRegex(ValueError, "body_feature_anatomy_conflict"):

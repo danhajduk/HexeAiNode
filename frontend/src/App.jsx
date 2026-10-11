@@ -3141,7 +3141,6 @@ export default function App() {
           dataLoading={imageStudioDataLoading}
           dataError={error}
           promptHelperBusy={manualImagePromptHelperBusy}
-          poseHelperBusy={manualImagePoseHelperBusy}
           interviewBusy={characterInterviewBusy}
           characterProfiles={Array.isArray(avatarGenerationPayload?.profiles) ? avatarGenerationPayload.profiles : []}
           characterSaveBusy={avatarGenerationBusy}
@@ -3155,7 +3154,6 @@ export default function App() {
             }
           }}
           onImprovePrompt={onImproveManualImagePrompt}
-          onBuildPose={onBuildManualImagePose}
           onInterviewQuestion={onCharacterInterviewQuestion}
           onSaveCharacterDraft={onSaveAvatarProfile}
           onGenerateFacePreview={onCreateImageStudioFacePreview}

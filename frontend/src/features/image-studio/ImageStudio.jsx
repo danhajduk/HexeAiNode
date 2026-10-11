@@ -269,14 +269,6 @@ const BODY_PREVIEW_STYLE_PROMPTS = {
   anime: "Clean anime character body design, intact continuous skin, coherent anime anatomy and proportions, smooth cel-shaded rendering, polished character reference art.",
 };
 
-const BODY_POSE_PRESETS = [
-  ["neutral", "Relaxed anatomical A-pose facing the camera, upright neutral spine and pelvis, shoulders level, feet hip-width apart, arms slightly away from the torso, palms inward."],
-  ["three-quarter", "Natural standing three-quarter view, torso and pelvis turned about 30 degrees together, weight balanced, both arms relaxed, both feet fully visible."],
-  ["side", "Natural standing side profile, spine neutral, shoulders and hips aligned, arms relaxed without covering the torso, both complete feet visible."],
-  ["back", "Natural standing back view, shoulders and hips level, arms slightly away from the torso, legs uncrossed, both complete feet visible."],
-  ["contrapposto", "Subtle relaxed contrapposto, weight mostly on one leg, other knee softly relaxed, pelvis and shoulders naturally counterbalanced, arms clear of the torso."],
-];
-
 function buildBodyPreviewPrompt(characterBrief, faceSelections = {}, faceCatalog = null) {
   const visualStyle = String(characterBrief.visual_style || "semi-realistic").trim().toLowerCase();
   const stylePrompt = BODY_PREVIEW_STYLE_PROMPTS[visualStyle] || BODY_PREVIEW_STYLE_PROMPTS["semi-realistic"];
@@ -309,7 +301,6 @@ function buildBodyPreviewPayload(characterBrief, bodySelections, faceSelections,
       gender_identity: characterBrief.gender_identity,
       visual_style: characterBrief.visual_style,
       content_rating: characterBrief.content_rating,
-      ...(String(characterBrief.pose || "").trim() ? { pose_prompt: String(characterBrief.pose).trim() } : {}),
     },
   };
 }
@@ -837,12 +828,10 @@ export function ImageStudio({
   dataLoading = false,
   dataError = "",
   promptHelperBusy = false,
-  poseHelperBusy = false,
   interviewBusy = false,
   characterProfiles = [],
   characterSaveBusy = false,
   onImprovePrompt,
-  onBuildPose,
   onInterviewQuestion,
   onSaveCharacterDraft,
   onGenerateFacePreview,
@@ -896,9 +885,6 @@ export function ImageStudio({
   const [bodyFeatureSelections, setBodyFeatureSelections] = useState({});
   const [bodyFeatureMagnitudes, setBodyFeatureMagnitudes] = useState({});
   const [bodyCustomDetails, setBodyCustomDetails] = useState("");
-  const [bodyPosePreset, setBodyPosePreset] = useState("neutral");
-  const [bodyPoseText, setBodyPoseText] = useState(BODY_POSE_PRESETS[0][1]);
-  const [bodyPoseStatus, setBodyPoseStatus] = useState("");
   const [bodySeedLocked, setBodySeedLocked] = useState(false);
   const [bodySeedInput, setBodySeedInput] = useState("");
   const [faceSeedReviewOpen, setFaceSeedReviewOpen] = useState(initialFaceSeedReviewOpen);
@@ -1111,10 +1097,6 @@ export function ImageStudio({
     setBodyFeatureSelections(savedBodyFeatures?.selections || {});
     setBodyFeatureMagnitudes(savedBodyFeatures?.magnitudes || {});
     setBodyCustomDetails(savedBodyFeatures?.custom_details || "");
-    if (savedBrief.pose) {
-      setBodyPosePreset("custom");
-      setBodyPoseText(savedBrief.pose);
-    }
   }, [initialCharacterProfileId, characterProfiles, faceFeatureCatalog, characterBrief.name]);
 
   useEffect(() => {
@@ -1285,13 +1267,6 @@ export function ImageStudio({
     setBodyFeatureSelections(savedBodyFeatures?.selections || {});
     setBodyFeatureMagnitudes(savedBodyFeatures?.magnitudes || {});
     setBodyCustomDetails(savedBodyFeatures?.custom_details || "");
-    if (savedBrief.pose) {
-      setBodyPosePreset("custom");
-      setBodyPoseText(savedBrief.pose);
-    } else {
-      setBodyPosePreset("neutral");
-      setBodyPoseText(BODY_POSE_PRESETS[0][1]);
-    }
     setCharacterProfileId(profile.profile_id || "");
     setPromptDraft("");
     setInterviewStep(nextIncompleteInterviewStep(savedBrief));
@@ -1472,7 +1447,7 @@ export function ImageStudio({
       setDraftSaveMessage("Character saved. Submitting body reference preview…");
       const result = await onGenerateBodyPreview(profileId, {
         ...buildBodyPreviewPayload(characterBrief, bodyFeatureSelections, faceFeatureSelections, bodyCustomDetails, bodyFeatureMagnitudes),
-        negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, scalp, head hair, hair hanging into frame, facial hair, beard, mustache, sideburns, facial features, portrait, portrait shot, close-up, medium shot, anatomical close-up, torso-dominant composition, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped ankles, cropped feet, cropped toes, missing toes, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, skin lesions, rash, sores, colored spots, confetti, embedded debris, mosaic skin, camouflage texture, body paint, patterned skin, patterned background, dramatic pose, fashion pose, contrapposto, hip cocked, leaning body, twisted torso, crossed arms, crossed legs, hands on hips, hands behind back, hands covering torso, bent raised knee, walking pose, action pose, extreme foreshortening, text, watermark, child, teen, underage"
+        negative_prompt: "head, face, jaw, chin, eyes, mouth, nose, ears, scalp, head hair, hair hanging into frame, facial hair, beard, mustache, sideburns, facial features, portrait, portrait shot, close-up, medium shot, anatomical close-up, torso-dominant composition, visible head, partial head, multiple people, duplicate body, extra limbs, missing limbs, malformed anatomy, cropped shoulders, cropped waist, cropped legs, cropped ankles, cropped feet, cropped toes, missing toes, shirt, pants, dress, underwear, leotard, bodysuit, loose clothing, bulky clothing, robot, android, cyborg, mannequin, doll, anatomical model, exposed muscles, exposed skeleton, mechanical joints, segmented limbs, body panels, armor plates, synthetic skin, seams across skin, plastic surface, porcelain surface, skin lesions, rash, sores, colored spots, confetti, embedded debris, mosaic skin, camouflage texture, body paint, patterned skin, patterned background, side view, profile view, back view, three-quarter view, asymmetrical stance, uneven shoulders, uneven hips, weight shift, dramatic pose, fashion pose, contrapposto, hip cocked, leaning body, twisted torso, crossed arms, crossed legs, hands on hips, hands behind back, hands covering torso, bent raised knee, walking pose, action pose, extreme foreshortening, text, watermark, child, teen, underage"
           + ((bodyFeatureSelections.misc || []).includes("no tattoos") ? ", tattoo, tattoos, body art, inked skin, pubic tattoo, genital tattoo, pelvic tattoo, heart tattoo, heart symbol, red heart, decorative symbol on skin" : ""),
         seed: bodySeedInput.trim() || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null ? bodyPreviewSeed : null),
         lock_seed: Boolean(bodySeedInput.trim()) || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null),
@@ -1484,42 +1459,6 @@ export function ImageStudio({
     } finally {
       setGenerationSubmissionStage("");
     }
-  }
-
-  async function generateBodyPose() {
-    const poseText = bodyPoseText.trim();
-    if (!poseText || poseHelperBusy || !onBuildPose) return;
-    setBodyPoseStatus("Generating structured pose…");
-    const result = await onBuildPose({
-      template_id: "template.avatar_upper_torso_preview.realvisxl.v1",
-      pose_text: poseText,
-      current_pose_prompt: characterBrief.pose || null,
-      avatar_name: characterBrief.name || "avatar",
-      width: 768,
-      height: 1536,
-      generate_reference: false,
-    });
-    if (!result?.pose_prompt) {
-      setBodyPoseStatus("Pose generation failed. The current pose was not changed.");
-      return;
-    }
-    updateCharacterBrief("pose", result.pose_prompt);
-    setBodyPoseStatus(`Pose ready${result.provider ? ` (${String(result.provider).replaceAll("_", " ")})` : ""}.`);
-  }
-
-  function selectBodyPosePreset(value) {
-    setBodyPosePreset(value);
-    const preset = BODY_POSE_PRESETS.find(([id]) => id === value);
-    if (preset) setBodyPoseText(preset[1]);
-    setBodyPoseStatus("");
-  }
-
-  function resetBodyPose() {
-    const neutral = BODY_POSE_PRESETS[0][1];
-    setBodyPosePreset("neutral");
-    setBodyPoseText(neutral);
-    updateCharacterBrief("pose", "");
-    setBodyPoseStatus("Using the default neutral A-pose.");
   }
 
   async function forceRefreshGeneration() {
@@ -2021,30 +1960,6 @@ export function ImageStudio({
                       </fieldset>
                     ) : null}
                   </div>
-                  <fieldset className="image-studio-magnitude-control image-studio-body-pose-generator">
-                    <legend>Reference pose<small>Choose a starting pose or describe one, then generate a structured pose instruction.</small></legend>
-                    <div className="image-studio-compact-trait-row">
-                      <label className="image-studio-trait-preset">
-                        <span>Pose preset</span>
-                        <select value={bodyPosePreset} onChange={(event) => selectBodyPosePreset(event.target.value)}>
-                          {BODY_POSE_PRESETS.map(([id]) => <option value={id} key={id}>{id.replaceAll("-", " ")}</option>)}
-                          <option value="custom">custom</option>
-                        </select>
-                      </label>
-                      <label className="image-studio-full-field">
-                        <span>Pose description</span>
-                        <textarea rows={3} value={bodyPoseText} onChange={(event) => { setBodyPosePreset("custom"); setBodyPoseText(event.target.value); setBodyPoseStatus(""); }} />
-                      </label>
-                    </div>
-                    <div className="row">
-                      <button className="btn btn-primary" type="button" onClick={generateBodyPose} disabled={!bodyPoseText.trim() || poseHelperBusy || !onBuildPose}>
-                        {poseHelperBusy ? "Generating pose…" : "Generate pose"}
-                      </button>
-                      <button className="btn" type="button" onClick={resetBodyPose} disabled={poseHelperBusy}>Reset to neutral</button>
-                    </div>
-                    {bodyPoseStatus ? <p className="image-studio-refinement-status" role="status">{bodyPoseStatus}</p> : null}
-                    <div className="image-studio-face-summary"><span>Pose sent to generation</span><p>{characterBrief.pose || "Default relaxed anatomical A-pose"}</p></div>
-                  </fieldset>
                   <label className="image-studio-full-field">Additional body details<textarea rows={3} value={bodyCustomDetails} onChange={(event) => updateBodyCustomDetails(event.target.value)} /></label>
                   <div className="image-studio-face-summary"><span>Combined body description</span><p>{characterBrief.body || "Choose body characteristics to build the reference description."}</p></div>
                 </div>

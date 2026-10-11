@@ -147,16 +147,13 @@ def compile_body_preview_prompt(*, selections: dict | None, face_selections: dic
         details.append(str(custom_details).strip())
 
     style = str(context.get("visual_style") or "semi-realistic").strip().lower()
-    pose_prompt = str(context.get("pose_prompt") or "").strip()
-    if not pose_prompt:
-        pose_prompt = "relaxed anatomical A-pose facing the camera squarely. Stand upright with the spine and pelvis neutral, shoulders level and relaxed, feet hip-width apart and fully planted, toes pointing forward with only a slight natural outward angle, body weight distributed evenly across both legs, and knees straight but not locked. Hold both arms naturally 10 to 15 degrees away from the torso with soft elbows, palms facing inward toward the thighs, wrists neutral, and fingers gently separated. Keep the torso, waist, hips, hands, and inner leg contours clearly visible and unobscured."
     return "\n".join(filter(None, (
         "Studio image of exactly one living human person. The camera frame begins at the collarbones and base of the neck; the person's head is naturally above and fully outside the image boundary.",
         "STRICT CAMERA FRAMING: (extreme long shot, entire body visible from the base of the neck through every toe:1.60), (camera far away:1.50), vertical canvas, generous clear space around the body. The subject occupies no more than 85 percent of the image height. Top edge crosses the base of the neck above both collarbones. Both shoulders, entire torso, pelvis, both complete legs, ankles, both complete feet, and all ten toes are inside the frame. Feet sit above the bottom margin with visible space below the toes. No head, scalp, face, facial hair, beard, mustache, sideburns, or head hair is visible anywhere in the image; no hair hangs down from outside the frame. No shoulder crop, waist crop, knee crop, ankle crop, foot crop, or toe crop.",
         f"Character body: {context.get('age_group', '')} {context.get('gender_identity', '')}.",
         f"SELECTED BODY TRAITS — MUST MATCH EXACTLY: {'; '.join(details)}.",
         skin_instruction,
-        f"DEFINED REFERENCE POSE — MUST MATCH WHILE KEEPING THE COMPLETE BODY VISIBLE: {pose_prompt}",
+        "STRICT NEUTRAL A-POSE — MUST MATCH: (symmetrical front-facing anatomical A-pose:1.60). Stand perfectly upright and square to the camera with a neutral straight spine and level neutral pelvis. Keep both shoulders level and relaxed, with no torso twist, hip shift, lean, or contrapposto. Keep body weight distributed exactly evenly across both straight but unlocked legs. Keep both feet hip-width apart, parallel, and fully planted, with toes pointing forward. Hold both arms symmetrically 12 to 15 degrees away from the torso, elbows softly extended at equal height, palms facing inward toward the thighs, wrists neutral, and fingers gently separated. Keep the torso, waist, hips, hands, inner leg contours, complete feet, and all toes clearly visible and unobscured.",
         "Clean healthy intact living skin with natural pores, subtle tonal variation, and uninterrupted soft-tissue transitions. Uniform natural skin surface without embedded objects, debris, colored spots, lesions, mosaic texture, or body paint. Normal human joints with no panel lines.",
         "Plain seamless neutral-gray studio background, visually separate from the body, no patterned wall, no camouflage, no reflected texture on skin.",
         STYLE_PROMPTS.get(style, STYLE_PROMPTS["semi-realistic"]),
