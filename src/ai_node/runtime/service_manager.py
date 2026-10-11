@@ -20,7 +20,7 @@ LOCAL_LLM_DEFAULT_REVERT_IDLE_SECONDS = 900
 LOCAL_LLM_ALWAYS_ON_CHECK_INTERVAL_SECONDS = 60
 VISION_LLM_BUILTIN_DEFAULT_MODEL_ID = "qwen2.5-vl-3b-instruct-q4_k_m"
 VISUAL_TRAINING_CLIENT_IDLE_SECONDS = 30
-VISUAL_TRAINING_MANUAL_IDLE_SECONDS = 300
+VISUAL_TRAINING_MANUAL_IDLE_SECONDS = 3600
 
 
 def _env_int(name: str, *, default: int) -> int:
@@ -229,6 +229,18 @@ class UserSystemdServiceManager:
         node = "running" if backend_state == "running" and frontend_state == "running" else "degraded"
         if backend_state == "unknown" and frontend_state == "unknown":
             node = "unknown"
+        comfyui_webui = self._comfyui_webui_status()
+        if (
+            comfyui_webui.get("state") == "running"
+            and comfyui_webui.get("runtime") == "gpu"
+            and comfyui_webui.get("manual_session_active")
+            and (
+                comfyui_webui.get("session", {}).get("idle_seconds") is None
+                or float(comfyui_webui.get("session", {}).get("idle_seconds") or 0)
+                < int(comfyui_webui.get("session", {}).get("idle_timeout_seconds") or self._comfyui_webui_idle_timeout_seconds)
+            )
+        ):
+            self.ensure_image_studio_gpu_lease(reason="manual_comfyui_session_active")
         services = {
             "backend": backend,
             "frontend": frontend,
@@ -236,7 +248,7 @@ class UserSystemdServiceManager:
             "vision_llm": self._vision_llm_status(),
             "comfyui_gpu": self._comfyui_runtime_status(runtime="gpu"),
             "comfyui_cpu": self._comfyui_runtime_status(runtime="cpu"),
-            "comfyui_webui": self._comfyui_webui_status(),
+            "comfyui_webui": comfyui_webui,
             "gpu_exclusive": self.gpu_exclusive_workload_status(),
             "gpu_resources": self._gpu_memory_status(),
             "node": node,
@@ -2456,6 +2468,23 @@ class UserSystemdServiceManager:
                 stopped[target] = f"stop_failed:{exc}"
                 self._logger.warning("failed to stop %s while acquiring Image Studio GPU lease: %s", target, exc)
         return {**self.image_studio_gpu_lease_status(), "stopped": stopped}
+
+    def ensure_image_studio_gpu_lease(self, *, reason: str) -> dict:
+        lease = self.image_studio_gpu_lease_status()
+        if not lease.get("active"):
+            return self.acquire_image_studio_gpu_lease(reason=reason)
+        path = Path(str(lease.get("lease_file") or self._image_studio_gpu_lease_file))
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            now_epoch = time.time()
+            payload["expires_at_epoch"] = now_epoch + self._image_studio_gpu_lease_seconds
+            payload["renewed_at_epoch"] = now_epoch
+            temporary = path.with_suffix(path.suffix + ".tmp")
+            temporary.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+            os.replace(temporary, path)
+        except Exception as exc:
+            self._logger.warning("failed to renew Image Studio GPU lease: %s", exc)
+        return self.image_studio_gpu_lease_status()
 
     def release_image_studio_gpu_lease(self, *, reason: str) -> dict:
         path = Path(self._image_studio_gpu_lease_file or ".run/image-studio-gpu-lease.json")

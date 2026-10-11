@@ -875,6 +875,30 @@ class ServiceManagerTests(unittest.TestCase):
             self.assertIn("image_studio_gpu_lease_active", exclusive["reasons"])
             self.assertTrue(exclusive["local_llm_blocked"])
             self.assertEqual(blocked["result"], "blocked")
+
+            with (
+                patch.object(manager, "_run_local_llm_control") as renewed_local_control,
+                patch.object(manager, "_run_vision_llm_control") as renewed_vision_control,
+            ):
+                renewed = manager.ensure_image_studio_gpu_lease(reason="manual_comfyui_session_active")
+            self.assertTrue(renewed["active"])
+            self.assertGreater(renewed["remaining_seconds"], 3500)
+            renewed_local_control.assert_not_called()
+            renewed_vision_control.assert_not_called()
+
+            lease_path = Path(renewed["lease_file"])
+            expired_payload = json.loads(lease_path.read_text(encoding="utf-8"))
+            expired_payload["expires_at_epoch"] = time.time() - 1
+            lease_path.write_text(json.dumps(expired_payload), encoding="utf-8")
+            with (
+                patch.object(manager, "_run_local_llm_control") as recovered_local_control,
+                patch.object(manager, "_run_vision_llm_control") as recovered_vision_control,
+            ):
+                recovered = manager.ensure_image_studio_gpu_lease(reason="manual_comfyui_session_active")
+            self.assertTrue(recovered["active"])
+            recovered_local_control.assert_called_once_with("stop")
+            recovered_vision_control.assert_called_once_with("stop")
+
             self.assertTrue(manager.release_image_studio_gpu_lease(reason="test_complete")["released"])
             self.assertFalse(manager.image_studio_gpu_lease_status()["active"])
 
