@@ -252,6 +252,7 @@ def management_scope_for_route(*, method: str, path: str) -> str | None:
 MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID = "template.avatar_head_face_preview.realvisxl.v1"
 IMAGE_STUDIO_FACE_FEATURE_CATALOG_RELATIVE_PATH = "config/image-studio/face-feature-catalog.json"
+IMAGE_STUDIO_FACE_REFERENCE_PROMPTS_RELATIVE_PATH = "config/image-studio/face-reference-prompts.json"
 IMAGE_STUDIO_FACE_LORA_PROMPTS_RELATIVE_PATH = "config/image-studio/face-lora-prompts.json"
 IMAGE_STUDIO_BODY_LORA_PROMPTS_RELATIVE_PATH = "config/image-studio/body-lora-prompts.json"
 AVATAR_UPPER_TORSO_PREVIEW_TEMPLATE_ID = "template.avatar_upper_torso_preview.realvisxl.v1"
@@ -2679,6 +2680,13 @@ class NodeControlState:
         return (Path(__file__).resolve().parents[3] / IMAGE_STUDIO_FACE_FEATURE_CATALOG_RELATIVE_PATH).resolve()
 
     @staticmethod
+    def _image_studio_face_reference_prompt_catalog_path() -> Path:
+        configured = str(os.environ.get("HEXE_IMAGE_STUDIO_FACE_REFERENCE_PROMPTS_PATH") or "").strip()
+        if configured:
+            return Path(configured).expanduser().resolve()
+        return (Path(__file__).resolve().parents[3] / IMAGE_STUDIO_FACE_REFERENCE_PROMPTS_RELATIVE_PATH).resolve()
+
+    @staticmethod
     def _image_studio_lora_prompt_catalog(kind: str) -> dict:
         normalized_kind = "body" if str(kind or "").strip().lower() == "body" else "face"
         environment_name = (
@@ -2730,6 +2738,38 @@ class NodeControlState:
             "hot_reload": True,
         }
 
+    def image_studio_face_reference_prompt_catalog(self) -> dict:
+        path = self._image_studio_face_reference_prompt_catalog_path()
+        try:
+            catalog = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            raise ValueError("image_studio_face_reference_prompt_catalog_not_found") from exc
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"image_studio_face_reference_prompt_catalog_invalid_json:{exc.lineno}:{exc.colno}") from exc
+        if (
+            not isinstance(catalog, dict)
+            or catalog.get("runtime_enabled") is not True
+            or not isinstance(catalog.get("base_prompt"), dict)
+            or not isinstance(catalog.get("reference_creation"), dict)
+        ):
+            raise ValueError("image_studio_face_reference_prompt_catalog_invalid")
+        return {
+            **catalog,
+            "source_path": path.as_posix(),
+            "modified_ns": path.stat().st_mtime_ns,
+            "hot_reload": True,
+        }
+
+    @staticmethod
+    def _format_image_studio_prompt_line(template: object, **values: str) -> str:
+        normalized = str(template or "").strip()
+        if not normalized:
+            return ""
+        try:
+            return normalized.format(**values).strip()
+        except (KeyError, ValueError):
+            return ""
+
     @staticmethod
     def _image_studio_profile_initial_data(metadata: dict) -> dict:
         try:
@@ -2743,14 +2783,16 @@ class NodeControlState:
         if str(initial_data.get("source") or "").strip() != "image_studio":
             return None
         catalog = self.image_studio_face_feature_catalog()
+        prompt_catalog = self.image_studio_face_reference_prompt_catalog()
+        base_prompt = prompt_catalog["base_prompt"]
+        reference_creation = prompt_catalog["reference_creation"]
         brief = initial_data.get("character_brief") if isinstance(initial_data.get("character_brief"), dict) else {}
         feature_catalog = initial_data.get("face_feature_catalog") if isinstance(initial_data.get("face_feature_catalog"), dict) else {}
         selections = feature_catalog.get("selections") if isinstance(feature_catalog.get("selections"), dict) else {}
         custom_details = str(feature_catalog.get("custom_details") or "").strip()
         expanded_parts: list[str] = []
         primary_lines: list[str] = []
-        preview_config = catalog.get("preview") if isinstance(catalog.get("preview"), dict) else {}
-        negative_terms = [str(item).strip() for item in (preview_config.get("base_negative") or []) if str(item).strip()]
+        negative_terms = [str(item).strip() for item in (reference_creation.get("base_negative") or []) if str(item).strip()]
         normalized_selections: dict[str, list[str]] = {}
         for group in (item for item in catalog.get("groups", []) if isinstance(item, dict)):
             group_id = str(group.get("id") or "").strip()
@@ -2768,25 +2810,31 @@ class NodeControlState:
                 negative_terms.extend(str(item).strip() for item in (options[value].get("negative_terms") or []) if str(item).strip())
             if group.get("primary_weight") is not None and descriptions:
                 instruction = str(group.get("primary_instruction") or "").replace("{value}", values[0]).strip()
-                primary_lines.append(
-                    f"PRIMARY {group_id.upper()} REQUIREMENT: ({descriptions[0]}:{float(group['primary_weight']):.2f})."
-                    + (f" {instruction}" if instruction else "")
-                )
+                primary_lines.append(self._format_image_studio_prompt_line(
+                    base_prompt.get("primary_requirement"),
+                    group_id=group_id.upper(),
+                    description=descriptions[0],
+                    weight=f"{float(group['primary_weight']):.2f}",
+                    instruction=instruction,
+                ))
         if custom_details:
             expanded_parts.append(custom_details)
         appearance = "; ".join(expanded_parts)
         identity = " ".join(value for value in [str(brief.get("age_group") or "").strip(), str(brief.get("gender_identity") or "").strip()] if value)
         name = str(brief.get("name") or metadata.get("name") or "an unnamed character").strip()
+        concept = str(brief.get("concept") or "").strip()
+        expression = str(brief.get("expression") or "").strip() or "neutral and relaxed"
+        visual_style = str(brief.get("visual_style") or "").strip()
         lines = [
-            str(preview_config.get("opening") or "").strip(),
-            f"Character identity reference portrait of {name}{f', {identity}' if identity else ''}.",
-            f"Character concept: {str(brief.get('concept') or '').strip()}." if str(brief.get("concept") or "").strip() else "",
+            str(reference_creation.get("opening") or "").strip(),
+            self._format_image_studio_prompt_line(base_prompt.get("identity"), name=name, identity=identity, identity_suffix=f", {identity}" if identity else ""),
+            self._format_image_studio_prompt_line(base_prompt.get("concept"), concept=concept) if concept else "",
             *primary_lines,
-            f"Face and hair: {appearance}." if appearance else "",
-            f"Expression: {str(brief.get('expression') or '').strip()}." if str(brief.get("expression") or "").strip() else "Expression: neutral and relaxed.",
-            str(preview_config.get("composition") or "").strip(),
-            str(preview_config.get("quality") or "").strip(),
-            f"Visual style: {str(brief.get('visual_style') or '').strip()}." if str(brief.get("visual_style") or "").strip() else "",
+            self._format_image_studio_prompt_line(base_prompt.get("appearance"), appearance=appearance) if appearance else "",
+            self._format_image_studio_prompt_line(base_prompt.get("expression"), expression=expression),
+            str(reference_creation.get("composition") or "").strip(),
+            str(reference_creation.get("quality") or "").strip(),
+            self._format_image_studio_prompt_line(base_prompt.get("visual_style"), visual_style=visual_style) if visual_style else "",
         ]
         safe_refinement = str(refinement or "").strip()
         if safe_refinement.startswith("{"):
@@ -2804,6 +2852,10 @@ class NodeControlState:
             "selections": normalized_selections,
             "catalog_id": catalog.get("catalog_id"),
             "catalog_modified_ns": catalog.get("modified_ns"),
+            "prompt_catalog_id": prompt_catalog.get("catalog_id"),
+            "prompt_catalog_modified_ns": prompt_catalog.get("modified_ns"),
+            "template_id": str(reference_creation.get("template_id") or AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID),
+            "prompt_compiled_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def save_avatar_profile(self, *, payload: "AvatarProfileSaveRequest") -> dict:
@@ -3133,7 +3185,12 @@ class NodeControlState:
             if isinstance(compiled_catalog_prompt, dict)
             else str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
         )
-        template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID)["template"]
+        template_id = (
+            str(compiled_catalog_prompt.get("template_id") or AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID)
+            if isinstance(compiled_catalog_prompt, dict)
+            else AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID
+        )
+        template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
         defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
         if not negative_prompt:
             negative_prompt = str(defaults.get("negative_prompt") or "").strip()
@@ -3150,7 +3207,7 @@ class NodeControlState:
         submitted_at = datetime.now(timezone.utc).isoformat()
         generation = await self.submit_manual_image_generation(
             payload=ManualImageGenerationRequest(
-                template_id=AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID,
+                template_id=template_id,
                 mode="txt2img",
                 prompt=prompt,
                 negative_prompt=negative_prompt,
@@ -3172,7 +3229,10 @@ class NodeControlState:
             "preview_id": f"head_face_{int(time.time())}",
             "section": "head_face",
             "status": str(generation.get("status") or "submitted"),
-            "template_id": AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID,
+            "template_id": template_id,
+            "prompt_catalog_id": compiled_catalog_prompt.get("prompt_catalog_id") if isinstance(compiled_catalog_prompt, dict) else None,
+            "prompt_catalog_modified_ns": compiled_catalog_prompt.get("prompt_catalog_modified_ns") if isinstance(compiled_catalog_prompt, dict) else None,
+            "prompt_compiled_at": compiled_catalog_prompt.get("prompt_compiled_at") if isinstance(compiled_catalog_prompt, dict) else submitted_at,
             "prompt_id": generation.get("prompt_id"),
             "prompt_ids": generation.get("prompt_ids") or [],
             "seed": first_submission.get("seed"),

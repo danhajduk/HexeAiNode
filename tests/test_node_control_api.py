@@ -4630,15 +4630,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
     def test_image_studio_face_catalog_hot_reloads_and_compiles_prompt(self):
         with tempfile.TemporaryDirectory() as tmp:
             catalog_path = Path(tmp) / "face-catalog.json"
+            prompt_catalog_path = Path(tmp) / "face-reference-prompts.json"
             catalog = {
                 "schema_version": "1.0",
                 "catalog_id": "test.face.v1",
-                "preview": {
-                    "opening": "ONE FACE",
-                    "composition": "front portrait",
-                    "quality": "sharp focus",
-                    "base_negative": ["multiple faces"],
-                },
                 "groups": [
                     {
                         "id": "hair color",
@@ -4655,7 +4650,27 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     }
                 ],
             }
+            prompt_catalog = {
+                "schema_version": "test",
+                "catalog_id": "test.face_reference.v1",
+                "runtime_enabled": True,
+                "base_prompt": {
+                    "identity": "Identity portrait of {name}{identity_suffix}.",
+                    "concept": "Concept: {concept}.",
+                    "primary_requirement": "PRIMARY {group_id}: ({description}:{weight}). {instruction}",
+                    "appearance": "Appearance: {appearance}.",
+                    "expression": "Expression: {expression}.",
+                    "visual_style": "Style: {visual_style}.",
+                },
+                "reference_creation": {
+                    "opening": "ONE FACE",
+                    "composition": "front portrait",
+                    "quality": "sharp focus",
+                    "base_negative": ["multiple faces"],
+                },
+            }
             catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+            prompt_catalog_path.write_text(json.dumps(prompt_catalog), encoding="utf-8")
             state = NodeControlState(
                 lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
                 config_path=str(Path(tmp) / "bootstrap_config.json"),
@@ -4669,15 +4684,23 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     "face_feature_catalog": {"selections": {"hair color": ["blonde"]}},
                 }),
             }
-            with patch.dict("os.environ", {"HEXE_IMAGE_STUDIO_FACE_FEATURE_CATALOG_PATH": str(catalog_path)}):
+            with patch.dict("os.environ", {
+                "HEXE_IMAGE_STUDIO_FACE_FEATURE_CATALOG_PATH": str(catalog_path),
+                "HEXE_IMAGE_STUDIO_FACE_REFERENCE_PROMPTS_PATH": str(prompt_catalog_path),
+            }):
                 first = state._compile_image_studio_face_preview_prompt(metadata=metadata)
                 catalog["groups"][0]["options"]["blonde"]["description"] = "bright golden blonde hair"
                 catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+                prompt_catalog["reference_creation"]["quality"] = "very sharp focus"
+                prompt_catalog_path.write_text(json.dumps(prompt_catalog), encoding="utf-8")
                 second = state._compile_image_studio_face_preview_prompt(metadata=metadata)
 
         self.assertIn("(clear blonde hair:1.45)", first["prompt"])
         self.assertIn("brown hair", first["negative_prompt"])
         self.assertIn("bright golden blonde hair", second["prompt"])
+        self.assertIn("very sharp focus", second["prompt"])
+        self.assertEqual(second["prompt_catalog_id"], "test.face_reference.v1")
+        self.assertTrue(second["prompt_compiled_at"])
         self.assertNotEqual(first["prompt"], second["prompt"])
 
     def test_avatar_generation_refines_head_prompt_with_local_llm_and_saves_history(self):

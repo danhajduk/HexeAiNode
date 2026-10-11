@@ -1,0 +1,28 @@
+{
+  "schema_version": "image_studio_face_reference_prompts_v1",
+  "catalog_id": "image_studio.face_reference_prompts.v1",
+  "runtime_enabled": true,
+  "base_prompt": {
+    "identity": "Character identity reference portrait of {name}{identity_suffix}.",
+    "concept": "Character concept: {concept}.",
+    "primary_requirement": "PRIMARY {group_id} REQUIREMENT: ({description}:{weight}). {instruction}",
+    "appearance": "Face and hair: {appearance}.",
+    "expression": "Expression: {expression}.",
+    "visual_style": "Visual style: {visual_style}."
+  },
+  "reference_creation": {
+    "template_id": "template.avatar_head_face_preview.realvisxl.v1",
+    "opening": "EXACTLY ONE PERSON. EXACTLY ONE FACE. Single centered identity portrait; never a collage, grid, comparison, or character sheet.",
+    "composition": "Front-facing head-and-shoulders composition, eyes looking directly at camera, symmetrical neutral pose, centered face, entire head visible.",
+    "quality": "Realistic facial proportions, detailed natural skin texture, soft even studio lighting, plain neutral-gray background, single-subject studio portrait, sharp focus.",
+    "base_negative": [
+      "multiple people", "more than one person", "two people", "multiple faces", "more than one face",
+      "two faces", "duplicate face", "extra face", "face collage", "portrait collage", "diptych", "triptych",
+      "contact sheet", "character sheet", "split screen", "side-by-side portraits", "mirrored face", "reflection",
+      "profile view", "three-quarter view", "tilted head", "cropped forehead", "cropped chin", "closed eyes",
+      "asymmetrical eyes", "distorted face", "duplicate features", "exaggerated expression", "heavy makeup",
+      "dramatic lighting", "harsh shadows", "accessories covering the face", "text", "watermark", "blurry",
+      "low detail", "child", "teen", "underage"
+    ]
+  }
+}
