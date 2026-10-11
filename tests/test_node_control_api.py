@@ -5883,6 +5883,23 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Reject soft beauty angles", vision_prompt)
         self.assertIn("near side-profile", vision_prompt)
 
+    def test_avatar_lora_prompt_avoids_reference_sheet_composition(self):
+        prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(
+            prompt="identity reference sheet, 512x512 face LoRA dataset image, pose-varied avatar training reference",
+            pose_id="front_neutral",
+        )
+        negative = NodeControlState._avatar_head_lora_dataset_pose_negative_prompt(
+            negative_prompt="multiple faces",
+            pose_id="front_neutral",
+        )
+
+        self.assertNotIn("reference sheet", prompt)
+        self.assertNotIn("training reference", prompt)
+        self.assertIn("single-subject studio portrait", prompt)
+        self.assertIn("inset portrait", negative)
+        self.assertIn("hair swatch", negative)
+        self.assertIn("hands above head", negative)
+
     def test_avatar_generation_head_lora_dataset_runs_vision_review_after_batch_completed(self):
         class _AvatarProfileServiceManager:
             def __init__(self, input_dir: str, output_dir: str):

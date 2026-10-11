@@ -5763,6 +5763,7 @@ class NodeControlState:
         }
 
     def _avatar_head_lora_pose_phase(self, *, profile_dir: Path, pose: dict) -> dict:
+        vision_review_enabled = _env_bool("HEXE_AVATAR_LORA_VISION_REVIEW_ENABLED", True)
         pose_items = [item for item in list(pose.get("items") or []) if isinstance(item, dict) and not bool(item.get("rejected"))]
         total_count = len(pose_items)
         completed_items = [
@@ -5821,11 +5822,11 @@ class NodeControlState:
             status = "importing"
             detail = f"Importing generated images into the profile folder {imported_count}/{required_batch_count}."
             wait_reason = "waiting_for_profile_import"
-        elif settle_remaining > 0:
+        elif vision_review_enabled and settle_remaining > 0:
             status = "waiting_for_vision"
             detail = f"Waiting {settle_remaining}s for the last imported image to settle before vision review."
             wait_reason = "waiting_for_import_settle"
-        elif len(reviewed_items) < required_batch_count:
+        elif vision_review_enabled and len(reviewed_items) < required_batch_count:
             status = "waiting_for_vision"
             detail = f"Waiting for vision review {len(reviewed_items)}/{required_batch_count}."
             wait_reason = "waiting_for_vision_review"
@@ -5833,13 +5834,17 @@ class NodeControlState:
             status = "ready"
             detail = f"Ready for next pose: {approved_count}/{required_approved_count} human-approved."
             wait_reason = ""
-        else:
+        elif vision_review_enabled:
             status = "vision_reviewed"
             detail = (
                 f"Vision reviewed {len(reviewed_items)}/{required_batch_count}; "
                 f"{vision_approved_count} approved, {vision_rejected_count} rejected, {vision_failed_count} failed. "
                 f"Human approval needed {approved_count}/{required_approved_count}."
             )
+            wait_reason = "waiting_for_human_approval"
+        else:
+            status = "manual_review"
+            detail = f"Generated {imported_count}/{required_batch_count}; human approval needed {approved_count}/{required_approved_count}."
             wait_reason = "waiting_for_human_approval"
 
         return {
@@ -5865,6 +5870,29 @@ class NodeControlState:
         pose: dict,
         now: str,
     ) -> tuple[dict, bool]:
+        if not _env_bool("HEXE_AVATAR_LORA_VISION_REVIEW_ENABLED", True):
+            items = []
+            changed = str(pose.get("vision_status") or "") != "manual_review"
+            for item in list(pose.get("items") or []):
+                if not isinstance(item, dict):
+                    items.append(item)
+                    continue
+                cleaned = {
+                    key: value
+                    for key, value in item.items()
+                    if key not in {"vision_error", "vision_review", "vision_reviewed_at"}
+                }
+                cleaned["vision_status"] = "manual_review"
+                cleaned["vision_approved"] = False
+                changed = changed or cleaned != item
+                items.append(cleaned)
+            return {
+                **pose,
+                "items": items,
+                "vision_status": "manual_review",
+                "vision_reviewed_count": 0,
+                "vision_updated_at": now,
+            }, changed
         if self._service_manager is None:
             return pose, False
         if not hasattr(self._service_manager, "stop") or not hasattr(self._service_manager, "start"):
@@ -8844,9 +8872,15 @@ class NodeControlState:
 
     @staticmethod
     def _avatar_head_lora_dataset_pose_base_prompt(*, prompt: str, pose_id: str) -> str:
-        if pose_id not in {"three_quarter_left", "three_quarter_right"}:
-            return prompt
         cleaned = str(prompt or "")
+        for source, target in {
+            "identity reference sheet": "single-subject studio portrait",
+            "pose-varied avatar training reference": "single-image identity sample",
+            "face LoRA dataset image": "single-subject portrait image",
+        }.items():
+            cleaned = cleaned.replace(source, target)
+        if pose_id not in {"three_quarter_left", "three_quarter_right"}:
+            return cleaned
         direction = "left" if pose_id == "three_quarter_left" else "right"
         gaze_target = f"off-camera gaze toward the {direction} edge of the image"
         replacements = {
@@ -8886,12 +8920,21 @@ class NodeControlState:
 
     @staticmethod
     def _avatar_head_lora_dataset_pose_negative_prompt(*, negative_prompt: str, pose_id: str) -> str:
+        common = [
+            str(negative_prompt or "").strip(),
+            "inset portrait", "secondary portrait", "thumbnail portrait", "picture-in-picture",
+            "reference panel", "reference board", "mood board", "face crop overlay",
+            "eye detail inset", "hair swatch", "color swatch", "detail callout",
+            "floating head", "background face", "framed inset", "image border",
+            "multiple camera views", "alternate view", "comparison layout",
+            "raised arms", "hands above head", "hands touching hair", "dynamic body pose",
+        ]
         if pose_id not in {"three_quarter_left", "three_quarter_right"}:
-            return negative_prompt
+            return ", ".join(part for part in common if part)
         return ", ".join(
             part
             for part in [
-                str(negative_prompt or "").strip(),
+                *common,
                 "straight-on frontal face",
                 "front-facing portrait",
                 "symmetrical passport photo",
@@ -12037,6 +12080,19 @@ class NodeControlState:
             if body_text:
                 detail = f"{detail}: {body_text[:500]}"
             raise ValueError(f"{error_label}: {detail}")
+        if b"transfer-encoding: chunked" in head.lower():
+            decoded = bytearray()
+            remaining = response_body
+            while remaining:
+                size_line, separator, remaining = remaining.partition(b"\r\n")
+                if not separator:
+                    break
+                size = int(size_line.split(b";", 1)[0], 16)
+                if size == 0:
+                    break
+                decoded.extend(remaining[:size])
+                remaining = remaining[size + 2 :]
+            response_body = bytes(decoded)
         parsed = json.loads(response_body.decode("utf-8")) if response_body else {}
         return parsed if isinstance(parsed, dict) else {}
 

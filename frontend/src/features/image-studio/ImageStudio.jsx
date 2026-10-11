@@ -681,7 +681,7 @@ function buildFacePreviewPrompt(brief, selections = {}, refinement = "") {
     brief?.appearance ? `Face and hair: ${brief.appearance}.` : "",
     brief?.expression ? `Expression: ${brief.expression}.` : "Expression: neutral and relaxed.",
     "Front-facing head-and-shoulders composition, eyes looking directly at camera, symmetrical neutral pose, centered face, entire head visible.",
-    "Realistic facial proportions, detailed natural skin texture, soft even studio lighting, plain neutral-gray background, identity reference sheet, sharp focus.",
+    "Realistic facial proportions, detailed natural skin texture, soft even studio lighting, plain neutral-gray background, single-subject studio portrait, sharp focus.",
     brief?.visual_style ? `Visual style: ${brief.visual_style}.` : "",
     safeRefinement ? `LLM REFINEMENT LAYER: ${safeRefinement}` : "",
   ].filter(Boolean).join("\n");
