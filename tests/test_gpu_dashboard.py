@@ -51,6 +51,11 @@ class GpuDashboardTests(unittest.TestCase):
         self.assertNotIn("hidden-output", output)
         self.assertNotIn("Clocks", output)
         self.assertNotIn("History", output)
+        header_lines = output.splitlines()[:7]
+        self.assertEqual(header_lines[0].split()[0:4], ["HEXE", "GPU", "+", "COMFYUI"])
+        self.assertTrue(header_lines[1].startswith("Compute"))
+        self.assertTrue(header_lines[6].startswith("ComfyUI"))
+        self.assertNotIn("GPU       Test GPU", output)
 
     def test_image_studio_backend_correlates_local_and_comfyui_state(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

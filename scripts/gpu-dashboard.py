@@ -231,14 +231,11 @@ def render(
     queue_text = f"{queue['running']} running / {queue['pending']} pending"
     lines = [
             color("HEXE GPU + COMFYUI", "1;35", color_enabled) + f"  {time.strftime('%H:%M:%S')}  {workload}",
-            f"GPU       {sample['name']}",
-            "",
             f"Compute   {gauge(util, 100, gauge_width, color_enabled)} {util:5.1f}%",
             f"Memory IO {gauge(memory_activity, 100, gauge_width, color_enabled)} {memory_activity:5.1f}%",
             f"VRAM      {gauge(memory_used, memory_total, gauge_width, color_enabled, 0.8, 0.95)} {memory_used:,.0f} / {memory_total:,.0f} MiB",
             f"Power     {gauge(power, power_limit, gauge_width, color_enabled, 0.7, 0.9)} {power:5.1f} / {power_limit:.0f} W",
             f"Temp      {gauge(temperature, 90, gauge_width, color_enabled, 0.78, 0.9)} {temperature:5.1f} °C",
-            "",
             f"ComfyUI   {queue['state']} · {queue_text}",
     ]
     lines.extend(["", color("IMAGE STUDIO BACKEND", "1;35", color_enabled)])
