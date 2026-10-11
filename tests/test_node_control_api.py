@@ -5934,17 +5934,17 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("natural eyebrow placement following the head angle", prompt)
         self.assertIn("natural shape following the head angle", prompt)
         self.assertIn("soft angled face illumination", prompt)
-        self.assertIn("off-camera gaze toward the left edge of the image", prompt)
+        self.assertIn("off-camera gaze toward the right edge of the image", prompt)
         self.assertIn("looking directly at camera", negative_prompt)
         self.assertIn("direct eye contact", negative_prompt)
         self.assertIn("both eyes same size", negative_prompt)
         self.assertIn("both cheeks equally visible", negative_prompt)
-        self.assertIn("face turned 40 to 45 degrees", geometry_prompt)
+        self.assertIn("subject turned 40 to 45 degrees", geometry_prompt)
         self.assertIn("both eyes visible with the far eye naturally narrower", geometry_prompt)
-        self.assertIn("nose tip and chin angled toward the left edge", geometry_prompt)
+        self.assertIn("nose tip and chin angled toward the right edge", geometry_prompt)
         self.assertIn("Reject straight-on frontal portraits", vision_prompt)
         self.assertIn("full 90-degree side profiles", vision_prompt)
-        self.assertIn("natural 40 to 45 degree left three-quarter portrait", vision_prompt)
+        self.assertIn("anatomical-left three-quarter portrait", vision_prompt)
         inherited_negative = NodeControlState._avatar_head_lora_dataset_pose_negative_prompt(
             negative_prompt="profile view, three-quarter view, tilted head, low quality",
             pose_id="three_quarter_left",
@@ -6033,7 +6033,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("directly at camera", prompt)
         self.assertNotIn("symmetrical neutral pose", prompt)
         self.assertIn("left three-quarter head pose", prompt)
-        self.assertIn("slightly off camera toward the left edge", prompt)
+        self.assertIn("slightly off camera toward the right edge", prompt)
 
     def test_avatar_lora_prompt_avoids_reference_sheet_composition(self):
         prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(
