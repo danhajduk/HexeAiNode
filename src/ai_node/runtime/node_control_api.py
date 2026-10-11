@@ -3987,6 +3987,11 @@ class NodeControlState:
         action = str(payload.action or "ensure").strip().lower()
         active_pose = poses[active_pose_index] if poses else {}
         item_id = str(payload.item_id or "").strip()
+        if action == "generate":
+            services = self.service_status_payload().get("services", {})
+            webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+            if str((webui or {}).get("state") or "").strip().lower() != "running":
+                await self.start_service(target="comfyui_webui")
         if action in {"generate"} and not approved_seeds:
             raise ValueError("avatar_head_lora_seed_set_required")
         if action in {"next", "reject"} and not approved_seeds:
@@ -4175,7 +4180,7 @@ class NodeControlState:
             active_pose_index = min(active_pose_index + 1, max(len(poses) - 1, 0))
             active_pose = poses[active_pose_index]
 
-        if action in {"generate", "next", "reject"} and approved_seeds:
+        if action == "generate" and approved_seeds:
             existing_items = [item for item in list(active_pose.get("items") or []) if isinstance(item, dict) and not bool(item.get("rejected"))]
             avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
             pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
@@ -4352,6 +4357,11 @@ class NodeControlState:
         item_id = str(payload.item_id or "").strip()
         if action not in {"ensure", "generate", "approve", "reject", "next", "reset_pose", "prepare_train_lora", "train_lora", "generate_epoch_review", "select_epoch_review"}:
             raise ValueError("avatar_upper_torso_lora_dataset_action_unsupported")
+        if action == "generate":
+            services = self.service_status_payload().get("services", {})
+            webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
+            if str((webui or {}).get("state") or "").strip().lower() != "running":
+                await self.start_service(target="comfyui_webui")
         now = datetime.now(timezone.utc).isoformat()
         pose_catalog = [
             {
@@ -4433,7 +4443,7 @@ class NodeControlState:
         head_workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
         head_seed_set = head_workspace.get("lora_seed_set") if isinstance(head_workspace.get("lora_seed_set"), dict) else {}
         identity_control = self._avatar_head_lora_dataset_identity_control(workspace=head_workspace, lora_seed_set=head_seed_set)
-        if action in {"generate", "next", "reject"} and active_pose and body_seed is not None and identity_control:
+        if action == "generate" and active_pose and body_seed is not None and identity_control:
             existing_items = [candidate for candidate in list(active_pose.get("items") or []) if isinstance(candidate, dict) and not bool(candidate.get("rejected"))]
             pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
             pose_reference_image = self._ensure_avatar_lora_pose_guide(
