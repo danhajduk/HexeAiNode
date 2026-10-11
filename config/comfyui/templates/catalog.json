@@ -499,7 +499,7 @@
         "scheduler": "sgm_uniform",
         "pose_reference_image": "system/neutral-a-pose-openpose.png",
         "pose_controlnet": "controlnet-openpose-sdxl-1.0.safetensors",
-        "pose_strength": 0.75,
+        "pose_strength": 0.8,
         "pose_start": 0.0,
         "pose_end": 0.7,
         "width": 512,
