@@ -62,19 +62,56 @@ def gpu_sample(index: int) -> dict[str, float | str]:
     }
 
 
-def comfy_queue(socket_path: str) -> dict[str, int | str]:
+def comfy_queue(socket_path: str) -> dict[str, object]:
     try:
         connection = UnixHTTPConnection(socket_path)
         connection.request("GET", "/queue")
         response = connection.getresponse()
         payload = json.loads(response.read())
-        return {
-            "state": "online" if response.status == 200 else f"HTTP {response.status}",
-            "running": len(payload.get("queue_running") or []),
-            "pending": len(payload.get("queue_pending") or []),
-        }
+        return parse_comfy_queue(payload, state="online" if response.status == 200 else f"HTTP {response.status}")
     except (OSError, ValueError, json.JSONDecodeError, http.client.HTTPException):
         return {"state": "offline", "running": 0, "pending": 0}
+
+
+def parse_comfy_queue(payload: dict, *, state: str = "online") -> dict[str, object]:
+    running = list(payload.get("queue_running") or [])
+    pending = list(payload.get("queue_pending") or [])
+    current = (running or pending or [None])[0]
+    result: dict[str, object] = {
+        "state": state,
+        "running": len(running),
+        "pending": len(pending),
+        "job_state": "running" if running else "pending" if pending else "idle",
+    }
+    if not isinstance(current, list):
+        return result
+    workflow = current[2] if len(current) > 2 and isinstance(current[2], dict) else {}
+    sampler = next((node.get("inputs", {}) for node in workflow.values() if node.get("class_type") == "KSampler"), {})
+    checkpoint = next(
+        (node.get("inputs", {}).get("ckpt_name") for node in workflow.values() if node.get("class_type") == "CheckpointLoaderSimple"),
+        None,
+    )
+    output_prefix = next(
+        (
+            node.get("inputs", {}).get("filename_prefix")
+            for node in workflow.values()
+            if node.get("class_type") in {"SaveImage", "SaveImageWebsocket"}
+        ),
+        None,
+    )
+    result.update(
+        {
+            "queue_number": current[0] if current else None,
+            "prompt_id": current[1] if len(current) > 1 else None,
+            "seed": sampler.get("seed") or sampler.get("noise_seed"),
+            "steps": sampler.get("steps"),
+            "cfg": sampler.get("cfg"),
+            "sampler": " / ".join(str(value) for value in (sampler.get("sampler_name"), sampler.get("scheduler")) if value),
+            "checkpoint": checkpoint,
+            "output_prefix": output_prefix,
+        }
+    )
+    return result
 
 
 def color(text: str, code: str, enabled: bool) -> str:
@@ -111,8 +148,7 @@ def render(sample: dict[str, float | str], queue: dict[str, int | str], history:
     else:
         workload = color("IDLE", "90", color_enabled)
     queue_text = f"{queue['running']} running / {queue['pending']} pending"
-    return "\n".join(
-        [
+    lines = [
             color("HEXE GPU + COMFYUI", "1;35", color_enabled) + f"  {time.strftime('%H:%M:%S')}  {workload}",
             f"GPU       {sample['name']}",
             "",
@@ -125,10 +161,24 @@ def render(sample: dict[str, float | str], queue: dict[str, int | str], history:
             f"Clocks    core {float(sample['clocks.sm']):.0f} MHz · memory {float(sample['clocks.mem']):.0f} MHz",
             f"History   {color(sparkline(history), '36', color_enabled)}  (GPU compute, oldest → newest)",
             f"ComfyUI   {queue['state']} · {queue_text}",
-            "",
-            color("Ctrl+C to close", "90", color_enabled),
-        ]
-    )
+    ]
+    if queue.get("job_state") in {"running", "pending"}:
+        lines.extend(
+            [
+                "",
+                color("CURRENT COMFYUI JOB", "1;35", color_enabled),
+                f"State     {queue.get('job_state')} · queue #{queue.get('queue_number', 'unknown')}",
+                f"Prompt ID {queue.get('prompt_id') or 'unknown'}",
+                f"Sampling  {queue.get('steps') or '?'} steps · CFG {queue.get('cfg') or '?'} · {queue.get('sampler') or 'unknown'}",
+                f"Seed      {queue.get('seed') if queue.get('seed') is not None else 'unknown'}",
+                f"Model     {queue.get('checkpoint') or 'unknown'}",
+                f"Output    {queue.get('output_prefix') or 'unknown'}",
+            ]
+        )
+    else:
+        lines.extend(["Job       no active or pending ComfyUI job"])
+    lines.extend(["", color("Ctrl+C to close", "90", color_enabled)])
+    return "\n".join(lines)
 
 
 def main() -> int:
