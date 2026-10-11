@@ -162,6 +162,7 @@ Image creation is moving into a standalone workspace at `#/image-studio`.
 - active face previews poll a lightweight generation-activity endpoint that omits the full manual output/reference inventory scan, so completed images and status updates are not blocked by a large output directory
 - generation progress dialogs bind status, sampler progress, messages, and prompt labels to the submitted preview prompt ID; an older cached, completed, or failed global job cannot overwrite the active face/body popup state
 - preview placeholders record a distinct creation time and are never reported as imported files; the popup exposes an import timestamp only after the final non-placeholder image is present
+- imported body previews are blurred by default in both the body workspace and generation popup, require an explicit click to reveal, hide the full-image link until revealed, and automatically return to the blurred state for each new prompt ID
 - each newly completed face preview publishes one `user.message` event to `hexe/events/user/message` with `endpoint_id: "all"`, QoS 1, and retain disabled; the persisted preview records successful delivery to prevent polling from republishing it
 - final new-character generation remains gated until the required baseline face/body identity assets can be created or supplied
 - the existing Manual Images implementation remains available as `Manual Images (Legacy)` during migration

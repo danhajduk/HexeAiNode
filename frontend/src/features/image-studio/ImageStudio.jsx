@@ -894,6 +894,7 @@ export function ImageStudio({
   const [generationKind, setGenerationKind] = useState(initialGenerationKind);
   const [generationRefreshBusy, setGenerationRefreshBusy] = useState(false);
   const [generationSubmissionStage, setGenerationSubmissionStage] = useState(initialGenerationSubmissionStage);
+  const [revealedBodyPreviewId, setRevealedBodyPreviewId] = useState("");
   const matchingTemplates = useMemo(
     () => templates.filter((template) => {
       if (templateCreationType(template) !== creationType) {
@@ -970,6 +971,8 @@ export function ImageStudio({
   const bodyPreviewStatus = String(bodyPreview?.status || (bodyPreviewTracking ? "preparing" : "not started"));
   const bodyPreviewCompleted = ["completed", "completed_with_fallback"].includes(bodyPreviewStatus.toLowerCase());
   const bodyPreviewImageUrl = bodyPreview?.url ? `${apiBase}${bodyPreview.url}` : "";
+  const bodyPreviewRevealId = String(bodyPreview?.prompt_id || bodyPreview?.preview_id || bodyPreview?.url || "");
+  const bodyPreviewRevealed = Boolean(bodyPreviewRevealId && revealedBodyPreviewId === bodyPreviewRevealId);
   const facePreviewSeed = facePreview?.seed_text || facePreview?.seed;
   const generationProgress = generationActivity?.generation_status?.progress || {};
   const generationSession = generationActivity?.generation_status?.session || generationActivity?.service?.session || {};
@@ -1063,6 +1066,8 @@ export function ImageStudio({
       ? Math.max(0, Math.min(100, (modalProgressValue / modalProgressMax) * 100))
       : 0;
   const progressImageUrl = progressArtifactReady && progressPreview?.url ? `${apiBase}${progressPreview.url}` : "";
+  const progressBodyRevealId = String(progressPreview?.prompt_id || progressPreview?.preview_id || progressPreview?.url || "");
+  const progressBodyRevealed = generationKind !== "body" || Boolean(progressBodyRevealId && revealedBodyPreviewId === progressBodyRevealId);
   const progressSubmittedAt = String(progressPreview?.submitted_at || generationJob?.submitted_at || "");
   const progressImportedAt = progressArtifactReady ? String(progressPreview?.imported_at || "") : "";
   const popupSeed = progressPreview?.seed_text ?? progressPreview?.seed;
@@ -1975,7 +1980,17 @@ export function ImageStudio({
                 <aside className="image-studio-face-preview">
                   <span className="image-studio-eyebrow">Neck-down full-body foundation</span>
                   <div className="image-studio-face-preview-canvas">
-                    {bodyPreviewImageUrl ? <img src={bodyPreviewImageUrl} alt={`Generated body reference for ${characterBrief.name || "character"}`} /> : <><span>Body reference</span><p>Your selected proportions will be rendered here.</p></>}
+                    {bodyPreviewImageUrl ? (
+                      <button
+                        className={`image-studio-sensitive-preview ${bodyPreviewRevealed ? "is-revealed" : "is-blurred"}`}
+                        type="button"
+                        aria-label={bodyPreviewRevealed ? "Hide body preview" : "Reveal blurred body preview"}
+                        onClick={() => setRevealedBodyPreviewId(bodyPreviewRevealed ? "" : bodyPreviewRevealId)}
+                      >
+                        <img src={bodyPreviewImageUrl} alt={`Generated body reference for ${characterBrief.name || "character"}`} />
+                        {!bodyPreviewRevealed ? <span>Body preview hidden · Click to reveal</span> : null}
+                      </button>
+                    ) : <><span>Body reference</span><p>Your selected proportions will be rendered here.</p></>}
                   </div>
                   <div className="row">
                     <button className="btn btn-primary" type="button" onClick={generateBodyPreview} disabled={!characterBrief.body.trim() || characterSaveBusy || bodyPreviewTracking}>
@@ -2141,9 +2156,19 @@ export function ImageStudio({
               <aside className="image-studio-generation-preview-pane">
                 <span className="image-studio-eyebrow">Generated preview</span>
                 <div className="image-studio-generation-preview-frame">
-                  {progressImageUrl ? <img src={progressImageUrl} alt={`${generationKind} generation preview`} /> : <><strong>{renderFinished ? "Importing image…" : "Preview pending"}</strong><p>The image will appear here after it has been copied into the character profile.</p></>}
+                  {progressImageUrl ? generationKind === "body" ? (
+                    <button
+                      className={`image-studio-sensitive-preview ${progressBodyRevealed ? "is-revealed" : "is-blurred"}`}
+                      type="button"
+                      aria-label={progressBodyRevealed ? "Hide body preview" : "Reveal blurred body preview"}
+                      onClick={() => setRevealedBodyPreviewId(progressBodyRevealed ? "" : progressBodyRevealId)}
+                    >
+                      <img src={progressImageUrl} alt="Body generation preview" />
+                      {!progressBodyRevealed ? <span>Body preview hidden · Click to reveal</span> : null}
+                    </button>
+                  ) : <img src={progressImageUrl} alt="Face generation preview" /> : <><strong>{renderFinished ? "Importing image…" : "Preview pending"}</strong><p>The image will appear here after it has been copied into the character profile.</p></>}
                 </div>
-                {progressArtifactReady ? <a className="btn" href={progressImageUrl} target="_blank" rel="noreferrer">Open full image</a> : null}
+                {progressArtifactReady && progressBodyRevealed ? <a className="btn" href={progressImageUrl} target="_blank" rel="noreferrer">Open full image</a> : null}
               </aside>
             </div>
           </section>

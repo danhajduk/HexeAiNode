@@ -609,6 +609,21 @@ describe("ImageStudio", () => {
     expect(markup).not.toContain("waiting for render");
   });
 
+  it("blurs body previews until explicitly revealed", () => {
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialGenerationProgressOpen
+        initialGenerationKind="body"
+        bodyPreviewResult={{ preview: { status: "completed", prompt_id: "body-prompt", url: "/body.png", imported_at: "now", placeholder: false } }}
+      />
+    );
+
+    expect(markup).toContain("image-studio-sensitive-preview is-blurred");
+    expect(markup).toContain("Reveal blurred body preview");
+    expect(markup).toContain("Body preview hidden · Click to reveal");
+    expect(markup).not.toContain("Open full image");
+  });
+
   it("adds a rendering prompt that matches the initial character visual style", () => {
     const semiRealistic = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", visual_style: "semi-realistic", body: "curvy" });
     const anime = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", visual_style: "anime", body: "curvy" });
