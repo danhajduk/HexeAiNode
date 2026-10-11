@@ -9656,6 +9656,49 @@ class NodeControlState:
         }
         return final, dispatch, changed
 
+    def _dispatch_next_avatar_batch_preview_before_import(
+        self,
+        *,
+        previews: list[dict],
+        completed_index: int,
+        avatar_name: str,
+        now: str,
+    ) -> bool:
+        """Keep ComfyUI busy while the completed preview is imported locally."""
+        completed_preview = previews[completed_index] if 0 <= completed_index < len(previews) else {}
+        batch_id = str(completed_preview.get("batch_id") or "").strip() if isinstance(completed_preview, dict) else ""
+        completed_prompt_id = str(completed_preview.get("prompt_id") or "").strip() if isinstance(completed_preview, dict) else ""
+        if not batch_id or not completed_prompt_id:
+            return False
+        snapshot = self._avatar_head_face_seed_batch_queue_snapshot()
+        if not snapshot.get("socket_available") or int(snapshot.get("capacity") or 0) <= 0:
+            return False
+        if completed_prompt_id in set(snapshot.get("active_prompt_ids") or set()):
+            return False
+        for index, preview in enumerate(previews):
+            if not isinstance(preview, dict) or index == completed_index:
+                continue
+            if str(preview.get("batch_id") or "").strip() != batch_id:
+                continue
+            status = str(preview.get("status") or "").strip()
+            waiting = status == "local_queued" or (
+                status == "pending" and not str(preview.get("prompt_id") or "").strip()
+            )
+            if not waiting or str(preview.get("prompt_id") or "").strip():
+                continue
+            try:
+                previews[index] = self._submit_avatar_head_face_seed_batch_preview(
+                    preview=preview,
+                    socket_path=str(snapshot.get("socket_path") or ""),
+                    avatar_name=avatar_name,
+                    now=now,
+                )
+            except Exception as exc:
+                previews[index] = {**preview, "dispatch_error": str(exc), "dispatch_error_at": now}
+                return False
+            return True
+        return False
+
     def _refresh_avatar_upper_torso_preview_outputs(self, *, profile_dir: Path, metadata: dict) -> dict:
         workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="upper_torso")
         raw_preview_history = list(workspace.get("preview_history") or [])
@@ -9683,7 +9726,7 @@ class NodeControlState:
         lora_epoch_review_count = len(lora_epoch_review_previews)
         preview_history = normal_preview_history + lora_dataset_items + lora_epoch_review_previews
         updated_history: list[dict] = []
-        for preview in preview_history:
+        for preview_index, preview in enumerate(preview_history):
             if not isinstance(preview, dict):
                 updated_history.append(preview)
                 continue
@@ -9762,6 +9805,13 @@ class NodeControlState:
                 )
                 changed = True
                 continue
+            if self._dispatch_next_avatar_batch_preview_before_import(
+                previews=preview_history,
+                completed_index=preview_index,
+                avatar_name=avatar_name,
+                now=now,
+            ):
+                changed = True
             if existing_is_placeholder and existing_filename:
                 existing_path = (preview_dir / existing_filename).resolve()
                 if profile_dir in existing_path.parents and existing_path.exists() and existing_path.is_file():
@@ -10009,7 +10059,7 @@ class NodeControlState:
         updated_history = []
         changed = original_preview_history_count > AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT
         now = datetime.now(timezone.utc).isoformat()
-        for preview in preview_history:
+        for preview_index, preview in enumerate(preview_history):
             if not isinstance(preview, dict):
                 updated_history.append(preview)
                 continue
@@ -10103,6 +10153,13 @@ class NodeControlState:
                 )
                 changed = True
                 continue
+            if self._dispatch_next_avatar_batch_preview_before_import(
+                previews=preview_history,
+                completed_index=preview_index,
+                avatar_name=avatar_name,
+                now=now,
+            ):
+                changed = True
             if self._avatar_head_face_preview_is_rgb_fallback_path(path=output_path) and not skip_background_removal:
                 submitted_preview = self._submit_avatar_head_face_background_removal_if_needed(
                     profile_dir=profile_dir,

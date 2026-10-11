@@ -5867,6 +5867,63 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(timestamp, datetime.fromisoformat("2026-10-11T08:20:34+00:00").timestamp())
 
+    def test_avatar_lora_dispatches_next_preview_before_completed_import(self):
+        state = NodeControlState(
+            lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+            config_path="/tmp/nonexistent-hexe-config.json",
+            logger=logging.getLogger("node-control-api-test"),
+        )
+        previews = [
+            {"preview_id": "one", "batch_id": "batch", "status": "submitted", "prompt_id": "prompt-one", "seed": 1},
+            {"preview_id": "two", "batch_id": "batch", "status": "local_queued", "seed": 2},
+            {"preview_id": "other", "batch_id": "other-batch", "status": "local_queued", "seed": 3},
+        ]
+        with patch.object(
+            state,
+            "_avatar_head_face_seed_batch_queue_snapshot",
+            return_value={"socket_available": True, "socket_path": "/tmp/comfy.sock", "capacity": 1, "active_prompt_ids": set()},
+        ), patch.object(
+            state,
+            "_submit_avatar_head_face_seed_batch_preview",
+            side_effect=lambda preview, **_: {**preview, "status": "submitted", "prompt_id": f"prompt-{preview['preview_id']}"},
+        ) as submit:
+            dispatched = state._dispatch_next_avatar_batch_preview_before_import(
+                previews=previews,
+                completed_index=0,
+                avatar_name="Avatar",
+                now="2026-10-11T00:00:01+00:00",
+            )
+
+        self.assertTrue(dispatched)
+        self.assertEqual(submit.call_count, 1)
+        self.assertEqual(previews[1]["prompt_id"], "prompt-two")
+        self.assertEqual(previews[2]["status"], "local_queued")
+
+    def test_avatar_lora_does_not_overlap_while_completed_prompt_is_still_active(self):
+        state = NodeControlState(
+            lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+            config_path="/tmp/nonexistent-hexe-config.json",
+            logger=logging.getLogger("node-control-api-test"),
+        )
+        previews = [
+            {"preview_id": "one", "batch_id": "batch", "status": "submitted", "prompt_id": "prompt-one", "seed": 1},
+            {"preview_id": "two", "batch_id": "batch", "status": "local_queued", "seed": 2},
+        ]
+        with patch.object(
+            state,
+            "_avatar_head_face_seed_batch_queue_snapshot",
+            return_value={"socket_available": True, "socket_path": "/tmp/comfy.sock", "capacity": 0, "active_prompt_ids": {"prompt-one"}},
+        ), patch.object(state, "_submit_avatar_head_face_seed_batch_preview") as submit:
+            dispatched = state._dispatch_next_avatar_batch_preview_before_import(
+                previews=previews,
+                completed_index=0,
+                avatar_name="Avatar",
+                now="2026-10-11T00:00:01+00:00",
+            )
+
+        self.assertFalse(dispatched)
+        submit.assert_not_called()
+
     def test_avatar_lora_dispatch_uses_live_queue_over_stale_session(self):
         service_manager = SimpleNamespace(
             comfyui_webui_generation_status=lambda: {
