@@ -129,16 +129,14 @@ export function resolveManualGenerationTracking({ busy = false, result = null, p
   };
 }
 
-const IMAGE_STUDIO_TERMINAL_PREVIEW_STATUSES = new Set([
-  "completed",
-  "completed_with_fallback",
-  "failed",
-  "error",
-  "cancelled",
-]);
+const IMAGE_STUDIO_FAILED_PREVIEW_STATUSES = new Set(["failed", "error", "cancelled"]);
+const IMAGE_STUDIO_COMPLETED_PREVIEW_STATUSES = new Set(["completed", "completed_with_fallback"]);
 
 export function shouldTrackImageStudioPreview(preview) {
-  return !IMAGE_STUDIO_TERMINAL_PREVIEW_STATUSES.has(String(preview?.status || "").toLowerCase());
+  const status = String(preview?.status || "").toLowerCase();
+  if (IMAGE_STUDIO_FAILED_PREVIEW_STATUSES.has(status)) return false;
+  if (!IMAGE_STUDIO_COMPLETED_PREVIEW_STATUSES.has(status)) return true;
+  return !(preview?.url && preview?.imported_at && preview?.placeholder !== true);
 }
 
 export function findImageStudioBodyPreview(profiles, promptId) {

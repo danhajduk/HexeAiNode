@@ -93,12 +93,23 @@ describe("shouldTrackImageStudioPreview", () => {
     expect(shouldTrackImageStudioPreview({ status: "submitted" })).toBe(true);
   });
 
-  it.each(["completed", "completed_with_fallback", "failed", "error", "cancelled"])(
-    "stops tracking a %s preview",
+  it.each(["completed", "completed_with_fallback"])(
+    "keeps tracking a %s preview while its image is still importing",
     (status) => {
-      expect(shouldTrackImageStudioPreview({ status })).toBe(false);
+      expect(shouldTrackImageStudioPreview({ status })).toBe(true);
     }
   );
+
+  it.each(["completed", "completed_with_fallback"])(
+    "stops tracking a %s preview once its imported image is available",
+    (status) => {
+      expect(shouldTrackImageStudioPreview({ status, url: "/last.png", imported_at: "now", placeholder: false })).toBe(false);
+    }
+  );
+
+  it.each(["failed", "error", "cancelled"])("stops tracking a %s preview", (status) => {
+    expect(shouldTrackImageStudioPreview({ status })).toBe(false);
+  });
 });
 
 describe("findImageStudioBodyPreview", () => {
