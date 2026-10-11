@@ -4,6 +4,7 @@ import {
   IMAGE_STUDIO_DATA_ENDPOINTS,
   buildComfyuiWebuiBrowserUrl,
   findImageStudioBodyPreview,
+  latestImageStudioBodyJob,
   resolveManualGenerationTracking,
   shouldTrackImageStudioPreview,
 } from "./App";
@@ -125,5 +126,16 @@ describe("findImageStudioBodyPreview", () => {
     }];
 
     expect(findImageStudioBodyPreview(profiles, "body-current")).toBe(currentJob);
+  });
+});
+
+describe("latestImageStudioBodyJob", () => {
+  it("selects the newest current job when another tab submits a replacement", () => {
+    const newest = { prompt_id: "new", submitted_at: "2026-10-11T01:13:53Z" };
+    expect(latestImageStudioBodyJob([
+      { profile_id: "other", prompt_workspaces: { upper_torso: { current_job: { prompt_id: "other-newer", submitted_at: "2026-10-11T01:14:53Z" } } } },
+      { profile_id: "Hexe", prompt_workspaces: { upper_torso: { current_job: { prompt_id: "old", submitted_at: "2026-10-11T01:11:17Z" } } } },
+      { profile_id: "Hexe", prompt_workspaces: { upper_torso: { current_job: newest } } },
+    ], "Hexe")).toBe(newest);
   });
 });

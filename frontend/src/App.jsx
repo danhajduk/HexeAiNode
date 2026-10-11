@@ -149,6 +149,19 @@ export function findImageStudioBodyPreview(profiles, promptId) {
   return candidates.find((item) => String(item?.prompt_id || "").trim() === normalizedPromptId) || null;
 }
 
+export function latestImageStudioBodyJob(profiles, profileId = "") {
+  const normalizedProfileId = String(profileId || "").trim();
+  const jobs = (Array.isArray(profiles) ? profiles : [])
+    .filter((profile) => !normalizedProfileId || String(profile?.profile_id || "").trim() === normalizedProfileId)
+    .map((profile) => profile?.prompt_workspaces?.upper_torso?.current_job)
+    .filter(Boolean);
+  return jobs.sort((left, right) => {
+    const leftTime = Date.parse(left?.submitted_at || left?.created_at || 0) || 0;
+    const rightTime = Date.parse(right?.submitted_at || right?.created_at || 0) || 0;
+    return rightTime - leftTime;
+  })[0] || null;
+}
+
 export const IMAGE_STUDIO_DATA_ENDPOINTS = [
   "/api/comfyui/templates",
   "/api/services/status",
@@ -177,6 +190,7 @@ export default function App() {
   const [routeHash, setRouteHash] = useState(() => window.location.hash || "#/");
   const imageStudioOpen = isImageStudioRoute(routeHash);
   const imageStudioRouteState = resolveImageStudioRouteState(routeHash);
+  const imageStudioProgressOpen = Boolean(imageStudioRouteState.progressKind);
   const [backendStatus, setBackendStatus] = useState("loading");
   const [pendingApprovalUrl, setPendingApprovalUrl] = useState("");
   const [nodeId, setNodeId] = useState("");
@@ -591,7 +605,14 @@ export default function App() {
         setImageStudioFacePreviewTracking(shouldTrackImageStudioPreview(preview));
       }
       const bodyPromptId = String(imageStudioBodyPreviewResult?.preview?.prompt_id || "").trim();
-      const bodyPreview = findImageStudioBodyPreview(profilesResult.value?.profiles, bodyPromptId);
+      const trackedBodyPreview = findImageStudioBodyPreview(profilesResult.value?.profiles, bodyPromptId);
+      const bodyProfileId = imageStudioRouteState.profileId || imageStudioBodyPreviewResult?.profile?.profile_id;
+      const currentBodyJob = latestImageStudioBodyJob(profilesResult.value?.profiles, bodyProfileId);
+      const trackedSubmittedAt = Date.parse(trackedBodyPreview?.submitted_at || trackedBodyPreview?.created_at || 0) || 0;
+      const currentSubmittedAt = Date.parse(currentBodyJob?.submitted_at || currentBodyJob?.created_at || 0) || 0;
+      const bodyPreview = currentBodyJob && (!trackedBodyPreview || currentSubmittedAt > trackedSubmittedAt)
+        ? currentBodyJob
+        : trackedBodyPreview;
       if (bodyPreview) {
         setImageStudioBodyPreviewResult((current) => ({ ...(current || {}), preview: bodyPreview }));
         setImageStudioBodyPreviewTracking(shouldTrackImageStudioPreview(bodyPreview));
@@ -622,13 +643,13 @@ export default function App() {
     && shouldTrackImageStudioPreview(imageStudioBodyPreviewResult?.preview);
 
   useEffect(() => {
-    if (!imageStudioOpen || (
+    if (!imageStudioOpen || (!imageStudioProgressOpen && (
       !imageStudioFacePreviewTracking
       && !imageStudioBodyPreviewTracking
       && !imageStudioFacePreviewPollRequired
       && !imageStudioBodyPreviewPollRequired
       && !imageStudioSeedBatchTracking
-    )) {
+    ))) {
       return undefined;
     }
     let cancelled = false;
@@ -644,7 +665,7 @@ export default function App() {
       cancelled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [imageStudioOpen, imageStudioFacePreviewTracking, imageStudioFacePreviewResult?.preview?.prompt_id, imageStudioFacePreviewPollRequired, imageStudioBodyPreviewTracking, imageStudioBodyPreviewResult?.preview?.prompt_id, imageStudioBodyPreviewPollRequired, imageStudioSeedBatchTracking, imageStudioSeedBatchResult?.profile?.profile_id]);
+  }, [imageStudioOpen, imageStudioProgressOpen, imageStudioFacePreviewTracking, imageStudioFacePreviewResult?.preview?.prompt_id, imageStudioFacePreviewPollRequired, imageStudioBodyPreviewTracking, imageStudioBodyPreviewResult?.preview?.prompt_id, imageStudioBodyPreviewPollRequired, imageStudioSeedBatchTracking, imageStudioSeedBatchResult?.profile?.profile_id]);
 
   async function onCreateImageStudioFacePreview(profileId, payload) {
     const normalized = String(profileId || "").trim();
