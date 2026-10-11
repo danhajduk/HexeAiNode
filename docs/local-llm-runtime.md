@@ -134,6 +134,9 @@ reads the backend-owned Image Studio profile state. Its
 queued and submitted candidates, imported and approved counts, and distinguishes
 rendering from the post-ComfyUI image-import phase. Use `--profile-root` when
 the manual ComfyUI profile directory is stored outside the default runtime path.
+The header shows persisted Image Studio idle time against the configured session
+timeout while the ComfyUI queue is empty; use `--session-file` for a non-default
+session-state path.
 
 The dashboard refreshes once per second and exits with `Ctrl+C`. Use `--interval 0.5` for faster sampling,
 `--once` for a single snapshot, or `--no-color` when redirecting its output.

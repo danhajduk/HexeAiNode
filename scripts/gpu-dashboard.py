@@ -187,6 +187,22 @@ def image_studio_backend(profile_root: str, queue: dict[str, object]) -> dict[st
     }
 
 
+def comfy_session(path: str, queue: dict[str, object]) -> dict[str, object]:
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        last_active_epoch = float(payload.get("last_active_epoch"))
+        idle_timeout_seconds = max(float(payload.get("idle_timeout_seconds") or 0), 0.0)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return {"available": False}
+    queue_active = int(queue.get("running") or 0) > 0 or int(queue.get("pending") or 0) > 0
+    return {
+        "available": True,
+        "idle_seconds": 0.0 if queue_active else max(time.time() - last_active_epoch, 0.0),
+        "idle_timeout_seconds": idle_timeout_seconds,
+        "queue_active": queue_active,
+    }
+
+
 def _iso_epoch(value: object) -> float:
     try:
         return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
@@ -196,6 +212,13 @@ def _iso_epoch(value: object) -> float:
 
 def color(text: str, code: str, enabled: bool) -> str:
     return f"\033[{code}m{text}\033[0m" if enabled else text
+
+
+def duration(seconds: object) -> str:
+    total = max(int(float(seconds or 0)), 0)
+    hours, remainder = divmod(total, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
 def gauge(value: float, maximum: float, width: int, enabled: bool, warning: float = 0.75, danger: float = 0.9) -> str:
@@ -209,6 +232,7 @@ def render(
     sample: dict[str, float | str],
     queue: dict[str, object],
     backend: dict[str, object],
+    session: dict[str, object],
     color_enabled: bool,
 ) -> str:
     terminal_width = shutil.get_terminal_size((100, 24)).columns
@@ -228,9 +252,16 @@ def render(
         workload = color("WARM / MODELS LOADED", "1;36", color_enabled)
     else:
         workload = color("IDLE", "90", color_enabled)
+    idle_label = ""
+    if session.get("available") and not session.get("queue_active"):
+        idle_label = (
+            f" · IDLE {duration(session.get('idle_seconds'))}"
+            f" / {duration(session.get('idle_timeout_seconds'))}"
+        )
     queue_text = f"{queue['running']} running / {queue['pending']} pending"
     lines = [
-            color("HEXE GPU + COMFYUI", "1;35", color_enabled) + f"  {time.strftime('%H:%M:%S')}  {workload}",
+            color("HEXE GPU + COMFYUI", "1;35", color_enabled)
+            + f"  {time.strftime('%H:%M:%S')}  {workload}{idle_label}",
             f"Compute   {gauge(util, 100, gauge_width, color_enabled)} {util:5.1f}%",
             f"Memory IO {gauge(memory_activity, 100, gauge_width, color_enabled)} {memory_activity:5.1f}%",
             f"VRAM      {gauge(memory_used, memory_total, gauge_width, color_enabled, 0.8, 0.95)} {memory_used:,.0f} / {memory_total:,.0f} MiB",
@@ -272,6 +303,11 @@ def main() -> int:
     parser.add_argument("--gpu-index", type=int, default=0, help="NVIDIA GPU index (default: 0).")
     parser.add_argument("--comfy-socket", default="/run/hexe/ai-node/comfyui-gpu.sock", help="ComfyUI Unix socket.")
     parser.add_argument(
+        "--session-file",
+        default=".run/comfyui-webui-session.json",
+        help="Persisted Image Studio ComfyUI session state.",
+    )
+    parser.add_argument(
         "--profile-root",
         default="runtime/manual/comfyui-gpu/input/avatar_profiles",
         help="Image Studio avatar profile root.",
@@ -287,7 +323,8 @@ def main() -> int:
             sample = gpu_sample(args.gpu_index)
             queue = comfy_queue(args.comfy_socket)
             backend = image_studio_backend(args.profile_root, queue)
-            output = render(sample, queue, backend, color_enabled)
+            session = comfy_session(args.session_file, queue)
+            output = render(sample, queue, backend, session, color_enabled)
             if not args.once and sys.stdout.isatty():
                 print("\033[2J\033[H", end="")
             print(output, flush=True)

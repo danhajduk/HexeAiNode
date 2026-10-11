@@ -40,7 +40,7 @@ class GpuDashboardTests(unittest.TestCase):
         }
         backend = {"available": False, "state": "idle"}
 
-        output = gpu_dashboard.render(sample, queue, backend, False)
+        output = gpu_dashboard.render(sample, queue, backend, {"available": True, "queue_active": True}, False)
 
         self.assertLess(output.index("IMAGE STUDIO BACKEND"), output.index("CURRENT COMFYUI JOB"))
         self.assertIn("State     running · queue #103", output)
@@ -56,6 +56,27 @@ class GpuDashboardTests(unittest.TestCase):
         self.assertTrue(header_lines[1].startswith("Compute"))
         self.assertTrue(header_lines[6].startswith("ComfyUI"))
         self.assertNotIn("GPU       Test GPU", output)
+
+    def test_idle_timer_uses_persisted_session_activity(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            session_path = Path(temporary_directory) / "session.json"
+            session_path.write_text(
+                json.dumps(
+                    {
+                        "last_active_epoch": gpu_dashboard.time.time() - 125,
+                        "idle_timeout_seconds": 3600,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            queue = {"running": 0, "pending": 0}
+
+            session = gpu_dashboard.comfy_session(str(session_path), queue)
+
+            self.assertTrue(session["available"])
+            self.assertGreaterEqual(session["idle_seconds"], 125)
+            self.assertEqual(gpu_dashboard.duration(session["idle_seconds"]), "00:02:05")
+            self.assertEqual(gpu_dashboard.duration(session["idle_timeout_seconds"]), "01:00:00")
 
     def test_image_studio_backend_correlates_local_and_comfyui_state(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
