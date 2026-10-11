@@ -1,0 +1,36 @@
+{
+  "schema_version": "image_studio_body_lora_prompts_v1",
+  "runtime_enabled": false,
+  "migration_status": "staged_only_not_loaded_by_runtime",
+  "defaults": {
+    "batch_size": 10,
+    "minimum_approved_per_pose": 6,
+    "width": 768,
+    "height": 1536,
+    "pose_strength": 0.8,
+    "pose_start": 0.0,
+    "pose_end": 0.8,
+    "template_id": "template.avatar_head_lora_pose_control.realvisxl.v1"
+  },
+  "shared_prompt_suffix": "single adult character, complete neck-to-toes framing, entire body visible, consistent anatomy and proportions, body LoRA training reference",
+  "variation_recipes": [
+    {"cfg_offset": -0.08, "identity_strength_offset": -0.03, "pose_strength_offset": -0.04, "prompt_suffix": "soft even studio light, neutral relaxed expression, standard portrait framing"},
+    {"cfg_offset": -0.06, "identity_strength_offset": -0.02, "pose_strength_offset": -0.03, "prompt_suffix": "soft light from camera left, relaxed eyelids, slightly wider portrait framing"},
+    {"cfg_offset": -0.04, "identity_strength_offset": -0.01, "pose_strength_offset": -0.02, "prompt_suffix": "soft light from camera right, calm closed-mouth expression, slightly closer framing"},
+    {"cfg_offset": -0.02, "identity_strength_offset": 0.0, "pose_strength_offset": -0.01, "prompt_suffix": "balanced studio light, subtle natural brow variation, standard portrait framing"},
+    {"cfg_offset": 0.0, "identity_strength_offset": 0.01, "pose_strength_offset": 0.0, "prompt_suffix": "neutral studio light, steady neutral gaze, centered portrait framing"},
+    {"cfg_offset": 0.02, "identity_strength_offset": 0.02, "pose_strength_offset": 0.01, "prompt_suffix": "gentle high-key studio light, relaxed facial muscles, slightly wider portrait framing"},
+    {"cfg_offset": 0.04, "identity_strength_offset": 0.03, "pose_strength_offset": 0.02, "prompt_suffix": "gentle low-contrast studio light, faint natural warmth in expression, slightly closer framing"},
+    {"cfg_offset": 0.06, "identity_strength_offset": -0.015, "pose_strength_offset": 0.03, "prompt_suffix": "soft upper-left key light, neutral mouth, standard portrait framing"},
+    {"cfg_offset": 0.08, "identity_strength_offset": 0.015, "pose_strength_offset": 0.04, "prompt_suffix": "soft upper-right key light, calm attentive gaze, slightly wider portrait framing"},
+    {"cfg_offset": 0.1, "identity_strength_offset": 0.0, "pose_strength_offset": 0.0, "prompt_suffix": "flat identity-reference light, fully relaxed neutral expression, slightly closer framing"}
+  ],
+  "poses": [
+    {"pose_id": "front_neutral", "label": "Front Neutral", "prompt": "front-facing neutral A-pose, even weight, complete neck-to-feet framing", "guide_image": "system/lora-pose-guides/body/front_neutral.png", "negative_remove": [], "negative_add": []},
+    {"pose_id": "three_quarter_left", "label": "Three Quarter Left", "prompt": "neutral A-pose with the body rotated 45 degrees left, complete neck-to-feet framing", "guide_image": "system/lora-pose-guides/body/three_quarter_left.png", "negative_remove": [], "negative_add": []},
+    {"pose_id": "three_quarter_right", "label": "Three Quarter Right", "prompt": "neutral A-pose with the body rotated 45 degrees right, complete neck-to-feet framing", "guide_image": "system/lora-pose-guides/body/three_quarter_right.png", "negative_remove": [], "negative_add": []},
+    {"pose_id": "profile_left", "label": "Profile Left", "prompt": "neutral left profile stance, arms slightly separated from torso, complete neck-to-feet framing", "guide_image": "system/lora-pose-guides/body/profile_left.png", "negative_remove": [], "negative_add": []},
+    {"pose_id": "profile_right", "label": "Profile Right", "prompt": "neutral right profile stance, arms slightly separated from torso, complete neck-to-feet framing", "guide_image": "system/lora-pose-guides/body/profile_right.png", "negative_remove": [], "negative_add": []},
+    {"pose_id": "back_neutral", "label": "Back Neutral", "prompt": "back-facing neutral A-pose, even weight, complete neck-to-feet framing", "guide_image": "system/lora-pose-guides/body/back_neutral.png", "negative_remove": [], "negative_add": []}
+  ]
+}

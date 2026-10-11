@@ -1,0 +1,117 @@
+{
+  "schema_version": "image_studio_face_lora_prompts_v1",
+  "runtime_enabled": false,
+  "migration_status": "staged_only_not_loaded_by_runtime",
+  "defaults": {
+    "batch_size": 10,
+    "minimum_approved_per_pose": 6,
+    "width": 512,
+    "height": 512,
+    "cfg_jitter": 0.2,
+    "template_id": "template.avatar_head_lora_pose_control.realvisxl.v1"
+  },
+  "base_prompt_replacements": {
+    "identity reference sheet": "single-subject studio portrait",
+    "pose-varied avatar training reference": "single-image identity sample",
+    "face LoRA dataset image": "single-subject portrait image"
+  },
+  "common_negative_additions": [
+    "inset portrait",
+    "secondary portrait",
+    "thumbnail portrait",
+    "picture-in-picture",
+    "reference panel",
+    "reference board",
+    "mood board",
+    "face crop overlay",
+    "eye detail inset",
+    "hair swatch",
+    "color swatch",
+    "detail callout",
+    "floating head",
+    "background face",
+    "framed inset",
+    "image border",
+    "multiple camera views",
+    "alternate view",
+    "comparison layout",
+    "raised arms",
+    "hands above head",
+    "hands touching hair",
+    "dynamic body pose"
+  ],
+  "variation_recipes": [
+    {"cfg_offset": -0.08, "identity_strength_offset": -0.03, "pose_strength_offset": -0.04, "prompt_suffix": "soft even studio light, neutral relaxed expression, standard portrait framing"},
+    {"cfg_offset": -0.06, "identity_strength_offset": -0.02, "pose_strength_offset": -0.03, "prompt_suffix": "soft light from camera left, relaxed eyelids, slightly wider portrait framing"},
+    {"cfg_offset": -0.04, "identity_strength_offset": -0.01, "pose_strength_offset": -0.02, "prompt_suffix": "soft light from camera right, calm closed-mouth expression, slightly closer framing"},
+    {"cfg_offset": -0.02, "identity_strength_offset": 0.0, "pose_strength_offset": -0.01, "prompt_suffix": "balanced studio light, subtle natural brow variation, standard portrait framing"},
+    {"cfg_offset": 0.0, "identity_strength_offset": 0.01, "pose_strength_offset": 0.0, "prompt_suffix": "neutral studio light, steady neutral gaze, centered portrait framing"},
+    {"cfg_offset": 0.02, "identity_strength_offset": 0.02, "pose_strength_offset": 0.01, "prompt_suffix": "gentle high-key studio light, relaxed facial muscles, slightly wider portrait framing"},
+    {"cfg_offset": 0.04, "identity_strength_offset": 0.03, "pose_strength_offset": 0.02, "prompt_suffix": "gentle low-contrast studio light, faint natural warmth in expression, slightly closer framing"},
+    {"cfg_offset": 0.06, "identity_strength_offset": -0.015, "pose_strength_offset": 0.03, "prompt_suffix": "soft upper-left key light, neutral mouth, standard portrait framing"},
+    {"cfg_offset": 0.08, "identity_strength_offset": 0.015, "pose_strength_offset": 0.04, "prompt_suffix": "soft upper-right key light, calm attentive gaze, slightly wider portrait framing"},
+    {"cfg_offset": 0.1, "identity_strength_offset": 0.0, "pose_strength_offset": 0.0, "prompt_suffix": "flat identity-reference light, fully relaxed neutral expression, slightly closer framing"}
+  ],
+  "poses": [
+    {
+      "pose_id": "front_neutral",
+      "label": "Front Neutral",
+      "prompt": "front-facing neutral head-and-shoulders portrait, direct gaze, relaxed expression",
+      "geometry_prompt": "",
+      "guide_image": "system/lora-pose-guides/face/front_neutral.png",
+      "negative_remove": [],
+      "negative_add": [],
+      "review_rule": "Require a clear front-facing neutral portrait with direct gaze."
+    },
+    {
+      "pose_id": "front_smile",
+      "label": "Front Smile",
+      "prompt": "front-facing head-and-shoulders portrait, natural confident smile, direct gaze",
+      "geometry_prompt": "mandatory clearly visible genuine smile: (raised mouth corners, parted lips, visible upper teeth, lifted rounded cheeks, subtle smile lines beside the mouth, bright engaged eyes:1.45), the smile must be unmistakably different from a neutral or closed-mouth expression",
+      "guide_image": "system/lora-pose-guides/face/front_smile.png",
+      "negative_remove": ["exaggerated expression"],
+      "negative_add": ["cartoonish facial distortion"],
+      "review_rule": "Require an unmistakable genuine smile with raised mouth corners and lifted cheeks."
+    },
+    {
+      "pose_id": "three_quarter_left",
+      "label": "Three Quarter Left",
+      "prompt": "natural three-quarter head-and-shoulders portrait, head yaw rotated 40 to 45 degrees toward the left side of the image, nose and chin clearly angle left, near cheek dominant and far cheek narrower, both eyes visible with the far eye naturally narrower, near ear may remain visible through or beside the hair, eyes looking slightly off camera toward the left edge, not a straight-on frontal face and not a full side profile",
+      "geometry_prompt": "mandatory natural three-quarter head yaw: face turned 40 to 45 degrees toward the left side of the image, nose tip and chin angled toward the left edge, facial centerline visibly angled away from camera, both eyes visible with the far eye naturally narrower, far cheek narrower but still visible, near cheek dominant, near ear optionally visible through or beside the hair, slightly off-camera gaze, no straight-on camera pose",
+      "guide_image": "system/lora-pose-guides/face/three_quarter_left.png",
+      "negative_remove": ["profile view", "three-quarter view", "tilted head"],
+      "negative_add": ["straight-on frontal face", "front-facing portrait", "symmetrical passport photo", "looking directly at camera", "direct eye contact", "centered forward gaze", "both eyes same size", "both cheeks equally visible", "nose centered straight ahead", "chin centered straight ahead", "two ears visible", "perfectly symmetrical face", "beauty front portrait", "slight angle", "soft three-quarter beauty angle", "full 90-degree side profile", "only one eye visible", "both nostrils visible"],
+      "review_rule": "Require a natural 40 to 45 degree left three-quarter portrait with both eyes visible and reject frontal or full-profile results."
+    },
+    {
+      "pose_id": "three_quarter_right",
+      "label": "Three Quarter Right",
+      "prompt": "natural three-quarter head-and-shoulders portrait, head yaw rotated 40 to 45 degrees toward the right side of the image, nose and chin clearly angle right, near cheek dominant and far cheek narrower, both eyes visible with the far eye naturally narrower, near ear may remain visible through or beside the hair, eyes looking slightly off camera toward the right edge, not a straight-on frontal face and not a full side profile",
+      "geometry_prompt": "mandatory natural three-quarter head yaw: face turned 40 to 45 degrees toward the right side of the image, nose tip and chin angled toward the right edge, facial centerline visibly angled away from camera, both eyes visible with the far eye naturally narrower, far cheek narrower but still visible, near cheek dominant, near ear optionally visible through or beside the hair, slightly off-camera gaze, no straight-on camera pose",
+      "guide_image": "system/lora-pose-guides/face/three_quarter_right.png",
+      "negative_remove": ["profile view", "three-quarter view", "tilted head"],
+      "negative_add": ["straight-on frontal face", "front-facing portrait", "symmetrical passport photo", "looking directly at camera", "direct eye contact", "centered forward gaze", "both eyes same size", "both cheeks equally visible", "nose centered straight ahead", "chin centered straight ahead", "two ears visible", "perfectly symmetrical face", "beauty front portrait", "slight angle", "soft three-quarter beauty angle", "full 90-degree side profile", "only one eye visible", "both nostrils visible"],
+      "review_rule": "Require a natural 40 to 45 degree right three-quarter portrait with both eyes visible and reject frontal or full-profile results."
+    },
+    {
+      "pose_id": "slight_down",
+      "label": "Slight Down",
+      "prompt": "head-and-shoulders portrait with face angled slightly downward, eyes toward viewer",
+      "geometry_prompt": "",
+      "guide_image": "system/lora-pose-guides/face/slight_down.png",
+      "negative_remove": [],
+      "negative_add": [],
+      "review_rule": "Require a subtle downward head angle while keeping the face readable."
+    },
+    {
+      "pose_id": "slight_up",
+      "label": "Slight Up",
+      "prompt": "head-and-shoulders portrait with face angled slightly upward, eyes toward viewer",
+      "geometry_prompt": "",
+      "guide_image": "system/lora-pose-guides/face/slight_up.png",
+      "negative_remove": [],
+      "negative_add": [],
+      "review_rule": "Require a subtle upward head angle while keeping the face readable."
+    }
+  ]
+}
