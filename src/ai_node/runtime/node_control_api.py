@@ -253,6 +253,9 @@ MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transpa
 AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID = "template.avatar_head_face_preview.realvisxl.v1"
 IMAGE_STUDIO_FACE_FEATURE_CATALOG_RELATIVE_PATH = "config/image-studio/face-feature-catalog.json"
 AVATAR_UPPER_TORSO_PREVIEW_TEMPLATE_ID = "template.avatar_upper_torso_preview.realvisxl.v1"
+AVATAR_UPPER_TORSO_POSE_GUIDE_RELATIVE_PATH = "system/neutral-a-pose-openpose.png"
+AVATAR_UPPER_TORSO_POSE_GUIDE_SOURCE = Path("config/image-studio/neutral-a-pose-openpose.png")
+AVATAR_UPPER_TORSO_POSE_CONTROLNET = "controlnet-openpose-sdxl-1.0.safetensors"
 AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID = "template.avatar_head_lora_pose_control.realvisxl.v1"
 AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID = "template.avatar_head_lora_epoch_review.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT = 9
@@ -3213,6 +3216,10 @@ class NodeControlState:
         sampler_name = sampling["sampler_name"]
         scheduler = sampling["scheduler"]
         avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
+        pose_reference_image = self._ensure_avatar_upper_torso_pose_guide()
+        pose_strength = float(defaults.get("pose_strength") or 0.85)
+        pose_start = float(defaults.get("pose_start") or 0.0)
+        pose_end = float(defaults.get("pose_end") or 0.8)
         submitted_at = datetime.now(timezone.utc).isoformat()
         generation = await self.submit_manual_image_generation(
             payload=ManualImageGenerationRequest(
@@ -3234,6 +3241,11 @@ class NodeControlState:
                     "lightning_strength": lightning_strength,
                     "sampler_name": sampler_name,
                     "scheduler": scheduler,
+                    "pose_reference_image": pose_reference_image,
+                    "pose_controlnet": str(defaults.get("pose_controlnet") or AVATAR_UPPER_TORSO_POSE_CONTROLNET),
+                    "pose_strength": pose_strength,
+                    "pose_start": pose_start,
+                    "pose_end": pose_end,
                 },
             )
         )
@@ -3261,6 +3273,11 @@ class NodeControlState:
             "sampler_name": sampler_name,
             "scheduler": scheduler,
             "lightning_strength": lightning_strength,
+            "pose_reference_image": pose_reference_image,
+            "pose_controlnet": str(defaults.get("pose_controlnet") or AVATAR_UPPER_TORSO_POSE_CONTROLNET),
+            "pose_strength": pose_strength,
+            "pose_start": pose_start,
+            "pose_end": pose_end,
             "submitted_at": submitted_at,
             "created_at": now,
         }
@@ -11281,6 +11298,24 @@ class NodeControlState:
         manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
         input_dir = str(manual_paths.get("input_dir") or "runtime/manual/comfyui-gpu/input") if isinstance(manual_paths, dict) else "runtime/manual/comfyui-gpu/input"
         return Path(input_dir).resolve()
+
+    def _ensure_avatar_upper_torso_pose_guide(self) -> str:
+        source = (Path.cwd() / AVATAR_UPPER_TORSO_POSE_GUIDE_SOURCE).resolve()
+        if not source.is_file():
+            raise ValueError("avatar_upper_torso_pose_guide_missing")
+        input_dir = self._manual_image_input_dir()
+        target = (input_dir / AVATAR_UPPER_TORSO_POSE_GUIDE_RELATIVE_PATH).resolve()
+        if input_dir != target and input_dir not in target.parents:
+            raise ValueError("avatar_upper_torso_pose_guide_path_invalid")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.is_file() or target.stat().st_size != source.stat().st_size or target.read_bytes() != source.read_bytes():
+            temporary = target.with_suffix(target.suffix + ".tmp")
+            shutil.copyfile(source, temporary)
+            if temporary.stat().st_size != source.stat().st_size:
+                temporary.unlink(missing_ok=True)
+                raise ValueError("avatar_upper_torso_pose_guide_copy_failed")
+            temporary.replace(target)
+        return AVATAR_UPPER_TORSO_POSE_GUIDE_RELATIVE_PATH
 
     def _manual_image_reference_root(self, *, manual_paths: dict | None = None) -> Path:
         if isinstance(manual_paths, dict):

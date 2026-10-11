@@ -6383,6 +6383,12 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(payload.template_variables["lightning_strength"], 0.0)
                 self.assertEqual(payload.template_variables["sampler_name"], "dpmpp_2m_sde")
                 self.assertEqual(payload.template_variables["scheduler"], "karras")
+                self.assertEqual(payload.template_variables["pose_reference_image"], "system/neutral-a-pose-openpose.png")
+                self.assertEqual(payload.template_variables["pose_controlnet"], "controlnet-openpose-sdxl-1.0.safetensors")
+                self.assertEqual(payload.template_variables["pose_strength"], 0.85)
+                self.assertEqual(payload.template_variables["pose_start"], 0.0)
+                self.assertEqual(payload.template_variables["pose_end"], 0.8)
+                self.assertTrue((input_dir / "system" / "neutral-a-pose-openpose.png").is_file())
                 return {"status": "submitted", "prompt_id": "body-prompt", "prompt_ids": ["body-prompt"], "submissions": [{"seed": 42}]}
 
             state.submit_manual_image_generation = _submit_manual_image_generation
@@ -6402,6 +6408,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["preview"]["sampler_name"], "dpmpp_2m_sde")
         self.assertEqual(result["preview"]["scheduler"], "karras")
         self.assertEqual(result["preview"]["lightning_strength"], 0.0)
+        self.assertEqual(result["preview"]["pose_reference_image"], "system/neutral-a-pose-openpose.png")
+        self.assertEqual(result["preview"]["pose_strength"], 0.85)
 
     def test_avatar_generation_saves_latest_upper_torso_alias(self):
         with tempfile.TemporaryDirectory() as tmp:

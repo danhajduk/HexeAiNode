@@ -377,7 +377,7 @@
     {
       "template_id": "template.avatar_upper_torso_preview.realvisxl.v1",
       "template_name": "Avatar Upper Torso Preview",
-      "description": "Text-only SDXL neck-to-feet body-reference workflow. The backend selects RealVisXL for ordinary body references or an installed adult-capable checkpoint when explicit adult anatomy is requested.",
+      "description": "SDXL neck-to-feet body-reference workflow guided by a reusable neutral A-pose OpenPose control map. The backend selects RealVisXL for ordinary body references or an installed adult-capable checkpoint when explicit adult anatomy is requested.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-upper-torso-preview-realvisxl/api_workflow.json",
       "variables": [
@@ -442,6 +442,36 @@
           "description": "ComfyUI scheduler selected for the active checkpoint."
         },
         {
+          "name": "pose_reference_image",
+          "type": "string",
+          "required": false,
+          "description": "Reusable neutral A-pose OpenPose guide copied into the active ComfyUI input directory."
+        },
+        {
+          "name": "pose_controlnet",
+          "type": "string",
+          "required": false,
+          "description": "Local SDXL OpenPose ControlNet model filename."
+        },
+        {
+          "name": "pose_strength",
+          "type": "number",
+          "required": false,
+          "description": "OpenPose ControlNet conditioning strength."
+        },
+        {
+          "name": "pose_start",
+          "type": "number",
+          "required": false,
+          "description": "Sampling fraction where pose conditioning starts."
+        },
+        {
+          "name": "pose_end",
+          "type": "number",
+          "required": false,
+          "description": "Sampling fraction where pose conditioning ends."
+        },
+        {
           "name": "steps",
           "type": "integer",
           "required": false,
@@ -467,6 +497,11 @@
         "lightning_strength": 1.0,
         "sampler_name": "euler",
         "scheduler": "sgm_uniform",
+        "pose_reference_image": "system/neutral-a-pose-openpose.png",
+        "pose_controlnet": "controlnet-openpose-sdxl-1.0.safetensors",
+        "pose_strength": 0.85,
+        "pose_start": 0.0,
+        "pose_end": 0.8,
         "width": 512,
         "height": 512,
         "seed": null,
@@ -480,13 +515,19 @@
           "sdxl_lightning_4step_lora.safetensors"
         ],
         "vae": null,
-        "controlnets": [],
+        "controlnets": [
+          "controlnet-openpose-sdxl-1.0.safetensors"
+        ],
         "other": {
           "nodes": [
             "CheckpointLoaderSimple",
             "LoraLoader",
             "CLIPTextEncode",
             "EmptyLatentImage",
+            "LoadImage",
+            "ResizeAndPadImage",
+            "ControlNetLoader",
+            "ControlNetApplyAdvanced",
             "KSampler",
             "VAEDecode",
             "SaveImage"
@@ -498,7 +539,9 @@
         "domain": "avatar_profile",
         "input_mode": "text",
         "edit_intent": "avatar_upper_torso_preview",
-        "reference_roles": [],
+        "reference_roles": [
+          "pose"
+        ],
         "transparent_background": false
       }
     },

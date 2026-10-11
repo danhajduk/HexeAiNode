@@ -257,7 +257,10 @@ template binding, the node selects the scenario from `inputs.image_type` and sel
 importance or GPU for interactive importance. Explicit governed template bindings continue to pin their registered
 runtime. The catalog also contains GPU avatar templates for profile prompt previews, final profile-aware generation,
 body-reference testing, and masked inpaint passes. `Avatar Head Face Preview`
-(`template.avatar_head_face_preview.realvisxl.v1`) is a text-only RealVisXL SDXL portrait workflow used by the Avatar Generation profile detail page to submit head/face prompt previews and record the resulting prompt id in preview history. `Simple Avatar Generation`
+(`template.avatar_head_face_preview.realvisxl.v1`) is a text-only RealVisXL SDXL portrait workflow used by the Avatar Generation profile detail page to submit head/face prompt previews and record the resulting prompt id in preview history. `Avatar Upper Torso Preview` (`template.avatar_upper_torso_preview.realvisxl.v1`) copies the reusable
+`config/image-studio/neutral-a-pose-openpose.png` guide into the active ComfyUI input directory and applies the installed
+SDXL OpenPose ControlNet at strength `0.85` from sampling fraction `0.0` through `0.8`. Despite its legacy template name,
+the workflow produces the Image Studio neck-to-toes baseline and records the pose-control settings with the preview.
 
 Direct local `task.image_generation` requests may include the optional routing hint
 `inputs.image_type: "scenery"`. When neither `inputs.template_id` nor a governed
@@ -266,7 +269,7 @@ prompt template binding selects a template, the node uses
 the image description; the node does not modify or bind that prompt. Generation
 settings are optional: the scenery template provides defaults for the negative
 prompt, output name, dimensions, seed behavior, steps, CFG, and denoise.
-(`template.avatar_body_depth_reference_transparent.realvisxl.v1`) applies PuLID face identity to the model, resizes and
+`Simple Avatar Generation` (`template.avatar_body_depth_reference_transparent.realvisxl.v1`) applies PuLID face identity to the model, resizes and
 pads the body reference to the output aspect ratio, extracts a Depth Anything V2 depth map, and applies the SDXL depth
 ControlNet before sampling from an empty latent. `Avatar Profile Generation`
 (`template.avatar_profile_depth_pulid.realvisxl.v1`) is the profile-aware final generation path: it uses the selected
