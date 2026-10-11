@@ -3942,7 +3942,7 @@ class NodeControlState:
             poses
             and (
                 str(dataset.get("seed_strategy") or "") != "profile_face_seed"
-                or str(dataset.get("variation_strategy") or "") != "controlled_ten_v2"
+                or str(dataset.get("variation_strategy") or "") != "controlled_ten_v3_manual_start"
             )
             and not any(bool(item.get("approved")) for pose in poses if isinstance(pose, dict) for item in list(pose.get("items") or []) if isinstance(item, dict))
         ):
@@ -4172,7 +4172,7 @@ class NodeControlState:
             active_pose_index = min(active_pose_index + 1, max(len(poses) - 1, 0))
             active_pose = poses[active_pose_index]
 
-        if action in {"ensure", "generate", "next", "reject"} and approved_seeds:
+        if action in {"generate", "next", "reject"} and approved_seeds:
             existing_items = [item for item in list(active_pose.get("items") or []) if isinstance(item, dict) and not bool(item.get("rejected"))]
             avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
             pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
@@ -4291,7 +4291,7 @@ class NodeControlState:
             "required_per_pose": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
             "seed_strategy": "profile_face_anchor_with_candidate_seeds",
             "generation_seed": face_profile_seed,
-            "variation_strategy": "controlled_ten_v2",
+            "variation_strategy": "controlled_ten_v3_manual_start",
             "training_manifest": training_manifest,
             "training_status": training_manifest.get("status") if isinstance(training_manifest, dict) else dataset.get("training_status"),
             "training_job": training_job,
@@ -4424,7 +4424,7 @@ class NodeControlState:
         head_workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
         head_seed_set = head_workspace.get("lora_seed_set") if isinstance(head_workspace.get("lora_seed_set"), dict) else {}
         identity_control = self._avatar_head_lora_dataset_identity_control(workspace=head_workspace, lora_seed_set=head_seed_set)
-        if action in {"ensure", "generate", "next", "reject"} and active_pose and body_seed is not None and identity_control:
+        if action in {"generate", "next", "reject"} and active_pose and body_seed is not None and identity_control:
             existing_items = [candidate for candidate in list(active_pose.get("items") or []) if isinstance(candidate, dict) and not bool(candidate.get("rejected"))]
             pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
             pose_reference_image = self._ensure_avatar_lora_pose_guide(

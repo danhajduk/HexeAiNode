@@ -5725,6 +5725,13 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             )
             for pose in body_dataset["pose_catalog"]:
                 self.assertTrue((input_dir / pose["pose_reference_image"]).is_file())
+            self.assertEqual(body_dataset["poses"][body_dataset["active_pose_index"]]["items"], [])
+            body_dataset = asyncio.run(
+                state.update_avatar_profile_upper_torso_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(action="generate", pose_id="front_neutral"),
+                )
+            )["dataset"]
             body_pose = body_dataset["poses"][body_dataset["active_pose_index"]]
             self.assertEqual(len(body_pose["items"]), 10)
             self.assertTrue(all(item["seed"] == 24680 for item in body_pose["items"]))
