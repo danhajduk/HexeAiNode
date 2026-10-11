@@ -3206,6 +3206,30 @@
   gap: 10px;
 }
 
+.image-studio-lora-anchor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(9, 16, 31, 0.72);
+}
+
+.image-studio-lora-anchor > div {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.image-studio-lora-anchor img {
+  width: 128px;
+  height: 128px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid rgba(139, 92, 246, 0.55);
+}
+
 .image-studio-seed-review-summary > div {
   display: grid;
   gap: 4px;

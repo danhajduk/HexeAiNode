@@ -284,7 +284,7 @@ AVATAR_HEAD_FACE_LORA_DATASET_LEGACY_POSE_PROMPTS = {
     "three_quarter_left": "three-quarter head-and-shoulders portrait turned slightly left, eyes toward viewer",
     "three_quarter_right": "three-quarter head-and-shoulders portrait turned slightly right, eyes toward viewer",
 }
-AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE = 9
+AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE = 10
 AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE = 6
 AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_PER_EPOCH = 3
 AVATAR_HEAD_FACE_LORA_DATASET_WIDTH = 512
@@ -3940,7 +3940,10 @@ class NodeControlState:
         poses = dataset.get("poses") if isinstance(dataset.get("poses"), list) else []
         if (
             poses
-            and str(dataset.get("seed_strategy") or "") != "profile_face_seed"
+            and (
+                str(dataset.get("seed_strategy") or "") != "profile_face_seed"
+                or str(dataset.get("variation_strategy") or "") != "controlled_ten_v1"
+            )
             and not any(bool(item.get("approved")) for pose in poses if isinstance(pose, dict) for item in list(pose.get("items") or []) if isinstance(item, dict))
         ):
             for pose in poses:
@@ -4180,13 +4183,20 @@ class NodeControlState:
             while len(existing_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
                 identity_source_seed = face_profile_seed
                 seed = face_profile_seed
-                item_cfg = self._avatar_head_lora_dataset_jittered_cfg(cfg)
+                slot_index = len(existing_items) + 1
                 item_token = uuid.uuid4().hex[:10]
                 output_avatar_name = self._safe_filename_component(f"{avatar_name}_lora_{pose_id}_{item_token}")
                 pose_prompt = str(active_pose.get("pose_prompt") or "").strip()
                 pose_base_prompt = self._avatar_head_lora_dataset_pose_base_prompt(prompt=prompt, pose_id=pose_id)
                 pose_geometry_prompt = self._avatar_head_lora_dataset_pose_geometry_prompt(pose_id=pose_id)
                 pose_control = self._avatar_head_lora_dataset_pose_control(pose_id=pose_id)
+                variation = self._avatar_head_lora_dataset_variation(
+                    slot_index=slot_index,
+                    cfg=cfg,
+                    face_strength=float(identity_control.get("face_strength") or 0.55),
+                    pose_strength=float(pose_control.get("pose_strength") or 0.42),
+                )
+                item_cfg = variation["cfg"]
                 pose_negative_prompt = self._avatar_head_lora_dataset_pose_negative_prompt(
                     negative_prompt=negative_prompt,
                     pose_id=pose_id,
@@ -4197,6 +4207,7 @@ class NodeControlState:
                         pose_prompt,
                         pose_geometry_prompt,
                         pose_base_prompt,
+                        variation["prompt_suffix"],
                         "512x512 face LoRA dataset image, pose-varied avatar training reference",
                     ]
                     if part
@@ -4223,9 +4234,10 @@ class NodeControlState:
                             key: value
                             for key, value in {
                                 **identity_control,
+                                "face_strength": variation["face_strength"],
                                 "pose_reference_image": pose_control.get("pose_reference_image"),
                                 "pose_controlnet": pose_control.get("pose_controlnet"),
-                                "pose_strength": pose_control.get("pose_strength"),
+                                "pose_strength": variation["pose_strength"],
                                 "pose_start": pose_control.get("pose_start"),
                                 "pose_end": pose_control.get("pose_end"),
                             }.items()
@@ -4245,6 +4257,7 @@ class NodeControlState:
                         "identity_source_seed": identity_source_seed,
                         "identity_control": identity_control,
                         "cfg_jitter": round(item_cfg - cfg, 2),
+                        "variation": variation,
                         "pose_control": pose_control,
                     }
                 )
@@ -4275,6 +4288,7 @@ class NodeControlState:
             "required_per_pose": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
             "seed_strategy": "profile_face_seed",
             "generation_seed": face_profile_seed,
+            "variation_strategy": "controlled_ten_v1",
             "training_manifest": training_manifest,
             "training_status": training_manifest.get("status") if isinstance(training_manifest, dict) else dataset.get("training_status"),
             "training_job": training_job,
@@ -8669,6 +8683,29 @@ class NodeControlState:
         jitter = secrets.randbelow(int(AVATAR_HEAD_FACE_LORA_DATASET_CFG_JITTER * 200) + 1) / 100.0
         value = cfg - AVATAR_HEAD_FACE_LORA_DATASET_CFG_JITTER + jitter
         return round(min(max(value, 0.1), 20.0), 2)
+
+    @staticmethod
+    def _avatar_head_lora_dataset_variation(*, slot_index: int, cfg: float, face_strength: float, pose_strength: float) -> dict:
+        recipes = (
+            (-0.08, -0.03, -0.04, "soft even studio light, neutral relaxed expression, standard portrait framing"),
+            (-0.06, -0.02, -0.03, "soft light from camera left, relaxed eyelids, slightly wider portrait framing"),
+            (-0.04, -0.01, -0.02, "soft light from camera right, calm closed-mouth expression, slightly closer framing"),
+            (-0.02, 0.00, -0.01, "balanced studio light, subtle natural brow variation, standard portrait framing"),
+            (0.00, 0.01, 0.00, "neutral studio light, steady neutral gaze, centered portrait framing"),
+            (0.02, 0.02, 0.01, "gentle high-key studio light, relaxed facial muscles, slightly wider portrait framing"),
+            (0.04, 0.03, 0.02, "gentle low-contrast studio light, faint natural warmth in expression, slightly closer framing"),
+            (0.06, -0.015, 0.03, "soft upper-left key light, neutral mouth, standard portrait framing"),
+            (0.08, 0.015, 0.04, "soft upper-right key light, calm attentive gaze, slightly wider portrait framing"),
+            (0.10, 0.00, 0.00, "flat identity-reference light, fully relaxed neutral expression, slightly closer framing"),
+        )
+        cfg_offset, face_offset, pose_offset, prompt_suffix = recipes[(max(int(slot_index), 1) - 1) % len(recipes)]
+        return {
+            "recipe_index": (max(int(slot_index), 1) - 1) % len(recipes) + 1,
+            "cfg": round(min(max(cfg + cfg_offset, 0.1), 20.0), 2),
+            "face_strength": round(min(max(face_strength + face_offset, 0.0), 1.0), 3),
+            "pose_strength": round(min(max(pose_strength + pose_offset, 0.0), 1.0), 3),
+            "prompt_suffix": prompt_suffix,
+        }
 
     @staticmethod
     def _avatar_head_lora_dataset_pose_base_prompt(*, prompt: str, pose_id: str) -> str:

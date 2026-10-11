@@ -5722,8 +5722,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             )["dataset"]
             active_pose = generated["poses"][generated["active_pose_index"]]
             self.assertEqual(active_pose["pose_id"], "three_quarter_left")
-            self.assertEqual(len(active_pose["items"]), 9)
+            self.assertEqual(len(active_pose["items"]), 10)
             self.assertTrue(all(item["seed"] == anchor["seed"] for item in active_pose["items"]))
+            self.assertEqual(len({item["variation"]["recipe_index"] for item in active_pose["items"]}), 10)
+            self.assertEqual(len({item["variation"]["prompt_suffix"] for item in active_pose["items"]}), 10)
             self.assertEqual(generated["generation_seed"], anchor["seed"])
             self.assertEqual(generated["seed_strategy"], "profile_face_seed")
             self.assertTrue(all(item["pose_control"]["pose_reference_image"] for item in active_pose["items"]))
@@ -5895,7 +5897,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 reviewed_profile = state.avatar_generation_status()["profiles"][0]
 
         reviewed_items = reviewed_profile["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]["items"]
-        self.assertEqual(vision.call_count, 9)
+        self.assertEqual(vision.call_count, 10)
         self.assertTrue(all(item["vision_approved"] for item in reviewed_items))
         self.assertTrue(all(item["vision_status"] == "approved" for item in reviewed_items))
         self.assertIn(("stop", "comfyui_webui"), service_manager.calls)
@@ -6012,14 +6014,14 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     "metadata": {"pose_id": "front_neutral", "training_note": "usable"},
                 }
             )
-            side_effects = [ValueError("vision_describe_failed: no_status_line")] + [(vision_reply, "vision-test")] * 9
+            side_effects = [ValueError("vision_describe_failed: no_status_line")] + [(vision_reply, "vision-test")] * 10
             with patch.object(state, "_vision_describe_image_bytes", side_effect=side_effects) as vision, patch(
                 "ai_node.runtime.node_control_api.time.sleep"
             ):
                 reviewed_profile = state.avatar_generation_status()["profiles"][0]
 
         reviewed_items = reviewed_profile["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]["items"]
-        self.assertEqual(vision.call_count, 10)
+        self.assertEqual(vision.call_count, 11)
         self.assertTrue(all(item["vision_status"] == "approved" for item in reviewed_items))
 
     def test_avatar_generation_head_lora_dataset_rejects_retry_vision(self):

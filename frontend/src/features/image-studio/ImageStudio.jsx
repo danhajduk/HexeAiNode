@@ -2100,6 +2100,10 @@ export function ImageStudio({
               </div>
             ) : activeInterviewStep.id === "face_lora_dataset" ? (
               <div className="image-studio-face-builder">
+                <div className="image-studio-lora-anchor">
+                  <div><span className="image-studio-eyebrow">Original approved face</span><strong>Identity reference · seed {facePreviewSeed ?? "unknown"}</strong></div>
+                  {previewImageUrl ? <img src={previewImageUrl} alt={`Original approved face for ${characterBrief.name || "character"}`} /> : <GenerationPreviewPlaceholder />}
+                </div>
                 <div className="image-studio-seed-review-summary" aria-live="polite">
                   <div><span>Pose</span><strong>{faceLoraPose?.label || "Preparing poses"}</strong></div>
                   <div><span>Progress</span><strong>{`${faceLoraPoseIndex + 1} / ${Math.max(faceLoraPoses.length, 6)}`}</strong></div>
