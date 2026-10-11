@@ -5919,9 +5919,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("face turned 40 to 45 degrees", geometry_prompt)
         self.assertIn("both eyes visible with the far eye naturally narrower", geometry_prompt)
         self.assertIn("nose tip and chin angled toward the left edge", geometry_prompt)
-        self.assertIn("reject any image that reads as a straight-on frontal portrait", vision_prompt)
-        self.assertIn("reject full 90-degree side profiles", vision_prompt)
-        self.assertIn("natural 40 to 45 degree three-quarter portrait", vision_prompt)
+        self.assertIn("Reject straight-on frontal portraits", vision_prompt)
+        self.assertIn("full 90-degree side profiles", vision_prompt)
+        self.assertIn("natural 40 to 45 degree left three-quarter portrait", vision_prompt)
         inherited_negative = NodeControlState._avatar_head_lora_dataset_pose_negative_prompt(
             negative_prompt="profile view, three-quarter view, tilted head, low quality",
             pose_id="three_quarter_left",
@@ -5931,6 +5931,71 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("tilted head", inherited_negative)
         self.assertIn("full 90-degree side profile", inherited_negative)
         self.assertIn("low quality", inherited_negative)
+
+    def test_avatar_lora_prompt_catalog_reads_runtime_json(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            catalog_path = Path(temporary_directory) / "face-prompts.json"
+            catalog_path.write_text(
+                json.dumps(
+                    {
+                        "runtime_enabled": True,
+                        "variation_recipes": [
+                            {
+                                "cfg_offset": 0.1,
+                                "identity_strength_offset": 0.2,
+                                "pose_strength_offset": 0.3,
+                                "prompt_suffix": "catalog variation",
+                            }
+                        ],
+                        "poses": [
+                            {
+                                "pose_id": "custom_pose",
+                                "prompt": "catalog pose prompt",
+                                "geometry_prompt": "catalog geometry",
+                                "negative_remove": ["conflicting angle"],
+                                "negative_add": ["catalog negative"],
+                                "prompt_replacements": {"old framing": "catalog framing"},
+                                "review_rule": "catalog review rule",
+                            }
+                        ],
+                        "common_negative_additions": ["catalog common negative"],
+                        "base_prompt_replacements": {"old base": "catalog base"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {"HEXE_IMAGE_STUDIO_FACE_LORA_PROMPTS_PATH": str(catalog_path)}):
+                prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(
+                    prompt="old base, old framing",
+                    pose_id="custom_pose",
+                )
+                geometry = NodeControlState._avatar_head_lora_dataset_pose_geometry_prompt(pose_id="custom_pose")
+                negative = NodeControlState._avatar_head_lora_dataset_pose_negative_prompt(
+                    negative_prompt="conflicting angle, low quality",
+                    pose_id="custom_pose",
+                )
+                variation = NodeControlState._avatar_head_lora_dataset_variation(
+                    slot_index=1,
+                    cfg=1.0,
+                    face_strength=0.4,
+                    pose_strength=0.5,
+                    pose_id="custom_pose",
+                )
+                review = NodeControlState._avatar_head_lora_dataset_vision_prompt(
+                    pose_id="custom_pose",
+                    pose_prompt="catalog pose prompt",
+                )
+
+            self.assertEqual(prompt, "catalog base, catalog framing")
+            self.assertEqual(geometry, "catalog geometry")
+            self.assertNotIn("conflicting angle", negative)
+            self.assertIn("catalog common negative", negative)
+            self.assertIn("catalog negative", negative)
+            self.assertEqual(variation["prompt_suffix"], "catalog variation")
+            self.assertEqual(variation["cfg"], 1.1)
+            self.assertEqual(variation["face_strength"], 0.6)
+            self.assertEqual(variation["pose_strength"], 0.8)
+            self.assertIn("catalog review rule", review)
 
     def test_avatar_lora_prompt_avoids_reference_sheet_composition(self):
         prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(

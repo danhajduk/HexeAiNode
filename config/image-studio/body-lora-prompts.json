@@ -1,7 +1,7 @@
 {
   "schema_version": "image_studio_body_lora_prompts_v1",
-  "runtime_enabled": false,
-  "migration_status": "staged_only_not_loaded_by_runtime",
+  "runtime_enabled": true,
+  "migration_status": "active_runtime_source",
   "defaults": {
     "batch_size": 10,
     "minimum_approved_per_pose": 6,

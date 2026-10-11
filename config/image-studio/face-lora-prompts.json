@@ -1,7 +1,7 @@
 {
   "schema_version": "image_studio_face_lora_prompts_v1",
-  "runtime_enabled": false,
-  "migration_status": "staged_only_not_loaded_by_runtime",
+  "runtime_enabled": true,
+  "migration_status": "active_runtime_source",
   "defaults": {
     "batch_size": 10,
     "minimum_approved_per_pose": 6,
@@ -61,6 +61,8 @@
       "guide_image": "system/lora-pose-guides/face/front_neutral.png",
       "negative_remove": [],
       "negative_add": [],
+      "prompt_replacements": {},
+      "variation_replacements": {},
       "review_rule": "Require a clear front-facing neutral portrait with direct gaze."
     },
     {
@@ -71,6 +73,21 @@
       "guide_image": "system/lora-pose-guides/face/front_smile.png",
       "negative_remove": ["exaggerated expression"],
       "negative_add": ["cartoonish facial distortion"],
+      "prompt_replacements": {
+        "Expression: neutral and relaxed.": "Expression: clearly smiling with lifted cheeks and raised mouth corners.",
+        "symmetrical neutral pose": "symmetrical front-facing smiling pose",
+        "neutral relaxed expression": "clearly visible warm smile",
+        "neutral expression": "clearly visible warm smile"
+      },
+      "variation_replacements": {
+        "neutral relaxed expression": "warm smiling expression",
+        "calm closed-mouth expression": "clear open smile with visible upper teeth",
+        "steady neutral gaze": "bright friendly gaze and lifted cheeks",
+        "relaxed facial muscles": "naturally lifted cheek muscles",
+        "faint natural warmth in expression": "clearly visible joyful smile",
+        "neutral mouth": "raised mouth corners and parted smiling lips",
+        "fully relaxed neutral expression": "confident genuine smile"
+      },
       "review_rule": "Require an unmistakable genuine smile with raised mouth corners and lifted cheeks."
     },
     {
@@ -81,7 +98,27 @@
       "guide_image": "system/lora-pose-guides/face/three_quarter_left.png",
       "negative_remove": ["profile view", "three-quarter view", "tilted head"],
       "negative_add": ["straight-on frontal face", "front-facing portrait", "symmetrical passport photo", "looking directly at camera", "direct eye contact", "centered forward gaze", "both eyes same size", "both cheeks equally visible", "nose centered straight ahead", "chin centered straight ahead", "two ears visible", "perfectly symmetrical face", "beauty front portrait", "slight angle", "soft three-quarter beauty angle", "full 90-degree side profile", "only one eye visible", "both nostrils visible"],
-      "review_rule": "Require a natural 40 to 45 degree left three-quarter portrait with both eyes visible and reject frontal or full-profile results."
+      "prompt_replacements": {
+        "front-facing composition": "pose-specific character composition",
+        "front facing composition": "pose-specific character composition",
+        "front-facing portrait": "pose-specific angled portrait",
+        "front facing portrait": "pose-specific angled portrait",
+        "front-facing": "pose-specific angled",
+        "front facing": "pose-specific angled",
+        "only adjust the face outline so it feels less pointy and more softly oval": "allow pose-specific head rotation and natural perspective changes",
+        "direct confident gaze": "off-camera gaze toward the left edge of the image",
+        "direct viewer engagement": "off-camera gaze toward the left edge of the image",
+        "eyes toward viewer": "off-camera gaze toward the left edge of the image",
+        "looking at the camera": "off-camera gaze toward the left edge of the image",
+        "balanced symmetrical placement above the eyes": "natural eyebrow placement following the head angle",
+        "balanced symmetrical shape": "natural shape following the head angle",
+        "balanced lower face proportions": "natural lower face proportions following the head angle",
+        "soft frontal face illumination": "soft angled face illumination",
+        "green rim light from both sides": "subtle rim light following the head angle",
+        "centered composition": "pose-specific angled composition"
+      },
+      "variation_replacements": {},
+      "review_rule": "Reject straight-on frontal portraits, equally visible cheeks, centered-forward nose or chin, direct camera eye contact, angles that still look mostly frontal, and full 90-degree side profiles. Require a natural 40 to 45 degree left three-quarter portrait: nose and chin angle left, both eyes remain visible with the far eye naturally narrower, the far cheek is narrower but visible, the near cheek is dominant, and the eyes look slightly off camera toward the left."
     },
     {
       "pose_id": "three_quarter_right",
@@ -91,7 +128,27 @@
       "guide_image": "system/lora-pose-guides/face/three_quarter_right.png",
       "negative_remove": ["profile view", "three-quarter view", "tilted head"],
       "negative_add": ["straight-on frontal face", "front-facing portrait", "symmetrical passport photo", "looking directly at camera", "direct eye contact", "centered forward gaze", "both eyes same size", "both cheeks equally visible", "nose centered straight ahead", "chin centered straight ahead", "two ears visible", "perfectly symmetrical face", "beauty front portrait", "slight angle", "soft three-quarter beauty angle", "full 90-degree side profile", "only one eye visible", "both nostrils visible"],
-      "review_rule": "Require a natural 40 to 45 degree right three-quarter portrait with both eyes visible and reject frontal or full-profile results."
+      "prompt_replacements": {
+        "front-facing composition": "pose-specific character composition",
+        "front facing composition": "pose-specific character composition",
+        "front-facing portrait": "pose-specific angled portrait",
+        "front facing portrait": "pose-specific angled portrait",
+        "front-facing": "pose-specific angled",
+        "front facing": "pose-specific angled",
+        "only adjust the face outline so it feels less pointy and more softly oval": "allow pose-specific head rotation and natural perspective changes",
+        "direct confident gaze": "off-camera gaze toward the right edge of the image",
+        "direct viewer engagement": "off-camera gaze toward the right edge of the image",
+        "eyes toward viewer": "off-camera gaze toward the right edge of the image",
+        "looking at the camera": "off-camera gaze toward the right edge of the image",
+        "balanced symmetrical placement above the eyes": "natural eyebrow placement following the head angle",
+        "balanced symmetrical shape": "natural shape following the head angle",
+        "balanced lower face proportions": "natural lower face proportions following the head angle",
+        "soft frontal face illumination": "soft angled face illumination",
+        "green rim light from both sides": "subtle rim light following the head angle",
+        "centered composition": "pose-specific angled composition"
+      },
+      "variation_replacements": {},
+      "review_rule": "Reject straight-on frontal portraits, equally visible cheeks, centered-forward nose or chin, direct camera eye contact, angles that still look mostly frontal, and full 90-degree side profiles. Require a natural 40 to 45 degree right three-quarter portrait: nose and chin angle right, both eyes remain visible with the far eye naturally narrower, the far cheek is narrower but visible, the near cheek is dominant, and the eyes look slightly off camera toward the right."
     },
     {
       "pose_id": "slight_down",
@@ -101,6 +158,8 @@
       "guide_image": "system/lora-pose-guides/face/slight_down.png",
       "negative_remove": [],
       "negative_add": [],
+      "prompt_replacements": {},
+      "variation_replacements": {},
       "review_rule": "Require a subtle downward head angle while keeping the face readable."
     },
     {
@@ -111,6 +170,8 @@
       "guide_image": "system/lora-pose-guides/face/slight_up.png",
       "negative_remove": [],
       "negative_add": [],
+      "prompt_replacements": {},
+      "variation_replacements": {},
       "review_rule": "Require a subtle upward head angle while keeping the face readable."
     }
   ]

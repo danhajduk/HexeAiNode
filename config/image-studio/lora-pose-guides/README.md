@@ -8,5 +8,7 @@ This directory contains reusable ControlNet guide images for character LoRA data
 Run `scripts/generate-lora-pose-guides.py` to regenerate the deterministic body guides. If local 300W-LP control exports are available, the script also refreshes the packaged face guides from them.
 
 Editable staged prompt catalogs live at `config/image-studio/face-lora-prompts.json` and
-`config/image-studio/body-lora-prompts.json`. They mirror the current hard-coded runtime
-behavior but are intentionally not loaded by the backend yet (`runtime_enabled: false`).
+`config/image-studio/body-lora-prompts.json`. They are the active runtime source for
+face/body LoRA pose prompts, variations, guide mappings, and prompt-specific negatives.
+Set `HEXE_IMAGE_STUDIO_FACE_LORA_PROMPTS_PATH` or
+`HEXE_IMAGE_STUDIO_BODY_LORA_PROMPTS_PATH` to load an alternate catalog path.

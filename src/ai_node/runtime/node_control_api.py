@@ -252,6 +252,8 @@ def management_scope_for_route(*, method: str, path: str) -> str | None:
 MANUAL_IMAGE_DEFAULT_TEMPLATE_ID = "template.avatar_body_depth_reference_transparent.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID = "template.avatar_head_face_preview.realvisxl.v1"
 IMAGE_STUDIO_FACE_FEATURE_CATALOG_RELATIVE_PATH = "config/image-studio/face-feature-catalog.json"
+IMAGE_STUDIO_FACE_LORA_PROMPTS_RELATIVE_PATH = "config/image-studio/face-lora-prompts.json"
+IMAGE_STUDIO_BODY_LORA_PROMPTS_RELATIVE_PATH = "config/image-studio/body-lora-prompts.json"
 AVATAR_UPPER_TORSO_PREVIEW_TEMPLATE_ID = "template.avatar_upper_torso_preview.realvisxl.v1"
 AVATAR_UPPER_TORSO_POSE_GUIDE_RELATIVE_PATH = "system/neutral-a-pose-openpose.png"
 AVATAR_UPPER_TORSO_POSE_GUIDE_SOURCE = Path("config/image-studio/neutral-a-pose-openpose.png")
@@ -2676,6 +2678,41 @@ class NodeControlState:
             return Path(configured).expanduser().resolve()
         return (Path(__file__).resolve().parents[3] / IMAGE_STUDIO_FACE_FEATURE_CATALOG_RELATIVE_PATH).resolve()
 
+    @staticmethod
+    def _image_studio_lora_prompt_catalog(kind: str) -> dict:
+        normalized_kind = "body" if str(kind or "").strip().lower() == "body" else "face"
+        environment_name = (
+            "HEXE_IMAGE_STUDIO_BODY_LORA_PROMPTS_PATH"
+            if normalized_kind == "body"
+            else "HEXE_IMAGE_STUDIO_FACE_LORA_PROMPTS_PATH"
+        )
+        configured = str(os.environ.get(environment_name) or "").strip()
+        relative_path = (
+            IMAGE_STUDIO_BODY_LORA_PROMPTS_RELATIVE_PATH
+            if normalized_kind == "body"
+            else IMAGE_STUDIO_FACE_LORA_PROMPTS_RELATIVE_PATH
+        )
+        path = Path(configured).expanduser().resolve() if configured else (
+            Path(__file__).resolve().parents[3] / relative_path
+        ).resolve()
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            return {}
+        if not isinstance(payload, dict) or payload.get("runtime_enabled") is not True:
+            return {}
+        poses = payload.get("poses")
+        variations = payload.get("variation_recipes")
+        if not isinstance(poses, list) or not poses or not isinstance(variations, list) or not variations:
+            return {}
+        return payload
+
+    @classmethod
+    def _image_studio_lora_pose_catalog(cls, kind: str) -> list[dict]:
+        catalog = cls._image_studio_lora_prompt_catalog(kind)
+        poses = catalog.get("poses") if isinstance(catalog.get("poses"), list) else []
+        return [pose for pose in poses if isinstance(pose, dict) and str(pose.get("pose_id") or "").strip()]
+
     def image_studio_face_feature_catalog(self) -> dict:
         path = self._image_studio_face_feature_catalog_path()
         try:
@@ -3930,8 +3967,16 @@ class NodeControlState:
         defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
         if not negative_prompt:
             negative_prompt = str(defaults.get("negative_prompt") or "").strip()
-        width = AVATAR_HEAD_FACE_LORA_DATASET_WIDTH
-        height = AVATAR_HEAD_FACE_LORA_DATASET_HEIGHT
+        face_prompt_catalog = self._image_studio_lora_prompt_catalog("face")
+        face_prompt_defaults = (
+            face_prompt_catalog.get("defaults") if isinstance(face_prompt_catalog.get("defaults"), dict) else {}
+        )
+        face_pose_catalog = self._image_studio_lora_pose_catalog("face") or [
+            {"pose_id": pose_id, "label": pose_id.replace("_", " ").title(), "prompt": pose_prompt}
+            for pose_id, pose_prompt in AVATAR_HEAD_FACE_LORA_DATASET_POSES
+        ]
+        width = int(face_prompt_defaults.get("width") or AVATAR_HEAD_FACE_LORA_DATASET_WIDTH)
+        height = int(face_prompt_defaults.get("height") or AVATAR_HEAD_FACE_LORA_DATASET_HEIGHT)
         steps = int(defaults.get("steps") or 4)
         cfg = float(defaults.get("cfg") or 1.2)
         denoise = float(defaults.get("denoise") or 1.0)
@@ -3965,19 +4010,24 @@ class NodeControlState:
                     "required_count": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
                     "status": "pending",
                 }
-                for pose_id, pose_prompt in AVATAR_HEAD_FACE_LORA_DATASET_POSES
+                for pose_id, pose_prompt in [
+                    (str(item.get("pose_id") or ""), str(item.get("prompt") or ""))
+                    for item in face_pose_catalog
+                ]
             ]
         else:
-            default_pose_prompts = dict(AVATAR_HEAD_FACE_LORA_DATASET_POSES)
+            default_pose_prompts = {
+                str(item.get("pose_id") or ""): str(item.get("prompt") or "")
+                for item in face_pose_catalog
+            }
             for pose in poses:
                 if not isinstance(pose, dict):
                     continue
                 pose_id = str(pose.get("pose_id") or "").strip()
                 pose_prompt = str(pose.get("pose_prompt") or "").strip()
-                if not pose_prompt or pose_prompt == AVATAR_HEAD_FACE_LORA_DATASET_LEGACY_POSE_PROMPTS.get(pose_id):
-                    updated_pose_prompt = default_pose_prompts.get(pose_id)
-                    if updated_pose_prompt:
-                        pose["pose_prompt"] = updated_pose_prompt
+                updated_pose_prompt = default_pose_prompts.get(pose_id)
+                if updated_pose_prompt and pose_prompt != updated_pose_prompt:
+                    pose["pose_prompt"] = updated_pose_prompt
         active_pose_index = min(max(int(dataset.get("active_pose_index") or 0), 0), max(len(poses) - 1, 0))
         requested_pose_id = str(payload.pose_id or "").strip()
         if requested_pose_id:
@@ -4386,16 +4436,27 @@ class NodeControlState:
             if str((webui or {}).get("state") or "").strip().lower() != "running":
                 await self.start_service(target="comfyui_webui")
         now = datetime.now(timezone.utc).isoformat()
-        pose_catalog = [
+        body_prompt_catalog = self._image_studio_lora_prompt_catalog("body")
+        body_prompt_defaults = body_prompt_catalog.get("defaults") if isinstance(body_prompt_catalog.get("defaults"), dict) else {}
+        body_pose_catalog = self._image_studio_lora_pose_catalog("body") or [
             {
                 "pose_id": pose_id,
                 "label": pose_id.replace("_", " ").title(),
-                "pose_prompt": pose_prompt,
-                "pose_reference_image": self._ensure_avatar_lora_pose_guide(
-                    relative_image=AVATAR_UPPER_TORSO_LORA_POSE_REFERENCE_IMAGES[pose_id]
-                ),
+                "prompt": pose_prompt,
+                "guide_image": AVATAR_UPPER_TORSO_LORA_POSE_REFERENCE_IMAGES[pose_id],
             }
             for pose_id, pose_prompt in AVATAR_UPPER_TORSO_LORA_DATASET_POSES
+        ]
+        pose_catalog = [
+            {
+                "pose_id": str(pose.get("pose_id") or ""),
+                "label": str(pose.get("label") or str(pose.get("pose_id") or "").replace("_", " ").title()),
+                "pose_prompt": str(pose.get("prompt") or ""),
+                "pose_reference_image": self._ensure_avatar_lora_pose_guide(
+                    relative_image=str(pose.get("guide_image") or "")
+                ),
+            }
+            for pose in body_pose_catalog
         ]
         prompt_parts = self._avatar_profile_normalized_upper_torso_prompt_parts(
             profile=metadata,
@@ -4411,7 +4472,8 @@ class NodeControlState:
         negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
         template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID)["template"]
         defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
-        width, height = 768, 1536
+        width = int(body_prompt_defaults.get("width") or 768)
+        height = int(body_prompt_defaults.get("height") or 1536)
         steps = int(defaults.get("steps") or 4)
         cfg = float(defaults.get("cfg") or 1.2)
         denoise = float(defaults.get("denoise") or 1.0)
@@ -4427,8 +4489,22 @@ class NodeControlState:
                     "required_count": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
                     "status": "pending",
                 }
-                for pose_id, pose_prompt in AVATAR_UPPER_TORSO_LORA_DATASET_POSES
+                for pose_id, pose_prompt in [
+                    (str(item.get("pose_id") or ""), str(item.get("prompt") or ""))
+                    for item in body_pose_catalog
+                ]
             ]
+        else:
+            body_prompts_by_id = {
+                str(item.get("pose_id") or ""): str(item.get("prompt") or "")
+                for item in body_pose_catalog
+            }
+            for pose in poses:
+                if not isinstance(pose, dict):
+                    continue
+                configured_prompt = body_prompts_by_id.get(str(pose.get("pose_id") or ""))
+                if configured_prompt and str(pose.get("pose_prompt") or "") != configured_prompt:
+                    pose["pose_prompt"] = configured_prompt
         active_pose_index = min(max(int(dataset.get("active_pose_index") or 0), 0), max(len(poses) - 1, 0))
         requested_pose_id = str(payload.pose_id or "").strip()
         if requested_pose_id:
@@ -4469,21 +4545,21 @@ class NodeControlState:
         if action == "generate" and active_pose and body_seed is not None and identity_control:
             existing_items = [candidate for candidate in list(active_pose.get("items") or []) if isinstance(candidate, dict) and not bool(candidate.get("rejected"))]
             pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
-            pose_reference_image = self._ensure_avatar_lora_pose_guide(
-                relative_image=AVATAR_UPPER_TORSO_LORA_POSE_REFERENCE_IMAGES[pose_id]
-            )
+            pose_config = next((item for item in body_pose_catalog if str(item.get("pose_id") or "") == pose_id), {})
+            pose_reference_image = self._ensure_avatar_lora_pose_guide(relative_image=str(pose_config.get("guide_image") or ""))
             avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
             while len(existing_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
                 slot_index = len(existing_items) + 1
                 item_token = uuid.uuid4().hex[:10]
                 variation = self._avatar_head_lora_dataset_variation(
-                    slot_index=slot_index, cfg=cfg, face_strength=float(identity_control.get("face_strength") or 0.55), pose_strength=0.8
+                    slot_index=slot_index, cfg=cfg, face_strength=float(identity_control.get("face_strength") or 0.55),
+                    pose_strength=float(body_prompt_defaults.get("pose_strength") or 0.8), catalog_kind="body"
                 )
                 item_prompt = ", ".join(filter(None, [
                     str(active_pose.get("pose_prompt") or "").strip(),
                     prompt,
                     variation["prompt_suffix"],
-                    "single adult character, complete neck-to-toes framing, entire body visible, consistent anatomy and proportions, body LoRA training reference",
+                    str(body_prompt_catalog.get("shared_prompt_suffix") or "single adult character, complete neck-to-toes framing, entire body visible, consistent anatomy and proportions, body LoRA training reference"),
                 ]))
                 output_avatar_name = self._safe_filename_component(f"{avatar_name}_body_lora_{pose_id}_{item_token}")
                 existing_items.append(
@@ -4499,7 +4575,9 @@ class NodeControlState:
                             "face_strength": variation["face_strength"],
                             "pose_reference_image": pose_reference_image,
                             "pose_controlnet": str(defaults.get("pose_controlnet") or "controlnet-openpose-sdxl-1.0.safetensors"),
-                            "pose_strength": variation["pose_strength"], "pose_start": 0, "pose_end": 0.8,
+                            "pose_strength": variation["pose_strength"],
+                            "pose_start": float(body_prompt_defaults.get("pose_start") or 0),
+                            "pose_end": float(body_prompt_defaults.get("pose_end") or 0.8),
                         },
                     ) | {
                         "preview_id": f"body_lora_{pose_id}_{item_token}", "pose_id": pose_id,
@@ -6486,10 +6564,16 @@ class NodeControlState:
             "vision_reviewed_at": now,
         }
 
-    @staticmethod
-    def _avatar_head_lora_dataset_vision_prompt(*, pose_id: str, pose_prompt: str) -> str:
+    @classmethod
+    def _avatar_head_lora_dataset_vision_prompt(cls, *, pose_id: str, pose_prompt: str) -> str:
         three_quarter_rule = ""
-        if pose_id in {"three_quarter_left", "three_quarter_right"}:
+        pose = next(
+            (item for item in cls._image_studio_lora_pose_catalog("face") if str(item.get("pose_id") or "") == pose_id),
+            {},
+        )
+        if str(pose.get("review_rule") or "").strip():
+            three_quarter_rule = str(pose.get("review_rule") or "").strip() + " "
+        elif pose_id in {"three_quarter_left", "three_quarter_right"}:
             three_quarter_rule = (
                 "For three-quarter poses, reject any image that reads as a straight-on frontal portrait, "
                 "has both cheeks equally visible, has the nose/chin centered forward, or has direct camera eye contact. "
@@ -8880,11 +8964,12 @@ class NodeControlState:
         value = cfg - AVATAR_HEAD_FACE_LORA_DATASET_CFG_JITTER + jitter
         return round(min(max(value, 0.1), 20.0), 2)
 
-    @staticmethod
+    @classmethod
     def _avatar_head_lora_dataset_variation(
-        *, slot_index: int, cfg: float, face_strength: float, pose_strength: float, pose_id: str = ""
+        cls, *, slot_index: int, cfg: float, face_strength: float, pose_strength: float, pose_id: str = "",
+        catalog_kind: str = "face",
     ) -> dict:
-        recipes = (
+        fallback_recipes = (
             (-0.08, -0.03, -0.04, "soft even studio light, neutral relaxed expression, standard portrait framing"),
             (-0.06, -0.02, -0.03, "soft light from camera left, relaxed eyelids, slightly wider portrait framing"),
             (-0.04, -0.01, -0.02, "soft light from camera right, calm closed-mouth expression, slightly closer framing"),
@@ -8896,8 +8981,28 @@ class NodeControlState:
             (0.08, 0.015, 0.04, "soft upper-right key light, calm attentive gaze, slightly wider portrait framing"),
             (0.10, 0.00, 0.00, "flat identity-reference light, fully relaxed neutral expression, slightly closer framing"),
         )
-        cfg_offset, face_offset, pose_offset, prompt_suffix = recipes[(max(int(slot_index), 1) - 1) % len(recipes)]
-        if pose_id == "front_smile":
+        catalog = cls._image_studio_lora_prompt_catalog(catalog_kind)
+        configured_recipes = [item for item in list(catalog.get("variation_recipes") or []) if isinstance(item, dict)]
+        recipe_index = (max(int(slot_index), 1) - 1) % (len(configured_recipes) or len(fallback_recipes))
+        if configured_recipes:
+            recipe = configured_recipes[recipe_index]
+            cfg_offset = float(recipe.get("cfg_offset") or 0)
+            face_offset = float(recipe.get("identity_strength_offset") or 0)
+            pose_offset = float(recipe.get("pose_strength_offset") or 0)
+            prompt_suffix = str(recipe.get("prompt_suffix") or "").strip()
+        else:
+            cfg_offset, face_offset, pose_offset, prompt_suffix = fallback_recipes[recipe_index]
+        pose = next(
+            (item for item in cls._image_studio_lora_pose_catalog(catalog_kind) if str(item.get("pose_id") or "") == pose_id),
+            {},
+        )
+        variation_replacements = (
+            pose.get("variation_replacements") if isinstance(pose.get("variation_replacements"), dict) else {}
+        )
+        if variation_replacements:
+            for source, target in variation_replacements.items():
+                prompt_suffix = prompt_suffix.replace(str(source), str(target))
+        elif pose_id == "front_smile" and not catalog:
             prompt_suffix = ", ".join(
                 [
                     part
@@ -8915,22 +9020,30 @@ class NodeControlState:
                 ]
             )
         return {
-            "recipe_index": (max(int(slot_index), 1) - 1) % len(recipes) + 1,
+            "recipe_index": recipe_index + 1,
             "cfg": round(min(max(cfg + cfg_offset, 0.1), 20.0), 2),
             "face_strength": round(min(max(face_strength + face_offset, 0.0), 1.0), 3),
             "pose_strength": round(min(max(pose_strength + pose_offset, 0.0), 1.0), 3),
             "prompt_suffix": prompt_suffix,
         }
 
-    @staticmethod
-    def _avatar_head_lora_dataset_pose_base_prompt(*, prompt: str, pose_id: str) -> str:
+    @classmethod
+    def _avatar_head_lora_dataset_pose_base_prompt(cls, *, prompt: str, pose_id: str) -> str:
         cleaned = str(prompt or "")
-        for source, target in {
+        catalog = cls._image_studio_lora_prompt_catalog("face")
+        replacements = catalog.get("base_prompt_replacements") if isinstance(catalog.get("base_prompt_replacements"), dict) else {
             "identity reference sheet": "single-subject studio portrait",
             "pose-varied avatar training reference": "single-image identity sample",
             "face LoRA dataset image": "single-subject portrait image",
-        }.items():
+        }
+        for source, target in replacements.items():
             cleaned = cleaned.replace(source, target)
+        pose = next((item for item in cls._image_studio_lora_pose_catalog("face") if str(item.get("pose_id") or "") == pose_id), {})
+        pose_replacements = pose.get("prompt_replacements") if isinstance(pose.get("prompt_replacements"), dict) else {}
+        if pose_replacements:
+            for source, target in pose_replacements.items():
+                cleaned = cleaned.replace(str(source), str(target))
+            return cleaned
         if pose_id == "front_smile":
             for source, target in {
                 "Expression: neutral and relaxed.": "Expression: clearly smiling with lifted cheeks and raised mouth corners.",
@@ -8967,8 +9080,11 @@ class NodeControlState:
             cleaned = cleaned.replace(source, target)
         return cleaned
 
-    @staticmethod
-    def _avatar_head_lora_dataset_pose_geometry_prompt(*, pose_id: str) -> str:
+    @classmethod
+    def _avatar_head_lora_dataset_pose_geometry_prompt(cls, *, pose_id: str) -> str:
+        pose = next((item for item in cls._image_studio_lora_pose_catalog("face") if str(item.get("pose_id") or "") == pose_id), {})
+        if "geometry_prompt" in pose:
+            return str(pose.get("geometry_prompt") or "").strip()
         if pose_id == "front_smile":
             return (
                 "mandatory clearly visible genuine smile: (raised mouth corners, parted lips, visible upper teeth, "
@@ -8985,13 +9101,15 @@ class NodeControlState:
             "near ear optionally visible through or beside the hair, slightly off-camera gaze, no straight-on camera pose"
         )
 
-    @staticmethod
-    def _avatar_head_lora_dataset_pose_negative_prompt(*, negative_prompt: str, pose_id: str) -> str:
+    @classmethod
+    def _avatar_head_lora_dataset_pose_negative_prompt(cls, *, negative_prompt: str, pose_id: str) -> str:
         normalized_negative = str(negative_prompt or "").strip()
-        if pose_id == "front_smile":
-            normalized_negative = normalized_negative.replace("exaggerated expression", "cartoonish facial distortion")
-        common = [
-            normalized_negative,
+        catalog = cls._image_studio_lora_prompt_catalog("face")
+        pose = next((item for item in cls._image_studio_lora_pose_catalog("face") if str(item.get("pose_id") or "") == pose_id), {})
+        negative_remove = [str(item).strip() for item in list(pose.get("negative_remove") or []) if str(item).strip()]
+        normalized_parts = [part.strip() for part in normalized_negative.split(",") if part.strip()]
+        normalized_negative = ", ".join(part for part in normalized_parts if part.lower() not in {item.lower() for item in negative_remove})
+        common_negative_additions = list(catalog.get("common_negative_additions") or []) if catalog else [
             "inset portrait", "secondary portrait", "thumbnail portrait", "picture-in-picture",
             "reference panel", "reference board", "mood board", "face crop overlay",
             "eye detail inset", "hair swatch", "color swatch", "detail callout",
@@ -8999,6 +9117,13 @@ class NodeControlState:
             "multiple camera views", "alternate view", "comparison layout",
             "raised arms", "hands above head", "hands touching hair", "dynamic body pose",
         ]
+        common = [
+            normalized_negative,
+            *[str(item) for item in common_negative_additions if str(item).strip()],
+            *[str(item) for item in list(pose.get("negative_add") or []) if str(item).strip()],
+        ]
+        if catalog:
+            return ", ".join(part for part in common if part)
         if pose_id not in {"three_quarter_left", "three_quarter_right"}:
             return ", ".join(part for part in common if part)
         conflicting_angle_negatives = {"profile view", "three-quarter view", "tilted head"}
@@ -9034,7 +9159,13 @@ class NodeControlState:
         )
 
     def _avatar_head_lora_dataset_pose_control(self, *, pose_id: str) -> dict:
-        pose_reference_image = str(AVATAR_HEAD_FACE_LORA_POSE_REFERENCE_IMAGES.get(pose_id) or "").strip()
+        pose = next(
+            (item for item in self._image_studio_lora_pose_catalog("face") if str(item.get("pose_id") or "") == pose_id),
+            {},
+        )
+        pose_reference_image = str(
+            pose.get("guide_image") or AVATAR_HEAD_FACE_LORA_POSE_REFERENCE_IMAGES.get(pose_id) or ""
+        ).strip()
         if not pose_reference_image:
             return {}
         pose_reference_image = self._ensure_avatar_lora_pose_guide(relative_image=pose_reference_image)
