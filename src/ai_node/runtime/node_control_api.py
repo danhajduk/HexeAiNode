@@ -3176,6 +3176,7 @@ class NodeControlState:
         metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
         if not metadata:
             raise ValueError("avatar_profile_not_found")
+        self._reset_avatar_upper_torso_current_files(profile_dir=profile_dir)
         workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="upper_torso")
         prompt_parts = self._avatar_profile_normalized_upper_torso_prompt_parts(
             profile=metadata,
@@ -3287,6 +3288,7 @@ class NodeControlState:
         }
         preview_history = list(workspace.get("preview_history") or [])
         preview_history.append(preview)
+        self._write_avatar_upper_torso_current_job(profile_dir=profile_dir, payload=preview)
         updated_workspace = {
             **workspace,
             "section": "upper_torso",
@@ -7717,6 +7719,14 @@ class NodeControlState:
                 metadata = self._refresh_avatar_head_lora_training_job(profile_dir=profile_dir, metadata=metadata)
             finally:
                 self._avatar_profile_refresh_lock.release()
+        current_upper_torso_job = self._read_avatar_upper_torso_current_job(profile_dir=profile_dir)
+        if current_upper_torso_job:
+            upper_torso_workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="upper_torso")
+            metadata = self._avatar_profile_metadata_with_workspace(
+                metadata=metadata,
+                section="upper_torso",
+                workspace={**upper_torso_workspace, "current_job": current_upper_torso_job},
+            )
         profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
         face_image = Path(str(metadata.get("face_image") or "")).name
         body_image = Path(str(metadata.get("body_image") or "")).name
@@ -8549,6 +8559,31 @@ class NodeControlState:
         return latest_path
 
     @staticmethod
+    def _avatar_upper_torso_current_job_path(*, profile_dir: Path) -> Path:
+        return profile_dir / "refs" / "upper_torso" / "current_job.json"
+
+    def _read_avatar_upper_torso_current_job(self, *, profile_dir: Path) -> dict:
+        try:
+            payload = json.loads(self._avatar_upper_torso_current_job_path(profile_dir=profile_dir).read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _write_avatar_upper_torso_current_job(self, *, profile_dir: Path, payload: dict) -> None:
+        path = self._avatar_upper_torso_current_job_path(profile_dir=profile_dir)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    def _reset_avatar_upper_torso_current_files(self, *, profile_dir: Path) -> None:
+        reference_dir = profile_dir / "refs" / "upper_torso"
+        for path in (
+            reference_dir / "last.png",
+            reference_dir / "last.png.json",
+            self._avatar_upper_torso_current_job_path(profile_dir=profile_dir),
+        ):
+            path.unlink(missing_ok=True)
+
+    @staticmethod
     def _avatar_head_face_seed_batch_preview_is_usable(*, preview: dict) -> bool:
         if bool(preview.get("placeholder")):
             return False
@@ -9184,6 +9219,23 @@ class NodeControlState:
                 }
             )
             changed = True
+        current_job = self._read_avatar_upper_torso_current_job(profile_dir=profile_dir)
+        current_prompt_id = str(current_job.get("prompt_id") or "").strip()
+        if current_prompt_id:
+            refreshed_current_job = next(
+                (item for item in reversed(updated_history) if str(item.get("prompt_id") or "").strip() == current_prompt_id),
+                None,
+            )
+            if isinstance(refreshed_current_job, dict):
+                current_job_payload = dict(refreshed_current_job)
+                latest_path = profile_dir / "refs" / "upper_torso" / "last.png"
+                if not bool(current_job_payload.get("placeholder")) and latest_path.is_file():
+                    current_job_payload.update({
+                        "filename": "last.png",
+                        "input_image": f"avatar_profiles/{profile_id}/refs/upper_torso/last.png",
+                        "url": f"/api/avatar-generation/profiles/{profile_id}/references/upper_torso/last.png",
+                    })
+                self._write_avatar_upper_torso_current_job(profile_dir=profile_dir, payload=current_job_payload)
         lora_epoch_review_dispatch: dict = {}
         if lora_epoch_review:
             lora_epoch_start = normal_preview_count

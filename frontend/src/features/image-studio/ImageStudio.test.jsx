@@ -627,6 +627,30 @@ describe("ImageStudio", () => {
     expect(markup).not.toContain("Open full image");
   });
 
+  it("uses the profile current body job as the popup and preview source", () => {
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialCreativeSetupOpen
+        initialGenerationProgressOpen
+        initialGenerationKind="body"
+        initialCharacterProfileId="Hexe"
+        characterProfiles={[{
+          profile_id: "Hexe",
+          prompt_workspaces: { upper_torso: {
+            current_job: { status: "completed", prompt_id: "current-body", url: "/references/upper_torso/last.png", imported_at: "now", placeholder: false },
+            preview_history: [{ status: "completed", prompt_id: "old-body", url: "/old.png", imported_at: "before", placeholder: false }],
+          } },
+        }]}
+      />
+    );
+
+    expect(markup).toContain("current-body");
+    expect(markup).toContain("/references/upper_torso/last.png");
+    expect(markup).not.toContain("/old.png");
+  });
+
   it("adds a rendering prompt that matches the initial character visual style", () => {
     const semiRealistic = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", visual_style: "semi-realistic", body: "curvy" });
     const anime = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", visual_style: "anime", body: "curvy" });

@@ -966,12 +966,15 @@ export function ImageStudio({
     (preview) => ["completed", "completed_with_fallback"].includes(String(preview?.status || "").toLowerCase()) && preview?.url
   ).length;
   const faceSeedBatchComplete = faceSeedBatchPreviews.length === 15 && Number(faceSeedBatch?.remaining_count || 0) === 0;
-  const savedBodyPreview = activeCharacterProfile?.prompt_workspaces?.upper_torso?.preview_history?.slice(-1)[0] || null;
+  const currentBodyJob = activeCharacterProfile?.prompt_workspaces?.upper_torso?.current_job || null;
+  const savedBodyPreview = currentBodyJob || activeCharacterProfile?.prompt_workspaces?.upper_torso?.preview_history?.slice(-1)[0] || null;
   const bodyPreview = bodyPreviewResult?.preview || savedBodyPreview;
   const bodyPreviewSeed = bodyPreview?.seed_text || bodyPreview?.seed;
   const bodyPreviewStatus = String(bodyPreview?.status || (bodyPreviewTracking ? "preparing" : "not started"));
   const bodyPreviewCompleted = ["completed", "completed_with_fallback"].includes(bodyPreviewStatus.toLowerCase());
-  const bodyPreviewImageUrl = bodyPreview?.url ? `${apiBase}${bodyPreview.url}` : "";
+  const bodyPreviewImageUrl = generationKind === "body" && generationSubmissionStage
+    ? ""
+    : bodyPreview?.url ? `${apiBase}${bodyPreview.url}` : "";
   const bodyPreviewRevealId = String(bodyPreview?.prompt_id || bodyPreview?.preview_id || bodyPreview?.url || "");
   const bodyPreviewRevealed = Boolean(bodyPreviewRevealId && revealedBodyPreviewId === bodyPreviewRevealId);
   const facePreviewSeed = facePreview?.seed_text || facePreview?.seed;

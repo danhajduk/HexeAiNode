@@ -6373,6 +6373,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             )
             state._node_id = "node-test"
             state.save_avatar_profile(payload=AvatarProfileSaveRequest(name="Body Test"))
+            upper_torso_dir = input_dir / "avatar_profiles" / "Body_Test" / "refs" / "upper_torso"
+            upper_torso_dir.mkdir(parents=True, exist_ok=True)
+            (upper_torso_dir / "last.png").write_bytes(b"old-preview")
+            (upper_torso_dir / "last.png.json").write_text("{}\n", encoding="utf-8")
+            (upper_torso_dir / "current_job.json").write_text('{"prompt_id":"old-prompt"}\n', encoding="utf-8")
 
             async def _submit_manual_image_generation(*, payload):
                 self.assertEqual(payload.steps, 28)
@@ -6407,6 +6412,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     pose_end=0.6,
                 ),
             ))
+            current_job = json.loads((upper_torso_dir / "current_job.json").read_text(encoding="utf-8"))
+            previous_latest_removed = not (upper_torso_dir / "last.png").exists() and not (upper_torso_dir / "last.png.json").exists()
 
         self.assertEqual(result["status"], "upper_torso_preview_submitted")
         self.assertEqual(result["preview"]["checkpoint"], "lustifySDXLNSFWSFW_v20.safetensors")
@@ -6418,6 +6425,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["preview"]["pose_strength"], 0.65)
         self.assertEqual(result["preview"]["pose_start"], 0.1)
         self.assertEqual(result["preview"]["pose_end"], 0.6)
+        self.assertTrue(previous_latest_removed)
+        self.assertEqual(current_job["prompt_id"], "body-prompt")
+        self.assertEqual(result["profile"]["prompt_workspaces"]["upper_torso"]["current_job"]["prompt_id"], "body-prompt")
 
     def test_avatar_generation_saves_latest_upper_torso_alias(self):
         with tempfile.TemporaryDirectory() as tmp:
