@@ -1154,7 +1154,7 @@ export function ImageStudio({
       activeInterviewStep.id === "face_lora_dataset"
       && interviewOpen
       && characterProfileId
-      && (!faceLoraPoses.length || String(faceLoraDataset?.variation_strategy || "") !== "controlled_ten_v3_manual_start")
+      && (!faceLoraPoses.length || String(faceLoraDataset?.variation_strategy || "") !== "controlled_ten_v4_manual_start")
     ) {
       void updateFaceLoraDataset({ action: "ensure" });
     }
@@ -2151,7 +2151,7 @@ export function ImageStudio({
                   <div><span>Pose</span><strong>{faceLoraPose?.label || "Preparing poses"}</strong></div>
                   <div><span>Progress</span><strong>{`${faceLoraPoseIndex + 1} / ${Math.max(faceLoraPoses.length, 6)}`}</strong></div>
                   <div><span>Approved</span><strong>{`${faceLoraApproved} / ${faceLoraRequired}`}</strong></div>
-                  <div><span>Status</span><strong>{String(faceLoraPose?.status_detail || faceLoraPose?.status || (faceLoraBusy ? "Preparing…" : "Ready to begin")).replaceAll("_", " ")}</strong></div>
+                  <div><span>Status</span><strong>{String(faceLoraBusy ? "Preparing…" : !faceLoraItems.length ? "Ready to generate" : faceLoraPose?.status_detail || faceLoraPose?.status || "Ready to review").replaceAll("_", " ")}</strong></div>
                 </div>
                 <p>OpenPose controls each head angle while the approved face reference preserves identity. Approve at least {faceLoraRequired} candidates for each pose.</p>
                 <div className="row">
@@ -2193,7 +2193,7 @@ export function ImageStudio({
                   <div><span>Pose</span><strong>{bodyLoraPose?.label || "Preparing poses"}</strong></div>
                   <div><span>Progress</span><strong>{`${bodyLoraPoseIndex + 1} / ${Math.max(bodyLoraPoses.length, 6)}`}</strong></div>
                   <div><span>Approved</span><strong>{`${bodyLoraApproved} / ${bodyLoraRequired}`}</strong></div>
-                  <div><span>Status</span><strong>{String(bodyLoraPose?.status || (bodyLoraBusy ? "Preparing…" : "Ready to begin")).replaceAll("_", " ")}</strong></div>
+                  <div><span>Status</span><strong>{String(bodyLoraBusy ? "Preparing…" : !bodyLoraItems.length ? "Ready to generate" : bodyLoraPose?.status || "Ready to review").replaceAll("_", " ")}</strong></div>
                 </div>
                 <p>OpenPose controls each neck-to-toes view while the saved body prompt and seed preserve the approved proportions. Approve at least {bodyLoraRequired} candidates for each pose.</p>
                 <div className="row">

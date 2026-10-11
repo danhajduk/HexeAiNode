@@ -3942,7 +3942,7 @@ class NodeControlState:
             poses
             and (
                 str(dataset.get("seed_strategy") or "") != "profile_face_seed"
-                or str(dataset.get("variation_strategy") or "") != "controlled_ten_v3_manual_start"
+                or str(dataset.get("variation_strategy") or "") != "controlled_ten_v4_manual_start"
             )
             and not any(bool(item.get("approved")) for pose in poses if isinstance(pose, dict) for item in list(pose.get("items") or []) if isinstance(item, dict))
         ):
@@ -3950,6 +3950,9 @@ class NodeControlState:
                 if isinstance(pose, dict):
                     self._delete_avatar_head_lora_pose_files(profile_dir=profile_dir, pose=pose)
                     pose["items"] = []
+                    pose["status"] = "pending"
+                    pose["status_detail"] = "Ready to generate."
+                    pose["phase_status"] = "pending"
         if not poses:
             poses = [
                 {
@@ -4276,12 +4279,18 @@ class NodeControlState:
                 pose["status"] = "reviewing"
             else:
                 pose["status"] = "pending"
+                pose["status_detail"] = "Ready to generate."
+                pose["phase_status"] = "pending"
 
         dataset_id = str(dataset.get("dataset_id") or f"head_face_lora_dataset_{int(time.time())}")
         updated_dataset = {
             **dataset,
             "dataset_id": dataset_id,
-            "status": "completed" if all(int(pose.get("approved_count") or 0) >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE for pose in poses) else "in_progress",
+            "status": "completed"
+            if all(int(pose.get("approved_count") or 0) >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE for pose in poses)
+            else "waiting"
+            if not any(list(pose.get("items") or []) for pose in poses)
+            else "in_progress",
             "poses": poses,
             "pose_count": len(poses),
             "active_pose_index": active_pose_index,
@@ -4291,7 +4300,7 @@ class NodeControlState:
             "required_per_pose": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
             "seed_strategy": "profile_face_anchor_with_candidate_seeds",
             "generation_seed": face_profile_seed,
-            "variation_strategy": "controlled_ten_v3_manual_start",
+            "variation_strategy": "controlled_ten_v4_manual_start",
             "training_manifest": training_manifest,
             "training_status": training_manifest.get("status") if isinstance(training_manifest, dict) else dataset.get("training_status"),
             "training_job": training_job,
