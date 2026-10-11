@@ -298,7 +298,25 @@ AVATAR_HEAD_FACE_LORA_UPLOAD_MAX_IMAGES = 512
 AVATAR_HEAD_FACE_LORA_UPLOAD_MAX_IMAGE_BYTES = 30 * 1024 * 1024
 AVATAR_HEAD_FACE_LORA_UPLOAD_MAX_MODEL_BYTES = 1024 * 1024 * 1024
 AVATAR_HEAD_FACE_LORA_POSE_REFERENCE_IMAGES = {
-    "three_quarter_left": "references/pose/300w_lp/three_quarter_left/three_quarter_left_001_idx00007_control.png",
+    "front_neutral": "system/lora-pose-guides/face/front_neutral.png",
+    "front_smile": "system/lora-pose-guides/face/front_smile.png",
+    "three_quarter_left": "system/lora-pose-guides/face/three_quarter_left.png",
+    "three_quarter_right": "system/lora-pose-guides/face/three_quarter_right.png",
+    "slight_down": "system/lora-pose-guides/face/slight_down.png",
+    "slight_up": "system/lora-pose-guides/face/slight_up.png",
+}
+AVATAR_LORA_POSE_GUIDE_SOURCE_ROOT = Path("config/image-studio/lora-pose-guides")
+AVATAR_UPPER_TORSO_LORA_DATASET_POSES = (
+    ("front_neutral", "front-facing neutral A-pose, even weight, complete neck-to-feet framing"),
+    ("three_quarter_left", "neutral A-pose with the body rotated 45 degrees left, complete neck-to-feet framing"),
+    ("three_quarter_right", "neutral A-pose with the body rotated 45 degrees right, complete neck-to-feet framing"),
+    ("profile_left", "neutral left profile stance, arms slightly separated from torso, complete neck-to-feet framing"),
+    ("profile_right", "neutral right profile stance, arms slightly separated from torso, complete neck-to-feet framing"),
+    ("back_neutral", "back-facing neutral A-pose, even weight, complete neck-to-feet framing"),
+)
+AVATAR_UPPER_TORSO_LORA_POSE_REFERENCE_IMAGES = {
+    pose_id: f"system/lora-pose-guides/body/{pose_id}.png"
+    for pose_id, _prompt in AVATAR_UPPER_TORSO_LORA_DATASET_POSES
 }
 AVATAR_HEAD_FACE_LORA_VISION_READY_TIMEOUT_SECONDS = 90
 AVATAR_HEAD_FACE_LORA_VISION_READY_POLL_SECONDS = 2
@@ -4280,6 +4298,17 @@ class NodeControlState:
         if action not in {"ensure", "prepare_train_lora", "train_lora", "generate_epoch_review", "select_epoch_review"}:
             raise ValueError("avatar_upper_torso_lora_dataset_action_unsupported")
         now = datetime.now(timezone.utc).isoformat()
+        pose_catalog = [
+            {
+                "pose_id": pose_id,
+                "label": pose_id.replace("_", " ").title(),
+                "pose_prompt": pose_prompt,
+                "pose_reference_image": self._ensure_avatar_lora_pose_guide(
+                    relative_image=AVATAR_UPPER_TORSO_LORA_POSE_REFERENCE_IMAGES[pose_id]
+                ),
+            }
+            for pose_id, pose_prompt in AVATAR_UPPER_TORSO_LORA_DATASET_POSES
+        ]
         prompt_parts = self._avatar_profile_normalized_upper_torso_prompt_parts(
             profile=metadata,
             prompt_parts=payload.prompt_parts if isinstance(payload.prompt_parts, dict) else workspace.get("prompt_parts"),
@@ -4373,6 +4402,8 @@ class NodeControlState:
             **dataset,
             "source": "uploaded",
             "status": dataset.get("status") or "waiting",
+            "pose_catalog": pose_catalog,
+            "pose_count": len(pose_catalog),
             "training_manifest": training_manifest,
             "training_status": training_manifest.get("status") if isinstance(training_manifest, dict) else dataset.get("training_status"),
             "training_job": training_job,
@@ -8686,6 +8717,7 @@ class NodeControlState:
         pose_reference_image = str(AVATAR_HEAD_FACE_LORA_POSE_REFERENCE_IMAGES.get(pose_id) or "").strip()
         if not pose_reference_image:
             return {}
+        pose_reference_image = self._ensure_avatar_lora_pose_guide(relative_image=pose_reference_image)
         try:
             template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID)["template"]
         except Exception:
@@ -8699,6 +8731,27 @@ class NodeControlState:
             "pose_start": float(defaults.get("pose_start") if defaults.get("pose_start") is not None else 0),
             "pose_end": float(defaults.get("pose_end") if defaults.get("pose_end") is not None else 0.8),
         }
+
+    def _ensure_avatar_lora_pose_guide(self, *, relative_image: str) -> str:
+        relative_image = self._safe_relative_path(relative_image).as_posix()
+        prefix = "system/lora-pose-guides/"
+        if not relative_image.startswith(prefix):
+            raise ValueError("avatar_lora_pose_guide_path_invalid")
+        source_relative = relative_image[len(prefix):]
+        source = (Path.cwd() / AVATAR_LORA_POSE_GUIDE_SOURCE_ROOT / source_relative).resolve()
+        source_root = (Path.cwd() / AVATAR_LORA_POSE_GUIDE_SOURCE_ROOT).resolve()
+        if source_root not in source.parents or not source.is_file():
+            raise ValueError("avatar_lora_pose_guide_missing")
+        input_dir = self._manual_image_input_dir()
+        target = (input_dir / relative_image).resolve()
+        if input_dir not in target.parents:
+            raise ValueError("avatar_lora_pose_guide_path_invalid")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.is_file() or target.read_bytes() != source.read_bytes():
+            temporary = target.with_suffix(target.suffix + ".tmp")
+            shutil.copyfile(source, temporary)
+            temporary.replace(target)
+        return relative_image
 
     def _ensure_avatar_head_lora_comfyui_input_image(self, *, relative_image: str) -> str:
         relative = str(relative_image or "").strip().strip("/")

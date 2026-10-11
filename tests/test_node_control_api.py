@@ -5693,6 +5693,23 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 )
             )["dataset"]
             self.assertEqual(len(dataset["poses"]), 6)
+            for pose in dataset["poses"]:
+                control = state._avatar_head_lora_dataset_pose_control(pose_id=pose["pose_id"])
+                self.assertTrue(control["pose_reference_image"])
+                self.assertTrue((input_dir / control["pose_reference_image"]).is_file())
+            body_dataset = asyncio.run(
+                state.update_avatar_profile_upper_torso_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(action="ensure"),
+                )
+            )["dataset"]
+            self.assertEqual(body_dataset["pose_count"], 6)
+            self.assertEqual(
+                [pose["pose_id"] for pose in body_dataset["pose_catalog"]],
+                ["front_neutral", "three_quarter_left", "three_quarter_right", "profile_left", "profile_right", "back_neutral"],
+            )
+            for pose in body_dataset["pose_catalog"]:
+                self.assertTrue((input_dir / pose["pose_reference_image"]).is_file())
             with self.assertRaisesRegex(ValueError, "avatar_head_lora_node_dataset_generation_disabled"):
                 asyncio.run(
                     state.update_avatar_profile_head_lora_dataset(
