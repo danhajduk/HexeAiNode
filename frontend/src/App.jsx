@@ -558,6 +558,15 @@ export default function App() {
       const [templatesResult, servicesResult, profilesResult, faceCatalogResult] = await Promise.allSettled(
         IMAGE_STUDIO_DATA_ENDPOINTS.map((endpoint) => apiGet(endpoint))
       );
+      let effectiveProfilesResult = profilesResult;
+      if (profilesResult.status === "rejected") {
+        await new Promise((resolve) => window.setTimeout(resolve, 750));
+        try {
+          effectiveProfilesResult = { status: "fulfilled", value: await apiGet(IMAGE_STUDIO_DATA_ENDPOINTS[2]) };
+        } catch (reason) {
+          effectiveProfilesResult = { status: "rejected", reason };
+        }
+      }
       const failures = [];
       if (templatesResult.status === "fulfilled") {
         setComfyuiTemplateCatalogPayload(templatesResult.value);
@@ -569,8 +578,8 @@ export default function App() {
       } else {
         failures.push("runtime status");
       }
-      if (profilesResult.status === "fulfilled") {
-        setAvatarGenerationPayload(profilesResult.value);
+      if (effectiveProfilesResult.status === "fulfilled") {
+        setAvatarGenerationPayload(effectiveProfilesResult.value);
       } else {
         failures.push("character profiles");
       }
