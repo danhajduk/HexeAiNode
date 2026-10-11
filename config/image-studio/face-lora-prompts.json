@@ -165,28 +165,34 @@
     {
       "pose_id": "slight_down",
       "label": "Slight Down",
-      "prompt": "head-and-shoulders portrait with face angled slightly downward, eyes toward viewer",
-      "geometry_prompt": "",
+      "prompt": "head-and-shoulders portrait, head held upright without roll, chin lowered slightly, face pitched subtly downward, eyes looking naturally toward the camera",
+      "geometry_prompt": "subtle 10 to 15 degree downward head pitch, chin slightly closer to the neck, forehead slightly nearer the camera than the chin, both eyes fully readable, level shoulders in a relaxed natural posture",
       "guide_image": "system/lora-pose-guides/face/slight_down_dense.png",
-      "pose_strength": 0.6,
-      "negative_remove": [],
-      "negative_add": [],
-      "prompt_replacements": {},
+      "pose_strength": 0.5,
+      "negative_remove": ["tilted head"],
+      "negative_add": ["raised chin", "upward head angle", "head roll", "raised shoulders", "hunched shoulders", "chin pressed into chest", "extreme downward angle"],
+      "prompt_replacements": {
+        "Front-facing head-and-shoulders composition": "head-and-shoulders composition with a subtle downward head pitch",
+        "symmetrical neutral pose": "upright head with no sideways roll and a subtle downward pitch"
+      },
       "variation_replacements": {},
-      "review_rule": "Require a subtle downward head angle while keeping the face readable."
+      "review_rule": "Require a natural 10 to 15 degree downward head pitch with level relaxed shoulders, no sideways roll, both eyes readable, and identity preserved. Reject a level or upward-facing head, hunched or raised shoulders, chin pressed into the chest, or an extreme downward angle."
     },
     {
       "pose_id": "slight_up",
       "label": "Slight Up",
-      "prompt": "head-and-shoulders portrait with face angled slightly upward, eyes toward viewer",
-      "geometry_prompt": "",
+      "prompt": "head-and-shoulders portrait, head held upright without roll, chin raised slightly, face pitched subtly upward, eyes looking naturally toward the camera",
+      "geometry_prompt": "subtle 10 to 15 degree upward head pitch, chin slightly lifted away from the neck, chin slightly nearer the camera than the forehead, both eyes fully readable, level shoulders in a relaxed natural posture",
       "guide_image": "system/lora-pose-guides/face/slight_up_dense.png",
-      "pose_strength": 0.6,
-      "negative_remove": [],
-      "negative_add": [],
-      "prompt_replacements": {},
+      "pose_strength": 0.5,
+      "negative_remove": ["tilted head"],
+      "negative_add": ["lowered chin", "downward head angle", "head roll", "raised shoulders", "hunched shoulders", "extreme upward angle"],
+      "prompt_replacements": {
+        "Front-facing head-and-shoulders composition": "head-and-shoulders composition with a subtle upward head pitch",
+        "symmetrical neutral pose": "upright head with no sideways roll and a subtle upward pitch"
+      },
       "variation_replacements": {},
-      "review_rule": "Require a subtle upward head angle while keeping the face readable."
+      "review_rule": "Require a natural 10 to 15 degree upward head pitch with level relaxed shoulders, no sideways roll, both eyes readable, and identity preserved. Reject a level or downward-facing head, hunched or raised shoulders, or an extreme upward angle."
     }
   ]
 }
