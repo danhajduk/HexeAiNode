@@ -260,6 +260,7 @@ AVATAR_UPPER_TORSO_POSE_GUIDE_RELATIVE_PATH = "system/neutral-a-pose-openpose.pn
 AVATAR_UPPER_TORSO_POSE_GUIDE_SOURCE = Path("config/image-studio/neutral-a-pose-openpose.png")
 AVATAR_UPPER_TORSO_POSE_CONTROLNET = "controlnet-openpose-sdxl-1.0.safetensors"
 AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID = "template.avatar_head_lora_pose_control.realvisxl.v1"
+AVATAR_HEAD_FACE_LORA_POSE_DEPTH_CONTROL_TEMPLATE_ID = "template.avatar_head_lora_pose_depth_control.realvisxl.v1"
 AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID = "template.avatar_head_lora_epoch_review.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT = 9
 AVATAR_HEAD_FACE_SEED_BATCH_SUBMISSION_LIMIT = 1
@@ -4401,6 +4402,13 @@ class NodeControlState:
                                 "pose_strength": variation["pose_strength"],
                                 "pose_start": pose_control.get("pose_start"),
                                 "pose_end": pose_control.get("pose_end"),
+                                "depth_reference_image": pose_control.get("depth_reference_image"),
+                                "depth_controlnet": pose_control.get("depth_controlnet"),
+                                "depth_strength": pose_control.get("depth_strength"),
+                                "depth_start": pose_control.get("depth_start"),
+                                "depth_end": pose_control.get("depth_end"),
+                                "depth_anything_model": pose_control.get("depth_anything_model"),
+                                "depth_resolution": pose_control.get("depth_resolution"),
                             }.items()
                             if value not in (None, "")
                         },
@@ -9245,18 +9253,33 @@ class NodeControlState:
         if not pose_reference_image:
             return {}
         pose_reference_image = self._ensure_avatar_lora_pose_guide(relative_image=pose_reference_image)
+        depth_reference_image = str(pose.get("depth_guide_image") or "").strip()
+        if depth_reference_image:
+            depth_reference_image = self._ensure_avatar_lora_pose_guide(relative_image=depth_reference_image)
+        template_id = (
+            AVATAR_HEAD_FACE_LORA_POSE_DEPTH_CONTROL_TEMPLATE_ID
+            if depth_reference_image
+            else AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID
+        )
         try:
-            template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID)["template"]
+            template = self.get_comfyui_template_catalog_entry(template_id=template_id)["template"]
         except Exception:
             return {}
         defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
         return {
-            "template_id": AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID,
+            "template_id": template_id,
             "pose_reference_image": pose_reference_image,
             "pose_controlnet": str(defaults.get("pose_controlnet") or "controlnet-openpose-sdxl-1.0.safetensors"),
             "pose_strength": float(pose.get("pose_strength") if pose.get("pose_strength") is not None else defaults.get("pose_strength") if defaults.get("pose_strength") is not None else 0.85),
             "pose_start": float(pose.get("pose_start") if pose.get("pose_start") is not None else defaults.get("pose_start") if defaults.get("pose_start") is not None else 0),
             "pose_end": float(pose.get("pose_end") if pose.get("pose_end") is not None else defaults.get("pose_end") if defaults.get("pose_end") is not None else 0.8),
+            "depth_reference_image": depth_reference_image,
+            "depth_controlnet": str(defaults.get("depth_controlnet") or "controlnet-depth-sdxl-1.0-fp16.safetensors") if depth_reference_image else "",
+            "depth_strength": float(pose.get("depth_strength") if pose.get("depth_strength") is not None else defaults.get("depth_strength") if defaults.get("depth_strength") is not None else 0.25) if depth_reference_image else None,
+            "depth_start": float(pose.get("depth_start") if pose.get("depth_start") is not None else defaults.get("depth_start") if defaults.get("depth_start") is not None else 0) if depth_reference_image else None,
+            "depth_end": float(pose.get("depth_end") if pose.get("depth_end") is not None else defaults.get("depth_end") if defaults.get("depth_end") is not None else 0.7) if depth_reference_image else None,
+            "depth_anything_model": str(defaults.get("depth_anything_model") or "depth_anything_v2_vits.pth") if depth_reference_image else "",
+            "depth_resolution": int(defaults.get("depth_resolution") or 512) if depth_reference_image else None,
         }
 
     def _ensure_avatar_lora_pose_guide(self, *, relative_image: str) -> str:
@@ -9534,6 +9557,11 @@ class NodeControlState:
         if pose_reference_image.startswith("system/lora-pose-guides/"):
             template_variables["pose_reference_image"] = self._ensure_avatar_lora_pose_guide(
                 relative_image=pose_reference_image
+            )
+        depth_reference_image = str(template_variables.get("depth_reference_image") or "").strip()
+        if depth_reference_image.startswith("system/lora-pose-guides/"):
+            template_variables["depth_reference_image"] = self._ensure_avatar_lora_pose_guide(
+                relative_image=depth_reference_image
             )
         workflow, resolved_values = self._manual_image_workflow_and_values_from_template(
             template=template,

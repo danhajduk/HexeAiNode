@@ -6,6 +6,7 @@ This directory contains reusable ControlNet guide images for character LoRA data
 - `face/three_quarter_left_dense.png` is an exact single-pose crop from the dense facial-landmark reference sheet and is the active left three-quarter guide.
 - `face/three_quarter_right_dense.png` is the matching exact crop and is the active right three-quarter guide. Left/right labels use the subject's anatomical direction, so the subject's left points toward the viewer's right and vice versa.
 - `face/slight_up_dense.png` and `face/slight_down_dense.png` are exact centered crops from the same dense facial-landmark sheet and are the active vertical-angle guides.
+- `face/depth-source/` contains clean rendered head crops. The pitch-sensitive face workflow converts these RGB sources with Depth Anything V2 and applies the result through a low-strength SDXL depth ControlNet alongside OpenPose.
 - `body/` contains a six-view reference pack for externally prepared upper-torso/body datasets: front, left and right three-quarter, left and right profile, and back views. Hexe exposes this catalog but does not generate upper-torso LoRA datasets on-node.
 
 Run `scripts/generate-lora-pose-guides.py` to regenerate the deterministic body guides. If local 300W-LP control exports are available, the script also refreshes the packaged face guides from them.

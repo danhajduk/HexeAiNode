@@ -169,6 +169,10 @@
       "geometry_prompt": "natural 20 degree forward head pitch from the neck, a small amount of the top plane of the hair visible, mild natural facial foreshortening, nose angled down, eyes lowered without eye contact, camera level with the shoulders rather than above the subject, level relaxed shoulders, anatomically normal face",
       "guide_image": "system/lora-pose-guides/face/slight_down_dense.png",
       "pose_strength": 0.4,
+      "depth_guide_image": "system/lora-pose-guides/face/depth-source/slight_down.png",
+      "depth_strength": 0.25,
+      "depth_start": 0,
+      "depth_end": 0.7,
       "negative_remove": ["tilted head"],
       "negative_add": ["looking at camera", "direct camera eye contact", "face aimed at camera", "level head pitch", "raised chin", "upward head angle", "head roll", "overhead camera", "high-angle camera", "camera looking down", "raised shoulders", "hunched shoulders", "chin hidden against chest", "extreme downward angle", "distorted face", "compressed face", "warped facial features", "misaligned eyes", "deformed jaw"],
       "prompt_replacements": {
@@ -186,6 +190,10 @@
       "geometry_prompt": "subtle 10 to 15 degree upward head pitch, chin slightly lifted away from the neck, chin slightly nearer the camera than the forehead, both eyes fully readable, level shoulders in a relaxed natural posture",
       "guide_image": "system/lora-pose-guides/face/slight_up_dense.png",
       "pose_strength": 0.5,
+      "depth_guide_image": "system/lora-pose-guides/face/depth-source/slight_up.png",
+      "depth_strength": 0.25,
+      "depth_start": 0,
+      "depth_end": 0.7,
       "negative_remove": ["tilted head"],
       "negative_add": ["lowered chin", "downward head angle", "head roll", "raised shoulders", "hunched shoulders", "extreme upward angle"],
       "prompt_replacements": {

@@ -5725,6 +5725,19 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 control = state._avatar_head_lora_dataset_pose_control(pose_id=pose["pose_id"])
                 self.assertTrue(control["pose_reference_image"])
                 self.assertTrue((input_dir / control["pose_reference_image"]).is_file())
+                if pose["pose_id"] in {"slight_down", "slight_up"}:
+                    self.assertEqual(
+                        control["template_id"],
+                        "template.avatar_head_lora_pose_depth_control.realvisxl.v1",
+                    )
+                    self.assertEqual(control["depth_strength"], 0.25)
+                    self.assertTrue(control["depth_reference_image"])
+                    self.assertTrue((input_dir / control["depth_reference_image"]).is_file())
+                else:
+                    self.assertEqual(
+                        control["template_id"],
+                        "template.avatar_head_lora_pose_control.realvisxl.v1",
+                    )
             profile_dir = state._avatar_profile_dir(profile_id="Jane_Avatar")
             profile_metadata = state._avatar_profile_metadata(profile_dir=profile_dir)
             upper_workspace = state._avatar_profile_prompt_workspace(metadata=profile_metadata, section="upper_torso")
