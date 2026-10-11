@@ -153,6 +153,7 @@ Image creation is moving into a standalone workspace at `#/image-studio`.
 - Face & Features saves one approved preview and one face seed; multi-image face-angle and pose datasets are deferred to a later identity-strengthening stage
 - Body & Proportions uses structured height, build, shoulder, torso, waist, hip, limb, and musculature selections, then requires one neutral 768×1536 neck-to-toes preview with the head and face outside the frame. The compiled prompt prioritizes a distant extreme-long-shot composition, enforces a symmetrical front-facing neutral A-pose, keeps the complete feet and toes inside visible margins, and saves the body seed before continuing
 - each successfully imported body preview also refreshes `<profile>/refs/upper_torso/last.png` and its JSON sidecar as a stable pointer to the latest body image
+- each body-preview submission uses a unique ComfyUI output prefix, so Redo with a retained seed cannot be imported into an older pending preview that shares the same seed
 - resuming an incomplete character restores both the saved face-feature and body-feature catalog selections, custom details, and combined descriptions
 - when Image Studio opens, the face workspace restores the newest completed saved preview; a newly submitted job keeps that prior image visible until its replacement is ready
 - face previews use a structured identity-reference prompt; after a preview returns, its seed can be locked and the local text LLM can apply a targeted prompt adjustment before regenerating with that same seed

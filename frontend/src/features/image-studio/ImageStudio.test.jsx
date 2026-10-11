@@ -567,6 +567,27 @@ describe("ImageStudio", () => {
     expect(markup).not.toContain("100.0%");
   });
 
+  it("treats an imported preview as complete when the matching global job is stale", () => {
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialGenerationProgressOpen
+        initialGenerationKind="body"
+        bodyPreviewResult={{ preview: { status: "completed", prompt_id: "current-prompt", url: "/current.png", imported_at: "now", placeholder: false } }}
+        generationActivity={{
+          latest_job: {
+            status: "submitted",
+            prompt_id: "current-prompt",
+            progress_detail: { prompt_id: "current-prompt", status: "submitted", percent: 100 },
+          },
+        }}
+      />
+    );
+
+    expect(markup).toContain("<strong>completed</strong>");
+    expect(markup).toContain("file available");
+    expect(markup).not.toContain("waiting for render");
+  });
+
   it("adds a rendering prompt that matches the initial character visual style", () => {
     const semiRealistic = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", visual_style: "semi-realistic", body: "curvy" });
     const anime = buildBodyPreviewPrompt({ age_group: "adult (18+)", gender_identity: "female", visual_style: "anime", body: "curvy" });

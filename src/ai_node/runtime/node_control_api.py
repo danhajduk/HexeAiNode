@@ -3216,6 +3216,7 @@ class NodeControlState:
         sampler_name = sampling["sampler_name"]
         scheduler = sampling["scheduler"]
         avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
+        output_avatar_name = f"{avatar_name}_{uuid.uuid4().hex[:8]}"
         pose_reference_image = self._ensure_avatar_upper_torso_pose_guide()
         pose_strength = float(defaults.get("pose_strength") or 0.85)
         pose_start = float(defaults.get("pose_start") or 0.0)
@@ -3236,7 +3237,7 @@ class NodeControlState:
                 seed=requested_seed,
                 randomize_seed=requested_seed is None,
                 template_variables={
-                    "avatar_name": avatar_name,
+                    "avatar_name": output_avatar_name,
                     "checkpoint": checkpoint,
                     "lightning_strength": lightning_strength,
                     "sampler_name": sampler_name,
@@ -3273,6 +3274,7 @@ class NodeControlState:
             "sampler_name": sampler_name,
             "scheduler": scheduler,
             "lightning_strength": lightning_strength,
+            "output_avatar_name": output_avatar_name,
             "pose_reference_image": pose_reference_image,
             "pose_controlnet": str(defaults.get("pose_controlnet") or AVATAR_UPPER_TORSO_POSE_CONTROLNET),
             "pose_strength": pose_strength,

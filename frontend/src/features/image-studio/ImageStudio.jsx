@@ -1043,6 +1043,7 @@ export function ImageStudio({
   const rawModalStatus = String(
     generationSubmissionStage
       ? generationSubmissionStage
+      : previewArtifactReady(progressPreview) ? progressPreview?.status
       : modalProgressDetail?.status
       || (progressMatchesJob ? generationJob?.status : "")
       || progressPreview?.status

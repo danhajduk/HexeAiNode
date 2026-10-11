@@ -6388,6 +6388,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(payload.template_variables["pose_strength"], 0.85)
                 self.assertEqual(payload.template_variables["pose_start"], 0.0)
                 self.assertEqual(payload.template_variables["pose_end"], 0.8)
+                self.assertTrue(payload.template_variables["avatar_name"].startswith("Body_Test_"))
+                self.assertNotEqual(payload.template_variables["avatar_name"], "Body_Test")
                 self.assertTrue((input_dir / "system" / "neutral-a-pose-openpose.png").is_file())
                 return {"status": "submitted", "prompt_id": "body-prompt", "prompt_ids": ["body-prompt"], "submissions": [{"seed": 42}]}
 
@@ -6408,6 +6410,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["preview"]["sampler_name"], "dpmpp_2m_sde")
         self.assertEqual(result["preview"]["scheduler"], "karras")
         self.assertEqual(result["preview"]["lightning_strength"], 0.0)
+        self.assertTrue(result["preview"]["output_avatar_name"].startswith("Body_Test_"))
         self.assertEqual(result["preview"]["pose_reference_image"], "system/neutral-a-pose-openpose.png")
         self.assertEqual(result["preview"]["pose_strength"], 0.85)
 
