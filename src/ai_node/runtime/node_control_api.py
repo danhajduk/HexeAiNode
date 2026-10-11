@@ -3941,7 +3941,8 @@ class NodeControlState:
         if (
             poses
             and (
-                str(dataset.get("seed_strategy") or "") != "profile_face_seed"
+                str(dataset.get("seed_strategy") or "")
+                not in {"profile_face_seed", "profile_face_anchor_with_candidate_seeds"}
                 or str(dataset.get("variation_strategy") or "") != "controlled_ten_v5_serial_import"
             )
             and not any(bool(item.get("approved")) for pose in poses if isinstance(pose, dict) for item in list(pose.get("items") or []) if isinstance(item, dict))

@@ -5760,6 +5760,15 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(generated["generation_seed"], anchor["seed"])
             self.assertEqual(generated["seed_strategy"], "profile_face_anchor_with_candidate_seeds")
             self.assertTrue(all(item["pose_control"]["pose_reference_image"] for item in active_pose["items"]))
+            generated_item_ids = [item["preview_id"] for item in active_pose["items"]]
+            refreshed = asyncio.run(
+                state.update_avatar_profile_head_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(action="ensure", prompt="head portrait"),
+                )
+            )["dataset"]
+            refreshed_pose = next(pose for pose in refreshed["poses"] if pose["pose_id"] == "three_quarter_left")
+            self.assertEqual([item["preview_id"] for item in refreshed_pose["items"]], generated_item_ids)
 
     def test_avatar_lora_dispatch_submits_one_and_waits_for_import(self):
         state = NodeControlState(
