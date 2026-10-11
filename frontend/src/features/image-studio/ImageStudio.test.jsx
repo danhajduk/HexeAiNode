@@ -749,6 +749,7 @@ describe("ImageStudio", () => {
           profile_id: "Nova",
           prompt_workspaces: {
             upper_torso: { current_job: { status: "completed", seed: 42, url: "/body.png", prompt_id: "body-1" } },
+            head_face: { lora_dataset: { batch_size: 9, variation_strategy: "", poses: [{ pose_id: "front_neutral", label: "Front Neutral", items: Array.from({ length: 9 }, (_, index) => ({ preview_id: `old-${index}` })) }] } },
           },
         }]}
       />
@@ -756,7 +757,8 @@ describe("ImageStudio", () => {
 
     expect(markup).toContain("Face LoRA dataset");
     expect(markup).toContain("4 of 7");
-    expect(markup).toContain("Generate pose batch");
+    expect(markup).toContain("Fill / regenerate pose batch");
+    expect(markup).toContain("Candidate 10");
     expect(markup).not.toContain("What should the character wear");
   });
 

@@ -1140,10 +1140,15 @@ export function ImageStudio({
   }, [activeInterviewStep.id, interviewOpen, onRefreshData]);
 
   useEffect(() => {
-    if (activeInterviewStep.id === "face_lora_dataset" && interviewOpen && characterProfileId && !faceLoraPoses.length) {
+    if (
+      activeInterviewStep.id === "face_lora_dataset"
+      && interviewOpen
+      && characterProfileId
+      && (!faceLoraPoses.length || String(faceLoraDataset?.variation_strategy || "") !== "controlled_ten_v1")
+    ) {
       void updateFaceLoraDataset({ action: "ensure" });
     }
-  }, [activeInterviewStep.id, interviewOpen, characterProfileId, faceLoraPoses.length]);
+  }, [activeInterviewStep.id, interviewOpen, characterProfileId, faceLoraPoses.length, faceLoraDataset?.variation_strategy]);
 
   useEffect(() => {
     onStudioRouteChange?.({
@@ -2119,7 +2124,7 @@ export function ImageStudio({
                   <button className="btn" type="button" disabled={faceLoraBusy || faceLoraApproved < faceLoraRequired} onClick={() => updateFaceLoraDataset({ action: "next", pose_id: faceLoraPose?.pose_id })}>Save pose &amp; continue</button>
                 </div>
                 <div className="image-studio-seed-review-grid">
-                  {Array.from({ length: Number(faceLoraDataset?.batch_size || 9) }, (_, index) => {
+                  {Array.from({ length: Math.max(10, Number(faceLoraDataset?.batch_size || 0)) }, (_, index) => {
                     const item = faceLoraItems[index];
                     const ready = Boolean(item?.url) && ["completed", "completed_with_fallback"].includes(String(item?.status || "").toLowerCase());
                     return (
