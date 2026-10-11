@@ -1863,6 +1863,10 @@ class UserSystemdServiceManager:
             "user_dir": self._comfyui_manual_gpu_user_dir,
         }
 
+    def comfyui_manual_paths(self) -> dict:
+        """Return configured manual paths without probing container/service state."""
+        return dict(self._comfyui_manual_paths(runtime=self._comfyui_webui_runtime))
+
     def _comfyui_manual_mounts_active(self, *, runtime: str) -> bool | None:
         if not self._comfyui_container_name:
             return None

@@ -12040,6 +12040,11 @@ class NodeControlState:
         return value
 
     def _manual_image_output_dir(self) -> Path:
+        if self._service_manager is not None and hasattr(self._service_manager, "comfyui_manual_paths"):
+            manual_paths = self._service_manager.comfyui_manual_paths()
+            configured_output = str(manual_paths.get("output_dir") or "").strip() if isinstance(manual_paths, dict) else ""
+            if configured_output:
+                return Path(configured_output).resolve()
         services = self.service_status_payload().get("services", {})
         webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
         manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
@@ -12056,6 +12061,11 @@ class NodeControlState:
         return manual_output_dir
 
     def _manual_image_input_dir(self) -> Path:
+        if self._service_manager is not None and hasattr(self._service_manager, "comfyui_manual_paths"):
+            manual_paths = self._service_manager.comfyui_manual_paths()
+            configured_input = str(manual_paths.get("input_dir") or "").strip() if isinstance(manual_paths, dict) else ""
+            if configured_input:
+                return Path(configured_input).resolve()
         services = self.service_status_payload().get("services", {})
         webui = services.get("comfyui_webui") if isinstance(services, dict) else {}
         manual_paths = webui.get("manual_paths") if isinstance(webui, dict) else {}
