@@ -924,6 +924,7 @@ export function ImageStudio({
   const [faceSeedReviewSelections, setFaceSeedReviewSelections] = useState([]);
   const [faceSeedReviewBatchId, setFaceSeedReviewBatchId] = useState("");
   const [faceLoraBusy, setFaceLoraBusy] = useState(false);
+  const [faceLoraAction, setFaceLoraAction] = useState("");
   const [bodyLoraBusy, setBodyLoraBusy] = useState(false);
   const [faceLoraStatusOpen, setFaceLoraStatusOpen] = useState(true);
   const [faceLoraGalleryOpen, setFaceLoraGalleryOpen] = useState(false);
@@ -1594,10 +1595,12 @@ export function ImageStudio({
 
   async function updateFaceLoraDataset(overrides = {}) {
     if (!characterProfileId || faceLoraBusy || !onUpdateHeadLoraDataset) return null;
-    if (["generate", "reject"].includes(String(overrides.action || ""))) {
+    const action = String(overrides.action || "ensure");
+    if (["generate", "reject"].includes(action)) {
       setFaceLoraStatusOpen(true);
       setFaceLoraGalleryOpen(false);
     }
+    setFaceLoraAction(action);
     setFaceLoraBusy(true);
     try {
       const result = await onUpdateHeadLoraDataset(characterProfileId, {
@@ -1606,10 +1609,10 @@ export function ImageStudio({
         negative_prompt: String(facePreview?.negative_prompt || negativePrompt || "").trim(),
         ...overrides,
       });
-      await onRefreshData?.();
       return result;
     } finally {
       setFaceLoraBusy(false);
+      setFaceLoraAction("");
     }
   }
 
@@ -2171,7 +2174,7 @@ export function ImageStudio({
                 <p>OpenPose controls each head angle while the approved face reference preserves identity. Approve at least {faceLoraRequired} candidates for each pose.</p>
                 <div className="row">
                   <button className="btn btn-primary" type="button" disabled={faceLoraBusy} onClick={() => updateFaceLoraDataset({ action: faceLoraPoses.length ? "generate" : "ensure", pose_id: faceLoraPose?.pose_id })}>
-                    {faceLoraBusy ? "Working…" : faceLoraItems.length ? "Fill / regenerate pose batch" : "Generate pose batch"}
+                    {["generate", "ensure"].includes(faceLoraAction) ? "Working…" : faceLoraItems.length ? "Fill / regenerate pose batch" : "Generate pose batch"}
                   </button>
                   <button className="btn" type="button" disabled={faceLoraBusy} onClick={() => { void onRefreshData?.(); }}>Refresh</button>
                   <button className="btn" type="button" disabled={faceLoraBusy || faceLoraApproved < faceLoraRequired} onClick={() => updateFaceLoraDataset({ action: "next", pose_id: faceLoraPose?.pose_id })}>Save pose &amp; continue</button>
@@ -2184,7 +2187,7 @@ export function ImageStudio({
                     <div><span>Candidate progress</span><strong>{`${faceLoraReadyItems.length} / 10 ready`}</strong></div>
                     <div><span>Queue</span><strong>{`${queueRunning} running / ${queuePending} pending`}</strong></div>
                     <div><span>Replacements waiting</span><strong>{faceLoraReplacementCount}</strong></div>
-                    <div><span>Status</span><strong>{String(faceLoraBusy ? "Submitting…" : faceLoraReplacementCount ? "Waiting for Generate pose" : faceLoraPose?.status_detail || faceLoraPose?.status || "Ready").replaceAll("_", " ")}</strong></div>
+                    <div><span>Status</span><strong>{String(faceLoraBusy ? (["approve", "reject"].includes(faceLoraAction) ? "Saving review…" : "Submitting…") : faceLoraReplacementCount ? "Waiting for Generate pose" : faceLoraPose?.status_detail || faceLoraPose?.status || "Ready").replaceAll("_", " ")}</strong></div>
                   </div>
                   <div className="image-studio-lora-job-details">
                     <div><span>Current job</span><code>{faceLoraCurrentJob?.preview_id || "not submitted"}</code></div>
