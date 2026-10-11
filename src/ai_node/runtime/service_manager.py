@@ -78,7 +78,7 @@ class UserSystemdServiceManager:
         )
         self._local_llm_always_on_enabled = _env_bool("HEXE_LOCAL_LLM_ALWAYS_ON_ENABLED", default=True)
         self._local_llm_gpu_exclusive_blocker_enabled = _env_bool("HEXE_LOCAL_LLM_GPU_EXCLUSIVE_BLOCKER_ENABLED", default=True)
-        self._local_llm_gpu_exclusive_stop_for_comfyui = _env_bool("HEXE_LOCAL_LLM_STOP_FOR_COMFYUI", default=False)
+        self._local_llm_gpu_exclusive_stop_for_comfyui = _env_bool("HEXE_LOCAL_LLM_STOP_FOR_COMFYUI", default=True)
         self._local_llm_gpu_exclusive_stop_for_gpu_workloads = _env_bool("HEXE_LOCAL_LLM_STOP_FOR_GPU_WORKLOADS", default=True)
         self._vision_llm_control_script = str(
             os.environ.get("HEXE_VISION_LLM_CONTROL_SCRIPT") or "scripts/llamacpp-vision-control.sh"
@@ -2394,7 +2394,7 @@ class UserSystemdServiceManager:
         local_comfyui_active = bool(
             self._local_llm_gpu_exclusive_blocker_enabled
             and self._local_llm_gpu_exclusive_stop_for_comfyui
-            and (comfyui_gpu_model_loaded or manual_comfyui_webui_active)
+            and (comfyui_gpu_model_loaded or manual_comfyui_webui_active or comfyui_gpu_vision_gate_active)
         )
         local_sd_scripts_active = bool(
             self._local_llm_gpu_exclusive_blocker_enabled

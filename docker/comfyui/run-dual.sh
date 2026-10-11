@@ -71,6 +71,7 @@ python3 main.py \
   --output-directory "$GPU_BASE_DIR/output" \
   --temp-directory "$GPU_BASE_DIR/temp" \
   --user-directory "$GPU_BASE_DIR/user" \
+  --database-url "sqlite:///$GPU_BASE_DIR/user/comfyui.db" \
   --disable-auto-launch \
   ${COMFYUI_GPU_EXTRA_ARGS:-} &
 gpu_pid="$!"
@@ -89,6 +90,7 @@ CUDA_VISIBLE_DEVICES="" python3 /opt/hexe/run-cpu-limited.py python3 main.py \
   --output-directory "$CPU_BASE_DIR/output" \
   --temp-directory "$CPU_BASE_DIR/temp" \
   --user-directory "$CPU_BASE_DIR/user" \
+  --database-url "sqlite:///$CPU_BASE_DIR/user/comfyui.db" \
   --disable-auto-launch \
   ${COMFYUI_CPU_EXTRA_ARGS:-} &
 cpu_pid="$!"

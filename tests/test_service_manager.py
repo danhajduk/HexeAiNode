@@ -830,12 +830,15 @@ class ServiceManagerTests(unittest.TestCase):
                 patch("os.path.exists", return_value=True),
             ):
                 status = manager.vision_runtime_status()
+                exclusive = manager.gpu_exclusive_workload_status()
 
         self.assertTrue(status["gpu_exclusive_blocked"])
         self.assertFalse(status["start_due"])
         self.assertTrue(status["comfyui_gpu_vision_gate_active"])
         self.assertEqual(status["reason"], "blocked_by_comfyui_gpu_vision_gate")
         self.assertIn("comfyui_gpu_vision_gate_active", status["gpu_exclusive_reasons"])
+        self.assertTrue(exclusive["vision_llm_blocked"])
+        self.assertTrue(exclusive["local_llm_blocked"])
 
     def test_comfyui_webui_idle_close_closes_after_timeout(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(

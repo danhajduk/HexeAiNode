@@ -68,6 +68,8 @@ COMFYUI_GPU_VISION_GATE_ENABLED="${COMFYUI_GPU_VISION_GATE_ENABLED:-true}"
 COMFYUI_GPU_VISION_GATE_TIMEOUT_S="${COMFYUI_GPU_VISION_GATE_TIMEOUT_S:-90}"
 COMFYUI_GPU_VISION_GATE_ARTIFACT="${COMFYUI_GPU_VISION_GATE_ARTIFACT:-$ROOT_DIR/.run/comfyui-gpu-vision-gate.json}"
 COMFYUI_VISION_CONTROL_SCRIPT="${COMFYUI_VISION_CONTROL_SCRIPT:-$ROOT_DIR/scripts/llamacpp-vision-control.sh}"
+COMFYUI_LOCAL_LLM_CONTROL_SCRIPT="${COMFYUI_LOCAL_LLM_CONTROL_SCRIPT:-$ROOT_DIR/scripts/llamacpp-control.sh}"
+LLAMACPP_CONTAINER_NAME="${LLAMACPP_CONTAINER_NAME:-hexe-ai-node-llamacpp}"
 LLAMACPP_VISION_CONTAINER_NAME="${LLAMACPP_VISION_CONTAINER_NAME:-hexe-ai-node-llamacpp-vision}"
 LLAMACPP_VISION_SOCKET_PATH="${LLAMACPP_VISION_SOCKET_PATH:-/run/hexe/ai-node/llamacpp-vision.sock}"
 LLAMACPP_VISION_HEALTH_SOCKET="${LLAMACPP_VISION_HEALTH_SOCKET:-/run/hexe/ai-node/llamacpp-vision-health.sock}"
@@ -317,6 +319,25 @@ PY
   write_vision_gate_artifact "ok" "unloaded" "$unload_seconds" "vision_unloaded_for_gpu_comfyui"
 }
 
+gate_gpu_on_local_llm_stop() {
+  local container_pid
+  container_pid="$($DOCKER_BIN inspect --format '{{.State.Pid}}' "$LLAMACPP_CONTAINER_NAME" 2>/dev/null || true)"
+  if [[ -z "$container_pid" || "$container_pid" == "0" ]]; then
+    return
+  fi
+  if [[ ! -x "$COMFYUI_LOCAL_LLM_CONTROL_SCRIPT" ]]; then
+    echo "GPU ComfyUI gate rejected: text LLM control script is not executable: $COMFYUI_LOCAL_LLM_CONTROL_SCRIPT" >&2
+    return 1
+  fi
+  echo "Stopping text LLM before starting GPU ComfyUI"
+  "$COMFYUI_LOCAL_LLM_CONTROL_SCRIPT" stop
+}
+
+gate_gpu_exclusive_models() {
+  gate_gpu_on_local_llm_stop
+  gate_gpu_on_vision_unload
+}
+
 link_model_file() {
   local source_dir="$1"
   local target_dir="$2"
@@ -512,7 +533,7 @@ case "$command" in
     if [[ "$target" == "cpu" ]]; then
       write_vision_gate_artifact "ok" "skipped" "" "cpu_runtime_not_gated"
     else
-      gate_gpu_on_vision_unload
+      gate_gpu_exclusive_models
     fi
     ;;
   download-controlnets|download-controlnet-models)
@@ -543,7 +564,7 @@ case "$command" in
   start)
     prepare_runtime_dirs all
     select_runtime gpu
-    gate_gpu_on_vision_unload
+    gate_gpu_exclusive_models
     remove_legacy_split_containers
     compose up -d comfyui
     ;;
