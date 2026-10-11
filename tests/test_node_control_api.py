@@ -5990,6 +5990,50 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 }
             )
         )
+        self.assertTrue(
+            NodeControlState._avatar_profile_has_active_lora_work(
+                {
+                    "prompt_workspaces": {
+                        "head_face": {
+                            "lora_dataset": {
+                                "poses": [{"items": [{"status": "rendered_pending_import"}]}],
+                            }
+                        }
+                    }
+                }
+            )
+        )
+
+    def test_avatar_lora_bulk_import_waits_until_every_batch_output_exists(self):
+        state = NodeControlState(
+            lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+            config_path="/tmp/nonexistent-hexe-config.json",
+            logger=logging.getLogger("node-control-api-test"),
+        )
+        previews = [
+            {"batch_id": "batch", "batch_kind": "lora_dataset", "preview_id": "one", "status": "submitted"},
+            {"batch_id": "batch", "batch_kind": "lora_dataset", "preview_id": "two", "status": "pending"},
+        ]
+        available = {"one"}
+        resolver = lambda item: Path(f"/tmp/{item['preview_id']}.png") if item["preview_id"] in available else None
+
+        self.assertEqual(
+            state._avatar_lora_batches_ready_for_import(
+                previews=previews,
+                output_path_for_preview=resolver,
+                batch_kinds={"lora_dataset"},
+            ),
+            set(),
+        )
+        available.add("two")
+        self.assertEqual(
+            state._avatar_lora_batches_ready_for_import(
+                previews=previews,
+                output_path_for_preview=resolver,
+                batch_kinds={"lora_dataset"},
+            ),
+            {"batch"},
+        )
 
     def test_avatar_lora_dispatch_uses_live_queue_over_stale_session(self):
         service_manager = SimpleNamespace(

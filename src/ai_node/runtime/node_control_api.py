@@ -9753,6 +9753,27 @@ class NodeControlState:
         lora_dataset_count = len(lora_dataset_items)
         lora_epoch_review_count = len(lora_epoch_review_previews)
         preview_history = normal_preview_history + lora_dataset_items + lora_epoch_review_previews
+        def body_output_path(item: dict) -> Path | None:
+            seed = str(item.get("seed") or "").strip()
+            if not seed:
+                return None
+            output_avatar_name = self._safe_filename_component(item.get("output_avatar_name") or avatar_name)
+            template_id = str(item.get("template_id") or "").strip()
+            output_folder = (
+                "avatar_head_face_preview"
+                if template_id in {AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID, AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID}
+                else "avatar_upper_torso_preview"
+            )
+            return self._avatar_head_face_preview_output_for_prefix(
+                output_dir=output_dir,
+                prefix=f"hexe/{output_folder}/{output_avatar_name}_seed{seed}",
+                min_modified_time=self._avatar_head_face_preview_submitted_timestamp(preview=item),
+            )
+        bulk_import_ready = self._avatar_lora_batches_ready_for_import(
+            previews=preview_history,
+            output_path_for_preview=body_output_path,
+            batch_kinds={"upper_torso_lora_dataset", "lora_epoch_review"},
+        )
         updated_history: list[dict] = []
         for preview_index, preview in enumerate(preview_history):
             if not isinstance(preview, dict):
@@ -9831,6 +9852,27 @@ class NodeControlState:
                         "placeholder_created_at": now,
                     }
                 )
+                changed = True
+                continue
+            batch_id = str(preview.get("batch_id") or "").strip()
+            if (
+                str(preview.get("batch_kind") or "") in {"upper_torso_lora_dataset", "lora_epoch_review"}
+                and batch_id not in bulk_import_ready
+            ):
+                if self._dispatch_next_avatar_batch_preview_before_import(
+                    previews=preview_history,
+                    completed_index=preview_index,
+                    avatar_name=avatar_name,
+                    now=now,
+                ):
+                    changed = True
+                updated_history.append({
+                    **preview,
+                    "status": "rendered_pending_import",
+                    "rendered_at": preview.get("rendered_at") or now,
+                    "source_output": output_path.relative_to(output_dir).as_posix()
+                    if output_dir in output_path.parents else str(output_path),
+                })
                 changed = True
                 continue
             if self._dispatch_next_avatar_batch_preview_before_import(
@@ -10084,6 +10126,21 @@ class NodeControlState:
         profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
         avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
         output_dir = self._manual_image_output_dir()
+        def head_output_path(item: dict) -> Path | None:
+            seed = str(item.get("seed") or "").strip()
+            if not seed:
+                return None
+            output_avatar_name = self._safe_filename_component(item.get("output_avatar_name") or avatar_name)
+            return self._avatar_head_face_preview_output_for_prefix(
+                output_dir=output_dir,
+                prefix=f"hexe/avatar_head_face_preview/{output_avatar_name}_seed{seed}",
+                min_modified_time=self._avatar_head_face_preview_submitted_timestamp(preview=item),
+            )
+        bulk_import_ready = self._avatar_lora_batches_ready_for_import(
+            previews=preview_history,
+            output_path_for_preview=head_output_path,
+            batch_kinds={"lora_dataset", "lora_epoch_review"},
+        )
         updated_history = []
         changed = original_preview_history_count > AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT
         now = datetime.now(timezone.utc).isoformat()
@@ -10179,6 +10236,27 @@ class NodeControlState:
                         "placeholder_created_at": now,
                     }
                 )
+                changed = True
+                continue
+            batch_id = str(preview.get("batch_id") or "").strip()
+            if (
+                str(preview.get("batch_kind") or "") in {"lora_dataset", "lora_epoch_review"}
+                and batch_id not in bulk_import_ready
+            ):
+                if self._dispatch_next_avatar_batch_preview_before_import(
+                    previews=preview_history,
+                    completed_index=preview_index,
+                    avatar_name=avatar_name,
+                    now=now,
+                ):
+                    changed = True
+                updated_history.append({
+                    **preview,
+                    "status": "rendered_pending_import",
+                    "rendered_at": preview.get("rendered_at") or now,
+                    "source_output": output_path.relative_to(output_dir).as_posix()
+                    if output_dir in output_path.parents else str(output_path),
+                })
                 changed = True
                 continue
             if self._dispatch_next_avatar_batch_preview_before_import(
@@ -10722,6 +10800,31 @@ class NodeControlState:
     def _avatar_head_face_preview_is_rgb_fallback_path(*, path: Path) -> bool:
         stem = path.stem
         return stem.endswith("_rgb") or "_rgb_" in stem
+
+    def _avatar_lora_batches_ready_for_import(
+        self,
+        *,
+        previews: list[dict],
+        output_path_for_preview,
+        batch_kinds: set[str],
+    ) -> set[str]:
+        grouped: dict[str, list[dict]] = {}
+        for preview in previews:
+            if not isinstance(preview, dict) or str(preview.get("batch_kind") or "") not in batch_kinds:
+                continue
+            batch_id = str(preview.get("batch_id") or "").strip()
+            if batch_id:
+                grouped.setdefault(batch_id, []).append(preview)
+        ready: set[str] = set()
+        completed_statuses = {"completed", "completed_with_fallback"}
+        for batch_id, items in grouped.items():
+            if items and all(
+                str(item.get("status") or "").strip() in completed_statuses
+                or output_path_for_preview(item) is not None
+                for item in items
+            ):
+                ready.add(batch_id)
+        return ready
 
     def _refresh_avatar_body_depth_profile_job(self, *, profile_dir: Path, metadata: dict) -> dict:
         job = self._read_avatar_body_depth_profile_job(profile_dir=profile_dir)
@@ -17277,7 +17380,7 @@ class NodeControlState:
     @staticmethod
     def _avatar_profile_active_lora_sections(metadata: dict) -> set[str]:
         workspaces = metadata.get("prompt_workspaces") if isinstance(metadata.get("prompt_workspaces"), dict) else {}
-        active_statuses = {"local_queued", "pending", "submitted", "queued", "running"}
+        active_statuses = {"local_queued", "pending", "submitted", "queued", "running", "rendered_pending_import"}
         active_sections: set[str] = set()
         for section in ("head_face", "upper_torso"):
             workspace = workspaces.get(section) if isinstance(workspaces.get(section), dict) else {}
