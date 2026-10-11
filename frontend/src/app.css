@@ -3415,6 +3415,45 @@
   object-fit: contain;
 }
 
+.image-studio-preview-placeholder {
+  width: min(100%, 260px);
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  color: hsl(var(--sx-text-muted));
+}
+
+.image-studio-preview-placeholder svg {
+  width: min(70%, 150px);
+  max-height: 250px;
+  fill: hsl(var(--sx-accent) / 0.12);
+  stroke: hsl(var(--sx-accent) / 0.62);
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.image-studio-preview-placeholder strong {
+  color: hsl(var(--sx-text));
+}
+
+.image-studio-preview-placeholder p {
+  margin: 0;
+}
+
+.image-studio-preview-placeholder-pulse {
+  opacity: 0.25;
+}
+
+.image-studio-preview-placeholder.is-active .image-studio-preview-placeholder-pulse {
+  animation: image-studio-placeholder-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes image-studio-placeholder-pulse {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+
 .image-studio-sensitive-preview {
   position: relative;
   width: 100%;

@@ -315,6 +315,21 @@ function previewArtifactReady(preview) {
   );
 }
 
+function GenerationPreviewPlaceholder({ active = false, importing = false }) {
+  const title = importing ? "Importing image…" : active ? "Generating preview…" : "Preview pending";
+  return (
+    <div className={`image-studio-preview-placeholder${active ? " is-active" : ""}`} aria-label={title}>
+      <svg viewBox="0 0 180 320" aria-hidden="true">
+        <circle cx="90" cy="43" r="24" />
+        <path d="M90 70 L90 180 M90 96 L45 125 M90 96 L135 125 M90 180 L62 274 M90 180 L118 274" />
+        <path className="image-studio-preview-placeholder-pulse" d="M28 294 H152" />
+      </svg>
+      <strong>{title}</strong>
+      <p>{importing ? "The finished image is being copied into the character profile." : active ? "The new image will replace this placeholder automatically." : "Your generated image will appear here."}</p>
+    </div>
+  );
+}
+
 function isEscapeKey(event) {
   return event?.key === "Escape";
 }
@@ -972,7 +987,7 @@ export function ImageStudio({
   const bodyPreviewSeed = bodyPreview?.seed_text || bodyPreview?.seed;
   const bodyPreviewStatus = String(bodyPreview?.status || (bodyPreviewTracking ? "preparing" : "not started"));
   const bodyPreviewCompleted = ["completed", "completed_with_fallback"].includes(bodyPreviewStatus.toLowerCase());
-  const bodyPreviewImageUrl = generationKind === "body" && generationSubmissionStage
+  const bodyPreviewImageUrl = bodyPreviewTracking || (generationKind === "body" && generationSubmissionStage)
     ? ""
     : bodyPreview?.url ? `${apiBase}${bodyPreview.url}` : "";
   const bodyPreviewRevealId = String(bodyPreview?.prompt_id || bodyPreview?.preview_id || bodyPreview?.url || "");
@@ -1997,7 +2012,7 @@ export function ImageStudio({
                         <img src={bodyPreviewImageUrl} alt={`Generated body reference for ${characterBrief.name || "character"}`} />
                         {!bodyPreviewRevealed ? <span>Body preview hidden · Click to reveal</span> : null}
                       </button>
-                    ) : <><span>Body reference</span><p>Your selected proportions will be rendered here.</p></>}
+                    ) : <GenerationPreviewPlaceholder active={bodyPreviewTracking || Boolean(generationSubmissionStage)} />}
                   </div>
                   <div className="row">
                     <button className="btn btn-primary" type="button" onClick={generateBodyPreview} disabled={!characterBrief.body.trim() || characterSaveBusy || bodyPreviewTracking}>
@@ -2201,7 +2216,7 @@ export function ImageStudio({
                       <img src={progressImageUrl} alt="Body generation preview" />
                       {!progressBodyRevealed ? <span>Body preview hidden · Click to reveal</span> : null}
                     </button>
-                  ) : <img src={progressImageUrl} alt="Face generation preview" /> : <><strong>{renderFinished ? "Importing image…" : "Preview pending"}</strong><p>The image will appear here after it has been copied into the character profile.</p></>}
+                  ) : <img src={progressImageUrl} alt="Face generation preview" /> : <GenerationPreviewPlaceholder active={progressTracking || Boolean(generationSubmissionStage)} importing={renderFinished} />}
                 </div>
                 {progressArtifactReady && progressBodyRevealed ? <a className="btn" href={progressImageUrl} target="_blank" rel="noreferrer">Open full image</a> : null}
               </aside>

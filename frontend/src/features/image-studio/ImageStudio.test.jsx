@@ -503,6 +503,8 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Keep seed for Redo");
     expect(markup).toContain("Close");
     expect(markup).toContain("Generated preview");
+    expect(markup).toContain('aria-label="Generating preview…"');
+    expect(markup).toContain("The new image will replace this placeholder automatically.");
     expect(markup).toContain("Job details");
     expect(markup).toContain("Submitted");
     expect(markup).toContain("Seed");
