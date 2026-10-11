@@ -129,6 +129,18 @@ export function resolveManualGenerationTracking({ busy = false, result = null, p
   };
 }
 
+const IMAGE_STUDIO_TERMINAL_PREVIEW_STATUSES = new Set([
+  "completed",
+  "completed_with_fallback",
+  "failed",
+  "error",
+  "cancelled",
+]);
+
+export function shouldTrackImageStudioPreview(preview) {
+  return !IMAGE_STUDIO_TERMINAL_PREVIEW_STATUSES.has(String(preview?.status || "").toLowerCase());
+}
+
 export const IMAGE_STUDIO_DATA_ENDPOINTS = [
   "/api/comfyui/templates",
   "/api/services/status",
@@ -568,7 +580,7 @@ export default function App() {
       const preview = previews.find((item) => String(item?.prompt_id || "") === promptId);
       if (preview) {
         setImageStudioFacePreviewResult((current) => ({ ...(current || {}), preview }));
-        if (["completed", "completed_with_fallback", "failed", "error", "cancelled"].includes(String(preview.status || "").toLowerCase())) {
+        if (!shouldTrackImageStudioPreview(preview)) {
           setImageStudioFacePreviewTracking(false);
         }
       }
@@ -579,7 +591,7 @@ export default function App() {
       const bodyPreview = bodyPreviews.find((item) => String(item?.prompt_id || "") === bodyPromptId);
       if (bodyPreview) {
         setImageStudioBodyPreviewResult((current) => ({ ...(current || {}), preview: bodyPreview }));
-        if (["completed", "completed_with_fallback", "failed", "error", "cancelled"].includes(String(bodyPreview.status || "").toLowerCase())) {
+        if (!shouldTrackImageStudioPreview(bodyPreview)) {
           setImageStudioBodyPreviewTracking(false);
         }
       }
@@ -597,10 +609,6 @@ export default function App() {
     }
     if (generationResult.status === "fulfilled") {
       setManualImageGenerationPayload(generationResult.value);
-      const status = String(generationResult.value?.latest_job?.status || "").toLowerCase();
-      if (["failed", "error", "cancelled"].includes(status)) {
-        setImageStudioFacePreviewTracking(false);
-      }
     }
     if (servicesResult.status === "fulfilled") {
       setManualGenerationRuntimeStatus(servicesResult.value);
@@ -636,6 +644,7 @@ export default function App() {
     try {
       const result = await apiPost(`/api/avatar-generation/profiles/${encodeURIComponent(normalized)}/head-face/previews`, payload);
       setImageStudioFacePreviewResult(result);
+      setImageStudioFacePreviewTracking(shouldTrackImageStudioPreview(result?.preview));
       if (Array.isArray(result?.profiles)) {
         setAvatarGenerationPayload((current) => ({ ...(current || {}), profiles: result.profiles }));
       }
@@ -679,10 +688,12 @@ export default function App() {
     if (!normalized || avatarGenerationBusy) return null;
     setAvatarGenerationBusy(true);
     setImageStudioBodyPreviewTracking(true);
+    setImageStudioBodyPreviewResult(null);
     setError("");
     try {
       const result = await apiPost(`/api/avatar-generation/profiles/${encodeURIComponent(normalized)}/upper-torso/previews`, payload);
       setImageStudioBodyPreviewResult(result);
+      setImageStudioBodyPreviewTracking(shouldTrackImageStudioPreview(result?.preview));
       if (Array.isArray(result?.profiles)) {
         setAvatarGenerationPayload((current) => ({ ...(current || {}), profiles: result.profiles }));
       }

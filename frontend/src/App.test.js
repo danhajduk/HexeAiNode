@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { IMAGE_STUDIO_DATA_ENDPOINTS, buildComfyuiWebuiBrowserUrl, resolveManualGenerationTracking } from "./App";
+import {
+  IMAGE_STUDIO_DATA_ENDPOINTS,
+  buildComfyuiWebuiBrowserUrl,
+  resolveManualGenerationTracking,
+  shouldTrackImageStudioPreview,
+} from "./App";
 import { buildDashboardUiState } from "./uiStateModel";
 
 describe("Image Studio data boundary", () => {
@@ -80,4 +85,17 @@ describe("resolveManualGenerationTracking", () => {
       })
     ).toEqual({ status: "completed", active: false });
   });
+});
+
+describe("shouldTrackImageStudioPreview", () => {
+  it("tracks a newly submitted preview", () => {
+    expect(shouldTrackImageStudioPreview({ status: "submitted" })).toBe(true);
+  });
+
+  it.each(["completed", "completed_with_fallback", "failed", "error", "cancelled"])(
+    "stops tracking a %s preview",
+    (status) => {
+      expect(shouldTrackImageStudioPreview({ status })).toBe(false);
+    }
+  );
 });
