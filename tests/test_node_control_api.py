@@ -5964,10 +5964,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 state,
                 "_avatar_profile_metadata",
                 side_effect=lambda profile_dir: active_metadata if profile_dir == active_dir else idle_metadata,
-            ), patch.object(state, "_selected_avatar_profile_id", return_value="Active"), patch.object(
+            ), patch.object(
                 state,
-                "_avatar_profile_payload",
-                return_value={"profile_id": "Active"},
+                "_refresh_avatar_head_face_preview_outputs",
+                side_effect=lambda profile_dir, metadata: metadata,
             ) as refresh:
                 result = state._refresh_active_avatar_lora_profiles_once()
 

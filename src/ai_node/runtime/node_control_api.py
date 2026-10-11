@@ -17255,9 +17255,10 @@ class NodeControlState:
         return await asyncio.to_thread(self.cleanup_manual_image_outputs)
 
     @staticmethod
-    def _avatar_profile_has_active_lora_work(metadata: dict) -> bool:
+    def _avatar_profile_active_lora_sections(metadata: dict) -> set[str]:
         workspaces = metadata.get("prompt_workspaces") if isinstance(metadata.get("prompt_workspaces"), dict) else {}
         active_statuses = {"local_queued", "pending", "submitted", "queued", "running"}
+        active_sections: set[str] = set()
         for section in ("head_face", "upper_torso"):
             workspace = workspaces.get(section) if isinstance(workspaces.get(section), dict) else {}
             dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
@@ -17271,30 +17272,45 @@ class NodeControlState:
             epoch_review = dataset.get("epoch_review") if isinstance(dataset.get("epoch_review"), dict) else {}
             items.extend(item for item in list(epoch_review.get("previews") or []) if isinstance(item, dict))
             if any(str(item.get("status") or "").strip().lower() in active_statuses for item in items):
-                return True
-        return False
+                active_sections.add(section)
+        return active_sections
+
+    @classmethod
+    def _avatar_profile_has_active_lora_work(cls, metadata: dict) -> bool:
+        return bool(cls._avatar_profile_active_lora_sections(metadata))
 
     def _refresh_active_avatar_lora_profiles_once(self) -> dict:
         root = self._avatar_profile_root()
         if not root.exists():
             return {"status": "idle", "active_profile_count": 0, "refreshed_profile_count": 0}
-        selected_profile_id = self._selected_avatar_profile_id()
         active_profile_ids: list[str] = []
         refreshed_profile_ids: list[str] = []
         for profile_dir in root.iterdir():
             if not profile_dir.is_dir():
                 continue
             metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
-            if not metadata or not self._avatar_profile_has_active_lora_work(metadata):
+            active_sections = self._avatar_profile_active_lora_sections(metadata) if metadata else set()
+            if not active_sections:
                 continue
             profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
             active_profile_ids.append(profile_id)
-            profile = self._avatar_profile_payload(
-                profile_dir=profile_dir,
-                selected_profile_id=selected_profile_id,
-            )
-            if profile:
+            refresh_acquired = self._avatar_profile_refresh_lock.acquire(blocking=False)
+            if not refresh_acquired:
+                continue
+            try:
+                if "head_face" in active_sections:
+                    metadata = self._refresh_avatar_head_face_preview_outputs(
+                        profile_dir=profile_dir,
+                        metadata=metadata,
+                    )
+                if "upper_torso" in active_sections:
+                    metadata = self._refresh_avatar_upper_torso_preview_outputs(
+                        profile_dir=profile_dir,
+                        metadata=metadata,
+                    )
                 refreshed_profile_ids.append(profile_id)
+            finally:
+                self._avatar_profile_refresh_lock.release()
         return {
             "status": "active" if active_profile_ids else "idle",
             "active_profile_count": len(active_profile_ids),
