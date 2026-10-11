@@ -2174,7 +2174,7 @@ export function ImageStudio({
                 <p>OpenPose controls each head angle while the approved face reference preserves identity. Approve at least {faceLoraRequired} candidates for each pose.</p>
                 <div className="row">
                   <button className="btn btn-primary" type="button" disabled={faceLoraBusy} onClick={() => updateFaceLoraDataset({ action: faceLoraPoses.length ? "generate" : "ensure", pose_id: faceLoraPose?.pose_id })}>
-                    {["generate", "ensure"].includes(faceLoraAction) ? "Working…" : faceLoraItems.length ? "Fill / regenerate pose batch" : "Generate pose batch"}
+                    {["generate", "ensure"].includes(faceLoraAction) ? "Working…" : faceLoraItems.length ? "Generate / reroll unapproved" : "Generate pose batch"}
                   </button>
                   <button className="btn" type="button" disabled={faceLoraBusy} onClick={() => { void onRefreshData?.(); }}>Refresh</button>
                   <button className="btn" type="button" disabled={faceLoraBusy || faceLoraApproved < faceLoraRequired} onClick={() => updateFaceLoraDataset({ action: "next", pose_id: faceLoraPose?.pose_id })}>Save pose &amp; continue</button>

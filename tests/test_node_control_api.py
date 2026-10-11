@@ -5770,6 +5770,37 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             refreshed_pose = next(pose for pose in refreshed["poses"] if pose["pose_id"] == "three_quarter_left")
             self.assertEqual([item["preview_id"] for item in refreshed_pose["items"]], generated_item_ids)
 
+            metadata = state._avatar_profile_metadata(profile_dir=profile_dir)
+            workspace = state._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
+            pose = next(item for item in workspace["lora_dataset"]["poses"] if item["pose_id"] == "three_quarter_left")
+            for index, item in enumerate(pose["items"]):
+                item["approved"] = index < 3
+            old_items = list(pose["items"])
+            old_seeds = {item["seed"] for item in old_items}
+            metadata = state._avatar_profile_metadata_with_workspace(metadata=metadata, section="head_face", workspace=workspace)
+            (profile_dir / "profile.json").write_text(json.dumps(metadata), encoding="utf-8")
+
+            rerolled = asyncio.run(
+                state.update_avatar_profile_head_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(
+                        action="generate",
+                        pose_id="three_quarter_left",
+                        prompt="head portrait",
+                    ),
+                )
+            )["dataset"]
+            rerolled_pose = next(item for item in rerolled["poses"] if item["pose_id"] == "three_quarter_left")
+            self.assertEqual(len(rerolled_pose["items"]), 10)
+            self.assertEqual(
+                [item["preview_id"] for item in rerolled_pose["items"] if item["approved"]],
+                [item["preview_id"] for item in old_items[:3]],
+            )
+            replacement_items = [item for item in rerolled_pose["items"] if not item["approved"]]
+            self.assertEqual(len(replacement_items), 7)
+            self.assertTrue(old_seeds.isdisjoint({item["seed"] for item in replacement_items}))
+            self.assertTrue(old_seeds.issubset(set(rerolled_pose["seed_history"])))
+
     def test_avatar_lora_dispatch_submits_one_and_waits_for_import(self):
         state = NodeControlState(
             lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),

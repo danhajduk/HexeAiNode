@@ -4182,7 +4182,26 @@ class NodeControlState:
             active_pose = poses[active_pose_index]
 
         if action == "generate" and approved_seeds:
-            existing_items = [item for item in list(active_pose.get("items") or []) if isinstance(item, dict) and not bool(item.get("rejected"))]
+            previous_items = [item for item in list(active_pose.get("items") or []) if isinstance(item, dict)]
+            seed_history = {
+                seed
+                for seed in (
+                    self._coerce_manual_image_seed(value)
+                    for value in [
+                        *list(active_pose.get("seed_history") or []),
+                        *(item.get("seed") for item in previous_items),
+                    ]
+                )
+                if seed is not None
+            }
+            existing_items = [
+                item
+                for item in previous_items
+                if bool(item.get("approved")) and not bool(item.get("rejected"))
+            ]
+            for item in previous_items:
+                if item not in existing_items:
+                    self._delete_avatar_head_lora_candidate_file(profile_dir=profile_dir, item=item)
             avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
             pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
             identity_control = self._avatar_head_lora_dataset_identity_control(
@@ -4191,11 +4210,12 @@ class NodeControlState:
             )
             while len(existing_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
                 identity_source_seed = face_profile_seed
-                slot_index = len(existing_items) + 1
-                seed_offset = zlib.crc32(f"{pose_id}:{slot_index}".encode("utf-8")) + slot_index
-                seed = (int(face_profile_seed) + seed_offset) % (2**63)
-                if seed == face_profile_seed:
-                    seed = (seed + slot_index) % (2**63)
+                occupied_slots = {int(item.get("slot_index") or 0) for item in existing_items}
+                slot_index = next(index for index in range(1, AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE + 1) if index not in occupied_slots)
+                seed = secrets.randbelow(2**63 - 1)
+                while seed == face_profile_seed or seed in seed_history:
+                    seed = secrets.randbelow(2**63 - 1)
+                seed_history.add(seed)
                 item_token = uuid.uuid4().hex[:10]
                 output_avatar_name = self._safe_filename_component(f"{avatar_name}_lora_{pose_id}_{item_token}")
                 pose_prompt = str(active_pose.get("pose_prompt") or "").strip()
@@ -4238,7 +4258,7 @@ class NodeControlState:
                         cfg=item_cfg,
                         denoise=denoise,
                         now=now,
-                        slot_index=len(existing_items) + 1,
+                        slot_index=slot_index,
                         batch_kind="lora_dataset",
                         anchor_seed=self._coerce_manual_image_seed(lora_seed_set.get("anchor_seed")),
                         template_id=str(pose_control.get("template_id") or AVATAR_HEAD_FACE_PREVIEW_TEMPLATE_ID),
@@ -4274,6 +4294,7 @@ class NodeControlState:
                     }
                 )
             active_pose["items"] = existing_items[:AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE]
+            active_pose["seed_history"] = sorted(seed_history)
 
         for pose in poses:
             approved_count = sum(1 for item in list(pose.get("items") or []) if bool(item.get("approved")))
@@ -4634,6 +4655,16 @@ class NodeControlState:
                 continue
             if candidate_dir.is_dir():
                 shutil.rmtree(candidate_dir)
+
+    def _delete_avatar_head_lora_candidate_file(self, *, profile_dir: Path, item: dict) -> None:
+        image_path = self._avatar_head_lora_dataset_item_image_path(profile_dir=profile_dir, item=item)
+        if image_path is None:
+            return
+        for candidate in (image_path, image_path.with_suffix(".json"), image_path.with_suffix(".txt")):
+            try:
+                candidate.unlink()
+            except FileNotFoundError:
+                pass
 
     def upload_avatar_profile_head_lora_dataset(
         self,
