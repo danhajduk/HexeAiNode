@@ -6385,9 +6385,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(payload.template_variables["scheduler"], "karras")
                 self.assertEqual(payload.template_variables["pose_reference_image"], "system/neutral-a-pose-openpose.png")
                 self.assertEqual(payload.template_variables["pose_controlnet"], "controlnet-openpose-sdxl-1.0.safetensors")
-                self.assertEqual(payload.template_variables["pose_strength"], 0.8)
-                self.assertEqual(payload.template_variables["pose_start"], 0.0)
-                self.assertEqual(payload.template_variables["pose_end"], 0.7)
+                self.assertEqual(payload.template_variables["pose_strength"], 0.65)
+                self.assertEqual(payload.template_variables["pose_start"], 0.1)
+                self.assertEqual(payload.template_variables["pose_end"], 0.6)
                 self.assertTrue(payload.template_variables["avatar_name"].startswith("Body_Test_"))
                 self.assertNotEqual(payload.template_variables["avatar_name"], "Body_Test")
                 self.assertTrue((input_dir / "system" / "neutral-a-pose-openpose.png").is_file())
@@ -6402,6 +6402,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     character_context={"age_group": "adult (18+)", "gender_identity": "female", "visual_style": "realistic"},
                     width=768,
                     height=1344,
+                    pose_strength=0.65,
+                    pose_start=0.1,
+                    pose_end=0.6,
                 ),
             ))
 
@@ -6412,7 +6415,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["preview"]["lightning_strength"], 0.0)
         self.assertTrue(result["preview"]["output_avatar_name"].startswith("Body_Test_"))
         self.assertEqual(result["preview"]["pose_reference_image"], "system/neutral-a-pose-openpose.png")
-        self.assertEqual(result["preview"]["pose_strength"], 0.8)
+        self.assertEqual(result["preview"]["pose_strength"], 0.65)
+        self.assertEqual(result["preview"]["pose_start"], 0.1)
+        self.assertEqual(result["preview"]["pose_end"], 0.6)
 
     def test_avatar_generation_saves_latest_upper_torso_alias(self):
         with tempfile.TemporaryDirectory() as tmp:

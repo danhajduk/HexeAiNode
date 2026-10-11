@@ -3218,9 +3218,11 @@ class NodeControlState:
         avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
         output_avatar_name = f"{avatar_name}_{uuid.uuid4().hex[:8]}"
         pose_reference_image = self._ensure_avatar_upper_torso_pose_guide()
-        pose_strength = float(defaults.get("pose_strength") or 0.85)
-        pose_start = float(defaults.get("pose_start") or 0.0)
-        pose_end = float(defaults.get("pose_end") or 0.8)
+        pose_strength = max(0.0, min(1.0, float(payload.pose_strength if payload.pose_strength is not None else defaults.get("pose_strength", 0.8))))
+        pose_start = max(0.0, min(1.0, float(payload.pose_start if payload.pose_start is not None else defaults.get("pose_start", 0.0))))
+        pose_end = max(0.0, min(1.0, float(payload.pose_end if payload.pose_end is not None else defaults.get("pose_end", 0.7))))
+        if pose_start > pose_end:
+            raise ValueError("pose_start_must_not_exceed_pose_end")
         submitted_at = datetime.now(timezone.utc).isoformat()
         generation = await self.submit_manual_image_generation(
             payload=ManualImageGenerationRequest(
@@ -17402,6 +17404,9 @@ class AvatarProfileHeadPreviewRequest(BaseModel):
     face_feature_selections: dict[str, list[str]] | None = None
     body_custom_details: str | None = None
     character_context: dict[str, str] | None = None
+    pose_strength: float | None = None
+    pose_start: float | None = None
+    pose_end: float | None = None
 
 
 class AvatarProfileHeadSeedBatchRequest(BaseModel):

@@ -887,6 +887,7 @@ export function ImageStudio({
   const [bodyCustomDetails, setBodyCustomDetails] = useState("");
   const [bodySeedLocked, setBodySeedLocked] = useState(false);
   const [bodySeedInput, setBodySeedInput] = useState("");
+  const [bodyPoseControl, setBodyPoseControl] = useState({ strength: 0.8, start: 0, end: 0.7 });
   const [faceSeedReviewOpen, setFaceSeedReviewOpen] = useState(initialFaceSeedReviewOpen);
   const [faceSeedReviewSelections, setFaceSeedReviewSelections] = useState([]);
   const [faceSeedReviewBatchId, setFaceSeedReviewBatchId] = useState("");
@@ -1465,6 +1466,9 @@ export function ImageStudio({
           + ((bodyFeatureSelections.misc || []).includes("no tattoos") ? ", tattoo, tattoos, body art, inked skin, pubic tattoo, genital tattoo, pelvic tattoo, heart tattoo, heart symbol, red heart, decorative symbol on skin" : ""),
         seed: bodySeedInput.trim() || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null ? bodyPreviewSeed : null),
         lock_seed: Boolean(bodySeedInput.trim()) || (bodySeedLocked && bodyPreviewSeed !== undefined && bodyPreviewSeed !== null),
+        pose_strength: bodyPoseControl.strength,
+        pose_start: bodyPoseControl.start,
+        pose_end: bodyPoseControl.end,
         width: 768,
         height: 1536,
       });
@@ -2145,6 +2149,34 @@ export function ImageStudio({
                                 else next[config.id] = Math.max(0, Math.min(1, Number(event.target.value)));
                                 return next;
                               })}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {generationKind === "body" ? (
+                    <div className="image-studio-popup-magnitudes">
+                      <span>Pose controls for Redo</span>
+                      <div>
+                        {[
+                          { id: "strength", label: "Pose strength" },
+                          { id: "start", label: "Pose start" },
+                          { id: "end", label: "Pose end" },
+                        ].map((config) => (
+                          <label key={config.id}>
+                            {config.label}
+                            <input
+                              aria-label={config.label}
+                              type="number"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              value={bodyPoseControl[config.id]}
+                              onChange={(event) => setBodyPoseControl((current) => ({
+                                ...current,
+                                [config.id]: Math.max(0, Math.min(1, Number(event.target.value))),
+                              }))}
                             />
                           </label>
                         ))}

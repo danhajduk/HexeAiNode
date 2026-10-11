@@ -509,6 +509,9 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Breast size");
     expect(markup).toContain("Breast shape");
     expect(markup).toContain("Magnitudes for Redo");
+    expect(markup).toContain("Pose controls for Redo");
+    expect(markup).toContain("Pose strength");
+    expect(markup).toContain("value=\"0.8\"");
     expect(markup).toContain("Torso length");
     expect(markup).toContain("Profile");
     expect(markup).toContain("Output");
