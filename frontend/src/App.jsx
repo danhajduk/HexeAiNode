@@ -588,17 +588,13 @@ export default function App() {
       const preview = previews.find((item) => String(item?.prompt_id || "") === promptId);
       if (preview) {
         setImageStudioFacePreviewResult((current) => ({ ...(current || {}), preview }));
-        if (!shouldTrackImageStudioPreview(preview)) {
-          setImageStudioFacePreviewTracking(false);
-        }
+        setImageStudioFacePreviewTracking(shouldTrackImageStudioPreview(preview));
       }
       const bodyPromptId = String(imageStudioBodyPreviewResult?.preview?.prompt_id || "").trim();
       const bodyPreview = findImageStudioBodyPreview(profilesResult.value?.profiles, bodyPromptId);
       if (bodyPreview) {
         setImageStudioBodyPreviewResult((current) => ({ ...(current || {}), preview: bodyPreview }));
-        if (!shouldTrackImageStudioPreview(bodyPreview)) {
-          setImageStudioBodyPreviewTracking(false);
-        }
+        setImageStudioBodyPreviewTracking(shouldTrackImageStudioPreview(bodyPreview));
       }
       const seedProfileId = String(imageStudioSeedBatchResult?.profile?.profile_id || "").trim();
       const seedProfile = (profilesResult.value?.profiles || []).find(
@@ -620,8 +616,19 @@ export default function App() {
     }
   }
 
+  const imageStudioFacePreviewPollRequired = Boolean(imageStudioFacePreviewResult?.preview?.prompt_id)
+    && shouldTrackImageStudioPreview(imageStudioFacePreviewResult?.preview);
+  const imageStudioBodyPreviewPollRequired = Boolean(imageStudioBodyPreviewResult?.preview?.prompt_id)
+    && shouldTrackImageStudioPreview(imageStudioBodyPreviewResult?.preview);
+
   useEffect(() => {
-    if (!imageStudioOpen || (!imageStudioFacePreviewTracking && !imageStudioBodyPreviewTracking && !imageStudioSeedBatchTracking)) {
+    if (!imageStudioOpen || (
+      !imageStudioFacePreviewTracking
+      && !imageStudioBodyPreviewTracking
+      && !imageStudioFacePreviewPollRequired
+      && !imageStudioBodyPreviewPollRequired
+      && !imageStudioSeedBatchTracking
+    )) {
       return undefined;
     }
     let cancelled = false;
@@ -637,7 +644,7 @@ export default function App() {
       cancelled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [imageStudioOpen, imageStudioFacePreviewTracking, imageStudioFacePreviewResult?.preview?.prompt_id, imageStudioBodyPreviewTracking, imageStudioBodyPreviewResult?.preview?.prompt_id, imageStudioSeedBatchTracking, imageStudioSeedBatchResult?.profile?.profile_id]);
+  }, [imageStudioOpen, imageStudioFacePreviewTracking, imageStudioFacePreviewResult?.preview?.prompt_id, imageStudioFacePreviewPollRequired, imageStudioBodyPreviewTracking, imageStudioBodyPreviewResult?.preview?.prompt_id, imageStudioBodyPreviewPollRequired, imageStudioSeedBatchTracking, imageStudioSeedBatchResult?.profile?.profile_id]);
 
   async function onCreateImageStudioFacePreview(profileId, payload) {
     const normalized = String(profileId || "").trim();
