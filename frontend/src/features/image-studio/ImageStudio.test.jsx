@@ -788,7 +788,11 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Body LoRA dataset");
     expect(markup).toContain("5 of 8");
     expect(markup).toContain("Original approved body");
-    expect(markup).toContain("Candidate 10");
+    expect(markup).toContain("Generation status");
+    expect(markup).toContain("Candidate gallery");
+    expect(markup).toContain("Waiting for all 10 candidates");
+    expect(markup).toContain("Replacements waiting");
+    expect(markup).not.toContain("Candidate 10");
     expect(markup).toContain("Click to reveal");
   });
 

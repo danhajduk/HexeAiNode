@@ -926,8 +926,11 @@ export function ImageStudio({
   const [faceLoraBusy, setFaceLoraBusy] = useState(false);
   const [faceLoraAction, setFaceLoraAction] = useState("");
   const [bodyLoraBusy, setBodyLoraBusy] = useState(false);
+  const [bodyLoraAction, setBodyLoraAction] = useState("");
   const [faceLoraStatusOpen, setFaceLoraStatusOpen] = useState(true);
   const [faceLoraGalleryOpen, setFaceLoraGalleryOpen] = useState(false);
+  const [bodyLoraStatusOpen, setBodyLoraStatusOpen] = useState(true);
+  const [bodyLoraGalleryOpen, setBodyLoraGalleryOpen] = useState(false);
   const [generationProgressOpen, setGenerationProgressOpen] = useState(initialGenerationProgressOpen);
   const [generationKind, setGenerationKind] = useState(initialGenerationKind);
   const [generationRefreshBusy, setGenerationRefreshBusy] = useState(false);
@@ -1058,6 +1061,15 @@ export function ImageStudio({
   const faceLoraCurrentJob = faceLoraReplacementCount > 0 ? null : faceLoraActiveItems.find(
     (item) => !["completed", "completed_with_fallback"].includes(String(item?.status || "").toLowerCase())
   ) || faceLoraActiveItems[faceLoraActiveItems.length - 1] || null;
+  const bodyLoraActiveItems = bodyLoraItems.filter((item) => !item?.rejected);
+  const bodyLoraReadyItems = bodyLoraActiveItems.filter(
+    (item) => Boolean(item?.url) && ["completed", "completed_with_fallback"].includes(String(item?.status || "").toLowerCase())
+  );
+  const bodyLoraReplacementCount = Math.max(0, 10 - bodyLoraActiveItems.length);
+  const bodyLoraGalleryReady = bodyLoraReadyItems.length === 10 && queueRunning === 0 && queuePending === 0;
+  const bodyLoraCurrentJob = bodyLoraReplacementCount > 0 ? null : bodyLoraActiveItems.find(
+    (item) => !["completed", "completed_with_fallback"].includes(String(item?.status || "").toLowerCase())
+  ) || bodyLoraActiveItems[bodyLoraActiveItems.length - 1] || null;
   const modelName = facePreviewTemplate?.model_requirements?.checkpoint || comfyResidency.loaded_model || "Image model";
   const modelState = String(comfyResidency.model_state || "unloaded");
   const previewFailed = ["failed", "error", "cancelled"].includes(previewStatus.toLowerCase());
@@ -1166,6 +1178,12 @@ export function ImageStudio({
     setFaceLoraStatusOpen(!faceLoraGalleryReady);
     setFaceLoraGalleryOpen(faceLoraGalleryReady);
   }, [activeInterviewStep.id, faceLoraGalleryReady, faceLoraPose?.pose_id]);
+
+  useEffect(() => {
+    if (activeInterviewStep.id !== "body_lora_dataset") return;
+    setBodyLoraStatusOpen(!bodyLoraGalleryReady);
+    setBodyLoraGalleryOpen(bodyLoraGalleryReady);
+  }, [activeInterviewStep.id, bodyLoraGalleryReady, bodyLoraPose?.pose_id]);
 
   useEffect(() => {
     if (
@@ -1618,6 +1636,12 @@ export function ImageStudio({
 
   async function updateBodyLoraDataset(overrides = {}) {
     if (!characterProfileId || bodyLoraBusy || !onUpdateUpperTorsoLoraDataset) return null;
+    const action = String(overrides.action || "ensure");
+    if (["generate", "reject"].includes(action)) {
+      setBodyLoraStatusOpen(true);
+      setBodyLoraGalleryOpen(false);
+    }
+    setBodyLoraAction(action);
     setBodyLoraBusy(true);
     try {
       const result = await onUpdateUpperTorsoLoraDataset(characterProfileId, {
@@ -1630,6 +1654,7 @@ export function ImageStudio({
       return result;
     } finally {
       setBodyLoraBusy(false);
+      setBodyLoraAction("");
     }
   }
 
@@ -2227,35 +2252,51 @@ export function ImageStudio({
                     </button>
                   ) : <GenerationPreviewPlaceholder />}
                 </div>
-                <div className="image-studio-seed-review-summary" aria-live="polite">
-                  <div><span>Pose</span><strong>{bodyLoraPose?.label || "Preparing poses"}</strong></div>
-                  <div><span>Progress</span><strong>{`${bodyLoraPoseIndex + 1} / ${Math.max(bodyLoraPoses.length, 6)}`}</strong></div>
-                  <div><span>Approved</span><strong>{`${bodyLoraApproved} / ${bodyLoraRequired}`}</strong></div>
-                  <div><span>Status</span><strong>{String(bodyLoraBusy ? "Preparing…" : !bodyLoraItems.length ? "Ready to generate" : bodyLoraPose?.status || "Ready to review").replaceAll("_", " ")}</strong></div>
-                </div>
                 <p>OpenPose controls each neck-to-toes view while the saved body prompt and seed preserve the approved proportions. Approve at least {bodyLoraRequired} candidates for each pose.</p>
                 <div className="row">
                   <button className="btn btn-primary" type="button" disabled={bodyLoraBusy} onClick={() => updateBodyLoraDataset({ action: bodyLoraPoses.length ? "generate" : "ensure", pose_id: bodyLoraPose?.pose_id })}>
-                    {bodyLoraBusy ? "Working…" : bodyLoraItems.length ? "Fill / regenerate pose batch" : "Generate pose batch"}
+                    {["generate", "ensure"].includes(bodyLoraAction) ? "Working…" : bodyLoraItems.length ? "Generate / reroll unapproved" : "Generate pose batch"}
                   </button>
                   <button className="btn" type="button" disabled={bodyLoraBusy} onClick={() => { void onRefreshData?.(); }}>Refresh</button>
                   <button className="btn" type="button" disabled={bodyLoraBusy || bodyLoraApproved < bodyLoraRequired} onClick={() => updateBodyLoraDataset({ action: "next", pose_id: bodyLoraPose?.pose_id })}>Save pose &amp; continue</button>
                 </div>
-                <div className="image-studio-seed-review-grid">
-                  {Array.from({ length: Math.max(10, Number(bodyLoraDataset?.batch_size || 0)) }, (_, index) => {
-                    const item = bodyLoraItems[index];
-                    const ready = Boolean(item?.url) && ["completed", "completed_with_fallback"].includes(String(item?.status || "").toLowerCase());
-                    const revealId = `body-lora-${item?.preview_id || index}`;
-                    const revealed = revealedBodyPreviewId === revealId;
-                    return (
-                      <article className={`image-studio-seed-review-card${item?.approved ? " is-selected" : ""}`} key={item?.preview_id || `body-lora-pending-${index}`}>
-                        {ready ? <button className={`image-studio-sensitive-preview ${revealed ? "is-revealed" : "is-blurred"}`} type="button" onClick={() => setRevealedBodyPreviewId(revealed ? "" : revealId)}><img src={versionedPreviewUrl(apiBase, item)} alt={`${bodyLoraPose?.label || "Body pose"} candidate ${index + 1}`} />{!revealed ? <span>Click to reveal</span> : null}</button> : <span className="image-studio-seed-review-placeholder">{String(item?.status || "Waiting").replaceAll("_", " ")}</span>}
-                        <span className="image-studio-seed-review-card-meta"><strong>Candidate {index + 1}</strong><code>{item?.seed ?? "pending"}</code></span>
-                        {ready ? <span className="row"><button className="btn btn-primary" type="button" disabled={bodyLoraBusy || item?.approved} onClick={() => updateBodyLoraDataset({ action: "approve", item_id: item.preview_id, pose_id: bodyLoraPose?.pose_id })}>Approve</button><button className="btn" type="button" disabled={bodyLoraBusy || item?.rejected} onClick={() => updateBodyLoraDataset({ action: "reject", item_id: item.preview_id, pose_id: bodyLoraPose?.pose_id })}>Reject</button></span> : null}
-                      </article>
-                    );
-                  })}
-                </div>
+                <details className="image-studio-lora-review-section" open={bodyLoraStatusOpen} onToggle={(event) => setBodyLoraStatusOpen(event.currentTarget.open)}>
+                  <summary><span>Generation status</span><strong>{bodyLoraGalleryReady ? "10 candidates ready" : `${bodyLoraReadyItems.length} / 10 ready`}</strong></summary>
+                  <div className="image-studio-seed-review-summary" aria-live="polite">
+                    <div><span>Pose</span><strong>{bodyLoraPose?.label || "Preparing poses"}</strong></div>
+                    <div><span>Pose progress</span><strong>{`${bodyLoraPoseIndex + 1} / ${Math.max(bodyLoraPoses.length, 6)}`}</strong></div>
+                    <div><span>Candidate progress</span><strong>{`${bodyLoraReadyItems.length} / 10 ready`}</strong></div>
+                    <div><span>Queue</span><strong>{`${queueRunning} running / ${queuePending} pending`}</strong></div>
+                    <div><span>Replacements waiting</span><strong>{bodyLoraReplacementCount}</strong></div>
+                    <div><span>Status</span><strong>{String(bodyLoraBusy ? (["approve", "reject"].includes(bodyLoraAction) ? "Saving review…" : "Submitting…") : bodyLoraReplacementCount ? "Waiting for Generate pose" : bodyLoraPose?.status_detail || bodyLoraPose?.status || "Ready").replaceAll("_", " ")}</strong></div>
+                  </div>
+                  <div className="image-studio-lora-job-details">
+                    <div><span>Current job</span><code>{bodyLoraCurrentJob?.preview_id || "not submitted"}</code></div>
+                    <div><span>Prompt ID</span><code>{bodyLoraCurrentJob?.prompt_id || "waiting"}</code></div>
+                    <div><span>Seed</span><code>{bodyLoraCurrentJob?.seed ?? "waiting"}</code></div>
+                    <div><span>Job status</span><code>{String(bodyLoraCurrentJob?.status || "waiting").replaceAll("_", " ")}</code></div>
+                    <div><span>Submitted</span><code>{formatJobTime(bodyLoraCurrentJob?.submitted_at)}</code></div>
+                    <div><span>Imported</span><code>{formatJobTime(bodyLoraCurrentJob?.imported_at)}</code></div>
+                  </div>
+                </details>
+                <details className="image-studio-lora-review-section" open={bodyLoraGalleryOpen} onToggle={(event) => setBodyLoraGalleryOpen(event.currentTarget.open)}>
+                  <summary><span>Candidate gallery</span><strong>{bodyLoraGalleryReady ? `${bodyLoraApproved} approved` : "Waiting for all 10 candidates"}</strong></summary>
+                  {bodyLoraGalleryReady ? (
+                    <div className="image-studio-seed-review-grid">
+                      {bodyLoraReadyItems.map((item, index) => {
+                        const revealId = `body-lora-${item.preview_id || index}`;
+                        const revealed = revealedBodyPreviewId === revealId;
+                        return (
+                          <article className={`image-studio-seed-review-card${item.approved ? " is-selected" : ""}`} key={item.preview_id}>
+                            <button className={`image-studio-sensitive-preview ${revealed ? "is-revealed" : "is-blurred"}`} type="button" onClick={() => setRevealedBodyPreviewId(revealed ? "" : revealId)}><img src={versionedPreviewUrl(apiBase, item)} alt={`${bodyLoraPose?.label || "Body pose"} candidate ${index + 1}`} />{!revealed ? <span>Click to reveal</span> : null}</button>
+                            <span className="image-studio-seed-review-card-meta"><strong>Candidate {index + 1}</strong><code>{item.seed ?? "pending"}</code><small>{item.approved ? "approved" : "manual review"}</small></span>
+                            <span className="row"><button className="btn btn-primary" type="button" disabled={bodyLoraBusy || item.approved} onClick={() => updateBodyLoraDataset({ action: "approve", item_id: item.preview_id, pose_id: bodyLoraPose?.pose_id })}>Approve</button><button className="btn" type="button" disabled={bodyLoraBusy} onClick={() => updateBodyLoraDataset({ action: "reject", item_id: item.preview_id, pose_id: bodyLoraPose?.pose_id })}>Reject</button></span>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : <p className="image-studio-lora-gallery-waiting">The gallery opens after all 10 candidates are imported and the ComfyUI queue is empty.</p>}
+                </details>
               </div>
             ) : (
               <label className="image-studio-full-field">
