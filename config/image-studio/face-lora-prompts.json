@@ -161,53 +161,6 @@
       },
       "variation_replacements": {},
       "review_rule": "Reject straight-on frontal portraits, equally visible cheeks, centered-forward nose or chin, direct camera eye contact, angles that still look mostly frontal, and full 90-degree side profiles. Require a natural 40 to 45 degree anatomical-right three-quarter portrait: the subject turns to her right, nose and chin point toward the left side of the image, both eyes remain visible with the far eye naturally narrower, the far cheek is narrower but visible, the near cheek is dominant, and the eyes look slightly off camera toward the left."
-    },
-    {
-      "pose_id": "slight_down",
-      "label": "Slight Down",
-      "template_id": "template.avatar_head_lora_pose_depth_control.realvisxl.v1",
-      "prompt": "eye-level head-and-shoulders portrait, head gently bowed forward without sideways roll, chin lowered toward the upper chest, face and gaze directed down toward the floor rather than at the camera",
-      "geometry_prompt": "natural 20 degree forward head pitch from the neck, a small amount of the top plane of the hair visible, mild natural facial foreshortening, nose angled down, eyes lowered without eye contact, camera level with the shoulders rather than above the subject, level relaxed shoulders, anatomically normal face",
-      "guide_image": "system/lora-pose-guides/face/slight_down_dense.png",
-      "pose_strength": 0.4,
-      "depth_guide_image": "system/lora-pose-guides/face/depth-source/slight_down.png",
-      "depth_strength": 0.55,
-      "depth_start": 0,
-      "depth_end": 0.65,
-      "identity_strength": 0.7,
-      "identity_end": 1.0,
-      "negative_remove": ["tilted head"],
-      "negative_add": ["looking at camera", "direct camera eye contact", "face aimed at camera", "level head pitch", "raised chin", "upward head angle", "head roll", "overhead camera", "high-angle camera", "camera looking down", "raised shoulders", "hunched shoulders", "chin hidden against chest", "extreme downward angle", "distorted face", "compressed face", "warped facial features", "misaligned eyes", "deformed jaw"],
-      "prompt_replacements": {
-        "Front-facing head-and-shoulders composition": "eye-level head-and-shoulders composition with the head bowed toward the floor",
-        "eyes looking directly at camera": "eyes looking down at the floor with no eye contact",
-        "symmetrical neutral pose": "head bowed forward from the neck without sideways roll"
-      },
-      "variation_replacements": {},
-      "review_rule": "Require a natural approximately 20 degree bowed head with the face and gaze directed toward the floor, mild natural foreshortening, level relaxed shoulders, normal facial anatomy, and identity preserved. Reject eye contact, a face aimed toward the camera, a level or upward-facing head, an overhead/high camera angle masquerading as head pitch, distorted or compressed facial features, hunched shoulders, or a chin completely hidden against the chest."
-    },
-    {
-      "pose_id": "slight_up",
-      "label": "Slight Up",
-      "template_id": "template.avatar_head_lora_pose_depth_control.realvisxl.v1",
-      "prompt": "head-and-shoulders portrait, head held upright without roll, chin raised slightly, face pitched subtly upward, eyes looking naturally toward the camera",
-      "geometry_prompt": "subtle 10 to 15 degree upward head pitch, chin slightly lifted away from the neck, chin slightly nearer the camera than the forehead, both eyes fully readable, level shoulders in a relaxed natural posture",
-      "guide_image": "system/lora-pose-guides/face/slight_up_dense.png",
-      "pose_strength": 0.5,
-      "depth_guide_image": "system/lora-pose-guides/face/depth-source/slight_up.png",
-      "depth_strength": 0.55,
-      "depth_start": 0,
-      "depth_end": 0.65,
-      "identity_strength": 0.7,
-      "identity_end": 1.0,
-      "negative_remove": ["tilted head"],
-      "negative_add": ["lowered chin", "downward head angle", "head roll", "raised shoulders", "hunched shoulders", "extreme upward angle"],
-      "prompt_replacements": {
-        "Front-facing head-and-shoulders composition": "head-and-shoulders composition with a subtle upward head pitch",
-        "symmetrical neutral pose": "upright head with no sideways roll and a subtle upward pitch"
-      },
-      "variation_replacements": {},
-      "review_rule": "Require a natural 10 to 15 degree upward head pitch with level relaxed shoulders, no sideways roll, both eyes readable, and identity preserved. Reject a level or downward-facing head, hunched or raised shoulders, or an extreme upward angle."
     }
   ]
 }

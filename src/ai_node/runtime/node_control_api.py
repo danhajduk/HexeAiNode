@@ -281,8 +281,6 @@ AVATAR_HEAD_FACE_LORA_DATASET_POSES = (
         "near ear may remain visible through or beside the hair, eyes looking slightly off camera toward the right edge, "
         "not a straight-on frontal face and not a full side profile",
     ),
-    ("slight_down", "head-and-shoulders portrait with face angled slightly downward, eyes toward viewer"),
-    ("slight_up", "head-and-shoulders portrait with face angled slightly upward, eyes toward viewer"),
 )
 AVATAR_HEAD_FACE_LORA_DATASET_LEGACY_POSE_PROMPTS = {
     "three_quarter_left": "three-quarter head-and-shoulders portrait turned slightly left, eyes toward viewer",
@@ -306,8 +304,6 @@ AVATAR_HEAD_FACE_LORA_POSE_REFERENCE_IMAGES = {
     "front_smile": "system/lora-pose-guides/face/front_smile.png",
     "three_quarter_left": "system/lora-pose-guides/face/three_quarter_left.png",
     "three_quarter_right": "system/lora-pose-guides/face/three_quarter_right.png",
-    "slight_down": "system/lora-pose-guides/face/slight_down.png",
-    "slight_up": "system/lora-pose-guides/face/slight_up.png",
 }
 AVATAR_LORA_POSE_GUIDE_SOURCE_ROOT = Path("config/image-studio/lora-pose-guides")
 AVATAR_UPPER_TORSO_LORA_DATASET_POSES = (
@@ -4078,35 +4074,29 @@ class NodeControlState:
                     pose["status"] = "pending"
                     pose["status_detail"] = "Ready to generate."
                     pose["phase_status"] = "pending"
-        if not poses:
-            poses = [
-                {
+        existing_poses = {
+            str(pose.get("pose_id") or "").strip(): pose
+            for pose in poses
+            if isinstance(pose, dict) and str(pose.get("pose_id") or "").strip()
+        }
+        poses = []
+        for catalog_pose in face_pose_catalog:
+            pose_id = str(catalog_pose.get("pose_id") or "").strip()
+            pose_prompt = str(catalog_pose.get("prompt") or "").strip()
+            if not pose_id:
+                continue
+            pose = existing_poses.get(pose_id)
+            if pose is None:
+                pose = {
                     "pose_id": pose_id,
-                    "label": pose_id.replace("_", " ").title(),
-                    "pose_prompt": pose_prompt,
+                    "label": str(catalog_pose.get("label") or pose_id.replace("_", " ").title()),
                     "items": [],
                     "approved_count": 0,
                     "required_count": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
                     "status": "pending",
                 }
-                for pose_id, pose_prompt in [
-                    (str(item.get("pose_id") or ""), str(item.get("prompt") or ""))
-                    for item in face_pose_catalog
-                ]
-            ]
-        else:
-            default_pose_prompts = {
-                str(item.get("pose_id") or ""): str(item.get("prompt") or "")
-                for item in face_pose_catalog
-            }
-            for pose in poses:
-                if not isinstance(pose, dict):
-                    continue
-                pose_id = str(pose.get("pose_id") or "").strip()
-                pose_prompt = str(pose.get("pose_prompt") or "").strip()
-                updated_pose_prompt = default_pose_prompts.get(pose_id)
-                if updated_pose_prompt and pose_prompt != updated_pose_prompt:
-                    pose["pose_prompt"] = updated_pose_prompt
+            pose["pose_prompt"] = pose_prompt
+            poses.append(pose)
         active_pose_index = min(max(int(dataset.get("active_pose_index") or 0), 0), max(len(poses) - 1, 0))
         requested_pose_id = str(payload.pose_id or "").strip()
         if requested_pose_id:

@@ -5720,27 +5720,19 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     payload=AvatarProfileHeadLoraDatasetRequest(action="ensure", prompt="head portrait"),
                 )
             )["dataset"]
-            self.assertEqual(len(dataset["poses"]), 6)
+            self.assertEqual(len(dataset["poses"]), 4)
+            self.assertEqual(
+                [pose["pose_id"] for pose in dataset["poses"]],
+                ["front_neutral", "front_smile", "three_quarter_left", "three_quarter_right"],
+            )
             for pose in dataset["poses"]:
                 control = state._avatar_head_lora_dataset_pose_control(pose_id=pose["pose_id"])
                 self.assertTrue(control["pose_reference_image"])
                 self.assertTrue((input_dir / control["pose_reference_image"]).is_file())
-                if pose["pose_id"] in {"slight_down", "slight_up"}:
-                    self.assertEqual(
-                        control["template_id"],
-                        "template.avatar_head_lora_pose_depth_control.realvisxl.v1",
-                    )
-                    self.assertEqual(control["depth_strength"], 0.55)
-                    self.assertEqual(control["depth_end"], 0.65)
-                    self.assertEqual(control["identity_strength"], 0.7)
-                    self.assertEqual(control["identity_end"], 1.0)
-                    self.assertTrue(control["depth_reference_image"])
-                    self.assertTrue((input_dir / control["depth_reference_image"]).is_file())
-                else:
-                    self.assertEqual(
-                        control["template_id"],
-                        "template.avatar_head_lora_pose_control.realvisxl.v1",
-                    )
+                self.assertEqual(
+                    control["template_id"],
+                    "template.avatar_head_lora_pose_control.realvisxl.v1",
+                )
             profile_dir = state._avatar_profile_dir(profile_id="Jane_Avatar")
             profile_metadata = state._avatar_profile_metadata(profile_dir=profile_dir)
             upper_workspace = state._avatar_profile_prompt_workspace(metadata=profile_metadata, section="upper_torso")

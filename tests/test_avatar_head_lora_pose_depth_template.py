@@ -49,24 +49,12 @@ class AvatarHeadLoraPoseDepthTemplateTests(unittest.TestCase):
         self.assertEqual(template["defaults"]["depth_strength"], 0.55)
         self.assertEqual(template["defaults"]["depth_end"], 1.0)
 
-    def test_vertical_pose_catalog_selects_clean_depth_sources(self):
+    def test_face_pose_catalog_contains_only_reliable_identity_poses(self):
         catalog = json.loads(FACE_PROMPTS_PATH.read_text(encoding="utf-8"))
-        poses = {item["pose_id"]: item for item in catalog["poses"]}
-
-        for pose_id in ("slight_down", "slight_up"):
-            pose = poses[pose_id]
-            self.assertEqual(
-                pose["template_id"],
-                "template.avatar_head_lora_pose_depth_control.realvisxl.v1",
-            )
-            self.assertEqual(pose["depth_strength"], 0.55)
-            self.assertEqual(pose["depth_end"], 0.65)
-            self.assertEqual(pose["identity_strength"], 0.7)
-            self.assertEqual(pose["identity_end"], 1.0)
-            source = Path("config/image-studio/lora-pose-guides") / pose[
-                "depth_guide_image"
-            ].removeprefix("system/lora-pose-guides/")
-            self.assertTrue(source.is_file())
+        self.assertEqual(
+            [pose["pose_id"] for pose in catalog["poses"]],
+            ["front_neutral", "front_smile", "three_quarter_left", "three_quarter_right"],
+        )
 
 
 if __name__ == "__main__":
