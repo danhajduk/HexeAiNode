@@ -141,6 +141,16 @@ export function shouldTrackImageStudioPreview(preview) {
   return !IMAGE_STUDIO_TERMINAL_PREVIEW_STATUSES.has(String(preview?.status || "").toLowerCase());
 }
 
+export function findImageStudioBodyPreview(profiles, promptId) {
+  const normalizedPromptId = String(promptId || "").trim();
+  if (!normalizedPromptId) return null;
+  const candidates = (Array.isArray(profiles) ? profiles : []).flatMap((profile) => {
+    const workspace = profile?.prompt_workspaces?.upper_torso || {};
+    return [workspace.current_job, ...(workspace.preview_history || [])].filter(Boolean);
+  });
+  return candidates.find((item) => String(item?.prompt_id || "").trim() === normalizedPromptId) || null;
+}
+
 export const IMAGE_STUDIO_DATA_ENDPOINTS = [
   "/api/comfyui/templates",
   "/api/services/status",
@@ -585,10 +595,7 @@ export default function App() {
         }
       }
       const bodyPromptId = String(imageStudioBodyPreviewResult?.preview?.prompt_id || "").trim();
-      const bodyPreviews = (profilesResult.value?.profiles || []).flatMap(
-        (profile) => profile?.prompt_workspaces?.upper_torso?.preview_history || []
-      );
-      const bodyPreview = bodyPreviews.find((item) => String(item?.prompt_id || "") === bodyPromptId);
+      const bodyPreview = findImageStudioBodyPreview(profilesResult.value?.profiles, bodyPromptId);
       if (bodyPreview) {
         setImageStudioBodyPreviewResult((current) => ({ ...(current || {}), preview: bodyPreview }));
         if (!shouldTrackImageStudioPreview(bodyPreview)) {

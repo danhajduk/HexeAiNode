@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   IMAGE_STUDIO_DATA_ENDPOINTS,
   buildComfyuiWebuiBrowserUrl,
+  findImageStudioBodyPreview,
   resolveManualGenerationTracking,
   shouldTrackImageStudioPreview,
 } from "./App";
@@ -98,4 +99,20 @@ describe("shouldTrackImageStudioPreview", () => {
       expect(shouldTrackImageStudioPreview({ status })).toBe(false);
     }
   );
+});
+
+describe("findImageStudioBodyPreview", () => {
+  it("finds an active body job stored outside preview history", () => {
+    const currentJob = { prompt_id: "body-current", status: "running" };
+    const profiles = [{
+      prompt_workspaces: {
+        upper_torso: {
+          current_job: currentJob,
+          preview_history: [{ prompt_id: "body-old", status: "completed" }],
+        },
+      },
+    }];
+
+    expect(findImageStudioBodyPreview(profiles, "body-current")).toBe(currentJob);
+  });
 });
