@@ -179,6 +179,13 @@ export function mergeAvatarGenerationProfile(payload, profile) {
   return { ...current, profiles: nextProfiles };
 }
 
+export function imageStudioProfileActivityEndpoint(profileId) {
+  const normalized = String(profileId || "").trim();
+  return normalized
+    ? `/api/avatar-generation/profiles/${encodeURIComponent(normalized)}`
+    : "/api/avatar-generation";
+}
+
 export const IMAGE_STUDIO_DATA_ENDPOINTS = [
   "/api/comfyui/templates",
   "/api/services/status",
@@ -614,15 +621,28 @@ export default function App() {
   }
 
   async function refreshImageStudioFacePreviewActivity() {
+    const activityProfileId = String(
+      imageStudioRouteState.profileId
+      || imageStudioFacePreviewResult?.profile?.profile_id
+      || imageStudioBodyPreviewResult?.profile?.profile_id
+      || imageStudioSeedBatchResult?.profile?.profile_id
+      || ""
+    ).trim();
     const [profilesResult, generationResult, servicesResult] = await Promise.allSettled([
-      apiGet("/api/avatar-generation"),
-      apiGet("/api/manual-image-generation"),
+      apiGet(imageStudioProfileActivityEndpoint(activityProfileId)),
+      apiGet("/api/manual-image-generation/activity"),
       apiGet("/api/services/status"),
     ]);
     if (profilesResult.status === "fulfilled") {
-      setAvatarGenerationPayload(profilesResult.value);
+      const activityProfile = profilesResult.value?.profile;
+      const activityProfiles = activityProfile ? [activityProfile] : (profilesResult.value?.profiles || []);
+      if (activityProfile) {
+        setAvatarGenerationPayload((current) => mergeAvatarGenerationProfile(current, activityProfile));
+      } else {
+        setAvatarGenerationPayload(profilesResult.value);
+      }
       const promptId = String(imageStudioFacePreviewResult?.preview?.prompt_id || "").trim();
-      const previews = (profilesResult.value?.profiles || []).flatMap(
+      const previews = activityProfiles.flatMap(
         (profile) => profile?.prompt_workspaces?.head_face?.preview_history || []
       );
       const preview = previews.find((item) => String(item?.prompt_id || "") === promptId);
@@ -631,9 +651,9 @@ export default function App() {
         setImageStudioFacePreviewTracking(shouldTrackImageStudioPreview(preview));
       }
       const bodyPromptId = String(imageStudioBodyPreviewResult?.preview?.prompt_id || "").trim();
-      const trackedBodyPreview = findImageStudioBodyPreview(profilesResult.value?.profiles, bodyPromptId);
+      const trackedBodyPreview = findImageStudioBodyPreview(activityProfiles, bodyPromptId);
       const bodyProfileId = imageStudioRouteState.profileId || imageStudioBodyPreviewResult?.profile?.profile_id;
-      const currentBodyJob = latestImageStudioBodyJob(profilesResult.value?.profiles, bodyProfileId);
+      const currentBodyJob = latestImageStudioBodyJob(activityProfiles, bodyProfileId);
       const trackedSubmittedAt = Date.parse(trackedBodyPreview?.submitted_at || trackedBodyPreview?.created_at || 0) || 0;
       const currentSubmittedAt = Date.parse(currentBodyJob?.submitted_at || currentBodyJob?.created_at || 0) || 0;
       const bodyPreview = currentBodyJob && (!trackedBodyPreview || currentSubmittedAt > trackedSubmittedAt)
@@ -644,7 +664,7 @@ export default function App() {
         setImageStudioBodyPreviewTracking(shouldTrackImageStudioPreview(bodyPreview));
       }
       const seedProfileId = String(imageStudioSeedBatchResult?.profile?.profile_id || "").trim();
-      const seedProfile = (profilesResult.value?.profiles || []).find(
+      const seedProfile = activityProfiles.find(
         (profile) => String(profile?.profile_id || "") === seedProfileId
       );
       const seedBatch = seedProfile?.prompt_workspaces?.head_face?.seed_batch;

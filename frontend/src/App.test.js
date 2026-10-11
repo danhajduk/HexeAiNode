@@ -4,6 +4,7 @@ import {
   IMAGE_STUDIO_DATA_ENDPOINTS,
   buildComfyuiWebuiBrowserUrl,
   findImageStudioBodyPreview,
+  imageStudioProfileActivityEndpoint,
   latestImageStudioBodyJob,
   mergeAvatarGenerationProfile,
   resolveManualGenerationTracking,
@@ -50,6 +51,18 @@ describe("mergeAvatarGenerationProfile", () => {
         { profile_id: "hexe" }
       ).profiles
     ).toEqual([{ profile_id: "hexe" }, { profile_id: "other" }]);
+  });
+});
+
+describe("imageStudioProfileActivityEndpoint", () => {
+  it("scopes active generation polling to the current profile", () => {
+    expect(imageStudioProfileActivityEndpoint("Hexe profile")).toBe(
+      "/api/avatar-generation/profiles/Hexe%20profile"
+    );
+  });
+
+  it("falls back to the profile list before a profile is selected", () => {
+    expect(imageStudioProfileActivityEndpoint("")).toBe("/api/avatar-generation");
   });
 });
 

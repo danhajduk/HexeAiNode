@@ -2530,6 +2530,20 @@ class NodeControlState:
             "profiles": profiles,
         }
 
+    def avatar_generation_profile_status(self, *, profile_id: str) -> dict:
+        profile_dir = self._avatar_profile_dir(profile_id=profile_id)
+        if not self._avatar_profile_metadata(profile_dir=profile_dir):
+            raise ValueError("avatar_profile_not_found")
+        selected_profile_id = self._selected_avatar_profile_id()
+        return {
+            "configured": True,
+            "selected_profile_id": selected_profile_id,
+            "profile": self._avatar_profile_payload(
+                profile_dir=profile_dir,
+                selected_profile_id=selected_profile_id,
+            ),
+        }
+
     async def generate_avatar_body_depth_profile(self, *, profile_id: str, payload: "AvatarBodyDepthProfileGenerateRequest") -> dict:
         profile_dir = self._avatar_profile_dir(profile_id=profile_id)
         metadata = self._avatar_profile_metadata(profile_dir=profile_dir)
@@ -19504,6 +19518,13 @@ def create_node_control_app(*, state: NodeControlState, logger) -> FastAPI:
     @app.get("/api/avatar-generation")
     def get_avatar_generation():
         return state.avatar_generation_status()
+
+    @app.get("/api/avatar-generation/profiles/{profile_id}")
+    def get_avatar_generation_profile(profile_id: str):
+        try:
+            return state.avatar_generation_profile_status(profile_id=profile_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/api/avatar-generation/profiles")
     def post_avatar_generation_profile(payload: AvatarProfileSaveRequest):

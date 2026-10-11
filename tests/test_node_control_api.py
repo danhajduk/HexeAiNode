@@ -4553,9 +4553,13 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((profile_dir / "body.png").read_bytes(), b"body-image")
 
             status = state.avatar_generation_status()
+            with patch.object(state, "_avatar_profiles", side_effect=AssertionError("full profile scan")):
+                scoped_status = state.avatar_generation_profile_status(profile_id="Jane_Avatar")
 
         self.assertEqual(status["profiles"][0]["profile_id"], "Jane_Avatar")
         self.assertEqual(status["profiles"][0]["description"], "editable avatar description")
+        self.assertEqual(scoped_status["profile"]["profile_id"], "Jane_Avatar")
+        self.assertNotIn("profiles", scoped_status)
 
     def test_avatar_generation_saves_profile_with_basic_character_information(self):
         class _AvatarProfileServiceManager:
