@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1536" viewBox="0 0 768 1536">
+  <rect width="768" height="1536" fill="#000000"/>
+  <!-- Neck and shoulder girdle; head and facial keypoints are intentionally omitted. -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="18">
+    <path d="M384 150 L384 190" stroke="#ff0000"/>
+    <path d="M384 190 L270 210" stroke="#ff5500"/>
+    <path d="M270 210 L205 430" stroke="#ffaa00"/>
+    <path d="M205 430 L148 650" stroke="#ffff00"/>
+    <path d="M384 190 L498 210" stroke="#aaff00"/>
+    <path d="M498 210 L563 430" stroke="#55ff00"/>
+    <path d="M563 430 L620 650" stroke="#00ff00"/>
+    <!-- Torso centerline and pelvis. -->
+    <path d="M384 190 L384 650" stroke="#00ff55"/>
+    <path d="M384 650 L315 675" stroke="#00ffaa"/>
+    <path d="M384 650 L453 675" stroke="#00ffff"/>
+    <!-- Left leg. -->
+    <path d="M315 675 L285 1040" stroke="#00aaff"/>
+    <path d="M285 1040 L270 1360" stroke="#0055ff"/>
+    <path d="M270 1360 L245 1418" stroke="#0000ff"/>
+    <path d="M270 1360 L292 1418" stroke="#5500ff"/>
+    <!-- Right leg. -->
+    <path d="M453 675 L483 1040" stroke="#aa00ff"/>
+    <path d="M483 1040 L498 1360" stroke="#ff00ff"/>
+    <path d="M498 1360 L476 1418" stroke="#ff00aa"/>
+    <path d="M498 1360 L523 1418" stroke="#ff0055"/>
+  </g>
+  <g stroke="#000000" stroke-width="4">
+    <circle cx="384" cy="150" r="14" fill="#ff0000"/>
+    <circle cx="384" cy="190" r="14" fill="#ff5500"/>
+    <circle cx="270" cy="210" r="14" fill="#ffaa00"/>
+    <circle cx="205" cy="430" r="14" fill="#ffff00"/>
+    <circle cx="148" cy="650" r="14" fill="#aaff00"/>
+    <circle cx="498" cy="210" r="14" fill="#55ff00"/>
+    <circle cx="563" cy="430" r="14" fill="#00ff00"/>
+    <circle cx="620" cy="650" r="14" fill="#00ff55"/>
+    <circle cx="384" cy="650" r="14" fill="#00ffaa"/>
+    <circle cx="315" cy="675" r="14" fill="#00ffff"/>
+    <circle cx="285" cy="1040" r="14" fill="#00aaff"/>
+    <circle cx="270" cy="1360" r="14" fill="#0055ff"/>
+    <circle cx="245" cy="1418" r="11" fill="#0000ff"/>
+    <circle cx="292" cy="1418" r="11" fill="#5500ff"/>
+    <circle cx="453" cy="675" r="14" fill="#aa00ff"/>
+    <circle cx="483" cy="1040" r="14" fill="#ff00ff"/>
+    <circle cx="498" cy="1360" r="14" fill="#ff00aa"/>
+    <circle cx="476" cy="1418" r="11" fill="#ff0055"/>
+    <circle cx="523" cy="1418" r="11" fill="#ff0000"/>
+  </g>
+</svg>
