@@ -5624,7 +5624,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(lora_seed_set["seed_count"], 12)
         self.assertEqual(lora_seed_set["seeds"], [preview["seed"] for preview in updated["previews"][:12]])
 
-    def test_avatar_generation_head_lora_dataset_rejects_node_side_generation(self):
+    def test_avatar_generation_head_lora_dataset_enables_openpose_generation(self):
         class _AvatarProfileServiceManager:
             def __init__(self, input_dir: str, output_dir: str):
                 self.input_dir = input_dir
@@ -5710,17 +5710,20 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             )
             for pose in body_dataset["pose_catalog"]:
                 self.assertTrue((input_dir / pose["pose_reference_image"]).is_file())
-            with self.assertRaisesRegex(ValueError, "avatar_head_lora_node_dataset_generation_disabled"):
-                asyncio.run(
-                    state.update_avatar_profile_head_lora_dataset(
-                        profile_id="Jane_Avatar",
-                        payload=AvatarProfileHeadLoraDatasetRequest(
-                            action="generate",
-                            pose_id="three_quarter_left",
-                            prompt="head portrait",
-                        ),
-                    )
+            generated = asyncio.run(
+                state.update_avatar_profile_head_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(
+                        action="generate",
+                        pose_id="three_quarter_left",
+                        prompt="head portrait",
+                    ),
                 )
+            )["dataset"]
+            active_pose = generated["poses"][generated["active_pose_index"]]
+            self.assertEqual(active_pose["pose_id"], "three_quarter_left")
+            self.assertEqual(len(active_pose["items"]), 9)
+            self.assertTrue(all(item["pose_control"]["pose_reference_image"] for item in active_pose["items"]))
 
     def test_avatar_generation_head_lora_three_quarter_prompt_removes_front_facing_conflict(self):
         prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(
@@ -6097,18 +6100,18 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             pose["vision_reviewed_count"] = 9
             profile_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-            with self.assertRaisesRegex(ValueError, "avatar_head_lora_node_dataset_generation_disabled"):
-                asyncio.run(
-                    state.update_avatar_profile_head_lora_dataset(
-                        profile_id="Jane_Avatar",
-                        payload=AvatarProfileHeadLoraDatasetRequest(action="retry_vision", prompt="head portrait"),
-                    )
+            asyncio.run(
+                state.update_avatar_profile_head_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(action="retry_vision", prompt="head portrait"),
                 )
+            )
 
             persisted = json.loads(profile_path.read_text(encoding="utf-8"))
             persisted_pose = persisted["prompt_workspaces"]["head_face"]["lora_dataset"]["poses"][0]
-            self.assertEqual(persisted_pose["vision_status"], "reviewed")
-            self.assertTrue(all(item["vision_status"] == "failed" for item in persisted_pose["items"]))
+            self.assertEqual(persisted_pose["vision_status"], "pending")
+            self.assertTrue(all(item["vision_status"] == "pending" for item in persisted_pose["items"]))
+            self.assertTrue(all(item["vision_retry_count"] == 1 for item in persisted_pose["items"]))
 
     def test_avatar_generation_head_lora_approved_dataset_submits_background_removal(self):
         class _AvatarProfileServiceManager:

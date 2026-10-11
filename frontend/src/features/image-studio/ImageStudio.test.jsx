@@ -728,6 +728,35 @@ describe("ImageStudio", () => {
     expect(markup).not.toContain("/old.png");
   });
 
+  it("offers the Face LoRA dataset as the next step after a completed body reference", () => {
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialInterviewOpen
+        initialInterviewStep={2}
+        initialCharacterProfileId="Nova"
+        initialCharacterBrief={{
+          name: "Nova",
+          concept: "space pilot",
+          gender_identity: "female",
+          visual_style: "realistic",
+          age_group: "adult (18+)",
+          content_rating: "SFW",
+          body: "athletic build",
+        }}
+        characterProfiles={[{
+          profile_id: "Nova",
+          prompt_workspaces: {
+            upper_torso: { current_job: { status: "completed", seed: 42, url: "/body.png", prompt_id: "body-1" } },
+          },
+        }]}
+      />
+    );
+
+    expect(markup).toContain("Continue to Face LoRA dataset");
+  });
+
   it("forces SFW when an adult character is changed to an under-18 age group", () => {
     expect(applyCharacterFoundation(
       { age_group: "adult (18+)", content_rating: "NSFW adult content" },

@@ -3203,6 +3203,7 @@ export default function App() {
           onGenerateFacePreview={onCreateImageStudioFacePreview}
           onGenerateBodyPreview={onCreateImageStudioBodyPreview}
           onCreateFaceSeedBatch={onCreateImageStudioSeedBatch}
+          onUpdateHeadLoraDataset={onUpdateAvatarHeadLoraDataset}
           onOpenLegacy={() => { window.location.hash = buildOperationalRoute("manual_image"); }}
           onClose={() => {
             if (window.opener) {

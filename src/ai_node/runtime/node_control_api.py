@@ -3878,6 +3878,35 @@ class NodeControlState:
             for seed in list(lora_seed_set.get("seeds") or [])
         ]
         approved_seeds = [seed for seed in approved_seeds if seed is not None]
+        if not approved_seeds:
+            seed_batch = workspace.get("seed_batch") if isinstance(workspace.get("seed_batch"), dict) else {}
+            seed_previews = [item for item in list(seed_batch.get("previews") or []) if isinstance(item, dict)]
+            selected_preview_id = str(seed_batch.get("selected_preview_id") or "").strip()
+            identity_previews = [
+                item
+                for item in seed_previews
+                if bool(item.get("kept"))
+                or bool(item.get("identity_anchor"))
+                or str(item.get("preview_id") or "").strip() == selected_preview_id
+            ]
+            approved_seeds = [
+                seed
+                for seed in (self._coerce_manual_image_seed(item.get("seed")) for item in identity_previews)
+                if seed is not None
+            ]
+            if approved_seeds:
+                anchor = next(
+                    (item for item in identity_previews if str(item.get("preview_id") or "").strip() == selected_preview_id),
+                    identity_previews[0],
+                )
+                lora_seed_set = {
+                    "status": "ready",
+                    "source": "image_studio_face_selection",
+                    "anchor_preview_id": str(anchor.get("preview_id") or "").strip(),
+                    "anchor_seed": self._coerce_manual_image_seed(anchor.get("seed")),
+                    "seeds": approved_seeds,
+                    "seed_count": len(set(approved_seeds)),
+                }
 
         prompt_parts = self._avatar_profile_normalized_head_prompt_parts(
             profile=metadata,
@@ -3938,14 +3967,11 @@ class NodeControlState:
                     active_pose_index = index
                     break
         action = str(payload.action or "ensure").strip().lower()
-        generated_dataset_actions = {"generate", "next", "approve", "reject", "reset_pose", "retry_vision"}
-        if action in generated_dataset_actions:
-            raise ValueError("avatar_head_lora_node_dataset_generation_disabled")
         active_pose = poses[active_pose_index] if poses else {}
         item_id = str(payload.item_id or "").strip()
-        if action in {"generate"} and len(set(approved_seeds)) < 12:
+        if action in {"generate"} and not approved_seeds:
             raise ValueError("avatar_head_lora_seed_set_required")
-        if action in {"next", "reject"} and len(set(approved_seeds)) < 12:
+        if action in {"next", "reject"} and not approved_seeds:
             has_prepared_dataset = any(
                 sum(
                     1
@@ -4131,7 +4157,7 @@ class NodeControlState:
             active_pose_index = min(active_pose_index + 1, max(len(poses) - 1, 0))
             active_pose = poses[active_pose_index]
 
-        if action in {"ensure", "generate", "next", "reject"} and len(set(approved_seeds)) >= 12:
+        if action in {"ensure", "generate", "next", "reject"} and approved_seeds:
             existing_items = [item for item in list(active_pose.get("items") or []) if isinstance(item, dict) and not bool(item.get("rejected"))]
             avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
             pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")

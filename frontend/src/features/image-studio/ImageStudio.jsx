@@ -865,6 +865,7 @@ export function ImageStudio({
   onGenerateFacePreview,
   onGenerateBodyPreview,
   onCreateFaceSeedBatch,
+  onUpdateHeadLoraDataset,
   onRefreshData,
   onRefreshGeneration,
   onStudioRouteChange,
@@ -919,6 +920,8 @@ export function ImageStudio({
   const [faceSeedReviewOpen, setFaceSeedReviewOpen] = useState(initialFaceSeedReviewOpen);
   const [faceSeedReviewSelections, setFaceSeedReviewSelections] = useState([]);
   const [faceSeedReviewBatchId, setFaceSeedReviewBatchId] = useState("");
+  const [faceLoraDatasetOpen, setFaceLoraDatasetOpen] = useState(false);
+  const [faceLoraBusy, setFaceLoraBusy] = useState(false);
   const [generationProgressOpen, setGenerationProgressOpen] = useState(initialGenerationProgressOpen);
   const [generationKind, setGenerationKind] = useState(initialGenerationKind);
   const [generationRefreshBusy, setGenerationRefreshBusy] = useState(false);
@@ -1000,6 +1003,13 @@ export function ImageStudio({
   const bodyPreviewSeed = bodyPreview?.seed_text || bodyPreview?.seed;
   const bodyPreviewStatus = String(bodyPreview?.status || (bodyPreviewTracking ? "preparing" : "not started"));
   const bodyPreviewCompleted = ["completed", "completed_with_fallback"].includes(bodyPreviewStatus.toLowerCase());
+  const faceLoraDataset = activeCharacterProfile?.prompt_workspaces?.head_face?.lora_dataset || {};
+  const faceLoraPoses = Array.isArray(faceLoraDataset?.poses) ? faceLoraDataset.poses : [];
+  const faceLoraPoseIndex = Math.max(0, Math.min(Number(faceLoraDataset?.active_pose_index || 0), Math.max(faceLoraPoses.length - 1, 0)));
+  const faceLoraPose = faceLoraPoses[faceLoraPoseIndex] || {};
+  const faceLoraItems = Array.isArray(faceLoraPose?.items) ? faceLoraPose.items : [];
+  const faceLoraApproved = Number(faceLoraPose?.approved_count || 0);
+  const faceLoraRequired = Number(faceLoraPose?.required_count || 6);
   const bodyPreviewImageUrl = bodyPreviewTracking || (generationKind === "body" && generationSubmissionStage)
     ? ""
     : versionedPreviewUrl(apiBase, bodyPreview);
@@ -1122,6 +1132,12 @@ export function ImageStudio({
     window.addEventListener("keydown", handleGenerationShortcut);
     return () => window.removeEventListener("keydown", handleGenerationShortcut);
   }, [generationProgressOpen, generationKind, progressTracking, characterSaveBusy]);
+
+  useEffect(() => {
+    if (!faceLoraDatasetOpen || !onRefreshData) return undefined;
+    const timer = window.setInterval(() => { void onRefreshData(); }, 2000);
+    return () => window.clearInterval(timer);
+  }, [faceLoraDatasetOpen, onRefreshData]);
 
   useEffect(() => {
     onStudioRouteChange?.({
@@ -1525,6 +1541,29 @@ export function ImageStudio({
     } finally {
       setGenerationRefreshBusy(false);
     }
+  }
+
+  async function updateFaceLoraDataset(overrides = {}) {
+    if (!characterProfileId || faceLoraBusy || !onUpdateHeadLoraDataset) return null;
+    setFaceLoraBusy(true);
+    try {
+      const result = await onUpdateHeadLoraDataset(characterProfileId, {
+        action: "ensure",
+        prompt: String(facePreview?.prompt || characterBrief.appearance || "").trim(),
+        negative_prompt: String(facePreview?.negative_prompt || negativePrompt || "").trim(),
+        ...overrides,
+      });
+      await onRefreshData?.();
+      return result;
+    } finally {
+      setFaceLoraBusy(false);
+    }
+  }
+
+  function openFaceLoraDataset() {
+    setInterviewOpen(false);
+    setFaceLoraDatasetOpen(true);
+    void updateFaceLoraDataset({ action: "ensure" });
   }
 
   async function refineAndRegenerateFacePreview() {
@@ -2046,6 +2085,11 @@ export function ImageStudio({
                     <span>Status</span><strong>{bodyPreviewStatus.replaceAll("_", " ")}</strong>
                     <small>{bodyPreviewTracking ? "Generation status refreshes automatically." : bodyPreviewCompleted ? `Body identity seed ${bodyPreviewSeed} saved.` : "Generate one neutral reference before continuing."}</small>
                   </div>
+                  {bodyPreviewCompleted ? (
+                    <button className="btn btn-primary" type="button" onClick={openFaceLoraDataset}>
+                      Continue to Face LoRA dataset →
+                    </button>
+                  ) : null}
                   <div className="image-studio-seed-controls">
                     <label>
                       Body seed
@@ -2292,6 +2336,49 @@ export function ImageStudio({
                 {characterSaveBusy ? "Saving selection…" : "Save selection & continue"}
               </button>
             </footer>
+          </section>
+        </div>
+      ) : null}
+      {faceLoraDatasetOpen ? (
+        <div className="image-studio-modal-backdrop" role="presentation">
+          <section className="image-studio-interview-modal image-studio-seed-review-modal" role="dialog" aria-modal="true" aria-labelledby="face-lora-dataset-title">
+            <header>
+              <div>
+                <span className="image-studio-eyebrow">Next step after body reference</span>
+                <h2 id="face-lora-dataset-title">Build the Face LoRA dataset</h2>
+                <p>OpenPose controls each head angle while the approved face references preserve identity. Approve at least {faceLoraRequired} images per pose.</p>
+              </div>
+              <button className="btn" type="button" onClick={() => setFaceLoraDatasetOpen(false)}>Close</button>
+            </header>
+            <div className="image-studio-seed-review-summary" aria-live="polite">
+              <div><span>Pose</span><strong>{faceLoraPose?.label || "Preparing poses"}</strong></div>
+              <div><span>Progress</span><strong>{`${faceLoraPoseIndex + 1} / ${Math.max(faceLoraPoses.length, 6)}`}</strong></div>
+              <div><span>Approved</span><strong>{`${faceLoraApproved} / ${faceLoraRequired}`}</strong></div>
+              <div><span>Status</span><strong>{String(faceLoraPose?.status_detail || faceLoraPose?.status || (faceLoraBusy ? "Preparing…" : "Ready")).replaceAll("_", " ")}</strong></div>
+            </div>
+            <div className="row">
+              <button className="btn btn-primary" type="button" disabled={faceLoraBusy} onClick={() => updateFaceLoraDataset({ action: "generate", pose_id: faceLoraPose?.pose_id })}>
+                {faceLoraBusy ? "Working…" : faceLoraItems.length ? "Fill / regenerate pose batch" : "Generate pose batch"}
+              </button>
+              <button className="btn" type="button" disabled={faceLoraBusy} onClick={() => { void onRefreshData?.(); }}>Refresh</button>
+              <button className="btn" type="button" disabled={faceLoraBusy || faceLoraApproved < faceLoraRequired} onClick={() => updateFaceLoraDataset({ action: "next", pose_id: faceLoraPose?.pose_id })}>Save pose &amp; continue</button>
+            </div>
+            <div className="image-studio-seed-review-grid">
+              {Array.from({ length: Number(faceLoraDataset?.batch_size || 9) }, (_, index) => {
+                const item = faceLoraItems[index];
+                const ready = Boolean(item?.url) && ["completed", "completed_with_fallback"].includes(String(item?.status || "").toLowerCase());
+                return (
+                  <article className={`image-studio-seed-review-card${item?.approved ? " is-selected" : ""}`} key={item?.preview_id || `face-lora-pending-${index}`}>
+                    {ready ? <img src={versionedPreviewUrl(apiBase, item)} alt={`${faceLoraPose?.label || "Face pose"} candidate ${index + 1}`} /> : <span className="image-studio-seed-review-placeholder">{String(item?.status || "Waiting").replaceAll("_", " ")}</span>}
+                    <span className="image-studio-seed-review-card-meta"><strong>Candidate {index + 1}</strong><code>{item?.seed ?? "pending"}</code><small>{String(item?.vision_status || "vision pending").replaceAll("_", " ")}</small></span>
+                    {ready ? <span className="row">
+                      <button className="btn btn-primary" type="button" disabled={faceLoraBusy || item?.approved} onClick={() => updateFaceLoraDataset({ action: "approve", item_id: item.preview_id, pose_id: faceLoraPose?.pose_id })}>Approve</button>
+                      <button className="btn" type="button" disabled={faceLoraBusy || item?.rejected} onClick={() => updateFaceLoraDataset({ action: "reject", item_id: item.preview_id, pose_id: faceLoraPose?.pose_id })}>Reject</button>
+                    </span> : null}
+                  </article>
+                );
+              })}
+            </div>
           </section>
         </div>
       ) : null}
