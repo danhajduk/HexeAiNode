@@ -5723,6 +5723,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             active_pose = generated["poses"][generated["active_pose_index"]]
             self.assertEqual(active_pose["pose_id"], "three_quarter_left")
             self.assertEqual(len(active_pose["items"]), 9)
+            self.assertTrue(all(item["seed"] == anchor["seed"] for item in active_pose["items"]))
+            self.assertEqual(generated["generation_seed"], anchor["seed"])
+            self.assertEqual(generated["seed_strategy"], "profile_face_seed")
             self.assertTrue(all(item["pose_control"]["pose_reference_image"] for item in active_pose["items"]))
 
     def test_avatar_generation_head_lora_three_quarter_prompt_removes_front_facing_conflict(self):

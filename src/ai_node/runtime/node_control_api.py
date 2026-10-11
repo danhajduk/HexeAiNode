@@ -3907,6 +3907,9 @@ class NodeControlState:
                     "seeds": approved_seeds,
                     "seed_count": len(set(approved_seeds)),
                 }
+        face_profile_seed = self._coerce_manual_image_seed(lora_seed_set.get("anchor_seed"))
+        if face_profile_seed is None and approved_seeds:
+            face_profile_seed = approved_seeds[0]
 
         prompt_parts = self._avatar_profile_normalized_head_prompt_parts(
             profile=metadata,
@@ -3935,6 +3938,15 @@ class NodeControlState:
         now = datetime.now(timezone.utc).isoformat()
         dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
         poses = dataset.get("poses") if isinstance(dataset.get("poses"), list) else []
+        if (
+            poses
+            and str(dataset.get("seed_strategy") or "") != "profile_face_seed"
+            and not any(bool(item.get("approved")) for pose in poses if isinstance(pose, dict) for item in list(pose.get("items") or []) if isinstance(item, dict))
+        ):
+            for pose in poses:
+                if isinstance(pose, dict):
+                    self._delete_avatar_head_lora_pose_files(profile_dir=profile_dir, pose=pose)
+                    pose["items"] = []
         if not poses:
             poses = [
                 {
@@ -4161,24 +4173,13 @@ class NodeControlState:
             existing_items = [item for item in list(active_pose.get("items") or []) if isinstance(item, dict) and not bool(item.get("rejected"))]
             avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
             pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
-            excluded_seeds = set(approved_seeds)
-            excluded_seeds.update(
-                seed
-                for seed in (
-                    self._coerce_manual_image_seed(item.get("seed"))
-                    for item in existing_items
-                    if isinstance(item, dict)
-                )
-                if seed is not None
-            )
             identity_control = self._avatar_head_lora_dataset_identity_control(
                 workspace=workspace,
                 lora_seed_set=lora_seed_set,
             )
             while len(existing_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
-                identity_source_seed = secrets.choice(approved_seeds)
-                seed = self._random_seed_excluding(excluded_seeds)
-                excluded_seeds.add(seed)
+                identity_source_seed = face_profile_seed
+                seed = face_profile_seed
                 item_cfg = self._avatar_head_lora_dataset_jittered_cfg(cfg)
                 item_token = uuid.uuid4().hex[:10]
                 output_avatar_name = self._safe_filename_component(f"{avatar_name}_lora_{pose_id}_{item_token}")
@@ -4272,6 +4273,8 @@ class NodeControlState:
             "seed_set": lora_seed_set,
             "batch_size": AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE,
             "required_per_pose": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+            "seed_strategy": "profile_face_seed",
+            "generation_seed": face_profile_seed,
             "training_manifest": training_manifest,
             "training_status": training_manifest.get("status") if isinstance(training_manifest, dict) else dataset.get("training_status"),
             "training_job": training_job,
