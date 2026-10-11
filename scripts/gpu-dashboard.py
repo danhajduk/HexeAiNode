@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import http.client
 import json
 import shutil
@@ -135,6 +136,88 @@ def render_progress(path: str, prompt_id: object) -> dict[str, object]:
     }
 
 
+def image_studio_backend(profile_root: str, queue: dict[str, object]) -> dict[str, object]:
+    root = Path(profile_root)
+    candidates: list[tuple[float, Path, dict]] = []
+    try:
+        profile_paths = root.glob("*/profile.json")
+        for path in profile_paths:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            workspaces = payload.get("prompt_workspaces") if isinstance(payload.get("prompt_workspaces"), dict) else {}
+            for section in ("head_face", "upper_torso"):
+                workspace = workspaces.get(section) if isinstance(workspaces.get(section), dict) else {}
+                dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
+                poses = [pose for pose in list(dataset.get("poses") or []) if isinstance(pose, dict)]
+                active_pose_id = str(dataset.get("active_pose_id") or "").strip()
+                pose = next((item for item in poses if str(item.get("pose_id") or "") == active_pose_id), None)
+                if not dataset or not isinstance(pose, dict):
+                    continue
+                timestamp = _iso_epoch(
+                    dataset.get("updated_at") or workspace.get("updated_at") or payload.get("updated_at")
+                )
+                candidates.append(
+                    (timestamp, path, {"profile": payload, "section": section, "dataset": dataset, "pose": pose})
+                )
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {"available": False, "state": "unavailable"}
+    if not candidates:
+        return {"available": False, "state": "idle"}
+    _, path, selected = max(candidates, key=lambda item: item[0])
+    profile = selected["profile"]
+    dataset = selected["dataset"]
+    pose = selected["pose"]
+    items = [item for item in list(pose.get("items") or []) if isinstance(item, dict)]
+    statuses = [str(item.get("status") or "").strip() for item in items]
+    local_count = sum(
+        status in {"local_queued", "pending"} and not str(item.get("prompt_id") or "").strip()
+        for status, item in zip(statuses, items)
+    )
+    submitted_items = [
+        item
+        for item in items
+        if str(item.get("status") or "") in {"submitted", "queued", "running", "pending"}
+        and str(item.get("prompt_id") or "").strip()
+    ]
+    completed_count = sum(
+        status in {"completed", "completed_with_fallback"} and not bool(item.get("placeholder"))
+        for status, item in zip(statuses, items)
+    )
+    approved_count = sum(bool(item.get("approved")) for item in items)
+    active_prompt_ids = {str(queue.get("prompt_id") or "").strip()} if queue.get("prompt_id") else set()
+    submitted_prompt_ids = {str(item.get("prompt_id") or "").strip() for item in submitted_items}
+    if submitted_prompt_ids & active_prompt_ids:
+        phase = "rendering"
+    elif submitted_items:
+        phase = "importing output"
+    elif local_count:
+        phase = "waiting for Generate" if str(dataset.get("status") or "") == "manual_review" else "local queue waiting"
+    elif items and completed_count == len(items):
+        phase = "candidate review ready"
+    else:
+        phase = str((dataset.get("dispatch") or {}).get("status") or dataset.get("status") or "idle").replace("_", " ")
+    return {
+        "available": True,
+        "state": phase,
+        "profile": str(profile.get("name") or profile.get("profile_id") or path.parent.name),
+        "section": selected["section"],
+        "pose": str(pose.get("label") or pose.get("pose_id") or "unknown"),
+        "completed": completed_count,
+        "total": len(items),
+        "approved": approved_count,
+        "local_queued": local_count,
+        "submitted": len(submitted_items),
+        "dispatch": str((dataset.get("dispatch") or {}).get("status") or "unknown").replace("_", " "),
+        "updated_at": dataset.get("updated_at"),
+    }
+
+
+def _iso_epoch(value: object) -> float:
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def color(text: str, code: str, enabled: bool) -> str:
     return f"\033[{code}m{text}\033[0m" if enabled else text
 
@@ -154,6 +237,7 @@ def render(
     sample: dict[str, float | str],
     queue: dict[str, object],
     progress: dict[str, object],
+    backend: dict[str, object],
     history: deque[float],
     color_enabled: bool,
 ) -> str:
@@ -213,6 +297,20 @@ def render(
             lines.append("Progress  waiting for a matching sampling event")
     else:
         lines.extend(["Job       no active or pending ComfyUI job"])
+    lines.extend(["", color("IMAGE STUDIO BACKEND", "1;35", color_enabled)])
+    if backend.get("available"):
+        section = "Face LoRA" if backend.get("section") == "head_face" else "Body LoRA"
+        lines.extend(
+            [
+                f"Phase     {backend.get('state')}",
+                f"Context   {backend.get('profile')} · {section} · {backend.get('pose')}",
+                f"Candidates {backend.get('completed')}/{backend.get('total')} imported · {backend.get('approved')} approved",
+                f"Local     {backend.get('local_queued')} waiting · {backend.get('submitted')} submitted · dispatcher {backend.get('dispatch')}",
+                f"Updated   {backend.get('updated_at') or 'unknown'}",
+            ]
+        )
+    else:
+        lines.append(f"State     {backend.get('state', 'unavailable')} · no active LoRA pose found")
     lines.extend(["", color("Ctrl+C to close", "90", color_enabled)])
     return "\n".join(lines)
 
@@ -223,6 +321,11 @@ def main() -> int:
     parser.add_argument("--gpu-index", type=int, default=0, help="NVIDIA GPU index (default: 0).")
     parser.add_argument("--comfy-socket", default="/run/hexe/ai-node/comfyui-gpu.sock", help="ComfyUI Unix socket.")
     parser.add_argument("--progress-file", default=".run/comfyui-progress.json", help="Hexe ComfyUI progress snapshot.")
+    parser.add_argument(
+        "--profile-root",
+        default="runtime/manual/comfyui-gpu/input/avatar_profiles",
+        help="Image Studio avatar profile root.",
+    )
     parser.add_argument("--history", type=int, default=40, help="Number of utilization samples to show.")
     parser.add_argument("--once", action="store_true", help="Print one sample and exit.")
     parser.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
@@ -237,7 +340,8 @@ def main() -> int:
             history.append(float(sample["utilization.gpu"]))
             queue = comfy_queue(args.comfy_socket)
             progress = render_progress(args.progress_file, queue.get("prompt_id"))
-            output = render(sample, queue, progress, history, color_enabled)
+            backend = image_studio_backend(args.profile_root, queue)
+            output = render(sample, queue, progress, backend, history, color_enabled)
             if not args.once and sys.stdout.isatty():
                 print("\033[2J\033[H", end="")
             print(output, flush=True)

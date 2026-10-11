@@ -128,6 +128,12 @@ and active node, run:
 scripts/gpu-dashboard.py
 ```
 
+The dashboard also reads the backend-owned Image Studio profile state. Its
+`IMAGE STUDIO BACKEND` section shows the active face/body LoRA pose, locally
+queued and submitted candidates, imported and approved counts, and distinguishes
+rendering from the post-ComfyUI image-import phase. Use `--profile-root` when
+the manual ComfyUI profile directory is stored outside the default runtime path.
+
 The dashboard refreshes once per second and exits with `Ctrl+C`. Use `--interval 0.5` for faster sampling,
 `--once` for a single snapshot, or `--no-color` when redirecting its output.
 
