@@ -4338,7 +4338,7 @@ class NodeControlState:
         dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
         action = str(payload.action or "ensure").strip().lower()
         item_id = str(payload.item_id or "").strip()
-        if action not in {"ensure", "prepare_train_lora", "train_lora", "generate_epoch_review", "select_epoch_review"}:
+        if action not in {"ensure", "generate", "approve", "reject", "next", "reset_pose", "prepare_train_lora", "train_lora", "generate_epoch_review", "select_epoch_review"}:
             raise ValueError("avatar_upper_torso_lora_dataset_action_unsupported")
         now = datetime.now(timezone.utc).isoformat()
         pose_catalog = [
@@ -4364,6 +4364,111 @@ class NodeControlState:
         if not prompt:
             prompt = self._avatar_profile_default_upper_torso_prompt(profile=metadata)
         negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
+        template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID)["template"]
+        defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
+        width, height = 768, 1536
+        steps = int(defaults.get("steps") or 4)
+        cfg = float(defaults.get("cfg") or 1.2)
+        denoise = float(defaults.get("denoise") or 1.0)
+        poses = dataset.get("poses") if isinstance(dataset.get("poses"), list) else []
+        if not poses:
+            poses = [
+                {
+                    "pose_id": pose_id,
+                    "label": pose_id.replace("_", " ").title(),
+                    "pose_prompt": pose_prompt,
+                    "items": [],
+                    "approved_count": 0,
+                    "required_count": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+                    "status": "pending",
+                }
+                for pose_id, pose_prompt in AVATAR_UPPER_TORSO_LORA_DATASET_POSES
+            ]
+        active_pose_index = min(max(int(dataset.get("active_pose_index") or 0), 0), max(len(poses) - 1, 0))
+        requested_pose_id = str(payload.pose_id or "").strip()
+        if requested_pose_id:
+            active_pose_index = next(
+                (index for index, pose in enumerate(poses) if str(pose.get("pose_id") or "") == requested_pose_id),
+                active_pose_index,
+            )
+        active_pose = poses[active_pose_index] if poses else {}
+        if action == "reset_pose" and active_pose:
+            active_pose = {**active_pose, "items": [], "approved_count": 0, "status": "pending", "updated_at": now}
+            poses[active_pose_index] = active_pose
+        if action in {"approve", "reject"} and item_id:
+            for pose in poses:
+                pose["items"] = [
+                    {
+                        **candidate,
+                        "approved": action == "approve" if str(candidate.get("preview_id") or "") == item_id else bool(candidate.get("approved")),
+                        "rejected": action == "reject" if str(candidate.get("preview_id") or "") == item_id else bool(candidate.get("rejected")),
+                        **({"reviewed_at": now} if str(candidate.get("preview_id") or "") == item_id else {}),
+                    }
+                    for candidate in list(pose.get("items") or [])
+                    if isinstance(candidate, dict)
+                ]
+        if action == "next":
+            approved_count = sum(1 for candidate in list(active_pose.get("items") or []) if bool(candidate.get("approved")))
+            if approved_count < AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE:
+                raise ValueError("avatar_upper_torso_lora_pose_minimum_required")
+            active_pose["status"] = "completed"
+            active_pose_index = min(active_pose_index + 1, max(len(poses) - 1, 0))
+            active_pose = poses[active_pose_index]
+        body_previews = [item for item in list(workspace.get("preview_history") or []) if isinstance(item, dict)]
+        current_job = workspace.get("current_job") if isinstance(workspace.get("current_job"), dict) else {}
+        body_anchor = current_job if str(current_job.get("input_image") or "").strip() else (body_previews[-1] if body_previews else {})
+        body_seed = self._coerce_manual_image_seed(body_anchor.get("seed_text") or body_anchor.get("seed"))
+        head_workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
+        head_seed_set = head_workspace.get("lora_seed_set") if isinstance(head_workspace.get("lora_seed_set"), dict) else {}
+        identity_control = self._avatar_head_lora_dataset_identity_control(workspace=head_workspace, lora_seed_set=head_seed_set)
+        if action in {"ensure", "generate", "next", "reject"} and active_pose and body_seed is not None and identity_control:
+            existing_items = [candidate for candidate in list(active_pose.get("items") or []) if isinstance(candidate, dict) and not bool(candidate.get("rejected"))]
+            pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
+            pose_reference_image = self._ensure_avatar_lora_pose_guide(
+                relative_image=AVATAR_UPPER_TORSO_LORA_POSE_REFERENCE_IMAGES[pose_id]
+            )
+            avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
+            while len(existing_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
+                slot_index = len(existing_items) + 1
+                item_token = uuid.uuid4().hex[:10]
+                variation = self._avatar_head_lora_dataset_variation(
+                    slot_index=slot_index, cfg=cfg, face_strength=float(identity_control.get("face_strength") or 0.55), pose_strength=0.8
+                )
+                item_prompt = ", ".join(filter(None, [
+                    str(active_pose.get("pose_prompt") or "").strip(),
+                    prompt,
+                    variation["prompt_suffix"],
+                    "single adult character, complete neck-to-toes framing, entire body visible, consistent anatomy and proportions, body LoRA training reference",
+                ]))
+                output_avatar_name = self._safe_filename_component(f"{avatar_name}_body_lora_{pose_id}_{item_token}")
+                existing_items.append(
+                    self._avatar_head_face_seed_batch_local_preview(
+                        batch_id=str(dataset.get("dataset_id") or f"upper_torso_lora_dataset_{int(time.time())}"),
+                        prompt=item_prompt, prompt_parts=prompt_parts, locked_prompt_parts={},
+                        negative_prompt=negative_prompt, seed=body_seed, width=width, height=height,
+                        steps=steps, cfg=variation["cfg"], denoise=denoise, now=now, slot_index=slot_index,
+                        batch_kind="upper_torso_lora_dataset", anchor_seed=body_seed,
+                        template_id=AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID,
+                        template_variables={
+                            **identity_control,
+                            "face_strength": variation["face_strength"],
+                            "pose_reference_image": pose_reference_image,
+                            "pose_controlnet": str(defaults.get("pose_controlnet") or "controlnet-openpose-sdxl-1.0.safetensors"),
+                            "pose_strength": variation["pose_strength"], "pose_start": 0, "pose_end": 0.8,
+                        },
+                    ) | {
+                        "preview_id": f"body_lora_{pose_id}_{item_token}", "pose_id": pose_id,
+                        "output_avatar_name": output_avatar_name, "target_subdir": f"lora_dataset/{pose_id}",
+                        "approved": False, "rejected": False, "variation": variation,
+                    }
+                )
+            active_pose["items"] = existing_items[:AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE]
+        for pose in poses:
+            approved_count = sum(1 for candidate in list(pose.get("items") or []) if bool(candidate.get("approved")))
+            pose["approved_count"] = approved_count
+            pose["required_count"] = AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE
+            if str(pose.get("status") or "") != "completed":
+                pose["status"] = "ready" if approved_count >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE else "reviewing" if pose.get("items") else "pending"
         training_manifest = dataset.get("training_manifest") if isinstance(dataset.get("training_manifest"), dict) else {}
         training_job = dataset.get("training_job") if isinstance(dataset.get("training_job"), dict) else {}
         if training_job:
@@ -4443,8 +4548,16 @@ class NodeControlState:
             }
         updated_dataset = {
             **dataset,
-            "source": "uploaded",
-            "status": dataset.get("status") or "waiting",
+            "dataset_id": str(dataset.get("dataset_id") or f"upper_torso_lora_dataset_{int(time.time())}"),
+            "source": "generated",
+            "status": "completed" if poses and all(int(pose.get("approved_count") or 0) >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE for pose in poses) else "reviewing",
+            "poses": poses,
+            "active_pose_index": active_pose_index,
+            "batch_size": AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE,
+            "required_per_pose": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+            "seed_strategy": "profile_body_seed",
+            "variation_strategy": "controlled_ten_v1",
+            "anchor_seed": body_seed,
             "pose_catalog": pose_catalog,
             "pose_count": len(pose_catalog),
             "training_manifest": training_manifest,
@@ -9191,13 +9304,17 @@ class NodeControlState:
         workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="upper_torso")
         raw_preview_history = list(workspace.get("preview_history") or [])
         lora_dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
+        lora_dataset_poses = [pose for pose in list(lora_dataset.get("poses") or []) if isinstance(pose, dict)]
+        lora_dataset_items = [
+            item for pose in lora_dataset_poses for item in list(pose.get("items") or []) if isinstance(item, dict)
+        ]
         lora_epoch_review = lora_dataset.get("epoch_review") if isinstance(lora_dataset.get("epoch_review"), dict) else {}
         lora_epoch_review_previews = [
             item
             for item in list(lora_epoch_review.get("previews") or [])
             if isinstance(item, dict)
         ]
-        if not raw_preview_history and not lora_epoch_review_previews:
+        if not raw_preview_history and not lora_dataset_items and not lora_epoch_review_previews:
             return metadata
         profile_id = self._safe_filename_component(metadata.get("profile_id") or profile_dir.name)
         avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
@@ -9206,8 +9323,9 @@ class NodeControlState:
         changed = len(raw_preview_history) > AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT
         normal_preview_history = raw_preview_history[-AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT:]
         normal_preview_count = len(normal_preview_history)
+        lora_dataset_count = len(lora_dataset_items)
         lora_epoch_review_count = len(lora_epoch_review_previews)
-        preview_history = normal_preview_history + lora_epoch_review_previews
+        preview_history = normal_preview_history + lora_dataset_items + lora_epoch_review_previews
         updated_history: list[dict] = []
         for preview in preview_history:
             if not isinstance(preview, dict):
@@ -9241,7 +9359,7 @@ class NodeControlState:
                 template_id = str(preview.get("template_id") or "").strip()
                 output_folder = (
                     "avatar_head_face_preview"
-                    if template_id == AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID
+                    if template_id in {AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID, AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID}
                     else "avatar_upper_torso_preview"
                 )
                 prefix = f"hexe/{output_folder}/{output_avatar_name}_seed{seed}"
@@ -9317,12 +9435,13 @@ class NodeControlState:
                 json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
-            self._write_avatar_upper_torso_latest(
-                profile_dir=profile_dir,
-                profile_id=profile_id,
-                imported_path=target_path,
-                imported_sidecar=sidecar,
-            )
+            if not preview.get("batch_id"):
+                self._write_avatar_upper_torso_latest(
+                    profile_dir=profile_dir,
+                    profile_id=profile_id,
+                    imported_path=target_path,
+                    imported_sidecar=sidecar,
+                )
             self._delete_imported_manual_output(output_path=output_path, output_dir=output_dir)
             updated_history.append(
                 {
@@ -9355,9 +9474,19 @@ class NodeControlState:
                         "url": f"/api/avatar-generation/profiles/{profile_id}/references/upper_torso/last.png",
                     })
                 self._write_avatar_upper_torso_current_job(profile_dir=profile_dir, payload=current_job_payload)
+        lora_dataset_dispatch: dict = {}
+        if lora_dataset_items:
+            lora_start = normal_preview_count
+            lora_end = lora_start + lora_dataset_count
+            dispatched_previews, lora_dataset_dispatch, dispatch_changed = self._dispatch_avatar_head_face_seed_batch_previews(
+                previews=updated_history[lora_start:lora_end], avatar_name=avatar_name, output_dir=output_dir, now=now,
+            )
+            if dispatch_changed:
+                updated_history = updated_history[:lora_start] + dispatched_previews + updated_history[lora_end:]
+                changed = True
         lora_epoch_review_dispatch: dict = {}
         if lora_epoch_review:
-            lora_epoch_start = normal_preview_count
+            lora_epoch_start = normal_preview_count + lora_dataset_count
             lora_epoch_end = lora_epoch_start + lora_epoch_review_count
             dispatched_previews, lora_epoch_review_dispatch, dispatch_changed = self._dispatch_avatar_head_face_seed_batch_previews(
                 previews=updated_history[lora_epoch_start:lora_epoch_end],
@@ -9377,7 +9506,17 @@ class NodeControlState:
             "updated_at": now,
         }
         if lora_dataset:
-            lora_epoch_items = updated_history[normal_preview_count : normal_preview_count + lora_epoch_review_count]
+            lora_items = updated_history[normal_preview_count : normal_preview_count + lora_dataset_count]
+            items_by_id = {
+                str(item.get("preview_id") or ""): item for item in lora_items if str(item.get("preview_id") or "")
+            }
+            updated_poses = []
+            for pose in lora_dataset_poses:
+                pose_items = [items_by_id.get(str(item.get("preview_id") or ""), item) for item in list(pose.get("items") or [])]
+                approved_count = sum(1 for item in pose_items if bool(item.get("approved")))
+                updated_poses.append({**pose, "items": pose_items, "approved_count": approved_count})
+            lora_epoch_start = normal_preview_count + lora_dataset_count
+            lora_epoch_items = updated_history[lora_epoch_start : lora_epoch_start + lora_epoch_review_count]
             completed_count = sum(
                 1
                 for item in lora_epoch_items
@@ -9396,6 +9535,8 @@ class NodeControlState:
                 ]
             updated_workspace["lora_dataset"] = {
                 **lora_dataset,
+                "poses": updated_poses,
+                "dispatch": lora_dataset_dispatch or lora_dataset.get("dispatch") or {},
                 "epoch_review": {
                     **lora_epoch_review,
                     "previews": lora_epoch_items,

@@ -47,6 +47,7 @@ const CHARACTER_INTERVIEW_STEPS = [
   { id: "face_features", title: "Face & features", field: "appearance", question: "How should the character's face, hair, eyes, and defining features look?" },
   { id: "body_proportions", title: "Body & proportions", field: "body", question: "What body shape, proportions, height, and physical qualities should remain consistent?" },
   { id: "face_lora_dataset", title: "Face LoRA dataset", field: null, question: "Build a pose-controlled face dataset from the approved identity." },
+  { id: "body_lora_dataset", title: "Body LoRA dataset", field: null, question: "Build a pose-controlled body dataset from the approved proportions." },
   { id: "initial_clothing", title: "Initial clothing", field: "clothing", question: "What should the character wear in their initial reference image?" },
   { id: "initial_pose", title: "Initial pose", field: "pose", question: "What clear, neutral pose should establish the character's body and silhouette?" },
   { id: "expression", title: "Expression", field: "expression", question: "What facial expression best establishes the character's personality?" },
@@ -867,6 +868,7 @@ export function ImageStudio({
   onGenerateBodyPreview,
   onCreateFaceSeedBatch,
   onUpdateHeadLoraDataset,
+  onUpdateUpperTorsoLoraDataset,
   onRefreshData,
   onRefreshGeneration,
   onStudioRouteChange,
@@ -922,6 +924,7 @@ export function ImageStudio({
   const [faceSeedReviewSelections, setFaceSeedReviewSelections] = useState([]);
   const [faceSeedReviewBatchId, setFaceSeedReviewBatchId] = useState("");
   const [faceLoraBusy, setFaceLoraBusy] = useState(false);
+  const [bodyLoraBusy, setBodyLoraBusy] = useState(false);
   const [generationProgressOpen, setGenerationProgressOpen] = useState(initialGenerationProgressOpen);
   const [generationKind, setGenerationKind] = useState(initialGenerationKind);
   const [generationRefreshBusy, setGenerationRefreshBusy] = useState(false);
@@ -1010,6 +1013,13 @@ export function ImageStudio({
   const faceLoraItems = Array.isArray(faceLoraPose?.items) ? faceLoraPose.items : [];
   const faceLoraApproved = Number(faceLoraPose?.approved_count || 0);
   const faceLoraRequired = Number(faceLoraPose?.required_count || 6);
+  const bodyLoraDataset = activeCharacterProfile?.prompt_workspaces?.upper_torso?.lora_dataset || {};
+  const bodyLoraPoses = Array.isArray(bodyLoraDataset?.poses) ? bodyLoraDataset.poses : [];
+  const bodyLoraPoseIndex = Math.max(0, Math.min(Number(bodyLoraDataset?.active_pose_index || 0), Math.max(bodyLoraPoses.length - 1, 0)));
+  const bodyLoraPose = bodyLoraPoses[bodyLoraPoseIndex] || {};
+  const bodyLoraItems = Array.isArray(bodyLoraPose?.items) ? bodyLoraPose.items : [];
+  const bodyLoraApproved = Number(bodyLoraPose?.approved_count || 0);
+  const bodyLoraRequired = Number(bodyLoraPose?.required_count || 6);
   const bodyPreviewImageUrl = bodyPreviewTracking || (generationKind === "body" && generationSubmissionStage)
     ? ""
     : versionedPreviewUrl(apiBase, bodyPreview);
@@ -1134,7 +1144,7 @@ export function ImageStudio({
   }, [generationProgressOpen, generationKind, progressTracking, characterSaveBusy]);
 
   useEffect(() => {
-    if (activeInterviewStep.id !== "face_lora_dataset" || !interviewOpen || !onRefreshData) return undefined;
+    if (!["face_lora_dataset", "body_lora_dataset"].includes(activeInterviewStep.id) || !interviewOpen || !onRefreshData) return undefined;
     const timer = window.setInterval(() => { void onRefreshData(); }, 2000);
     return () => window.clearInterval(timer);
   }, [activeInterviewStep.id, interviewOpen, onRefreshData]);
@@ -1149,6 +1159,17 @@ export function ImageStudio({
       void updateFaceLoraDataset({ action: "ensure" });
     }
   }, [activeInterviewStep.id, interviewOpen, characterProfileId, faceLoraPoses.length, faceLoraDataset?.variation_strategy]);
+
+  useEffect(() => {
+    if (
+      activeInterviewStep.id === "body_lora_dataset"
+      && interviewOpen
+      && characterProfileId
+      && (!bodyLoraPoses.length || String(bodyLoraDataset?.variation_strategy || "") !== "controlled_ten_v1")
+    ) {
+      void updateBodyLoraDataset({ action: "ensure" });
+    }
+  }, [activeInterviewStep.id, interviewOpen, characterProfileId, bodyLoraPoses.length, bodyLoraDataset?.variation_strategy]);
 
   useEffect(() => {
     onStudioRouteChange?.({
@@ -1571,6 +1592,23 @@ export function ImageStudio({
     }
   }
 
+  async function updateBodyLoraDataset(overrides = {}) {
+    if (!characterProfileId || bodyLoraBusy || !onUpdateUpperTorsoLoraDataset) return null;
+    setBodyLoraBusy(true);
+    try {
+      const result = await onUpdateUpperTorsoLoraDataset(characterProfileId, {
+        action: "ensure",
+        prompt: String(bodyPreview?.prompt || characterBrief.body || "").trim(),
+        negative_prompt: String(bodyPreview?.negative_prompt || negativePrompt || "").trim(),
+        ...overrides,
+      });
+      await onRefreshData?.();
+      return result;
+    } finally {
+      setBodyLoraBusy(false);
+    }
+  }
+
   async function refineAndRegenerateFacePreview() {
     if (!faceTweakInstruction.trim() || facePreviewSeed === undefined || facePreviewSeed === null || promptHelperBusy || facePreviewTracking) return;
     setFaceRefinementError("");
@@ -1700,7 +1738,7 @@ export function ImageStudio({
           <div className="image-studio-interview-launch">
             <div>
               <strong>Prefer a guided conversation?</strong>
-              <p>Complete seven focused setup steps instead of filling the whole brief at once.</p>
+              <p>Complete eight focused setup steps instead of filling the whole brief at once.</p>
             </div>
             <button className="btn btn-primary" type="button" onClick={openCharacterInterview}>Start Character Interview</button>
           </div>
@@ -2140,6 +2178,47 @@ export function ImageStudio({
                   })}
                 </div>
               </div>
+            ) : activeInterviewStep.id === "body_lora_dataset" ? (
+              <div className="image-studio-face-builder">
+                <div className="image-studio-lora-anchor">
+                  <div><span className="image-studio-eyebrow">Original approved body</span><strong>Proportion reference · seed {bodyPreviewSeed ?? "unknown"}</strong></div>
+                  {bodyPreviewImageUrl ? (
+                    <button className={`image-studio-sensitive-preview ${bodyPreviewRevealed ? "is-revealed" : "is-blurred"}`} type="button" onClick={() => setRevealedBodyPreviewId(bodyPreviewRevealed ? "" : bodyPreviewRevealId)}>
+                      <img src={bodyPreviewImageUrl} alt={`Original approved body for ${characterBrief.name || "character"}`} />
+                      {!bodyPreviewRevealed ? <span>Body preview hidden · Click to reveal</span> : null}
+                    </button>
+                  ) : <GenerationPreviewPlaceholder />}
+                </div>
+                <div className="image-studio-seed-review-summary" aria-live="polite">
+                  <div><span>Pose</span><strong>{bodyLoraPose?.label || "Preparing poses"}</strong></div>
+                  <div><span>Progress</span><strong>{`${bodyLoraPoseIndex + 1} / ${Math.max(bodyLoraPoses.length, 6)}`}</strong></div>
+                  <div><span>Approved</span><strong>{`${bodyLoraApproved} / ${bodyLoraRequired}`}</strong></div>
+                  <div><span>Status</span><strong>{String(bodyLoraPose?.status || (bodyLoraBusy ? "Preparing…" : "Ready to begin")).replaceAll("_", " ")}</strong></div>
+                </div>
+                <p>OpenPose controls each neck-to-toes view while the saved body prompt and seed preserve the approved proportions. Approve at least {bodyLoraRequired} candidates for each pose.</p>
+                <div className="row">
+                  <button className="btn btn-primary" type="button" disabled={bodyLoraBusy} onClick={() => updateBodyLoraDataset({ action: bodyLoraPoses.length ? "generate" : "ensure", pose_id: bodyLoraPose?.pose_id })}>
+                    {bodyLoraBusy ? "Working…" : bodyLoraItems.length ? "Fill / regenerate pose batch" : "Generate pose batch"}
+                  </button>
+                  <button className="btn" type="button" disabled={bodyLoraBusy} onClick={() => { void onRefreshData?.(); }}>Refresh</button>
+                  <button className="btn" type="button" disabled={bodyLoraBusy || bodyLoraApproved < bodyLoraRequired} onClick={() => updateBodyLoraDataset({ action: "next", pose_id: bodyLoraPose?.pose_id })}>Save pose &amp; continue</button>
+                </div>
+                <div className="image-studio-seed-review-grid">
+                  {Array.from({ length: Math.max(10, Number(bodyLoraDataset?.batch_size || 0)) }, (_, index) => {
+                    const item = bodyLoraItems[index];
+                    const ready = Boolean(item?.url) && ["completed", "completed_with_fallback"].includes(String(item?.status || "").toLowerCase());
+                    const revealId = `body-lora-${item?.preview_id || index}`;
+                    const revealed = revealedBodyPreviewId === revealId;
+                    return (
+                      <article className={`image-studio-seed-review-card${item?.approved ? " is-selected" : ""}`} key={item?.preview_id || `body-lora-pending-${index}`}>
+                        {ready ? <button className={`image-studio-sensitive-preview ${revealed ? "is-revealed" : "is-blurred"}`} type="button" onClick={() => setRevealedBodyPreviewId(revealed ? "" : revealId)}><img src={versionedPreviewUrl(apiBase, item)} alt={`${bodyLoraPose?.label || "Body pose"} candidate ${index + 1}`} />{!revealed ? <span>Click to reveal</span> : null}</button> : <span className="image-studio-seed-review-placeholder">{String(item?.status || "Waiting").replaceAll("_", " ")}</span>}
+                        <span className="image-studio-seed-review-card-meta"><strong>Candidate {index + 1}</strong><code>{item?.seed ?? "pending"}</code></span>
+                        {ready ? <span className="row"><button className="btn btn-primary" type="button" disabled={bodyLoraBusy || item?.approved} onClick={() => updateBodyLoraDataset({ action: "approve", item_id: item.preview_id, pose_id: bodyLoraPose?.pose_id })}>Approve</button><button className="btn" type="button" disabled={bodyLoraBusy || item?.rejected} onClick={() => updateBodyLoraDataset({ action: "reject", item_id: item.preview_id, pose_id: bodyLoraPose?.pose_id })}>Reject</button></span> : null}
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
             ) : (
               <label className="image-studio-full-field">
                 Your answer
@@ -2155,14 +2234,16 @@ export function ImageStudio({
                 </button>
                 {activeInterviewStep.id === "face_lora_dataset" ? (
                   <button className="btn btn-primary" type="button" disabled={String(faceLoraDataset.status || "") !== "completed"} onClick={() => moveCharacterInterview(1)}>
-                    Continue to initial clothing
+                    Continue to body LoRA dataset
                   </button>
+                ) : activeInterviewStep.id === "body_lora_dataset" ? (
+                  <button className="btn btn-primary" type="button" disabled={String(bodyLoraDataset.status || "") !== "completed"} onClick={() => moveCharacterInterview(1)}>Continue to initial clothing</button>
                 ) : interviewLlmEnabled && textModelLoaded ? (
                   <button className="btn" type="button" onClick={completeCurrentInterviewStep} disabled={(activeInterviewStep.id === "name_concept" ? !nameConceptComplete : !currentInterviewAnswer.trim()) || interviewBusy}>
                     {interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1 ? "Continue anyway" : "Finish anyway"}
                   </button>
                 ) : null}
-                {activeInterviewStep.id !== "face_lora_dataset" ? (
+                {!["face_lora_dataset", "body_lora_dataset"].includes(activeInterviewStep.id) ? (
                   <button className="btn btn-primary" type="button" onClick={reviewCharacterInterviewAnswer} disabled={(activeInterviewStep.id === "name_concept" ? !nameConceptComplete : !currentInterviewAnswer.trim()) || interviewBusy}>
                     {interviewBusy ? "Checking answer…" : interviewLlmEnabled && textModelLoaded ? "Check answer with LLM" : interviewStep < CHARACTER_INTERVIEW_STEPS.length - 1 ? "Next question" : "Finish interview"}
                   </button>

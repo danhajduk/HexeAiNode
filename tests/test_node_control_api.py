@@ -5697,6 +5697,21 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 control = state._avatar_head_lora_dataset_pose_control(pose_id=pose["pose_id"])
                 self.assertTrue(control["pose_reference_image"])
                 self.assertTrue((input_dir / control["pose_reference_image"]).is_file())
+            profile_dir = state._avatar_profile_dir(profile_id="Jane_Avatar")
+            profile_metadata = state._avatar_profile_metadata(profile_dir=profile_dir)
+            upper_workspace = state._avatar_profile_prompt_workspace(metadata=profile_metadata, section="upper_torso")
+            upper_workspace.update({
+                "prompt": "athletic adult body with consistent proportions",
+                "current_job": {
+                    "status": "completed",
+                    "seed": 24680,
+                    "input_image": "avatar_profiles/Jane_Avatar/refs/upper_torso/last.png",
+                },
+            })
+            profile_metadata = state._avatar_profile_metadata_with_workspace(
+                metadata=profile_metadata, section="upper_torso", workspace=upper_workspace,
+            )
+            (profile_dir / "profile.json").write_text(json.dumps(profile_metadata), encoding="utf-8")
             body_dataset = asyncio.run(
                 state.update_avatar_profile_upper_torso_lora_dataset(
                     profile_id="Jane_Avatar",
@@ -5710,6 +5725,12 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             )
             for pose in body_dataset["pose_catalog"]:
                 self.assertTrue((input_dir / pose["pose_reference_image"]).is_file())
+            body_pose = body_dataset["poses"][body_dataset["active_pose_index"]]
+            self.assertEqual(len(body_pose["items"]), 10)
+            self.assertTrue(all(item["seed"] == 24680 for item in body_pose["items"]))
+            self.assertTrue(all(item["width"] == 768 and item["height"] == 1536 for item in body_pose["items"]))
+            self.assertTrue(all("neck-to-toes" in item["prompt"] for item in body_pose["items"]))
+            self.assertEqual(body_dataset["seed_strategy"], "profile_body_seed")
             generated = asyncio.run(
                 state.update_avatar_profile_head_lora_dataset(
                     profile_id="Jane_Avatar",

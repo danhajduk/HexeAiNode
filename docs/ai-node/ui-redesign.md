@@ -139,7 +139,7 @@ Image creation is moving into a standalone workspace at `#/image-studio`.
 - creation begins by choosing Character, Location, or Scene
 - Character then branches into Create New Character, Use Existing Character, or Edit Character Image before template selection
 - template selection is filtered by that creation type
-- Create New Character provides a structured identity brief, compiled master prompt, negative prompt, and a six-stage interview whose local text LLM checks each answer and asks focused follow-ups for missing visual details
+- Create New Character provides a structured identity brief, compiled master prompt, negative prompt, and an eight-stage interview whose local text LLM checks prose answers and asks focused follow-ups for missing visual details
 - LLM review is stage-scoped and advisory: each stage also provides Continue anyway so model failure or an unwanted follow-up cannot block the interview
 - the first interview stage requires gender, visual style, age group, and SFW/NSFW rating; NSFW is limited to characters explicitly marked Adult (18+)
 - the first interview stage can persist its identity data as an incomplete avatar profile; Step 3 lists these drafts as clickable cards and resumes each at its first unfinished interview section
@@ -150,7 +150,8 @@ Image creation is moving into a standalone workspace at `#/image-studio`.
 - face shape, eye shape, nose, and lip choices use locally generated image thumbnails inside each option button; the face interview uses a two-column feature-and-preview workspace
 - every character-interview screen can save the incomplete profile; Check, Continue, and Finish persist the current answers before advancing
 - the face workspace can submit a real head/face preview and shows the resulting image with live generation, queue, node, runtime, model, VRAM, prompt, and seed status
-- Face & Features saves one approved preview and one face seed; multi-image face-angle and pose datasets are deferred to a later identity-strengthening stage
+- after the approved face and body references, dedicated Face LoRA and Body LoRA dataset stages each generate ten controlled candidates for six OpenPose-guided views; the face stage reuses the approved face seed, the body stage reuses the approved body seed and prompt, and operators approve at least six candidates before advancing each pose
+- the Body LoRA stage retains 768×1536 neck-to-toes framing, displays the approved body reference above the pose review, and keeps candidate images blurred until explicitly revealed
 - Body & Proportions uses structured height, build, shoulder, torso, waist, hip, limb, and musculature selections, then requires one neutral 768×1536 neck-to-toes preview with the head and face outside the frame. The compiled prompt prioritizes a distant extreme-long-shot composition, while the pose guide places the neck beyond the top canvas edge, enforces a symmetrical front-facing neutral A-pose, and keeps the complete feet and toes inside visible margins. Pose conditioning ends before the final sampling phase so selected body morphology can control the silhouette; the body seed is saved before continuing
 - each successfully imported body preview also refreshes `<profile>/refs/upper_torso/last.png` and its JSON sidecar as a stable pointer to the latest body image
 - body Generate/Redo removes the previous `last.png`, sidecar, and `current_job.json` before submission; after ComfyUI accepts the request, `<profile>/refs/upper_torso/current_job.json` becomes the popup's authoritative record, the UI falls back to the placeholder while active, and successful import recreates `last.png` as the displayed preview

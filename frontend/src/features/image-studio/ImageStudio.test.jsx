@@ -178,7 +178,7 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Identity bootstrap required before generation");
   });
 
-  it("offers a seven-step character workflow with optional local LLM guidance", () => {
+  it("offers an eight-step character workflow with optional local LLM guidance", () => {
     const template = {
       template_id: "template.avatar_body_depth_reference_transparent.realvisxl.v1",
       template_name: "Simple Avatar Generation",
@@ -206,7 +206,7 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Let the local LLM ask guiding questions");
     expect(markup).toContain("Check answer with LLM");
     expect(markup).toContain("Continue anyway");
-    expect(markup).toContain("1 of 7");
+    expect(markup).toContain("1 of 8");
     expect(markup).toContain("Gender");
     expect(markup).toContain("Non-binary");
     expect(markup).toContain("Semi-realistic");
@@ -756,10 +756,37 @@ describe("ImageStudio", () => {
     );
 
     expect(markup).toContain("Face LoRA dataset");
-    expect(markup).toContain("4 of 7");
+    expect(markup).toContain("4 of 8");
     expect(markup).toContain("Fill / regenerate pose batch");
     expect(markup).toContain("Candidate 10");
     expect(markup).not.toContain("What should the character wear");
+  });
+
+  it("places a ten-image Body LoRA dataset at step 5", () => {
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialInterviewOpen
+        initialInterviewStep={4}
+        initialCharacterProfileId="Nova"
+        initialCharacterBrief={{ name: "Nova", concept: "pilot", body: "athletic build" }}
+        characterProfiles={[{
+          profile_id: "Nova",
+          prompt_workspaces: {
+            upper_torso: {
+              current_job: { status: "completed", seed: 42, url: "/body.png", prompt_id: "body-1" },
+              lora_dataset: { batch_size: 10, variation_strategy: "controlled_ten_v1", poses: [{ pose_id: "front_neutral", label: "Front Neutral", items: [] }] },
+            },
+          },
+        }]}
+      />
+    );
+    expect(markup).toContain("Body LoRA dataset");
+    expect(markup).toContain("5 of 8");
+    expect(markup).toContain("Original approved body");
+    expect(markup).toContain("Candidate 10");
+    expect(markup).toContain("Click to reveal");
   });
 
   it("forces SFW when an adult character is changed to an under-18 age group", () => {
