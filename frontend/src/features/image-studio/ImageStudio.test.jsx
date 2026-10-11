@@ -758,7 +758,10 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Face LoRA dataset");
     expect(markup).toContain("4 of 8");
     expect(markup).toContain("Fill / regenerate pose batch");
-    expect(markup).toContain("Candidate 10");
+    expect(markup).toContain("Generation status");
+    expect(markup).toContain("Replacements waiting");
+    expect(markup).toContain("Waiting for all 10 candidates");
+    expect(markup).not.toContain("Candidate 10");
     expect(markup).not.toContain("What should the character wear");
   });
 

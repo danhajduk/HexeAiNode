@@ -3206,6 +3206,64 @@
   gap: 10px;
 }
 
+.image-studio-lora-review-section {
+  border: 1px solid hsl(var(--sx-border));
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-bg) / 0.35);
+  overflow: hidden;
+}
+
+.image-studio-lora-review-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 12px 14px;
+  cursor: pointer;
+  color: hsl(var(--sx-text));
+  list-style-position: inside;
+}
+
+.image-studio-lora-review-section > summary strong {
+  color: hsl(var(--sx-text-muted));
+  font-size: 0.9rem;
+}
+
+.image-studio-lora-review-section[open] > summary {
+  border-bottom: 1px solid hsl(var(--sx-border));
+}
+
+.image-studio-lora-review-section > .image-studio-seed-review-summary,
+.image-studio-lora-review-section > .image-studio-seed-review-grid,
+.image-studio-lora-review-section > .image-studio-lora-job-details,
+.image-studio-lora-review-section > .image-studio-lora-gallery-waiting {
+  margin: 12px;
+}
+
+.image-studio-lora-job-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 16px;
+  padding-top: 12px;
+  border-top: 1px solid hsl(var(--sx-border));
+}
+
+.image-studio-lora-job-details > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.image-studio-lora-job-details span,
+.image-studio-lora-gallery-waiting {
+  color: hsl(var(--sx-text-muted));
+}
+
+.image-studio-lora-job-details code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .image-studio-lora-anchor {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 128px;
