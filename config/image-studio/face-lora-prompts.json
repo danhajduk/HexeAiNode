@@ -96,7 +96,7 @@
       "prompt": "natural three-quarter head-and-shoulders portrait, head yaw rotated 40 to 45 degrees toward the left side of the image, nose and chin clearly angle left, near cheek dominant and far cheek narrower, both eyes visible with the far eye naturally narrower, near ear may remain visible through or beside the hair, eyes looking slightly off camera toward the left edge, not a straight-on frontal face and not a full side profile",
       "geometry_prompt": "mandatory natural three-quarter head yaw: face turned 40 to 45 degrees toward the left side of the image, nose tip and chin angled toward the left edge, facial centerline visibly angled away from camera, both eyes visible with the far eye naturally narrower, far cheek narrower but still visible, near cheek dominant, near ear optionally visible through or beside the hair, slightly off-camera gaze, no straight-on camera pose",
       "guide_image": "system/lora-pose-guides/face/three_quarter_left_dense.png",
-      "pose_strength": 0.75,
+      "pose_strength": 0.6,
       "pose_start": 0.0,
       "pose_end": 0.8,
       "negative_remove": ["profile view", "three-quarter view", "tilted head"],
