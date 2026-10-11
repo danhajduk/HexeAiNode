@@ -4227,6 +4227,7 @@ class NodeControlState:
                     cfg=cfg,
                     face_strength=float(identity_control.get("face_strength") or 0.55),
                     pose_strength=float(pose_control.get("pose_strength") or 0.42),
+                    pose_id=pose_id,
                 )
                 item_cfg = variation["cfg"]
                 pose_negative_prompt = self._avatar_head_lora_dataset_pose_negative_prompt(
@@ -8880,7 +8881,9 @@ class NodeControlState:
         return round(min(max(value, 0.1), 20.0), 2)
 
     @staticmethod
-    def _avatar_head_lora_dataset_variation(*, slot_index: int, cfg: float, face_strength: float, pose_strength: float) -> dict:
+    def _avatar_head_lora_dataset_variation(
+        *, slot_index: int, cfg: float, face_strength: float, pose_strength: float, pose_id: str = ""
+    ) -> dict:
         recipes = (
             (-0.08, -0.03, -0.04, "soft even studio light, neutral relaxed expression, standard portrait framing"),
             (-0.06, -0.02, -0.03, "soft light from camera left, relaxed eyelids, slightly wider portrait framing"),
@@ -8894,6 +8897,23 @@ class NodeControlState:
             (0.10, 0.00, 0.00, "flat identity-reference light, fully relaxed neutral expression, slightly closer framing"),
         )
         cfg_offset, face_offset, pose_offset, prompt_suffix = recipes[(max(int(slot_index), 1) - 1) % len(recipes)]
+        if pose_id == "front_smile":
+            prompt_suffix = ", ".join(
+                [
+                    part
+                    for part in (
+                        prompt_suffix
+                        .replace("neutral relaxed expression", "warm smiling expression")
+                        .replace("calm closed-mouth expression", "clear open smile with visible upper teeth")
+                        .replace("steady neutral gaze", "bright friendly gaze and lifted cheeks")
+                        .replace("relaxed facial muscles", "naturally lifted cheek muscles")
+                        .replace("faint natural warmth in expression", "clearly visible joyful smile")
+                        .replace("neutral mouth", "raised mouth corners and parted smiling lips")
+                        .replace("fully relaxed neutral expression", "confident genuine smile")
+                    ).split(", ")
+                    if part
+                ]
+            )
         return {
             "recipe_index": (max(int(slot_index), 1) - 1) % len(recipes) + 1,
             "cfg": round(min(max(cfg + cfg_offset, 0.1), 20.0), 2),
@@ -8911,6 +8931,15 @@ class NodeControlState:
             "face LoRA dataset image": "single-subject portrait image",
         }.items():
             cleaned = cleaned.replace(source, target)
+        if pose_id == "front_smile":
+            for source, target in {
+                "Expression: neutral and relaxed.": "Expression: clearly smiling with lifted cheeks and raised mouth corners.",
+                "symmetrical neutral pose": "symmetrical front-facing smiling pose",
+                "neutral relaxed expression": "clearly visible warm smile",
+                "neutral expression": "clearly visible warm smile",
+            }.items():
+                cleaned = cleaned.replace(source, target)
+            return cleaned
         if pose_id not in {"three_quarter_left", "three_quarter_right"}:
             return cleaned
         direction = "left" if pose_id == "three_quarter_left" else "right"
@@ -8940,6 +8969,12 @@ class NodeControlState:
 
     @staticmethod
     def _avatar_head_lora_dataset_pose_geometry_prompt(*, pose_id: str) -> str:
+        if pose_id == "front_smile":
+            return (
+                "mandatory clearly visible genuine smile: (raised mouth corners, parted lips, visible upper teeth, "
+                "lifted rounded cheeks, subtle smile lines beside the mouth, bright engaged eyes:1.45), "
+                "the smile must be unmistakably different from a neutral or closed-mouth expression"
+            )
         if pose_id not in {"three_quarter_left", "three_quarter_right"}:
             return ""
         direction = "left" if pose_id == "three_quarter_left" else "right"
@@ -8952,8 +8987,11 @@ class NodeControlState:
 
     @staticmethod
     def _avatar_head_lora_dataset_pose_negative_prompt(*, negative_prompt: str, pose_id: str) -> str:
+        normalized_negative = str(negative_prompt or "").strip()
+        if pose_id == "front_smile":
+            normalized_negative = normalized_negative.replace("exaggerated expression", "cartoonish facial distortion")
         common = [
-            str(negative_prompt or "").strip(),
+            normalized_negative,
             "inset portrait", "secondary portrait", "thumbnail portrait", "picture-in-picture",
             "reference panel", "reference board", "mood board", "face crop overlay",
             "eye detail inset", "hair swatch", "color swatch", "detail callout",

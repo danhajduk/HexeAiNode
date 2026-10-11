@@ -5940,6 +5940,32 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("hair swatch", negative)
         self.assertIn("hands above head", negative)
 
+    def test_avatar_lora_front_smile_removes_neutral_expression_conflicts(self):
+        prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(
+            prompt="Expression: neutral and relaxed. symmetrical neutral pose, neutral relaxed expression",
+            pose_id="front_smile",
+        )
+        geometry = NodeControlState._avatar_head_lora_dataset_pose_geometry_prompt(pose_id="front_smile")
+        negative = NodeControlState._avatar_head_lora_dataset_pose_negative_prompt(
+            negative_prompt="low quality, exaggerated expression",
+            pose_id="front_smile",
+        )
+        variation = NodeControlState._avatar_head_lora_dataset_variation(
+            slot_index=3,
+            cfg=1.2,
+            face_strength=0.55,
+            pose_strength=0.42,
+            pose_id="front_smile",
+        )
+
+        self.assertNotIn("neutral and relaxed", prompt)
+        self.assertNotIn("neutral relaxed expression", prompt)
+        self.assertIn("clearly smiling", prompt)
+        self.assertIn("visible upper teeth", geometry)
+        self.assertIn("lifted rounded cheeks", geometry)
+        self.assertNotIn("exaggerated expression", negative)
+        self.assertIn("clear open smile", variation["prompt_suffix"])
+
     def test_avatar_generation_head_lora_dataset_runs_vision_review_after_batch_completed(self):
         class _AvatarProfileServiceManager:
             def __init__(self, input_dir: str, output_dir: str):
