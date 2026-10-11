@@ -159,6 +159,7 @@ Image creation is moving into a standalone workspace at `#/image-studio`.
 - all face-feature buttons retain short labels in the UI but save descriptive prompt language for age, facial structure, skin, eyes, brows, nose, lips, hair, distinctive features, and facial hair
 - incomplete character data includes a structured face-feature catalog containing selected option IDs, custom details, the expanded description, and the appended LLM refinement layer; preview prompts enforce exactly one face and repeat the selected face shape as a primary weighted constraint
 - active face previews poll a lightweight generation-activity endpoint that omits the full manual output/reference inventory scan, so completed images and status updates are not blocked by a large output directory
+- generation progress dialogs bind status, sampler progress, messages, and prompt labels to the submitted preview prompt ID; an older cached, completed, or failed global job cannot overwrite the active face/body popup state
 - each newly completed face preview publishes one `user.message` event to `hexe/events/user/message` with `endpoint_id: "all"`, QoS 1, and retain disabled; the persisted preview records successful delivery to prevent polling from republishing it
 - final new-character generation remains gated until the required baseline face/body identity assets can be created or supplied
 - the existing Manual Images implementation remains available as `Manual Images (Legacy)` during migration

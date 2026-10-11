@@ -1028,15 +1028,23 @@ export function ImageStudio({
   const progressTracking = generationKind === "body" ? bodyPreviewTracking : facePreviewTracking;
   const progressPromptId = String(progressPreview?.prompt_id || "").trim();
   const progressMatchesJob = Boolean(progressPromptId && jobPromptIds.includes(progressPromptId));
-  const modalProgressDetail = generationSubmissionStage ? {} : generationJob?.progress_detail || {};
-  const modalProgressPercent = generationSubmissionStage ? Number.NaN : Number(modalProgressDetail?.percent ?? generationProgress?.percent);
-  const modalProgressValue = generationSubmissionStage ? Number.NaN : Number(modalProgressDetail?.value ?? generationProgress?.value);
-  const modalProgressMax = generationSubmissionStage ? Number.NaN : Number(modalProgressDetail?.max ?? generationProgress?.max);
+  const generationProgressPromptId = String(generationProgress?.prompt_id || "").trim();
+  const progressMatchesLiveProgress = Boolean(progressPromptId && generationProgressPromptId === progressPromptId);
+  const modalProgressDetail = generationSubmissionStage || !progressMatchesJob ? {} : generationJob?.progress_detail || {};
+  const modalProgressPercent = generationSubmissionStage ? Number.NaN : Number(
+    modalProgressDetail?.percent ?? (progressMatchesLiveProgress ? generationProgress?.percent : undefined)
+  );
+  const modalProgressValue = generationSubmissionStage ? Number.NaN : Number(
+    modalProgressDetail?.value ?? (progressMatchesLiveProgress ? generationProgress?.value : undefined)
+  );
+  const modalProgressMax = generationSubmissionStage ? Number.NaN : Number(
+    modalProgressDetail?.max ?? (progressMatchesLiveProgress ? generationProgress?.max : undefined)
+  );
   const rawModalStatus = String(
     generationSubmissionStage
       ? generationSubmissionStage
       : modalProgressDetail?.status
-      || ((progressMatchesJob || progressTracking) ? generationJob?.status : "")
+      || (progressMatchesJob ? generationJob?.status : "")
       || progressPreview?.status
       || (progressTracking ? "preparing" : "idle")
   ).replaceAll("_", " ");
@@ -2064,7 +2072,7 @@ export function ImageStudio({
               <div className="manual-generation-status-item"><span>Latest Job</span><strong>{modalStatus}</strong></div>
             </div>
             <div className="manual-generation-status-row manual-generation-status-row-secondary image-studio-generation-status-grid">
-              <div className="manual-generation-status-item"><span>Current Prompt</span><code>{generationSubmissionStage ? "waiting" : modalProgressDetail?.prompt_id || generationSession?.running_prompt_id || generationJob?.prompt_id || progressPromptId || "waiting"}</code></div>
+              <div className="manual-generation-status-item"><span>Current Prompt</span><code>{generationSubmissionStage ? "waiting" : progressPromptId || "waiting"}</code></div>
               <div className="manual-generation-status-item"><span>Template</span><code>{generationKind === "body" ? "template.avatar_upper_torso_preview.realvisxl.v1" : "template.avatar_head_face_preview.realvisxl.v1"}</code></div>
               <div className="manual-generation-status-item"><span>Stage</span><code>{String(modalProgressDetail?.phase || modalProgressDetail?.status || modalStatus)}</code></div>
             </div>
@@ -2076,7 +2084,7 @@ export function ImageStudio({
               <div className="manual-generation-progress-details">
                 <div className="manual-generation-progress-detail"><span>Node</span><code>{modalProgressDetail?.label || modalProgressDetail?.node_class || "Preparing"}</code></div>
                 <div className="manual-generation-progress-detail"><span>Step</span><code>{Number.isFinite(modalProgressValue) && Number.isFinite(modalProgressMax) ? `${modalProgressValue} of ${modalProgressMax}` : "waiting"}</code></div>
-                <div className="manual-generation-progress-detail"><span>Prompt</span><code>{generationSubmissionStage ? "waiting" : modalProgressDetail?.prompt_id || generationJob?.prompt_id || progressPromptId || "waiting"}</code></div>
+                <div className="manual-generation-progress-detail"><span>Prompt</span><code>{generationSubmissionStage ? "waiting" : progressPromptId || "waiting"}</code></div>
                 <div className="manual-generation-progress-detail"><span>Queue</span><code>{`${queueRunning} running / ${queuePending} pending`}</code></div>
               </div>
               <p className={`manual-generation-progress-message ${["failed", "error", "cancelled"].includes(modalStatus.toLowerCase()) ? "is-error" : ""}`}>

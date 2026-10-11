@@ -485,6 +485,7 @@ describe("ImageStudio", () => {
         initialGenerationProgressOpen
         initialGenerationKind="body"
         bodyPreviewTracking
+        bodyPreviewResult={{ preview: { status: "submitted", prompt_id: "prompt-123" } }}
         onRefreshGeneration={() => Promise.resolve()}
         generationActivity={{
           generation_status: { progress: { percent: 50, value: 2, max: 4 }, session: { running_count: 1, pending_count: 0 } },
@@ -536,6 +537,34 @@ describe("ImageStudio", () => {
 
     expect(markup).toContain("importing preview");
     expect(markup).toContain("still being saved and imported");
+  });
+
+  it("ignores status and progress from a different latest job", () => {
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialGenerationProgressOpen
+        initialGenerationKind="body"
+        bodyPreviewTracking
+        bodyPreviewResult={{ preview: { status: "submitted", prompt_id: "current-prompt" } }}
+        generationActivity={{
+          generation_status: {
+            progress: { prompt_id: "old-prompt", percent: 100, value: 28, max: 28 },
+            session: { running_count: 0, pending_count: 0 },
+          },
+          latest_job: {
+            status: "failed",
+            prompt_id: "old-prompt",
+            progress_detail: { prompt_id: "old-prompt", status: "failed", percent: 100, message: "Old job failed." },
+          },
+        }}
+      />
+    );
+
+    expect(markup).toContain("current-prompt");
+    expect(markup).toContain("submitted");
+    expect(markup).not.toContain("old-prompt");
+    expect(markup).not.toContain("Old job failed.");
+    expect(markup).not.toContain("100.0%");
   });
 
   it("adds a rendering prompt that matches the initial character visual style", () => {
