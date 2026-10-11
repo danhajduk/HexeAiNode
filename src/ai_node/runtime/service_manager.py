@@ -57,6 +57,13 @@ class UserSystemdServiceManager:
         self._sd_scripts_training_marker = str(
             os.environ.get("HEXE_SD_SCRIPTS_TRAINING_MARKER") or ".run/sd-scripts-training.active"
         ).strip()
+        self._image_studio_gpu_lease_file = str(
+            os.environ.get("HEXE_IMAGE_STUDIO_GPU_LEASE_FILE") or ".run/image-studio-gpu-lease.json"
+        ).strip()
+        self._image_studio_gpu_lease_seconds = max(
+            _env_int("HEXE_IMAGE_STUDIO_GPU_LEASE_SECONDS", default=6 * 60 * 60),
+            60,
+        )
         self._local_llm_models_config = str(
             os.environ.get("HEXE_LOCAL_LLM_MODELS_CONFIG") or "config/local-llm-models.json"
         ).strip()
@@ -322,6 +329,14 @@ class UserSystemdServiceManager:
             self._restart_unit(self._frontend_unit)
             return {"target": "node", "result": "restarted"}
         if value == "local_llm":
+            gpu_exclusive = self.gpu_exclusive_workload_status()
+            if gpu_exclusive.get("active") and gpu_exclusive.get("local_llm_blocked"):
+                return {
+                    "target": "local_llm",
+                    "result": "blocked",
+                    "reason": "gpu_exclusive_workload_active",
+                    "gpu_exclusive": gpu_exclusive,
+                }
             if self._scheduler_control_active():
                 self._run_local_llm_control("restart")
                 return {"target": "local_llm", "result": "restarted"}
@@ -336,6 +351,14 @@ class UserSystemdServiceManager:
             )
             return {"target": "local_llm", "result": request.get("status"), "release": release, "request": request}
         if value == "vision_llm":
+            gpu_exclusive = self.gpu_exclusive_workload_status()
+            if gpu_exclusive.get("active") and gpu_exclusive.get("vision_llm_blocked"):
+                return {
+                    "target": "vision_llm",
+                    "result": "blocked",
+                    "reason": "gpu_exclusive_workload_active",
+                    "gpu_exclusive": gpu_exclusive,
+                }
             if self._scheduler_control_active():
                 self._run_vision_llm_control("restart")
                 return {"target": "vision_llm", "result": "restarted"}
@@ -350,6 +373,7 @@ class UserSystemdServiceManager:
             )
             return {"target": "vision_llm", "result": request.get("status"), "release": release, "request": request}
         if value == "comfyui_webui":
+            self.acquire_image_studio_gpu_lease(reason="comfyui_webui_restart")
             component_id = self._comfyui_scheduler_component()
             release = self.release_local_scheduler_component(
                 component_id=component_id,
@@ -384,12 +408,6 @@ class UserSystemdServiceManager:
             self._start_unit(self._frontend_unit)
             return {"target": "node", "result": "started"}
         if value == "local_llm":
-            if not self._scheduler_control_active():
-                return self.request_local_scheduler_component(
-                    component_id="text_llm",
-                    importance="high",
-                    request_metadata={"source": "service_start", "target": value, **metadata},
-                )
             gpu_exclusive = self.gpu_exclusive_workload_status()
             if gpu_exclusive.get("active") and gpu_exclusive.get("local_llm_blocked"):
                 return {
@@ -398,15 +416,15 @@ class UserSystemdServiceManager:
                     "reason": "gpu_exclusive_workload_active",
                     "gpu_exclusive": gpu_exclusive,
                 }
-            self._run_local_llm_control("start")
-            return {"target": "local_llm", "result": "started"}
-        if value == "vision_llm":
             if not self._scheduler_control_active():
                 return self.request_local_scheduler_component(
-                    component_id="vision_llm",
+                    component_id="text_llm",
                     importance="high",
                     request_metadata={"source": "service_start", "target": value, **metadata},
                 )
+            self._run_local_llm_control("start")
+            return {"target": "local_llm", "result": "started"}
+        if value == "vision_llm":
             gpu_exclusive = self.gpu_exclusive_workload_status()
             if gpu_exclusive.get("active") and gpu_exclusive.get("vision_llm_blocked"):
                 return {
@@ -415,9 +433,19 @@ class UserSystemdServiceManager:
                     "reason": "gpu_exclusive_workload_active",
                     "gpu_exclusive": gpu_exclusive,
                 }
+            if not self._scheduler_control_active():
+                return self.request_local_scheduler_component(
+                    component_id="vision_llm",
+                    importance="high",
+                    request_metadata={"source": "service_start", "target": value, **metadata},
+                )
             self._run_vision_llm_control("start")
             return {"target": "vision_llm", "result": "started"}
         if value == "comfyui_webui":
+            self.acquire_image_studio_gpu_lease(
+                reason=str(metadata.get("source") or "comfyui_webui_start"),
+                metadata=metadata,
+            )
             requested_runtime = self._comfyui_runtime_from_request_metadata(metadata=metadata)
             if requested_runtime and requested_runtime != self._comfyui_webui_runtime:
                 if self._comfyui_webui_status().get("state") == "running":
@@ -430,6 +458,7 @@ class UserSystemdServiceManager:
                     request_metadata={"source": "service_start", "target": value, **metadata},
                 )
                 if request.get("status") != "ok":
+                    self.release_image_studio_gpu_lease(reason="comfyui_webui_start_blocked")
                     return {"target": "comfyui_webui", "result": request.get("status"), "request": request}
                 self._set_scheduler_control_active(True)
                 try:
@@ -1228,6 +1257,7 @@ class UserSystemdServiceManager:
             raise ValueError("ComfyUI web UI bridge did not become ready")
         except Exception:
             self._write_comfyui_webui_session(state="failed", reason="manual_webui_start_failed")
+            self.release_image_studio_gpu_lease(reason="comfyui_webui_start_failed")
             raise
 
     def stop_comfyui_webui(self) -> dict:
@@ -1262,7 +1292,8 @@ class UserSystemdServiceManager:
         if self._comfyui_webui_runtime == "gpu":
             self._clear_comfyui_gpu_vision_gate()
         self._clear_comfyui_webui_session()
-        return {"target": "comfyui_webui", "result": "stopped", **self._comfyui_webui_status()}
+        lease = self.release_image_studio_gpu_lease(reason="comfyui_webui_stopped")
+        return {"target": "comfyui_webui", "result": "stopped", "image_studio_gpu_lease": lease, **self._comfyui_webui_status()}
 
     def close_comfyui_webui_if_idle(self) -> dict:
         session_status = self.comfyui_webui_session_status()
@@ -2364,6 +2395,79 @@ class UserSystemdServiceManager:
         process_active = self._process_pattern_active(r"runtime/lora-training/sd-scripts.*sdxl_train_network\.py|sdxl_train_network\.py.*config_file")
         return bool(marker_active or process_active)
 
+    def image_studio_gpu_lease_status(self) -> dict:
+        path = Path(self._image_studio_gpu_lease_file or ".run/image-studio-gpu-lease.json")
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        payload: dict = {}
+        try:
+            if path.is_file():
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                payload = loaded if isinstance(loaded, dict) else {}
+        except Exception:
+            payload = {}
+        now_epoch = time.time()
+        try:
+            expires_at_epoch = float(payload.get("expires_at_epoch") or 0)
+        except (TypeError, ValueError):
+            expires_at_epoch = 0.0
+        active = bool(payload and expires_at_epoch > now_epoch)
+        if payload and not active:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+        return {
+            "active": active,
+            "reason": payload.get("reason") if active else None,
+            "metadata": payload.get("metadata") if active and isinstance(payload.get("metadata"), dict) else {},
+            "acquired_at_epoch": payload.get("acquired_at_epoch") if active else None,
+            "expires_at_epoch": expires_at_epoch if active else None,
+            "remaining_seconds": round(max(expires_at_epoch - now_epoch, 0.0), 3) if active else 0.0,
+            "lease_file": str(path),
+        }
+
+    def acquire_image_studio_gpu_lease(self, *, reason: str, metadata: dict | None = None) -> dict:
+        path = Path(self._image_studio_gpu_lease_file or ".run/image-studio-gpu-lease.json")
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        now_epoch = time.time()
+        payload = {
+            "active": True,
+            "reason": str(reason or "image_studio_generation").strip() or "image_studio_generation",
+            "metadata": dict(metadata or {}),
+            "acquired_at_epoch": now_epoch,
+            "expires_at_epoch": now_epoch + self._image_studio_gpu_lease_seconds,
+            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now_epoch)),
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        os.replace(temporary, path)
+        stopped = {}
+        for target, control in (
+            ("local_llm", self._run_local_llm_control),
+            ("vision_llm", self._run_vision_llm_control),
+        ):
+            try:
+                control("stop")
+                stopped[target] = "stopped"
+            except Exception as exc:
+                stopped[target] = f"stop_failed:{exc}"
+                self._logger.warning("failed to stop %s while acquiring Image Studio GPU lease: %s", target, exc)
+        return {**self.image_studio_gpu_lease_status(), "stopped": stopped}
+
+    def release_image_studio_gpu_lease(self, *, reason: str) -> dict:
+        path = Path(self._image_studio_gpu_lease_file or ".run/image-studio-gpu-lease.json")
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        existed = path.exists()
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        return {"active": False, "released": existed, "reason": str(reason or "released"), "lease_file": str(path)}
+
     def gpu_exclusive_workload_status(self) -> dict:
         enabled = bool(self._vision_llm_gpu_exclusive_blocker_enabled or self._local_llm_gpu_exclusive_blocker_enabled)
         if not enabled:
@@ -2381,10 +2485,12 @@ class UserSystemdServiceManager:
         manual_comfyui_webui_active = self._manual_comfyui_webui_active()
         comfyui_gpu_vision_gate_active = self._comfyui_gpu_vision_gate_active()
         sd_scripts_training_active = self._sd_scripts_training_active()
+        image_studio_gpu_lease = self.image_studio_gpu_lease_status()
+        image_studio_gpu_lease_active = bool(image_studio_gpu_lease.get("active"))
         vision_comfyui_active = bool(
             self._vision_llm_gpu_exclusive_blocker_enabled
             and self._vision_llm_gpu_exclusive_stop_for_comfyui
-            and (comfyui_gpu_model_loaded or manual_comfyui_webui_active or comfyui_gpu_vision_gate_active)
+            and (comfyui_gpu_model_loaded or manual_comfyui_webui_active or comfyui_gpu_vision_gate_active or image_studio_gpu_lease_active)
         )
         vision_sd_scripts_active = bool(
             self._vision_llm_gpu_exclusive_blocker_enabled
@@ -2394,7 +2500,7 @@ class UserSystemdServiceManager:
         local_comfyui_active = bool(
             self._local_llm_gpu_exclusive_blocker_enabled
             and self._local_llm_gpu_exclusive_stop_for_comfyui
-            and (comfyui_gpu_model_loaded or manual_comfyui_webui_active or comfyui_gpu_vision_gate_active)
+            and (comfyui_gpu_model_loaded or manual_comfyui_webui_active or comfyui_gpu_vision_gate_active or image_studio_gpu_lease_active)
         )
         local_sd_scripts_active = bool(
             self._local_llm_gpu_exclusive_blocker_enabled
@@ -2411,6 +2517,8 @@ class UserSystemdServiceManager:
             reasons.append("manual_comfyui_webui_active")
         if comfyui_active and comfyui_gpu_vision_gate_active:
             reasons.append("comfyui_gpu_vision_gate_active")
+        if comfyui_active and image_studio_gpu_lease_active:
+            reasons.append("image_studio_gpu_lease_active")
         if sd_scripts_active and sd_scripts_training_active:
             reasons.append("sd_scripts_training_active")
         vision_blocked = bool(vision_comfyui_active or vision_sd_scripts_active)
@@ -2422,6 +2530,8 @@ class UserSystemdServiceManager:
             "comfyui_gpu_model_loaded": comfyui_gpu_model_loaded,
             "manual_comfyui_webui_active": manual_comfyui_webui_active,
             "comfyui_gpu_vision_gate_active": comfyui_gpu_vision_gate_active,
+            "image_studio_gpu_lease_active": image_studio_gpu_lease_active,
+            "image_studio_gpu_lease": image_studio_gpu_lease,
             "sd_scripts_training_active": sd_scripts_training_active,
             "vision_llm_blocked": vision_blocked,
             "local_llm_blocked": local_blocked,

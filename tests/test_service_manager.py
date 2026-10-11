@@ -840,6 +840,44 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertTrue(exclusive["vision_llm_blocked"])
         self.assertTrue(exclusive["local_llm_blocked"])
 
+    def test_image_studio_gpu_lease_persists_and_blocks_llm_start(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {
+                "HEXE_IMAGE_STUDIO_GPU_LEASE_FILE": str(Path(tmp) / "image-studio-gpu-lease.json"),
+                "HEXE_IMAGE_STUDIO_GPU_LEASE_SECONDS": "3600",
+            },
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            with (
+                patch.object(manager, "_run_local_llm_control") as local_control,
+                patch.object(manager, "_run_vision_llm_control") as vision_control,
+            ):
+                lease = manager.acquire_image_studio_gpu_lease(
+                    reason="face_lora_dataset",
+                    metadata={"profile_id": "Hexe"},
+                )
+            self.assertTrue(lease["active"])
+            local_control.assert_called_once_with("stop")
+            vision_control.assert_called_once_with("stop")
+
+            with (
+                patch.object(manager, "_comfyui_gpu_model_loaded", return_value=False),
+                patch.object(manager, "_manual_comfyui_webui_active", return_value=False),
+                patch.object(manager, "_comfyui_gpu_vision_gate_active", return_value=False),
+                patch.object(manager, "_sd_scripts_training_active", return_value=False),
+            ):
+                exclusive = manager.gpu_exclusive_workload_status()
+                blocked = manager.start(target="local_llm")
+
+            self.assertTrue(exclusive["image_studio_gpu_lease_active"])
+            self.assertIn("image_studio_gpu_lease_active", exclusive["reasons"])
+            self.assertTrue(exclusive["local_llm_blocked"])
+            self.assertEqual(blocked["result"], "blocked")
+            self.assertTrue(manager.release_image_studio_gpu_lease(reason="test_complete")["released"])
+            self.assertFalse(manager.image_studio_gpu_lease_status()["active"])
+
     def test_comfyui_webui_idle_close_closes_after_timeout(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             "os.environ",
