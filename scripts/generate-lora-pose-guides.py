@@ -31,9 +31,12 @@ FACE_SOURCES = {
     "front_smile": "front_neutral/front_neutral_001_idx00065_control.png",
     "three_quarter_left": "three_quarter_left/three_quarter_left_001_idx00007_control.png",
     "three_quarter_right": "three_quarter_right/three_quarter_right_003_idx00022_control.png",
-    "slight_down": "slight_down/slight_down_001_idx00216_control.png",
-    "slight_up": "slight_up/slight_up_001_idx01459_control.png",
 }
+
+# These exact crops come from the dense facial-landmark reference sheet. They
+# are kept as packaged assets because the local 300W-LP exports above contain
+# simplified contour guides rather than the dense landmark geometry.
+DENSE_FACE_GUIDES = ("slight_down_dense.png", "slight_up_dense.png")
 
 
 EDGES = [(0, 1), (1, 2), (2, 3), (0, 4), (4, 5), (5, 6), (0, 7), (7, 8), (8, 9), (9, 10), (10, 11), (10, 12), (7, 13), (13, 14), (14, 15), (15, 16), (15, 17)]
@@ -68,6 +71,10 @@ def main() -> None:
             shutil.copyfile(source, target)
         elif not target.is_file():
             raise SystemExit(f"missing face pose source and packaged guide: {source}")
+    for filename in DENSE_FACE_GUIDES:
+        target = FACE_OUTPUT / filename
+        if not target.is_file():
+            raise SystemExit(f"missing packaged dense face pose guide: {target}")
 
 
 if __name__ == "__main__":
