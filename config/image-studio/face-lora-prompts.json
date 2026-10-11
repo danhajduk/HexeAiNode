@@ -165,19 +165,19 @@
     {
       "pose_id": "slight_down",
       "label": "Slight Down",
-      "prompt": "eye-level head-and-shoulders portrait, head bowed forward without sideways roll, chin directed toward the upper chest, face aimed toward the floor rather than the camera, gaze directed down at the floor with no eye contact",
-      "geometry_prompt": "clear 30 to 35 degree forward head pitch from the neck, top plane of the hair and forehead visibly exposed, face vertically foreshortened, nose pointing toward the floor, chin visibly closer to the upper chest, eyes lowered and partly shaded by the upper eyelids, camera remains level with the shoulders rather than above the subject, level relaxed shoulders",
+      "prompt": "eye-level head-and-shoulders portrait, head gently bowed forward without sideways roll, chin lowered toward the upper chest, face and gaze directed down toward the floor rather than at the camera",
+      "geometry_prompt": "natural 20 degree forward head pitch from the neck, a small amount of the top plane of the hair visible, mild natural facial foreshortening, nose angled down, eyes lowered without eye contact, camera level with the shoulders rather than above the subject, level relaxed shoulders, anatomically normal face",
       "guide_image": "system/lora-pose-guides/face/slight_down_dense.png",
-      "pose_strength": 0.8,
+      "pose_strength": 0.4,
       "negative_remove": ["tilted head"],
-      "negative_add": ["looking at camera", "direct camera eye contact", "face aimed at camera", "level head pitch", "raised chin", "upward head angle", "head roll", "overhead camera", "high-angle camera", "camera looking down", "raised shoulders", "hunched shoulders", "chin hidden against chest", "extreme downward angle"],
+      "negative_add": ["looking at camera", "direct camera eye contact", "face aimed at camera", "level head pitch", "raised chin", "upward head angle", "head roll", "overhead camera", "high-angle camera", "camera looking down", "raised shoulders", "hunched shoulders", "chin hidden against chest", "extreme downward angle", "distorted face", "compressed face", "warped facial features", "misaligned eyes", "deformed jaw"],
       "prompt_replacements": {
         "Front-facing head-and-shoulders composition": "eye-level head-and-shoulders composition with the head bowed toward the floor",
         "eyes looking directly at camera": "eyes looking down at the floor with no eye contact",
         "symmetrical neutral pose": "head bowed forward from the neck without sideways roll"
       },
       "variation_replacements": {},
-      "review_rule": "Require a clearly visible 30 to 35 degree bowed head with the face and gaze directed toward the floor, top of the hair and forehead visible, facial features vertically foreshortened, level relaxed shoulders, and identity preserved. Reject eye contact, a face aimed toward the camera, a level or upward-facing head, an overhead/high camera angle masquerading as head pitch, hunched shoulders, or a chin completely hidden against the chest."
+      "review_rule": "Require a natural approximately 20 degree bowed head with the face and gaze directed toward the floor, mild natural foreshortening, level relaxed shoulders, normal facial anatomy, and identity preserved. Reject eye contact, a face aimed toward the camera, a level or upward-facing head, an overhead/high camera angle masquerading as head pitch, distorted or compressed facial features, hunched shoulders, or a chin completely hidden against the chest."
     },
     {
       "pose_id": "slight_up",
