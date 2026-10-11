@@ -120,6 +120,16 @@ scripts/comfyui-control.sh cpu stop
 scripts/comfyui-control.sh all status
 ```
 
+For a compact live view of GPU compute, VRAM, power, temperature, clocks, recent utilization, and the GPU ComfyUI
+queue, run:
+
+```bash
+scripts/gpu-dashboard.py
+```
+
+The dashboard refreshes once per second and exits with `Ctrl+C`. Use `--interval 0.5` for faster sampling,
+`--once` for a single snapshot, or `--no-color` when redirecting its output.
+
 For compatibility, `scripts/comfyui-control.sh ready` still defaults to the GPU readiness check, but the managed
 container starts both runtime processes together. Both processes start with `--disable-auto-launch` and without a
 startup checkpoint argument; checkpoints and LoRAs should be loaded by the request workflow unless a future explicit
