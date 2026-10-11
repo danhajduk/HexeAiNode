@@ -1154,7 +1154,7 @@ export function ImageStudio({
       activeInterviewStep.id === "face_lora_dataset"
       && interviewOpen
       && characterProfileId
-      && (!faceLoraPoses.length || String(faceLoraDataset?.variation_strategy || "") !== "controlled_ten_v4_manual_start")
+      && (!faceLoraPoses.length || String(faceLoraDataset?.variation_strategy || "") !== "controlled_ten_v5_serial_import")
     ) {
       void updateFaceLoraDataset({ action: "ensure" });
     }

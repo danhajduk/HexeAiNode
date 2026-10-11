@@ -5760,6 +5760,38 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(generated["seed_strategy"], "profile_face_anchor_with_candidate_seeds")
             self.assertTrue(all(item["pose_control"]["pose_reference_image"] for item in active_pose["items"]))
 
+    def test_avatar_lora_dispatch_submits_one_and_waits_for_import(self):
+        state = NodeControlState(
+            lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+            config_path="/tmp/nonexistent-hexe-config.json",
+            logger=logging.getLogger("node-control-api-test"),
+        )
+        queued = [
+            {"preview_id": "one", "batch_id": "batch", "status": "local_queued", "seed": 1},
+            {"preview_id": "two", "batch_id": "batch", "status": "local_queued", "seed": 2},
+        ]
+        with patch.object(
+            state,
+            "_avatar_head_face_seed_batch_queue_snapshot",
+            return_value={"socket_available": True, "socket_path": "/tmp/comfy.sock", "capacity": 1, "active_prompt_ids": set(), "running_count": 0, "pending_count": 0},
+        ), patch.object(
+            state,
+            "_submit_avatar_head_face_seed_batch_preview",
+            side_effect=lambda preview, **_: {**preview, "status": "submitted", "prompt_id": f"prompt-{preview['preview_id']}"},
+        ) as submit:
+            submitted, dispatch, _ = state._dispatch_avatar_head_face_seed_batch_previews(
+                previews=queued, avatar_name="Avatar", output_dir=Path("/tmp"), now="2026-10-11T00:00:00+00:00",
+            )
+            self.assertEqual(submit.call_count, 1)
+            self.assertEqual(dispatch["submitted_count"], 1)
+            self.assertEqual([item["status"] for item in submitted], ["submitted", "local_queued"])
+            waiting, dispatch, _ = state._dispatch_avatar_head_face_seed_batch_previews(
+                previews=submitted, avatar_name="Avatar", output_dir=Path("/tmp"), now="2026-10-11T00:00:01+00:00",
+            )
+            self.assertEqual(submit.call_count, 1)
+            self.assertEqual(dispatch["status"], "waiting_for_completed_import")
+            self.assertEqual(waiting[1]["status"], "local_queued")
+
     def test_avatar_generation_head_lora_three_quarter_prompt_removes_front_facing_conflict(self):
         prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(
             prompt=(

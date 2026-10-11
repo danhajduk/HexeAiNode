@@ -259,7 +259,7 @@ AVATAR_UPPER_TORSO_POSE_CONTROLNET = "controlnet-openpose-sdxl-1.0.safetensors"
 AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID = "template.avatar_head_lora_pose_control.realvisxl.v1"
 AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID = "template.avatar_head_lora_epoch_review.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT = 9
-AVATAR_HEAD_FACE_SEED_BATCH_SUBMISSION_LIMIT = 2
+AVATAR_HEAD_FACE_SEED_BATCH_SUBMISSION_LIMIT = 1
 AVATAR_HEAD_FACE_LORA_DATASET_POSES = (
     ("front_neutral", "front-facing neutral head-and-shoulders portrait, direct gaze, relaxed expression"),
     ("front_smile", "front-facing head-and-shoulders portrait, natural confident smile, direct gaze"),
@@ -3942,7 +3942,7 @@ class NodeControlState:
             poses
             and (
                 str(dataset.get("seed_strategy") or "") != "profile_face_seed"
-                or str(dataset.get("variation_strategy") or "") != "controlled_ten_v4_manual_start"
+                or str(dataset.get("variation_strategy") or "") != "controlled_ten_v5_serial_import"
             )
             and not any(bool(item.get("approved")) for pose in poses if isinstance(pose, dict) for item in list(pose.get("items") or []) if isinstance(item, dict))
         ):
@@ -4300,7 +4300,7 @@ class NodeControlState:
             "required_per_pose": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
             "seed_strategy": "profile_face_anchor_with_candidate_seeds",
             "generation_seed": face_profile_seed,
-            "variation_strategy": "controlled_ten_v4_manual_start",
+            "variation_strategy": "controlled_ten_v5_serial_import",
             "training_manifest": training_manifest,
             "training_status": training_manifest.get("status") if isinstance(training_manifest, dict) else dataset.get("training_status"),
             "training_job": training_job,
@@ -9272,6 +9272,22 @@ class NodeControlState:
             updated.append(preview)
 
         submitted = 0
+        has_inflight_import = any(
+            str(preview.get("status") or "").strip() in {"pending", "submitted", "queued", "running"}
+            and bool(str(preview.get("prompt_id") or "").strip())
+            for preview in updated
+            if isinstance(preview, dict)
+        )
+        if has_inflight_import:
+            return updated, {
+                "status": "waiting_for_completed_import",
+                "submitted_count": 0,
+                "capacity_after": 0,
+                "running_count": int(snapshot.get("running_count") or 0),
+                "pending_count": int(snapshot.get("pending_count") or 0),
+                "active_limit": AVATAR_HEAD_FACE_SEED_BATCH_SUBMISSION_LIMIT,
+                "updated_at": now,
+            }, changed
         final: list[dict] = []
         for preview in updated:
             if not isinstance(preview, dict):
