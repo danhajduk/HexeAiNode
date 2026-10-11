@@ -539,6 +539,27 @@ describe("ImageStudio", () => {
     expect(markup).toContain("still being saved and imported");
   });
 
+  it("does not report a placeholder creation time as an imported image", () => {
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialGenerationProgressOpen
+        initialGenerationKind="body"
+        bodyPreviewTracking
+        bodyPreviewResult={{ preview: {
+          status: "pending",
+          prompt_id: "prompt-123",
+          url: "/placeholder.svg",
+          placeholder: true,
+          imported_at: "2026-10-10T17:00:00Z",
+        } }}
+        generationActivity={{ latest_job: { status: "running", prompt_id: "prompt-123" } }}
+      />
+    );
+
+    expect(markup).toContain("<span>Imported</span><code>waiting</code>");
+    expect(markup).not.toContain("10/10/2026, 5:00:00 PM");
+  });
+
   it("ignores status and progress from a different latest job", () => {
     const markup = renderToStaticMarkup(
       <ImageStudio

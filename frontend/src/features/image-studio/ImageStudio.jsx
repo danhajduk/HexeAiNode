@@ -1064,7 +1064,7 @@ export function ImageStudio({
       : 0;
   const progressImageUrl = progressArtifactReady && progressPreview?.url ? `${apiBase}${progressPreview.url}` : "";
   const progressSubmittedAt = String(progressPreview?.submitted_at || generationJob?.submitted_at || "");
-  const progressImportedAt = String(progressPreview?.imported_at || "");
+  const progressImportedAt = progressArtifactReady ? String(progressPreview?.imported_at || "") : "";
   const popupSeed = progressPreview?.seed_text ?? progressPreview?.seed;
   const keepPopupSeed = generationKind === "body" ? bodySeedLocked || Boolean(bodySeedInput.trim()) : faceSeedLocked;
   const breastShape = (bodyFeatureSelections.breast_shape || [])[0];

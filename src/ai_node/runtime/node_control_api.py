@@ -8492,7 +8492,8 @@ class NodeControlState:
             "prompt": preview.get("prompt"),
             "negative_prompt": preview.get("negative_prompt"),
             "created_at": preview.get("created_at") or now,
-            "imported_at": now,
+            "placeholder_created_at": now if placeholder else None,
+            "imported_at": None if placeholder else now,
         }
 
     def _write_avatar_head_face_preview_placeholder(self, *, path: Path, preview: dict, profile_name: str) -> None:
@@ -9126,7 +9127,7 @@ class NodeControlState:
                         "input_image": sidecar["input_image"],
                         "url": sidecar["url"],
                         "placeholder": True,
-                        "imported_at": now,
+                        "placeholder_created_at": now,
                     }
                 )
                 changed = True
@@ -9427,7 +9428,7 @@ class NodeControlState:
                         "input_image": sidecar["input_image"],
                         "url": sidecar["url"],
                         "placeholder": True,
-                        "imported_at": now,
+                        "placeholder_created_at": now,
                     }
                 )
                 changed = True
