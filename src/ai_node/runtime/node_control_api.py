@@ -8492,6 +8492,40 @@ class NodeControlState:
 """
         path.write_text(svg, encoding="utf-8")
 
+    def _write_avatar_upper_torso_latest(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        imported_path: Path,
+        imported_sidecar: dict,
+    ) -> Path:
+        latest_path = (profile_dir / "refs" / "upper_torso" / "last.png").resolve()
+        if profile_dir not in latest_path.parents:
+            raise ValueError("avatar_upper_torso_latest_path_invalid")
+        latest_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = latest_path.with_suffix(".png.tmp")
+        shutil.copyfile(imported_path, temporary_path)
+        if temporary_path.stat().st_size != imported_path.stat().st_size:
+            temporary_path.unlink(missing_ok=True)
+            raise ValueError("avatar_upper_torso_latest_copy_verification_failed")
+        temporary_path.replace(latest_path)
+        latest_sidecar = {
+            **imported_sidecar,
+            "name": "Latest Upper Torso Preview",
+            "filename": "last.png",
+            "relative_name": "last.png",
+            "input_image": f"avatar_profiles/{profile_id}/refs/upper_torso/last.png",
+            "url": f"/api/avatar-generation/profiles/{profile_id}/references/upper_torso/last.png",
+            "source": "avatar_upper_torso_latest_alias",
+            "canonical_reference": imported_sidecar.get("input_image"),
+        }
+        latest_path.with_suffix(".png.json").write_text(
+            json.dumps(latest_sidecar, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return latest_path
+
     @staticmethod
     def _avatar_head_face_seed_batch_preview_is_usable(*, preview: dict) -> bool:
         if bool(preview.get("placeholder")):
@@ -9106,6 +9140,12 @@ class NodeControlState:
             target_path.with_suffix(target_path.suffix + ".json").write_text(
                 json.dumps(sidecar, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
+            )
+            self._write_avatar_upper_torso_latest(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                imported_path=target_path,
+                imported_sidecar=sidecar,
             )
             self._delete_imported_manual_output(output_path=output_path, output_dir=output_dir)
             updated_history.append(

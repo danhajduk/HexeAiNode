@@ -6403,6 +6403,37 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["preview"]["scheduler"], "karras")
         self.assertEqual(result["preview"]["lightning_strength"], 0.0)
 
+    def test_avatar_generation_saves_latest_upper_torso_alias(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile_dir = root / "avatar_profiles" / "Jane_Avatar"
+            imported_path = profile_dir / "refs" / "upper_torso" / "preview" / "preview_seed42.png"
+            imported_path.parent.mkdir(parents=True)
+            imported_path.write_bytes(b"latest-body-preview")
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(root / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+            )
+            latest_path = state._write_avatar_upper_torso_latest(
+                profile_dir=profile_dir,
+                profile_id="Jane_Avatar",
+                imported_path=imported_path,
+                imported_sidecar={
+                    "seed": 42,
+                    "prompt": "strict neutral A-pose",
+                    "input_image": "avatar_profiles/Jane_Avatar/refs/upper_torso/preview/preview_seed42.png",
+                },
+            )
+            latest_bytes = latest_path.read_bytes()
+            latest_metadata = json.loads(latest_path.with_suffix(".png.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(latest_bytes, b"latest-body-preview")
+        self.assertEqual(latest_metadata["filename"], "last.png")
+        self.assertEqual(latest_metadata["seed"], 42)
+        self.assertEqual(latest_metadata["input_image"], "avatar_profiles/Jane_Avatar/refs/upper_torso/last.png")
+        self.assertEqual(latest_metadata["canonical_reference"], "avatar_profiles/Jane_Avatar/refs/upper_torso/preview/preview_seed42.png")
+
     def test_avatar_generation_imports_head_preview_rgb_without_background_removal(self):
         class _AvatarProfileServiceManager:
             def __init__(self, input_dir: str, output_dir: str, socket_path: str):
