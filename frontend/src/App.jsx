@@ -162,6 +162,23 @@ export function latestImageStudioBodyJob(profiles, profileId = "") {
   })[0] || null;
 }
 
+export function mergeAvatarGenerationProfile(payload, profile) {
+  const profileId = String(profile?.profile_id || "").trim();
+  if (!profileId) return payload;
+  const current = payload && typeof payload === "object" ? payload : {};
+  const profiles = Array.isArray(current.profiles) ? current.profiles : [];
+  const existingIndex = profiles.findIndex(
+    (item) => String(item?.profile_id || "").trim() === profileId
+  );
+  const nextProfiles = [...profiles];
+  if (existingIndex >= 0) {
+    nextProfiles[existingIndex] = profile;
+  } else {
+    nextProfiles.unshift(profile);
+  }
+  return { ...current, profiles: nextProfiles };
+}
+
 export const IMAGE_STUDIO_DATA_ENDPOINTS = [
   "/api/comfyui/templates",
   "/api/services/status",
@@ -1858,7 +1875,7 @@ export default function App() {
       const encodedProfileId = encodeURIComponent(normalized);
       const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/head-face/lora-dataset`, payload);
       setAvatarGenerationResult(result);
-      await loadStatus();
+      setAvatarGenerationPayload((current) => mergeAvatarGenerationProfile(current, result?.profile));
       return result;
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");
@@ -1946,7 +1963,7 @@ export default function App() {
       const encodedProfileId = encodeURIComponent(normalized);
       const result = await apiPost(`/api/avatar-generation/profiles/${encodedProfileId}/upper-torso/lora-dataset`, payload);
       setAvatarGenerationResult(result);
-      await loadStatus();
+      setAvatarGenerationPayload((current) => mergeAvatarGenerationProfile(current, result?.profile));
       return result;
     } catch (err) {
       const message = String(err?.message || err).replace(/^request failed \(\d+\):\s*/, "");

@@ -4476,7 +4476,6 @@ class NodeControlState:
             "dataset": saved_workspace.get("lora_dataset", updated_dataset),
             "profile": saved_profile,
             "workspace": saved_workspace,
-            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
         }
 
     async def update_avatar_profile_upper_torso_lora_dataset(self, *, profile_id: str, payload: "AvatarProfileHeadLoraDatasetRequest") -> dict:
@@ -4779,7 +4778,6 @@ class NodeControlState:
             "dataset": saved_workspace.get("lora_dataset", updated_dataset),
             "profile": saved_profile,
             "workspace": saved_workspace,
-            "profiles": self._avatar_profiles(limit=48, selected_profile_id=selected_profile_id),
         }
 
     def _delete_avatar_head_lora_pose_files(self, *, profile_dir: Path, pose: dict) -> None:

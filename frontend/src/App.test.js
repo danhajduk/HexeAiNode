@@ -5,6 +5,7 @@ import {
   buildComfyuiWebuiBrowserUrl,
   findImageStudioBodyPreview,
   latestImageStudioBodyJob,
+  mergeAvatarGenerationProfile,
   resolveManualGenerationTracking,
   shouldTrackImageStudioPreview,
 } from "./App";
@@ -18,6 +19,37 @@ describe("Image Studio data boundary", () => {
       "/api/avatar-generation",
       "/api/image-studio/face-feature-catalog",
     ]);
+  });
+});
+
+describe("mergeAvatarGenerationProfile", () => {
+  it("updates only the returned profile and preserves the remaining profile list", () => {
+    const current = {
+      selected_profile_id: "hexe",
+      profiles: [
+        { profile_id: "hexe", updated_at: "old" },
+        { profile_id: "other", updated_at: "unchanged" },
+      ],
+    };
+
+    expect(
+      mergeAvatarGenerationProfile(current, { profile_id: "hexe", updated_at: "new" })
+    ).toEqual({
+      selected_profile_id: "hexe",
+      profiles: [
+        { profile_id: "hexe", updated_at: "new" },
+        { profile_id: "other", updated_at: "unchanged" },
+      ],
+    });
+  });
+
+  it("adds a returned profile when it was not already loaded", () => {
+    expect(
+      mergeAvatarGenerationProfile(
+        { profiles: [{ profile_id: "other" }] },
+        { profile_id: "hexe" }
+      ).profiles
+    ).toEqual([{ profile_id: "hexe" }, { profile_id: "other" }]);
   });
 });
 
