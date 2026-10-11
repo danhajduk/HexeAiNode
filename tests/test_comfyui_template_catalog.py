@@ -53,8 +53,8 @@ class ComfyUiTemplateCatalogTests(unittest.TestCase):
         self.assertEqual(head_face_template["model_requirements"]["other"]["background_removal"], "birefnet.safetensors")
         body_preview_template = templates_by_id["template.avatar_upper_torso_preview.realvisxl.v1"]
         self.assertEqual(body_preview_template["defaults"]["pose_reference_image"], "system/neutral-a-pose-openpose.png")
-        self.assertEqual(body_preview_template["defaults"]["pose_strength"], 1.0)
-        self.assertEqual(body_preview_template["defaults"]["pose_end"], 1.0)
+        self.assertEqual(body_preview_template["defaults"]["pose_strength"], 0.75)
+        self.assertEqual(body_preview_template["defaults"]["pose_end"], 0.7)
         self.assertEqual(body_preview_template["model_requirements"]["controlnets"], ["controlnet-openpose-sdxl-1.0.safetensors"])
         self.assertIn("ControlNetApplyAdvanced", body_preview_template["model_requirements"]["other"]["nodes"])
         body_preview_workflow = json.loads(Path(body_preview_template["api_workflow_path"]).read_text(encoding="utf-8"))
