@@ -38,6 +38,16 @@ class ImageStudioBodyPromptTests(unittest.TestCase):
         self.assertIn("black pubic hair color", prompt)
         self.assertNotIn("auburn pubic hair color", prompt)
 
+    def test_custom_pose_replaces_the_default_a_pose(self):
+        prompt = compile_body_preview_prompt(
+            selections={"build": ["athletic"]},
+            face_selections={},
+            custom_details="",
+            context={"pose_prompt": "natural three-quarter stance with both feet fully visible"},
+        )
+        self.assertIn("natural three-quarter stance with both feet fully visible", prompt)
+        self.assertNotIn("relaxed anatomical A-pose facing the camera squarely", prompt)
+
     def test_rejects_conflicting_genital_anatomy(self):
         with self.assertRaisesRegex(ValueError, "body_feature_anatomy_conflict"):
             compile_body_preview_prompt(
