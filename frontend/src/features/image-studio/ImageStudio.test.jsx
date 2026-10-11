@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, latestSavedFacePreview, magnitudeLabel, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType } from "./ImageStudio";
+import { ImageStudio, applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, isGenerateShortcut, latestSavedFacePreview, magnitudeLabel, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType } from "./ImageStudio";
 
 describe("ImageStudio", () => {
   it("builds a structured face identity reference prompt", () => {
@@ -500,6 +500,8 @@ describe("ImageStudio", () => {
     expect(markup).toContain("2 of 4");
     expect(markup).toContain("Refresh Preview");
     expect(markup).toContain("Redo");
+    expect(markup).toContain("Redo · Ctrl+Enter");
+    expect(markup).toContain('aria-keyshortcuts="Control+Enter Meta+Enter"');
     expect(markup).toContain("Keep seed for Redo");
     expect(markup).toContain("Close");
     expect(markup).toContain("Generated preview");
@@ -522,6 +524,10 @@ describe("ImageStudio", () => {
   it("recognizes Escape and waits for an imported preview artifact", () => {
     expect(isEscapeKey({ key: "Escape" })).toBe(true);
     expect(isEscapeKey({ key: "Enter" })).toBe(false);
+    expect(isGenerateShortcut({ key: "Enter", ctrlKey: true })).toBe(true);
+    expect(isGenerateShortcut({ key: "Enter", metaKey: true })).toBe(true);
+    expect(isGenerateShortcut({ key: "Enter" })).toBe(false);
+    expect(isGenerateShortcut({ key: "Enter", ctrlKey: true, altKey: true })).toBe(false);
     expect(previewArtifactReady({ status: "completed", url: "/preview.png", placeholder: false })).toBe(false);
     expect(previewArtifactReady({ status: "completed", url: "/preview.svg", imported_at: "now", placeholder: true })).toBe(false);
     expect(previewArtifactReady({ status: "completed", url: "/preview.png", imported_at: "now", placeholder: false })).toBe(true);

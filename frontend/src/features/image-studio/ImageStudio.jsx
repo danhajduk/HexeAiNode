@@ -334,6 +334,10 @@ function isEscapeKey(event) {
   return event?.key === "Escape";
 }
 
+function isGenerateShortcut(event) {
+  return event?.key === "Enter" && (event.ctrlKey === true || event.metaKey === true) && event.altKey !== true;
+}
+
 function magnitudeLabel(value) {
   if (value < 0.2) return "Very small";
   if (value < 0.4) return "Small";
@@ -1096,12 +1100,19 @@ export function ImageStudio({
 
   useEffect(() => {
     if (!generationProgressOpen) return undefined;
-    const closeOnEscape = (event) => {
-      if (isEscapeKey(event)) setGenerationProgressOpen(false);
+    const handleGenerationShortcut = (event) => {
+      if (isEscapeKey(event)) {
+        setGenerationProgressOpen(false);
+        return;
+      }
+      if (isGenerateShortcut(event) && !progressTracking && !characterSaveBusy && !event.repeat) {
+        event.preventDefault();
+        void (generationKind === "body" ? generateBodyPreview() : generateFacePreview());
+      }
     };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [generationProgressOpen]);
+    window.addEventListener("keydown", handleGenerationShortcut);
+    return () => window.removeEventListener("keydown", handleGenerationShortcut);
+  }, [generationProgressOpen, generationKind, progressTracking, characterSaveBusy]);
 
   useEffect(() => {
     onStudioRouteChange?.({
@@ -2095,8 +2106,8 @@ export function ImageStudio({
                 <button className="btn" type="button" onClick={forceRefreshGeneration} disabled={generationRefreshBusy || !onRefreshGeneration}>
                   {generationRefreshBusy ? "Refreshing…" : "Refresh Preview"}
                 </button>
-                <button className="btn btn-primary" type="button" onClick={() => generationKind === "body" ? generateBodyPreview() : generateFacePreview()} disabled={progressTracking || characterSaveBusy}>
-                  Redo
+                <button className="btn btn-primary" type="button" aria-keyshortcuts="Control+Enter Meta+Enter" title="Redo (Ctrl+Enter)" onClick={() => generationKind === "body" ? generateBodyPreview() : generateFacePreview()} disabled={progressTracking || characterSaveBusy}>
+                  Redo · Ctrl+Enter
                 </button>
                 <button className="btn" type="button" onClick={() => setGenerationProgressOpen(false)}>Close</button>
               </div>
@@ -2279,4 +2290,4 @@ export function ImageStudio({
   );
 }
 
-export { applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, magnitudeLabel, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType };
+export { applyCharacterFoundation, buildBodyPreviewPayload, buildBodyPreviewPrompt, buildFacePreviewNegativePrompt, buildFacePreviewPrompt, characterDraftBodyFeatureCatalog, characterDraftBrief, characterDraftFeatureCatalog, composeBodyDescription, composeFaceDescription, faceFeaturePromptDescription, inferFaceFeatureSelections, isEscapeKey, isGenerateShortcut, magnitudeLabel, nextBodyFeatureSelections, nextIncompleteInterviewStep, previewArtifactReady, templateCharacterPath, templateCreationType };
