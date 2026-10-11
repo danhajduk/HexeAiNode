@@ -163,6 +163,53 @@ class GpuDashboardTests(unittest.TestCase):
             importing = gpu_dashboard.image_studio_backend(temporary_directory, {"job_state": "idle"})
             self.assertEqual(importing["state"], "importing output")
 
+    def test_image_studio_backend_selects_body_pose_by_index_and_running_prompt(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            profile_dir = Path(temporary_directory) / "Hexe"
+            profile_dir.mkdir()
+            profile = {
+                "name": "Hexe",
+                "prompt_workspaces": {
+                    "head_face": {
+                        "lora_dataset": {
+                            "active_pose_id": "three_quarter_right",
+                            "updated_at": "2026-10-11T13:40:00+00:00",
+                            "poses": [{
+                                "pose_id": "three_quarter_right",
+                                "label": "Three Quarter Right",
+                                "items": [{"status": "completed", "approved": True}],
+                            }],
+                        }
+                    },
+                    "upper_torso": {
+                        "lora_dataset": {
+                            "active_pose_index": 0,
+                            "updated_at": "2026-10-11T13:38:00+00:00",
+                            "dispatch": {"status": "waiting_for_completed_import"},
+                            "poses": [{
+                                "pose_id": "front_neutral",
+                                "label": "Front Neutral",
+                                "items": [{
+                                    "status": "submitted",
+                                    "prompt_id": "body-prompt-1",
+                                    "placeholder": True,
+                                }],
+                            }],
+                        }
+                    },
+                },
+            }
+            (profile_dir / "profile.json").write_text(json.dumps(profile), encoding="utf-8")
+
+            backend = gpu_dashboard.image_studio_backend(
+                temporary_directory,
+                {"job_state": "running", "prompt_id": "body-prompt-1"},
+            )
+
+            self.assertEqual(backend["section"], "upper_torso")
+            self.assertEqual(backend["pose"], "Front Neutral")
+            self.assertEqual(backend["state"], "rendering")
+
 
 if __name__ == "__main__":
     unittest.main()

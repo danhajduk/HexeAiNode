@@ -126,6 +126,12 @@ def image_studio_backend(profile_root: str, queue: dict[str, object]) -> dict[st
                 poses = [pose for pose in list(dataset.get("poses") or []) if isinstance(pose, dict)]
                 active_pose_id = str(dataset.get("active_pose_id") or "").strip()
                 pose = next((item for item in poses if str(item.get("pose_id") or "") == active_pose_id), None)
+                if pose is None and poses:
+                    try:
+                        active_pose_index = min(max(int(dataset.get("active_pose_index") or 0), 0), len(poses) - 1)
+                    except (TypeError, ValueError):
+                        active_pose_index = 0
+                    pose = poses[active_pose_index]
                 if not dataset or not isinstance(pose, dict):
                     continue
                 timestamp = _iso_epoch(
@@ -138,7 +144,20 @@ def image_studio_backend(profile_root: str, queue: dict[str, object]) -> dict[st
         return {"available": False, "state": "unavailable"}
     if not candidates:
         return {"available": False, "state": "idle"}
-    _, path, selected = max(candidates, key=lambda item: item[0])
+    active_prompt_id = str(queue.get("prompt_id") or "").strip()
+
+    def candidate_priority(candidate: tuple[float, Path, dict]) -> tuple[int, int, float]:
+        timestamp, _, context = candidate
+        items = [item for item in list(context["pose"].get("items") or []) if isinstance(item, dict)]
+        prompt_ids = {str(item.get("prompt_id") or "").strip() for item in items}
+        queue_match = int(bool(active_prompt_id and active_prompt_id in prompt_ids))
+        active_work = int(any(
+            str(item.get("status") or "") in {"local_queued", "pending", "submitted", "queued", "running"}
+            for item in items
+        ))
+        return queue_match, active_work, timestamp
+
+    _, path, selected = max(candidates, key=candidate_priority)
     profile = selected["profile"]
     dataset = selected["dataset"]
     pose = selected["pose"]
