@@ -71,12 +71,50 @@ class GpuDashboardTests(unittest.TestCase):
             )
             queue = {"running": 0, "pending": 0}
 
-            session = gpu_dashboard.comfy_session(str(session_path), queue)
+            session = gpu_dashboard.comfy_session(str(session_path), queue, {"available": False})
 
             self.assertTrue(session["available"])
             self.assertGreaterEqual(session["idle_seconds"], 125)
             self.assertEqual(gpu_dashboard.duration(session["idle_seconds"]), "00:02:05")
             self.assertEqual(gpu_dashboard.duration(session["idle_timeout_seconds"]), "01:00:00")
+
+    def test_idle_timer_resets_for_backend_import_and_uses_completion_time(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            session_path = Path(temporary_directory) / "session.json"
+            session_path.write_text(
+                json.dumps(
+                    {
+                        "last_active_epoch": gpu_dashboard.time.time() - 600,
+                        "idle_timeout_seconds": 3600,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            queue = {"running": 0, "pending": 0}
+            importing = {
+                "state": "importing output",
+                "submitted": 1,
+                "local_queued": 3,
+                "updated_at": "2026-10-11T11:01:12+00:00",
+            }
+
+            active_session = gpu_dashboard.comfy_session(str(session_path), queue, importing)
+
+            self.assertTrue(active_session["queue_active"])
+            self.assertEqual(active_session["idle_seconds"], 0)
+
+            completed_at = gpu_dashboard.time.time() - 5
+            completed = {
+                "state": "candidate review ready",
+                "submitted": 0,
+                "local_queued": 0,
+                "updated_at": gpu_dashboard.datetime.fromtimestamp(
+                    completed_at,
+                    tz=gpu_dashboard.datetime.now().astimezone().tzinfo,
+                ).isoformat(),
+            }
+            completed_session = gpu_dashboard.comfy_session(str(session_path), queue, completed)
+            self.assertLess(completed_session["idle_seconds"], 6)
 
     def test_image_studio_backend_correlates_local_and_comfyui_state(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

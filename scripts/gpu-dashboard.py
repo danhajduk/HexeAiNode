@@ -187,7 +187,7 @@ def image_studio_backend(profile_root: str, queue: dict[str, object]) -> dict[st
     }
 
 
-def comfy_session(path: str, queue: dict[str, object]) -> dict[str, object]:
+def comfy_session(path: str, queue: dict[str, object], backend: dict[str, object]) -> dict[str, object]:
     try:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         last_active_epoch = float(payload.get("last_active_epoch"))
@@ -195,11 +195,18 @@ def comfy_session(path: str, queue: dict[str, object]) -> dict[str, object]:
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
         return {"available": False}
     queue_active = int(queue.get("running") or 0) > 0 or int(queue.get("pending") or 0) > 0
+    backend_active = (
+        int(backend.get("local_queued") or 0) > 0
+        or int(backend.get("submitted") or 0) > 0
+        or str(backend.get("state") or "") in {"rendering", "importing output", "local queue waiting"}
+    )
+    backend_updated_epoch = _iso_epoch(backend.get("updated_at"))
+    last_activity_epoch = max(last_active_epoch, backend_updated_epoch)
     return {
         "available": True,
-        "idle_seconds": 0.0 if queue_active else max(time.time() - last_active_epoch, 0.0),
+        "idle_seconds": 0.0 if queue_active or backend_active else max(time.time() - last_activity_epoch, 0.0),
         "idle_timeout_seconds": idle_timeout_seconds,
-        "queue_active": queue_active,
+        "queue_active": queue_active or backend_active,
     }
 
 
@@ -323,7 +330,7 @@ def main() -> int:
             sample = gpu_sample(args.gpu_index)
             queue = comfy_queue(args.comfy_socket)
             backend = image_studio_backend(args.profile_root, queue)
-            session = comfy_session(args.session_file, queue)
+            session = comfy_session(args.session_file, queue, backend)
             output = render(sample, queue, backend, session, color_enabled)
             if not args.once and sys.stdout.isatty():
                 print("\033[2J\033[H", end="")
