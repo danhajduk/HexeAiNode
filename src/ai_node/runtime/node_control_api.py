@@ -8943,15 +8943,20 @@ class NodeControlState:
         source_root = (Path.cwd() / AVATAR_LORA_POSE_GUIDE_SOURCE_ROOT).resolve()
         if source_root not in source.parents or not source.is_file():
             raise ValueError("avatar_lora_pose_guide_missing")
-        input_dir = self._manual_image_input_dir()
-        target = (input_dir / relative_image).resolve()
-        if input_dir not in target.parents:
-            raise ValueError("avatar_lora_pose_guide_path_invalid")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if not target.is_file() or target.read_bytes() != source.read_bytes():
-            temporary = target.with_suffix(target.suffix + ".tmp")
-            shutil.copyfile(source, temporary)
-            temporary.replace(target)
+        input_roots = {
+            self._manual_image_input_dir().resolve(),
+            (Path.cwd() / "runtime" / "input" / "comfyui-gpu").resolve(),
+            (Path.cwd() / "runtime" / "manual" / "comfyui-gpu" / "input").resolve(),
+        }
+        for input_dir in input_roots:
+            target = (input_dir / relative_image).resolve()
+            if input_dir not in target.parents:
+                raise ValueError("avatar_lora_pose_guide_path_invalid")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.is_file() or target.read_bytes() != source.read_bytes():
+                temporary = target.with_suffix(target.suffix + ".tmp")
+                shutil.copyfile(source, temporary)
+                temporary.replace(target)
         return relative_image
 
     def _ensure_avatar_head_lora_comfyui_input_image(self, *, relative_image: str) -> str:
@@ -9190,6 +9195,11 @@ class NodeControlState:
             ),
             "avatar_name": output_avatar_name,
         }
+        pose_reference_image = str(template_variables.get("pose_reference_image") or "").strip()
+        if pose_reference_image.startswith("system/lora-pose-guides/"):
+            template_variables["pose_reference_image"] = self._ensure_avatar_lora_pose_guide(
+                relative_image=pose_reference_image
+            )
         workflow, resolved_values = self._manual_image_workflow_and_values_from_template(
             template=template,
             payload=ManualImageGenerationRequest(
