@@ -30,7 +30,7 @@ FACE_SOURCES = {
     "front_neutral": "front_neutral/front_neutral_001_idx00065_control.png",
     "front_smile": "front_neutral/front_neutral_001_idx00065_control.png",
     "three_quarter_left": "three_quarter_left/three_quarter_left_001_idx00007_control.png",
-    "three_quarter_right": "three_quarter_right/three_quarter_right_001_idx00009_control.png",
+    "three_quarter_right": "three_quarter_right/three_quarter_right_003_idx00022_control.png",
     "slight_down": "slight_down/slight_down_001_idx00216_control.png",
     "slight_up": "slight_up/slight_up_001_idx01459_control.png",
 }

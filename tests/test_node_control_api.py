@@ -5916,12 +5916,21 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("direct eye contact", negative_prompt)
         self.assertIn("both eyes same size", negative_prompt)
         self.assertIn("both cheeks equally visible", negative_prompt)
-        self.assertIn("face turned 70 degrees", geometry_prompt)
-        self.assertIn("far eye mostly hidden behind the nose bridge", geometry_prompt)
-        self.assertIn("nose tip and chin pointing toward the left edge", geometry_prompt)
+        self.assertIn("face turned 40 to 45 degrees", geometry_prompt)
+        self.assertIn("both eyes visible with the far eye naturally narrower", geometry_prompt)
+        self.assertIn("nose tip and chin angled toward the left edge", geometry_prompt)
         self.assertIn("reject any image that reads as a straight-on frontal portrait", vision_prompt)
-        self.assertIn("Reject soft beauty angles", vision_prompt)
-        self.assertIn("near side-profile", vision_prompt)
+        self.assertIn("reject full 90-degree side profiles", vision_prompt)
+        self.assertIn("natural 40 to 45 degree three-quarter portrait", vision_prompt)
+        inherited_negative = NodeControlState._avatar_head_lora_dataset_pose_negative_prompt(
+            negative_prompt="profile view, three-quarter view, tilted head, low quality",
+            pose_id="three_quarter_left",
+        )
+        self.assertNotIn("profile view", inherited_negative)
+        self.assertNotIn("three-quarter view", inherited_negative)
+        self.assertNotIn("tilted head", inherited_negative)
+        self.assertIn("full 90-degree side profile", inherited_negative)
+        self.assertIn("low quality", inherited_negative)
 
     def test_avatar_lora_prompt_avoids_reference_sheet_composition(self):
         prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(

@@ -265,17 +265,17 @@ AVATAR_HEAD_FACE_LORA_DATASET_POSES = (
     ("front_smile", "front-facing head-and-shoulders portrait, natural confident smile, direct gaze"),
     (
         "three_quarter_left",
-        "near side-profile head-and-shoulders portrait, not a beauty front portrait, head yaw rotated 70 degrees to the left side of the image, "
-        "nose and chin clearly point left in profile silhouette, face centerline strongly angled left, one cheek dominant and far cheek mostly hidden, "
-        "far eye mostly hidden behind the nose bridge, one visible ear on the near side, only one nostril clearly visible, "
-        "eyes looking off camera toward the left edge of the image, no direct eye contact, not a straight-on frontal face",
+        "natural three-quarter head-and-shoulders portrait, head yaw rotated 40 to 45 degrees toward the left side of the image, "
+        "nose and chin clearly angle left, near cheek dominant and far cheek narrower, both eyes visible with the far eye naturally narrower, "
+        "near ear may remain visible through or beside the hair, eyes looking slightly off camera toward the left edge, "
+        "not a straight-on frontal face and not a full side profile",
     ),
     (
         "three_quarter_right",
-        "near side-profile head-and-shoulders portrait, not a beauty front portrait, head yaw rotated 70 degrees to the right side of the image, "
-        "nose and chin clearly point right in profile silhouette, face centerline strongly angled right, one cheek dominant and far cheek mostly hidden, "
-        "far eye mostly hidden behind the nose bridge, one visible ear on the near side, only one nostril clearly visible, "
-        "eyes looking off camera toward the right edge of the image, no direct eye contact, not a straight-on frontal face",
+        "natural three-quarter head-and-shoulders portrait, head yaw rotated 40 to 45 degrees toward the right side of the image, "
+        "nose and chin clearly angle right, near cheek dominant and far cheek narrower, both eyes visible with the far eye naturally narrower, "
+        "near ear may remain visible through or beside the hair, eyes looking slightly off camera toward the right edge, "
+        "not a straight-on frontal face and not a full side profile",
     ),
     ("slight_down", "head-and-shoulders portrait with face angled slightly downward, eyes toward viewer"),
     ("slight_up", "head-and-shoulders portrait with face angled slightly upward, eyes toward viewer"),
@@ -6493,10 +6493,10 @@ class NodeControlState:
             three_quarter_rule = (
                 "For three-quarter poses, reject any image that reads as a straight-on frontal portrait, "
                 "has both cheeks equally visible, has the nose/chin centered forward, or has direct camera eye contact. "
-                "Reject soft beauty angles that still look mostly frontal. "
-                "A valid image for this slot must read as near side-profile rather than a front beauty portrait: nose and chin visibly point toward one side of the image, "
-                "the far eye is mostly hidden behind the nose bridge, the far cheek is mostly hidden, one cheek is dominant, one ear is visible, "
-                "and the eyes look off camera in the same direction as the head turn. "
+                "Reject angles that still look mostly frontal and reject full 90-degree side profiles. "
+                "A valid image must read as a natural 40 to 45 degree three-quarter portrait: nose and chin visibly angle toward one side, "
+                "both eyes remain visible with the far eye naturally narrower, the far cheek is narrower but visible, one cheek is dominant, "
+                "and the eyes look slightly off camera in the same direction as the head turn. "
             )
         return (
             "You are a strict quality reviewer for face LoRA dataset images. "
@@ -8979,10 +8979,10 @@ class NodeControlState:
             return ""
         direction = "left" if pose_id == "three_quarter_left" else "right"
         return (
-            f"mandatory near side-profile head yaw: face turned 70 degrees toward the {direction} side of the image, "
-            f"profile silhouette with nose tip and chin pointing toward the {direction} edge, facial centerline strongly angled away from camera, "
-            "far eye mostly hidden behind the nose bridge, far cheek mostly hidden, one cheek dominant, "
-            "one visible ear on the near side, only one nostril clearly visible, off-camera gaze, no direct camera eye contact"
+            f"mandatory natural three-quarter head yaw: face turned 40 to 45 degrees toward the {direction} side of the image, "
+            f"nose tip and chin angled toward the {direction} edge, facial centerline visibly angled away from camera, "
+            "both eyes visible with the far eye naturally narrower, far cheek narrower but still visible, near cheek dominant, "
+            "near ear optionally visible through or beside the hair, slightly off-camera gaze, no straight-on camera pose"
         )
 
     @staticmethod
@@ -9001,6 +9001,12 @@ class NodeControlState:
         ]
         if pose_id not in {"three_quarter_left", "three_quarter_right"}:
             return ", ".join(part for part in common if part)
+        conflicting_angle_negatives = {"profile view", "three-quarter view", "tilted head"}
+        common[0] = ", ".join(
+            part.strip()
+            for part in common[0].split(",")
+            if part.strip().lower() not in conflicting_angle_negatives
+        )
         return ", ".join(
             part
             for part in [
@@ -9020,9 +9026,9 @@ class NodeControlState:
                 "beauty front portrait",
                 "slight angle",
                 "soft three-quarter beauty angle",
-                "both eyes fully visible",
+                "full 90-degree side profile",
+                "only one eye visible",
                 "both nostrils visible",
-                "full face visible",
             ]
             if part
         )
