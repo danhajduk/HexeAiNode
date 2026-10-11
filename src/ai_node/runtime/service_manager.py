@@ -191,6 +191,9 @@ class UserSystemdServiceManager:
         self._local_llm_revert_in_progress = False
         self._local_llm_always_on_in_progress = False
         self._comfyui_progress_client_id = "hexe-node-manual-image-ui"
+        self._comfyui_progress_file = str(
+            os.environ.get("HEXE_COMFYUI_PROGRESS_FILE") or ".run/comfyui-progress.json"
+        ).strip()
         self._comfyui_progress_lock = threading.Lock()
         self._comfyui_progress_cache: dict = {}
         self._comfyui_progress_listener_thread: threading.Thread | None = None
@@ -2039,6 +2042,22 @@ class UserSystemdServiceManager:
         self._comfyui_progress_listener_stop.set()
         with self._comfyui_progress_lock:
             self._comfyui_progress_cache = {}
+        self._persist_comfyui_progress({})
+
+    def _persist_comfyui_progress(self, payload: dict) -> None:
+        path = Path(self._comfyui_progress_file or ".run/comfyui-progress.json")
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        if not payload:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        os.replace(temporary, path)
 
     def _comfyui_progress_state(self) -> dict:
         with self._comfyui_progress_lock:
@@ -2122,8 +2141,10 @@ class UserSystemdServiceManager:
                 data = message.get("data")
                 if not isinstance(data, dict):
                     continue
+                progress_payload = {**data, "updated_at_epoch": time.time()}
                 with self._comfyui_progress_lock:
-                    self._comfyui_progress_cache = {**data, "updated_at_epoch": time.time()}
+                    self._comfyui_progress_cache = progress_payload
+                self._persist_comfyui_progress(progress_payload)
 
     @staticmethod
     def _read_websocket_http_header(sock: socket.socket) -> str:

@@ -1263,6 +1263,19 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertFalse(progress["available"])
         self.assertFalse(progress["active"])
 
+    def test_comfyui_progress_snapshot_is_atomic_and_removable(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            "os.environ",
+            {"HEXE_COMFYUI_PROGRESS_FILE": str(Path(tmp) / "progress.json")},
+            clear=False,
+        ):
+            manager = UserSystemdServiceManager(logger=logging.getLogger("service-manager-test"))
+            progress_path = Path(tmp) / "progress.json"
+            manager._persist_comfyui_progress({"prompt_id": "prompt-1", "value": 7, "max": 28, "node": "6"})
+            self.assertEqual(json.loads(progress_path.read_text(encoding="utf-8"))["value"], 7)
+            manager._persist_comfyui_progress({})
+            self.assertFalse(progress_path.exists())
+
     def test_comfyui_webui_start_refreshes_stale_idle_clock(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             "os.environ",

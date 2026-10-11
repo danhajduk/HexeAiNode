@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from collections import deque
+from pathlib import Path
 
 
 GPU_FIELDS = (
@@ -114,6 +115,26 @@ def parse_comfy_queue(payload: dict, *, state: str = "online") -> dict[str, obje
     return result
 
 
+def render_progress(path: str, prompt_id: object) -> dict[str, object]:
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        updated_at = float(payload.get("updated_at_epoch") or 0)
+        value = float(payload.get("value"))
+        maximum = float(payload.get("max"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return {"available": False}
+    if str(payload.get("prompt_id") or "") != str(prompt_id or "") or time.time() - updated_at > 5:
+        return {"available": False}
+    percent = max(0.0, min(value / maximum * 100 if maximum > 0 else 0.0, 100.0))
+    return {
+        "available": True,
+        "value": value,
+        "max": maximum,
+        "percent": percent,
+        "node": payload.get("node"),
+    }
+
+
 def color(text: str, code: str, enabled: bool) -> str:
     return f"\033[{code}m{text}\033[0m" if enabled else text
 
@@ -129,7 +150,13 @@ def sparkline(values: deque[float]) -> str:
     return "".join(SPARKS[min(round(max(0.0, min(value, 100.0)) / 100 * (len(SPARKS) - 1)), len(SPARKS) - 1)] for value in values)
 
 
-def render(sample: dict[str, float | str], queue: dict[str, int | str], history: deque[float], color_enabled: bool) -> str:
+def render(
+    sample: dict[str, float | str],
+    queue: dict[str, object],
+    progress: dict[str, object],
+    history: deque[float],
+    color_enabled: bool,
+) -> str:
     terminal_width = shutil.get_terminal_size((100, 24)).columns
     gauge_width = max(18, min(42, terminal_width - 38))
     util = float(sample["utilization.gpu"])
@@ -175,6 +202,15 @@ def render(sample: dict[str, float | str], queue: dict[str, int | str], history:
                 f"Output    {queue.get('output_prefix') or 'unknown'}",
             ]
         )
+        if progress.get("available"):
+            percent = float(progress.get("percent") or 0)
+            lines.append(
+                f"Progress  {gauge(percent, 100, gauge_width, color_enabled)} "
+                f"{percent:5.1f}% · step {float(progress.get('value') or 0):.0f}/{float(progress.get('max') or 0):.0f}"
+                f" · node {progress.get('node') or 'unknown'}"
+            )
+        else:
+            lines.append("Progress  waiting for a matching sampling event")
     else:
         lines.extend(["Job       no active or pending ComfyUI job"])
     lines.extend(["", color("Ctrl+C to close", "90", color_enabled)])
@@ -186,6 +222,7 @@ def main() -> int:
     parser.add_argument("--interval", type=float, default=1.0, help="Refresh interval in seconds (default: 1).")
     parser.add_argument("--gpu-index", type=int, default=0, help="NVIDIA GPU index (default: 0).")
     parser.add_argument("--comfy-socket", default="/run/hexe/ai-node/comfyui-gpu.sock", help="ComfyUI Unix socket.")
+    parser.add_argument("--progress-file", default=".run/comfyui-progress.json", help="Hexe ComfyUI progress snapshot.")
     parser.add_argument("--history", type=int, default=40, help="Number of utilization samples to show.")
     parser.add_argument("--once", action="store_true", help="Print one sample and exit.")
     parser.add_argument("--no-color", action="store_true", help="Disable ANSI colors.")
@@ -198,7 +235,9 @@ def main() -> int:
         while True:
             sample = gpu_sample(args.gpu_index)
             history.append(float(sample["utilization.gpu"]))
-            output = render(sample, comfy_queue(args.comfy_socket), history, color_enabled)
+            queue = comfy_queue(args.comfy_socket)
+            progress = render_progress(args.progress_file, queue.get("prompt_id"))
+            output = render(sample, queue, progress, history, color_enabled)
             if not args.once and sys.stdout.isatty():
                 print("\033[2J\033[H", end="")
             print(output, flush=True)

@@ -121,7 +121,8 @@ scripts/comfyui-control.sh all status
 ```
 
 For a compact live view of GPU compute, VRAM, power, temperature, clocks, recent utilization, the GPU ComfyUI queue,
-and active-job details such as prompt ID, seed, sampler, steps, checkpoint, and output prefix, run:
+and active-job details such as prompt ID, seed, sampler, steps, checkpoint, output prefix, live sampling step, percentage,
+and active node, run:
 
 ```bash
 scripts/gpu-dashboard.py
