@@ -9126,7 +9126,7 @@ class NodeControlState:
             if isinstance(generation_status, dict) and isinstance(generation_status.get("session"), dict):
                 session = generation_status["session"]
         queue_payload: dict = {}
-        if socket_available and not session:
+        if socket_available:
             try:
                 queue_payload = self._uds_json_request(socket_path=socket_path, method="GET", path="/queue", timeout_s=3)
             except Exception:
@@ -9136,7 +9136,16 @@ class NodeControlState:
         pending_ids: set[str] = set()
         running_count = 0
         pending_count = 0
-        if session:
+        if queue_payload:
+            running_items = list(queue_payload.get("queue_running") or [])
+            pending_items = list(queue_payload.get("queue_pending") or [])
+            running_count = len(running_items)
+            pending_count = len(pending_items)
+            for item in running_items:
+                running_ids.update(self._prompt_ids_from_comfyui_queue_item(item))
+            for item in pending_items:
+                pending_ids.update(self._prompt_ids_from_comfyui_queue_item(item))
+        elif session:
             running_prompt_id = str(session.get("running_prompt_id") or "").strip()
             if running_prompt_id:
                 running_ids.add(running_prompt_id)
@@ -9146,16 +9155,6 @@ class NodeControlState:
                 if prompt_id:
                     pending_ids.add(prompt_id)
             pending_count = int(session.get("pending_count") or len(pending_ids) or 0)
-        elif queue_payload:
-            running_items = list(queue_payload.get("queue_running") or [])
-            pending_items = list(queue_payload.get("queue_pending") or [])
-            running_count = len(running_items)
-            pending_count = len(pending_items)
-            for item in running_items:
-                running_ids.update(self._prompt_ids_from_comfyui_queue_item(item))
-            for item in pending_items:
-                pending_ids.update(self._prompt_ids_from_comfyui_queue_item(item))
-
         return {
             "socket_path": socket_path,
             "socket_available": socket_available,
@@ -9235,6 +9234,7 @@ class NodeControlState:
             "prompt_ids": [prompt_id] if prompt_id else [],
             "number": response.get("number"),
             "seed": resolved_values.get("seed"),
+            "first_submitted_at": preview.get("first_submitted_at") or now,
             "submitted_at": now,
             "dispatch_error": None,
             "node_errors": response.get("node_errors") or {},
@@ -10285,7 +10285,12 @@ class NodeControlState:
 
     @staticmethod
     def _avatar_head_face_preview_submitted_timestamp(*, preview: dict) -> float | None:
-        for key in ("background_removal_submitted_at", "submitted_at", "created_at"):
+        keys = ["background_removal_submitted_at", "first_submitted_at"]
+        if preview.get("batch_id"):
+            keys.extend(("created_at", "submitted_at"))
+        else:
+            keys.extend(("submitted_at", "created_at"))
+        for key in keys:
             value = str(preview.get(key) or "").strip()
             if not value:
                 continue

@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -5791,6 +5792,48 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(submit.call_count, 1)
             self.assertEqual(dispatch["status"], "waiting_for_completed_import")
             self.assertEqual(waiting[1]["status"], "local_queued")
+
+    def test_avatar_lora_retry_keeps_original_output_time_window(self):
+        timestamp = NodeControlState._avatar_head_face_preview_submitted_timestamp(
+            preview={
+                "batch_id": "head_face_lora_dataset_test",
+                "created_at": "2026-10-11T08:20:34+00:00",
+                "submitted_at": "2026-10-11T08:21:48+00:00",
+            }
+        )
+
+        self.assertEqual(timestamp, datetime.fromisoformat("2026-10-11T08:20:34+00:00").timestamp())
+
+    def test_avatar_lora_dispatch_uses_live_queue_over_stale_session(self):
+        service_manager = SimpleNamespace(
+            comfyui_webui_generation_status=lambda: {
+                "session": {"running_count": 0, "pending_count": 0}
+            }
+        )
+        state = NodeControlState(
+            lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+            config_path="/tmp/nonexistent-hexe-config.json",
+            logger=logging.getLogger("node-control-api-test"),
+            service_manager=service_manager,
+        )
+        with (
+            patch.object(
+                state,
+                "service_status_payload",
+                return_value={"services": {"comfyui_webui": {"socket_path": "/tmp/comfy.sock"}}},
+            ),
+            patch.object(Path, "is_socket", return_value=True),
+            patch.object(
+                state,
+                "_uds_json_request",
+                return_value={"queue_running": [[1, "prompt-live"]], "queue_pending": []},
+            ),
+        ):
+            snapshot = state._avatar_head_face_seed_batch_queue_snapshot()
+
+        self.assertEqual(snapshot["running_count"], 1)
+        self.assertEqual(snapshot["active_prompt_ids"], {"prompt-live"})
+        self.assertEqual(snapshot["capacity"], 0)
 
     def test_avatar_generation_head_lora_three_quarter_prompt_removes_front_facing_conflict(self):
         prompt = NodeControlState._avatar_head_lora_dataset_pose_base_prompt(
