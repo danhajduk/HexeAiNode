@@ -13,6 +13,45 @@ SPEC.loader.exec_module(gpu_dashboard)
 
 
 class GpuDashboardTests(unittest.TestCase):
+    def test_current_job_is_compact_and_follows_backend_status(self):
+        sample = {
+            "name": "Test GPU",
+            "utilization.gpu": 50,
+            "utilization.memory": 25,
+            "memory.used": 100,
+            "memory.total": 1000,
+            "power.draw": 50,
+            "power.limit": 100,
+            "temperature.gpu": 45,
+        }
+        queue = {
+            "state": "online",
+            "running": 1,
+            "pending": 0,
+            "job_state": "running",
+            "queue_number": 103,
+            "prompt_id": "hidden-prompt",
+            "steps": 4,
+            "cfg": 1.16,
+            "sampler": "euler / sgm_uniform",
+            "seed": 7767315626558688864,
+            "checkpoint": "hidden-model",
+            "output_prefix": "hidden-output",
+        }
+        backend = {"available": False, "state": "idle"}
+
+        output = gpu_dashboard.render(sample, queue, backend, False)
+
+        self.assertLess(output.index("IMAGE STUDIO BACKEND"), output.index("CURRENT COMFYUI JOB"))
+        self.assertIn("State     running · queue #103", output)
+        self.assertIn("Sampling  4 steps · CFG 1.16 · euler / sgm_uniform", output)
+        self.assertIn("Seed      7767315626558688864", output)
+        self.assertNotIn("Prompt ID", output)
+        self.assertNotIn("hidden-model", output)
+        self.assertNotIn("hidden-output", output)
+        self.assertNotIn("Clocks", output)
+        self.assertNotIn("History", output)
+
     def test_image_studio_backend_correlates_local_and_comfyui_state(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             profile_dir = Path(temporary_directory) / "Hexe"

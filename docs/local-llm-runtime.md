@@ -120,15 +120,16 @@ scripts/comfyui-control.sh cpu stop
 scripts/comfyui-control.sh all status
 ```
 
-For a compact live view of GPU compute, VRAM, power, temperature, clocks, recent utilization, the GPU ComfyUI queue,
-and active-job details such as prompt ID, seed, sampler, steps, checkpoint, output prefix, live sampling step, percentage,
-and active node, run:
+For a compact live view of GPU compute, VRAM, power, temperature, the GPU ComfyUI queue,
+and active-job queue number, seed, sampler, and sampling settings, run:
 
 ```bash
 scripts/gpu-dashboard.py
 ```
 
-The dashboard also reads the backend-owned Image Studio profile state. Its
+The compact current ComfyUI job summary appears below the backend section and
+shows only queue state/number, sampling settings, and seed. The dashboard also
+reads the backend-owned Image Studio profile state. Its
 `IMAGE STUDIO BACKEND` section shows the active face/body LoRA pose, locally
 queued and submitted candidates, imported and approved counts, and distinguishes
 rendering from the post-ComfyUI image-import phase. Use `--profile-root` when
