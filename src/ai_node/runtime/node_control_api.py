@@ -4652,6 +4652,11 @@ class NodeControlState:
             pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
             pose_config = next((item for item in body_pose_catalog if str(item.get("pose_id") or "") == pose_id), {})
             pose_reference_image = self._ensure_avatar_lora_pose_guide(relative_image=str(pose_config.get("guide_image") or ""))
+            pose_body_prompt = self._avatar_body_lora_dataset_pose_prompt(prompt=prompt, pose=pose_config)
+            pose_negative_prompt = self._avatar_body_lora_dataset_pose_negative_prompt(
+                negative_prompt=negative_prompt,
+                pose=pose_config,
+            )
             avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
             while len(existing_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
                 occupied_slots = {int(candidate.get("slot_index") or 0) for candidate in existing_items}
@@ -4665,11 +4670,13 @@ class NodeControlState:
                 seed_history.add(seed)
                 variation = self._avatar_head_lora_dataset_variation(
                     slot_index=slot_index, cfg=cfg, face_strength=0,
-                    pose_strength=float(body_prompt_defaults.get("pose_strength") or 0.8), catalog_kind="body"
+                    pose_strength=float(pose_config.get("pose_strength") or body_prompt_defaults.get("pose_strength") or 0.8),
+                    pose_id=pose_id,
+                    catalog_kind="body",
                 )
                 item_prompt = ", ".join(filter(None, [
                     str(active_pose.get("pose_prompt") or "").strip(),
-                    prompt,
+                    pose_body_prompt,
                     variation["prompt_suffix"],
                     str(body_prompt_catalog.get("shared_prompt_suffix") or "single adult character, complete neck-to-toes framing, entire body visible, consistent anatomy and proportions, body LoRA training reference"),
                 ]))
@@ -4678,23 +4685,23 @@ class NodeControlState:
                     self._avatar_head_face_seed_batch_local_preview(
                         batch_id=str(dataset.get("dataset_id") or f"upper_torso_lora_dataset_{int(time.time())}"),
                         prompt=item_prompt, prompt_parts=prompt_parts, locked_prompt_parts={},
-                        negative_prompt=negative_prompt, seed=seed, width=width, height=height,
+                        negative_prompt=pose_negative_prompt, seed=seed, width=width, height=height,
                         steps=steps, cfg=variation["cfg"], denoise=denoise, now=now, slot_index=slot_index,
                         batch_kind="upper_torso_lora_dataset", anchor_seed=body_seed,
                         template_id=AVATAR_UPPER_TORSO_LORA_DEPTH_POSE_TEMPLATE_ID,
                         template_variables={
                             "body_reference_image": body_reference_image,
                             "body_depth_controlnet": str(defaults.get("body_depth_controlnet") or "controlnet-depth-sdxl-1.0-fp16.safetensors"),
-                            "body_depth_strength": float(body_prompt_defaults.get("body_depth_strength") or defaults.get("body_depth_strength") or 0.55),
+                            "body_depth_strength": float(pose_config.get("body_depth_strength") or body_prompt_defaults.get("body_depth_strength") or defaults.get("body_depth_strength") or 0.55),
                             "body_depth_start": float(body_prompt_defaults.get("body_depth_start") or defaults.get("body_depth_start") or 0),
-                            "body_depth_end": float(body_prompt_defaults.get("body_depth_end") or defaults.get("body_depth_end") or 0.6),
+                            "body_depth_end": float(pose_config.get("body_depth_end") or body_prompt_defaults.get("body_depth_end") or defaults.get("body_depth_end") or 0.6),
                             "depth_anything_model": str(defaults.get("depth_anything_model") or "depth_anything_v2_vits.pth"),
                             "depth_resolution": int(defaults.get("depth_resolution") or 768),
                             "pose_reference_image": pose_reference_image,
                             "pose_controlnet": str(defaults.get("pose_controlnet") or "controlnet-openpose-sdxl-1.0.safetensors"),
                             "pose_strength": variation["pose_strength"],
                             "pose_start": float(body_prompt_defaults.get("pose_start") or 0),
-                            "pose_end": float(body_prompt_defaults.get("pose_end") or 0.8),
+                            "pose_end": float(pose_config.get("pose_end") or body_prompt_defaults.get("pose_end") or 0.8),
                         },
                     ) | {
                         "preview_id": f"body_lora_{pose_id}_{item_token}", "pose_id": pose_id,
@@ -9197,6 +9204,26 @@ class NodeControlState:
         for source, target in replacements.items():
             cleaned = cleaned.replace(source, target)
         return cleaned
+
+    @staticmethod
+    def _avatar_body_lora_dataset_pose_prompt(*, prompt: str, pose: dict) -> str:
+        cleaned = str(prompt or "")
+        replacements = pose.get("prompt_replacements") if isinstance(pose.get("prompt_replacements"), dict) else {}
+        for source, target in replacements.items():
+            cleaned = re.sub(re.escape(str(source)), lambda _match: str(target), cleaned, flags=re.IGNORECASE)
+        return cleaned
+
+    @staticmethod
+    def _avatar_body_lora_dataset_pose_negative_prompt(*, negative_prompt: str, pose: dict) -> str:
+        removed = {
+            str(item).strip().lower()
+            for item in list(pose.get("negative_remove") or [])
+            if str(item).strip()
+        }
+        parts = [part.strip() for part in str(negative_prompt or "").split(",") if part.strip()]
+        parts = [part for part in parts if part.lower() not in removed]
+        parts.extend(str(item).strip() for item in list(pose.get("negative_add") or []) if str(item).strip())
+        return ", ".join(dict.fromkeys(parts))
 
     @classmethod
     def _avatar_head_lora_dataset_pose_geometry_prompt(cls, *, pose_id: str) -> str:

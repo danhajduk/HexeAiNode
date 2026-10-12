@@ -5809,6 +5809,23 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(old_body_seeds.isdisjoint({item["seed"] for item in body_replacements}))
             self.assertTrue(old_body_seeds.issubset(set(body_rerolled_pose["seed_history"])))
 
+            angled_body_dataset = asyncio.run(
+                state.update_avatar_profile_upper_torso_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(action="generate", pose_id="three_quarter_left"),
+                )
+            )["dataset"]
+            angled_body_pose = next(item for item in angled_body_dataset["poses"] if item["pose_id"] == "three_quarter_left")
+            angled_body_item = angled_body_pose["items"][0]
+            self.assertIn("mandatory anatomical-left three-quarter body view", angled_body_item["prompt"])
+            self.assertNotIn("symmetrical front-facing anatomical A-pose", angled_body_item["prompt"])
+            self.assertNotIn("three-quarter view", [part.strip() for part in angled_body_item["negative_prompt"].split(",")])
+            self.assertIn("straight-on frontal body", angled_body_item["negative_prompt"])
+            self.assertEqual(angled_body_item["template_variables"]["body_depth_strength"], 0.22)
+            self.assertEqual(angled_body_item["template_variables"]["body_depth_end"], 0.45)
+            self.assertEqual(angled_body_item["template_variables"]["pose_end"], 0.95)
+            self.assertGreaterEqual(angled_body_item["template_variables"]["pose_strength"], 0.78)
+
             generated = asyncio.run(
                 state.update_avatar_profile_head_lora_dataset(
                     profile_id="Jane_Avatar",
