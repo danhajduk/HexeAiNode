@@ -4047,6 +4047,12 @@ class NodeControlState:
         face_prompt_defaults = (
             face_prompt_catalog.get("defaults") if isinstance(face_prompt_catalog.get("defaults"), dict) else {}
         )
+        face_batch_size = min(self._optional_positive_int(face_prompt_defaults.get("batch_size")) or AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE, 20)
+        face_required_per_pose = min(
+            self._optional_positive_int(face_prompt_defaults.get("minimum_approved_per_pose"))
+            or AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+            face_batch_size,
+        )
         face_pose_catalog = self._image_studio_lora_pose_catalog("face") or [
             {"pose_id": pose_id, "label": pose_id.replace("_", " ").title(), "prompt": pose_prompt}
             for pose_id, pose_prompt in AVATAR_HEAD_FACE_LORA_DATASET_POSES
@@ -4093,7 +4099,8 @@ class NodeControlState:
                     "label": str(catalog_pose.get("label") or pose_id.replace("_", " ").title()),
                     "items": [],
                     "approved_count": 0,
-                    "required_count": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+                    "required_count": face_required_per_pose,
+                    "batch_size": face_batch_size,
                     "status": "pending",
                 }
             pose["pose_prompt"] = pose_prompt
@@ -4122,7 +4129,7 @@ class NodeControlState:
                     for record in list(pose.get("approved_dataset") or [])
                     if isinstance(record, dict) and str(record.get("status") or "").strip() == "ready"
                 )
-                >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE
+                >= face_required_per_pose
                 for pose in poses
                 if isinstance(pose, dict)
             )
@@ -4136,7 +4143,8 @@ class NodeControlState:
                 "approved_dataset": [],
                 "approved_count": 0,
                 "approved_dataset_count": 0,
-                "required_count": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+                "required_count": face_required_per_pose,
+                "batch_size": face_batch_size,
                 "status": "pending",
                 "status_detail": "No pose images generated yet.",
                 "phase_status": "pending",
@@ -4285,7 +4293,7 @@ class NodeControlState:
 
         if action == "next":
             approved_count = sum(1 for item in list(active_pose.get("items") or []) if bool(item.get("approved")))
-            if approved_count < AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE:
+            if approved_count < face_required_per_pose:
                 raise ValueError("avatar_head_lora_pose_minimum_required")
             active_pose, preparation_changed = self._prepare_avatar_head_lora_pose_approved_dataset(
                 profile_dir=profile_dir,
@@ -4328,10 +4336,10 @@ class NodeControlState:
                 workspace=workspace,
                 lora_seed_set=lora_seed_set,
             )
-            while len(existing_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
+            while len(existing_items) < face_batch_size:
                 identity_source_seed = face_profile_seed
                 occupied_slots = {int(item.get("slot_index") or 0) for item in existing_items}
-                slot_index = next(index for index in range(1, AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE + 1) if index not in occupied_slots)
+                slot_index = next(index for index in range(1, face_batch_size + 1) if index not in occupied_slots)
                 seed = secrets.randbelow(2**63 - 1)
                 while seed == face_profile_seed or seed in seed_history:
                     seed = secrets.randbelow(2**63 - 1)
@@ -4431,14 +4439,15 @@ class NodeControlState:
                         "pose_control": pose_control,
                     }
                 )
-            active_pose["items"] = existing_items[:AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE]
+            active_pose["items"] = existing_items[:face_batch_size]
             active_pose["seed_history"] = sorted(seed_history)
 
         for pose in poses:
             approved_count = sum(1 for item in list(pose.get("items") or []) if bool(item.get("approved")))
             pose["approved_count"] = approved_count
-            pose["required_count"] = AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE
-            if approved_count >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE:
+            pose["batch_size"] = face_batch_size
+            pose["required_count"] = face_required_per_pose
+            if approved_count >= face_required_per_pose:
                 pose["status"] = "ready" if str(pose.get("status") or "") != "completed" else "completed"
             elif list(pose.get("items") or []):
                 pose["status"] = "reviewing"
@@ -4452,7 +4461,7 @@ class NodeControlState:
             **dataset,
             "dataset_id": dataset_id,
             "status": "completed"
-            if all(int(pose.get("approved_count") or 0) >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE for pose in poses)
+            if all(int(pose.get("approved_count") or 0) >= face_required_per_pose for pose in poses)
             else "waiting"
             if not any(list(pose.get("items") or []) for pose in poses)
             else "in_progress",
@@ -4461,8 +4470,8 @@ class NodeControlState:
             "active_pose_index": active_pose_index,
             "active_pose_id": poses[active_pose_index].get("pose_id") if poses else "",
             "seed_set": lora_seed_set,
-            "batch_size": AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE,
-            "required_per_pose": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+            "batch_size": face_batch_size,
+            "required_per_pose": face_required_per_pose,
             "seed_strategy": "profile_face_anchor_with_candidate_seeds",
             "generation_seed": face_profile_seed,
             "variation_strategy": "controlled_ten_v5_serial_import",
@@ -4524,6 +4533,12 @@ class NodeControlState:
         now = datetime.now(timezone.utc).isoformat()
         body_prompt_catalog = self._image_studio_lora_prompt_catalog("body")
         body_prompt_defaults = body_prompt_catalog.get("defaults") if isinstance(body_prompt_catalog.get("defaults"), dict) else {}
+        body_batch_size = min(self._optional_positive_int(body_prompt_defaults.get("batch_size")) or AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE, 20)
+        body_required_per_pose = min(
+            self._optional_positive_int(body_prompt_defaults.get("minimum_approved_per_pose"))
+            or AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+            body_batch_size,
+        )
         body_pose_catalog = self._image_studio_lora_pose_catalog("body") or [
             {
                 "pose_id": pose_id,
@@ -4572,7 +4587,8 @@ class NodeControlState:
                     "pose_prompt": pose_prompt,
                     "items": [],
                     "approved_count": 0,
-                    "required_count": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+                    "required_count": body_required_per_pose,
+                    "batch_size": body_batch_size,
                     "status": "pending",
                 }
                 for pose_id, pose_prompt in [
@@ -4616,7 +4632,7 @@ class NodeControlState:
                 ]
         if action == "next":
             approved_count = sum(1 for candidate in list(active_pose.get("items") or []) if bool(candidate.get("approved")))
-            if approved_count < AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE:
+            if approved_count < body_required_per_pose:
                 raise ValueError("avatar_upper_torso_lora_pose_minimum_required")
             active_pose["status"] = "completed"
             active_pose_index = min(active_pose_index + 1, max(len(poses) - 1, 0))
@@ -4664,11 +4680,11 @@ class NodeControlState:
                 pose=pose_config,
             )
             avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
-            while len(existing_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
+            while len(existing_items) < body_batch_size:
                 occupied_slots = {int(candidate.get("slot_index") or 0) for candidate in existing_items}
                 slot_index = next(
                     index
-                    for index in range(1, AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE + 1)
+                    for index in range(1, body_batch_size + 1)
                     if index not in occupied_slots
                 )
                 item_token = uuid.uuid4().hex[:10]
@@ -4720,14 +4736,15 @@ class NodeControlState:
                         "identity_source_seed": body_seed,
                     }
                 )
-            active_pose["items"] = existing_items[:AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE]
+            active_pose["items"] = existing_items[:body_batch_size]
             active_pose["seed_history"] = sorted(seed_history)
         for pose in poses:
             approved_count = sum(1 for candidate in list(pose.get("items") or []) if bool(candidate.get("approved")))
             pose["approved_count"] = approved_count
-            pose["required_count"] = AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE
+            pose["batch_size"] = body_batch_size
+            pose["required_count"] = body_required_per_pose
             if str(pose.get("status") or "") != "completed":
-                pose["status"] = "ready" if approved_count >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE else "reviewing" if pose.get("items") else "pending"
+                pose["status"] = "ready" if approved_count >= body_required_per_pose else "reviewing" if pose.get("items") else "pending"
         training_manifest = dataset.get("training_manifest") if isinstance(dataset.get("training_manifest"), dict) else {}
         training_job = dataset.get("training_job") if isinstance(dataset.get("training_job"), dict) else {}
         if training_job:
@@ -4809,11 +4826,11 @@ class NodeControlState:
             **dataset,
             "dataset_id": str(dataset.get("dataset_id") or f"upper_torso_lora_dataset_{int(time.time())}"),
             "source": "generated",
-            "status": "completed" if poses and all(int(pose.get("approved_count") or 0) >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE for pose in poses) else "reviewing",
+            "status": "completed" if poses and all(int(pose.get("approved_count") or 0) >= body_required_per_pose for pose in poses) else "reviewing",
             "poses": poses,
             "active_pose_index": active_pose_index,
-            "batch_size": AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE,
-            "required_per_pose": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+            "batch_size": body_batch_size,
+            "required_per_pose": body_required_per_pose,
             "seed_strategy": "profile_body_anchor_with_candidate_seeds",
             "variation_strategy": "controlled_ten_v2_depth_pose",
             "anchor_seed": body_seed,
@@ -6035,8 +6052,11 @@ class NodeControlState:
         vision_rejected_count = sum(1 for item in imported_items if str(item.get("vision_status") or "").strip() == "rejected")
         generated_count = len(completed_items)
         imported_count = len(imported_items)
-        required_batch_count = AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE
-        required_approved_count = AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE
+        required_batch_count = self._optional_positive_int(pose.get("batch_size")) or AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE
+        required_approved_count = min(
+            self._optional_positive_int(pose.get("required_count")) or AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
+            required_batch_count,
+        )
         newest_imported_at = max(
             (
                 self._parse_iso_datetime(str(item.get("imported_at") or ""))
@@ -6146,7 +6166,8 @@ class NodeControlState:
         if not hasattr(self._service_manager, "ensure_vision_runtime_resident") or not hasattr(self._service_manager, "unload_vision_model"):
             return pose, False
         pose_items = [item for item in list(pose.get("items") or []) if isinstance(item, dict)]
-        if len([item for item in pose_items if not bool(item.get("rejected"))]) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
+        required_batch_count = self._optional_positive_int(pose.get("batch_size")) or AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE
+        if len([item for item in pose_items if not bool(item.get("rejected"))]) < required_batch_count:
             return pose, False
         queue_snapshot = self._avatar_head_face_seed_batch_queue_snapshot()
         active_prompt_ids = {
@@ -6167,12 +6188,12 @@ class NodeControlState:
                 or str(item.get("prompt_id") or "").strip() not in active_prompt_ids
             )
         ]
-        if len(reviewable_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
+        if len(reviewable_items) < required_batch_count:
             return pose, False
         newest_imported_at = max(
             (
                 self._parse_iso_datetime(str(item.get("imported_at") or ""))
-                for item in reviewable_items[:AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE]
+                for item in reviewable_items[:required_batch_count]
                 if str(item.get("imported_at") or "").strip()
                 and str(item.get("source_output") or "").strip()
             ),
@@ -6186,7 +6207,7 @@ class NodeControlState:
                 pass
         pending_items = [
             item
-            for item in reviewable_items[:AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE]
+            for item in reviewable_items[:required_batch_count]
             if str(item.get("vision_status") or "").strip() not in {"approved", "rejected", "failed"}
             and not isinstance(item.get("vision_review"), dict)
         ]
@@ -6252,7 +6273,7 @@ class NodeControlState:
         return {
             **pose,
             "items": updated_items,
-            "vision_status": "reviewed" if vision_reviewed_count >= AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE else "reviewing",
+            "vision_status": "reviewed" if vision_reviewed_count >= required_batch_count else "reviewing",
             "vision_reviewed_count": vision_reviewed_count,
             "vision_updated_at": now,
         }, True
@@ -6349,7 +6370,8 @@ class NodeControlState:
             for item in list(pose.get("items") or [])
             if isinstance(item, dict) and bool(item.get("approved")) and not bool(item.get("rejected"))
         ]
-        if len(approved_items) < AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE:
+        required_count = self._optional_positive_int(pose.get("required_count")) or AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE
+        if len(approved_items) < required_count:
             return pose, False
         existing_records = [
             item
@@ -6590,7 +6612,7 @@ class NodeControlState:
             **pose,
             "approved_dataset": updated_records,
             "approved_dataset_ready_count": ready_count,
-            "approved_dataset_status": "ready" if ready_count >= AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE else "background_removal_pending",
+            "approved_dataset_status": "ready" if ready_count >= required_count else "background_removal_pending",
             "approved_dataset_updated_at": now if changed else pose.get("approved_dataset_updated_at"),
         }, changed
 

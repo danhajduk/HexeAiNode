@@ -5772,8 +5772,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 )
             )["dataset"]
             body_pose = body_dataset["poses"][body_dataset["active_pose_index"]]
-            self.assertEqual(len(body_pose["items"]), 10)
-            self.assertEqual(len({item["seed"] for item in body_pose["items"]}), 10)
+            self.assertEqual(body_dataset["batch_size"], 1)
+            self.assertEqual(body_dataset["required_per_pose"], 1)
+            self.assertEqual(len(body_pose["items"]), 1)
+            self.assertEqual(len({item["seed"] for item in body_pose["items"]}), 1)
             self.assertTrue(all(item["seed"] != 24680 for item in body_pose["items"]))
             self.assertTrue(all(item["identity_source_seed"] == 24680 for item in body_pose["items"]))
             self.assertTrue(all(item["template_id"] == "template.avatar_body_lora_depth_pose.realvisxl.v1" for item in body_pose["items"]))
@@ -5785,8 +5787,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             metadata = state._avatar_profile_metadata(profile_dir=profile_dir)
             workspace = state._avatar_profile_prompt_workspace(metadata=metadata, section="upper_torso")
             pose = next(item for item in workspace["lora_dataset"]["poses"] if item["pose_id"] == "front_neutral")
-            for index, item in enumerate(pose["items"]):
-                item["approved"] = index < 2
+            for item in pose["items"]:
+                item["approved"] = False
             old_body_items = list(pose["items"])
             old_body_seeds = {item["seed"] for item in old_body_items}
             metadata = state._avatar_profile_metadata_with_workspace(metadata=metadata, section="upper_torso", workspace=workspace)
@@ -5799,13 +5801,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 )
             )["dataset"]
             body_rerolled_pose = next(item for item in body_rerolled["poses"] if item["pose_id"] == "front_neutral")
-            self.assertEqual(len(body_rerolled_pose["items"]), 10)
-            self.assertEqual(
-                [item["preview_id"] for item in body_rerolled_pose["items"] if item["approved"]],
-                [item["preview_id"] for item in old_body_items[:2]],
-            )
+            self.assertEqual(len(body_rerolled_pose["items"]), 1)
+            self.assertEqual([item for item in body_rerolled_pose["items"] if item["approved"]], [])
             body_replacements = [item for item in body_rerolled_pose["items"] if not item["approved"]]
-            self.assertEqual(len(body_replacements), 8)
+            self.assertEqual(len(body_replacements), 1)
             self.assertTrue(old_body_seeds.isdisjoint({item["seed"] for item in body_replacements}))
             self.assertTrue(old_body_seeds.issubset(set(body_rerolled_pose["seed_history"])))
 
@@ -5817,6 +5816,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             )["dataset"]
             angled_body_pose = next(item for item in angled_body_dataset["poses"] if item["pose_id"] == "three_quarter_left")
             angled_body_item = angled_body_pose["items"][0]
+            body_catalog = state._image_studio_lora_prompt_catalog("body")
+            body_defaults = body_catalog["defaults"]
+            angled_pose_config = next(item for item in body_catalog["poses"] if item["pose_id"] == "three_quarter_left")
             self.assertIn("mandatory anatomical-left three-quarter body view", angled_body_item["prompt"])
             self.assertNotIn("symmetrical front-facing anatomical A-pose", angled_body_item["prompt"])
             self.assertNotIn("three-quarter view", [part.strip() for part in angled_body_item["negative_prompt"].split(",")])
@@ -5827,11 +5829,11 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             self.assertTrue(angled_body_item["template_variables"]["body_reference_image"].endswith("/upper_torso/last.png"))
-            self.assertEqual(angled_body_item["template_variables"]["body_depth_strength"], 0.44)
-            self.assertEqual(angled_body_item["template_variables"]["body_depth_end"], 0.6)
-            self.assertEqual(angled_body_item["template_variables"]["pose_depth_strength"], 0.2)
-            self.assertEqual(angled_body_item["template_variables"]["pose_depth_end"], 0.45)
-            self.assertEqual(angled_body_item["template_variables"]["pose_end"], 0.8)
+            self.assertEqual(angled_body_item["template_variables"]["body_depth_strength"], body_defaults["body_depth_strength"])
+            self.assertEqual(angled_body_item["template_variables"]["body_depth_end"], body_defaults["body_depth_end"])
+            self.assertEqual(angled_body_item["template_variables"]["pose_depth_strength"], angled_pose_config["pose_depth_strength"])
+            self.assertEqual(angled_body_item["template_variables"]["pose_depth_end"], angled_pose_config["pose_depth_end"])
+            self.assertEqual(angled_body_item["template_variables"]["pose_end"], angled_pose_config["pose_end"])
             self.assertGreaterEqual(angled_body_item["template_variables"]["pose_strength"], 0.54)
 
             generated = asyncio.run(
