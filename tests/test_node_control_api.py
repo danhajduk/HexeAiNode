@@ -5781,6 +5781,34 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(all(item["width"] == 768 and item["height"] == 1536 for item in body_pose["items"]))
             self.assertTrue(all("neck-to-toes" in item["prompt"] for item in body_pose["items"]))
             self.assertEqual(body_dataset["seed_strategy"], "profile_body_anchor_with_candidate_seeds")
+
+            metadata = state._avatar_profile_metadata(profile_dir=profile_dir)
+            workspace = state._avatar_profile_prompt_workspace(metadata=metadata, section="upper_torso")
+            pose = next(item for item in workspace["lora_dataset"]["poses"] if item["pose_id"] == "front_neutral")
+            for index, item in enumerate(pose["items"]):
+                item["approved"] = index < 2
+            old_body_items = list(pose["items"])
+            old_body_seeds = {item["seed"] for item in old_body_items}
+            metadata = state._avatar_profile_metadata_with_workspace(metadata=metadata, section="upper_torso", workspace=workspace)
+            (profile_dir / "profile.json").write_text(json.dumps(metadata), encoding="utf-8")
+
+            body_rerolled = asyncio.run(
+                state.update_avatar_profile_upper_torso_lora_dataset(
+                    profile_id="Jane_Avatar",
+                    payload=AvatarProfileHeadLoraDatasetRequest(action="generate", pose_id="front_neutral"),
+                )
+            )["dataset"]
+            body_rerolled_pose = next(item for item in body_rerolled["poses"] if item["pose_id"] == "front_neutral")
+            self.assertEqual(len(body_rerolled_pose["items"]), 10)
+            self.assertEqual(
+                [item["preview_id"] for item in body_rerolled_pose["items"] if item["approved"]],
+                [item["preview_id"] for item in old_body_items[:2]],
+            )
+            body_replacements = [item for item in body_rerolled_pose["items"] if not item["approved"]]
+            self.assertEqual(len(body_replacements), 8)
+            self.assertTrue(old_body_seeds.isdisjoint({item["seed"] for item in body_replacements}))
+            self.assertTrue(old_body_seeds.issubset(set(body_rerolled_pose["seed_history"])))
+
             generated = asyncio.run(
                 state.update_avatar_profile_head_lora_dataset(
                     profile_id="Jane_Avatar",

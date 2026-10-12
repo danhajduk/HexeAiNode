@@ -4628,22 +4628,41 @@ class NodeControlState:
         body_reference_image = f"avatar_profiles/{self._safe_filename_component(profile_dir.name)}/refs/upper_torso/last.png"
         body_reference_path = self._manual_image_input_dir() / body_reference_image
         if action == "generate" and active_pose and body_seed is not None and body_reference_path.is_file():
-            existing_items = [candidate for candidate in list(active_pose.get("items") or []) if isinstance(candidate, dict) and not bool(candidate.get("rejected"))]
-            used_seeds = {
+            previous_items = [candidate for candidate in list(active_pose.get("items") or []) if isinstance(candidate, dict)]
+            seed_history = {
                 seed
-                for seed in (self._coerce_manual_image_seed(candidate.get("seed")) for candidate in existing_items)
+                for seed in (
+                    self._coerce_manual_image_seed(value)
+                    for value in [
+                        *list(active_pose.get("seed_history") or []),
+                        *(candidate.get("seed") for candidate in previous_items),
+                    ]
+                )
                 if seed is not None
             }
-            used_seeds.add(body_seed)
+            seed_history.add(body_seed)
+            existing_items = [
+                candidate
+                for candidate in previous_items
+                if bool(candidate.get("approved")) and not bool(candidate.get("rejected"))
+            ]
+            for candidate in previous_items:
+                if candidate not in existing_items:
+                    self._delete_avatar_head_lora_candidate_file(profile_dir=profile_dir, item=candidate)
             pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
             pose_config = next((item for item in body_pose_catalog if str(item.get("pose_id") or "") == pose_id), {})
             pose_reference_image = self._ensure_avatar_lora_pose_guide(relative_image=str(pose_config.get("guide_image") or ""))
             avatar_name = self._safe_filename_component(metadata.get("name") or profile_dir.name or "avatar")
             while len(existing_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
-                slot_index = len(existing_items) + 1
+                occupied_slots = {int(candidate.get("slot_index") or 0) for candidate in existing_items}
+                slot_index = next(
+                    index
+                    for index in range(1, AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE + 1)
+                    if index not in occupied_slots
+                )
                 item_token = uuid.uuid4().hex[:10]
-                seed = self._random_seed_excluding(used_seeds)
-                used_seeds.add(seed)
+                seed = self._random_seed_excluding(seed_history)
+                seed_history.add(seed)
                 variation = self._avatar_head_lora_dataset_variation(
                     slot_index=slot_index, cfg=cfg, face_strength=0,
                     pose_strength=float(body_prompt_defaults.get("pose_strength") or 0.8), catalog_kind="body"
@@ -4685,6 +4704,7 @@ class NodeControlState:
                     }
                 )
             active_pose["items"] = existing_items[:AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE]
+            active_pose["seed_history"] = sorted(seed_history)
         for pose in poses:
             approved_count = sum(1 for candidate in list(pose.get("items") or []) if bool(candidate.get("approved")))
             pose["approved_count"] = approved_count
