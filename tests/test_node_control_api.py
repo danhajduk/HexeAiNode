@@ -5826,8 +5826,8 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     "/body/depth-source/three_quarter_left.png"
                 )
             )
-            self.assertEqual(angled_body_item["template_variables"]["body_depth_strength"], 0.65)
-            self.assertEqual(angled_body_item["template_variables"]["body_depth_end"], 0.85)
+            self.assertEqual(angled_body_item["template_variables"]["body_depth_strength"], 0.42)
+            self.assertEqual(angled_body_item["template_variables"]["body_depth_end"], 0.72)
             self.assertEqual(angled_body_item["template_variables"]["pose_end"], 0.8)
             self.assertGreaterEqual(angled_body_item["template_variables"]["pose_strength"], 0.54)
 

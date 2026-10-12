@@ -38,8 +38,8 @@
       "depth_guide_image": "system/lora-pose-guides/body/depth-source/three_quarter_left.png",
       "pose_strength": 0.58,
       "pose_end": 0.8,
-      "body_depth_strength": 0.65,
-      "body_depth_end": 0.85,
+      "body_depth_strength": 0.42,
+      "body_depth_end": 0.72,
       "prompt_replacements": {
         "symmetrical front-facing anatomical A-pose": "anatomical-left three-quarter A-pose with strong visible torso and pelvis yaw",
         "front-facing": "anatomical-left three-quarter angled",
@@ -58,8 +58,8 @@
       "depth_guide_image": "system/lora-pose-guides/body/depth-source/three_quarter_right.png",
       "pose_strength": 0.58,
       "pose_end": 0.8,
-      "body_depth_strength": 0.65,
-      "body_depth_end": 0.85,
+      "body_depth_strength": 0.42,
+      "body_depth_end": 0.72,
       "prompt_replacements": {
         "symmetrical front-facing anatomical A-pose": "anatomical-right three-quarter A-pose with strong visible torso and pelvis yaw",
         "front-facing": "anatomical-right three-quarter angled",
