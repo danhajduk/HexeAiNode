@@ -5821,10 +5821,15 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("symmetrical front-facing anatomical A-pose", angled_body_item["prompt"])
             self.assertNotIn("three-quarter view", [part.strip() for part in angled_body_item["negative_prompt"].split(",")])
             self.assertIn("straight-on frontal body", angled_body_item["negative_prompt"])
-            self.assertEqual(angled_body_item["template_variables"]["body_depth_strength"], 0.22)
-            self.assertEqual(angled_body_item["template_variables"]["body_depth_end"], 0.45)
-            self.assertEqual(angled_body_item["template_variables"]["pose_end"], 0.95)
-            self.assertGreaterEqual(angled_body_item["template_variables"]["pose_strength"], 0.78)
+            self.assertTrue(
+                angled_body_item["template_variables"]["body_reference_image"].endswith(
+                    "/body/depth-source/three_quarter_left.png"
+                )
+            )
+            self.assertEqual(angled_body_item["template_variables"]["body_depth_strength"], 0.65)
+            self.assertEqual(angled_body_item["template_variables"]["body_depth_end"], 0.85)
+            self.assertEqual(angled_body_item["template_variables"]["pose_end"], 0.8)
+            self.assertGreaterEqual(angled_body_item["template_variables"]["pose_strength"], 0.54)
 
             generated = asyncio.run(
                 state.update_avatar_profile_head_lora_dataset(

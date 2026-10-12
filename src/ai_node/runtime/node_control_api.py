@@ -4652,6 +4652,12 @@ class NodeControlState:
             pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
             pose_config = next((item for item in body_pose_catalog if str(item.get("pose_id") or "") == pose_id), {})
             pose_reference_image = self._ensure_avatar_lora_pose_guide(relative_image=str(pose_config.get("guide_image") or ""))
+            depth_guide_image = str(pose_config.get("depth_guide_image") or "").strip()
+            pose_depth_reference_image = (
+                self._ensure_avatar_lora_pose_guide(relative_image=depth_guide_image)
+                if depth_guide_image
+                else body_reference_image
+            )
             pose_body_prompt = self._avatar_body_lora_dataset_pose_prompt(prompt=prompt, pose=pose_config)
             pose_negative_prompt = self._avatar_body_lora_dataset_pose_negative_prompt(
                 negative_prompt=negative_prompt,
@@ -4690,7 +4696,7 @@ class NodeControlState:
                         batch_kind="upper_torso_lora_dataset", anchor_seed=body_seed,
                         template_id=AVATAR_UPPER_TORSO_LORA_DEPTH_POSE_TEMPLATE_ID,
                         template_variables={
-                            "body_reference_image": body_reference_image,
+                            "body_reference_image": pose_depth_reference_image,
                             "body_depth_controlnet": str(defaults.get("body_depth_controlnet") or "controlnet-depth-sdxl-1.0-fp16.safetensors"),
                             "body_depth_strength": float(pose_config.get("body_depth_strength") or body_prompt_defaults.get("body_depth_strength") or defaults.get("body_depth_strength") or 0.55),
                             "body_depth_start": float(body_prompt_defaults.get("body_depth_start") or defaults.get("body_depth_start") or 0),
