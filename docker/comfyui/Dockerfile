@@ -1,8 +1,9 @@
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
-ARG COMFYUI_REF=master
+ARG COMFYUI_REF=f8e51b674c75f41b3960d65ce83f77301ab297c9
 ARG COMFYUI_CONTROLNET_AUX_REF=main
 ARG COMFYUI_PULID_REF=main
+ARG COMFYUI_IPADAPTER_REF=a0f451a5113cf9becb0847b92884cb10cbdec0ef
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PIP_NO_CACHE_DIR=1
@@ -27,7 +28,10 @@ RUN apt-get update \
 
 RUN python3 -m pip install --upgrade pip setuptools wheel
 
-RUN git clone --depth 1 --branch "${COMFYUI_REF}" https://github.com/comfyanonymous/ComfyUI.git /opt/ComfyUI
+RUN git init /opt/ComfyUI \
+    && git -C /opt/ComfyUI remote add origin https://github.com/comfyanonymous/ComfyUI.git \
+    && git -C /opt/ComfyUI fetch --depth 1 origin "${COMFYUI_REF}" \
+    && git -C /opt/ComfyUI checkout --detach FETCH_HEAD
 
 WORKDIR /opt/ComfyUI
 
@@ -39,6 +43,11 @@ RUN git clone --depth 1 --branch "${COMFYUI_CONTROLNET_AUX_REF}" https://github.
 
 RUN git clone --depth 1 --branch "${COMFYUI_PULID_REF}" https://github.com/cubiq/PuLID_ComfyUI.git custom_nodes/PuLID_ComfyUI \
     && python3 -m pip install -r custom_nodes/PuLID_ComfyUI/requirements.txt
+
+RUN git init custom_nodes/ComfyUI_IPAdapter_plus \
+    && git -C custom_nodes/ComfyUI_IPAdapter_plus remote add origin https://github.com/cubiq/ComfyUI_IPAdapter_plus.git \
+    && git -C custom_nodes/ComfyUI_IPAdapter_plus fetch --depth 1 origin "${COMFYUI_IPADAPTER_REF}" \
+    && git -C custom_nodes/ComfyUI_IPAdapter_plus checkout --detach FETCH_HEAD
 
 COPY docker/comfyui/run-dual.sh /opt/hexe/run-comfyui-dual.sh
 COPY docker/comfyui/run-cpu-limited.py /opt/hexe/run-cpu-limited.py

@@ -42,6 +42,10 @@ export COMFYUI_GPU_CONTROLNET_DEPTH_FILE="${COMFYUI_GPU_CONTROLNET_DEPTH_FILE:-c
 export COMFYUI_GPU_CONTROLNET_DEPTH_URL="${COMFYUI_GPU_CONTROLNET_DEPTH_URL:-https://huggingface.co/diffusers/controlnet-depth-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors}"
 export COMFYUI_GPU_PULID_MODEL_FILE="${COMFYUI_GPU_PULID_MODEL_FILE:-ip-adapter_pulid_sdxl_fp16.safetensors}"
 export COMFYUI_GPU_PULID_MODEL_URL="${COMFYUI_GPU_PULID_MODEL_URL:-https://huggingface.co/huchenlei/ipadapter_pulid/resolve/main/ip-adapter_pulid_sdxl_fp16.safetensors}"
+export COMFYUI_GPU_IPADAPTER_MODEL_FILE="${COMFYUI_GPU_IPADAPTER_MODEL_FILE:-ip-adapter_sdxl_vit-h.safetensors}"
+export COMFYUI_GPU_IPADAPTER_MODEL_URL="${COMFYUI_GPU_IPADAPTER_MODEL_URL:-https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter_sdxl_vit-h.safetensors}"
+export COMFYUI_GPU_CLIP_VISION_MODEL_FILE="${COMFYUI_GPU_CLIP_VISION_MODEL_FILE:-CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors}"
+export COMFYUI_GPU_CLIP_VISION_MODEL_URL="${COMFYUI_GPU_CLIP_VISION_MODEL_URL:-https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors}"
 export COMFYUI_GPU_INSIGHTFACE_MODEL_NAME="${COMFYUI_GPU_INSIGHTFACE_MODEL_NAME:-antelopev2}"
 export COMFYUI_GPU_INSIGHTFACE_MODEL_URL="${COMFYUI_GPU_INSIGHTFACE_MODEL_URL:-https://huggingface.co/MonsterMMORPG/tools/resolve/main/antelopev2.zip}"
 
@@ -362,7 +366,7 @@ link_model_file() {
 
 prepare_gpu_runtime_dirs() {
   mkdir -p "$COMFYUI_GPU_MODEL_DIR/checkpoints" "$COMFYUI_GPU_MODEL_DIR/loras"
-  mkdir -p "$COMFYUI_GPU_CONTROLNET_DIR" "$COMFYUI_GPU_MODEL_DIR/pulid" "$COMFYUI_GPU_MODEL_DIR/insightface/models/$COMFYUI_GPU_INSIGHTFACE_MODEL_NAME" "$COMFYUI_GPU_INPUT_DIR" "$COMFYUI_GPU_OUTPUT_DIR" "$COMFYUI_GPU_USER_DIR" "$COMFYUI_GPU_CUSTOM_NODES_DIR" "$COMFYUI_ASSET_DIR" "$COMFYUI_CONTROLNET_AUX_CKPTS_DIR" "$COMFYUI_CONTROLNET_AUX_TEMP_DIR" "$COMFYUI_SOCKET_DIR"
+  mkdir -p "$COMFYUI_GPU_CONTROLNET_DIR" "$COMFYUI_GPU_MODEL_DIR/pulid" "$COMFYUI_GPU_MODEL_DIR/ipadapter" "$COMFYUI_GPU_MODEL_DIR/clip_vision" "$COMFYUI_GPU_MODEL_DIR/insightface/models/$COMFYUI_GPU_INSIGHTFACE_MODEL_NAME" "$COMFYUI_GPU_INPUT_DIR" "$COMFYUI_GPU_OUTPUT_DIR" "$COMFYUI_GPU_USER_DIR" "$COMFYUI_GPU_CUSTOM_NODES_DIR" "$COMFYUI_ASSET_DIR" "$COMFYUI_CONTROLNET_AUX_CKPTS_DIR" "$COMFYUI_CONTROLNET_AUX_TEMP_DIR" "$COMFYUI_SOCKET_DIR"
   link_model_file "$COMFYUI_LEGACY_MODEL_DIR/checkpoints" "$COMFYUI_GPU_MODEL_DIR/checkpoints" "$COMFYUI_GPU_CHECKPOINT"
   link_model_file "$COMFYUI_LEGACY_MODEL_DIR/loras" "$COMFYUI_GPU_MODEL_DIR/loras" "$COMFYUI_GPU_LORA"
 }
@@ -517,6 +521,12 @@ download_gpu_pulid_models() {
   download_zip_model_if_missing "$COMFYUI_GPU_INSIGHTFACE_MODEL_URL" "$COMFYUI_GPU_MODEL_DIR/insightface/models/$COMFYUI_GPU_INSIGHTFACE_MODEL_NAME" "$COMFYUI_GPU_INSIGHTFACE_MODEL_NAME"
 }
 
+download_gpu_ipadapter_models() {
+  prepare_gpu_runtime_dirs
+  download_if_missing "$COMFYUI_GPU_IPADAPTER_MODEL_URL" "$COMFYUI_GPU_MODEL_DIR/ipadapter/$COMFYUI_GPU_IPADAPTER_MODEL_FILE"
+  download_if_missing "$COMFYUI_GPU_CLIP_VISION_MODEL_URL" "$COMFYUI_GPU_MODEL_DIR/clip_vision/$COMFYUI_GPU_CLIP_VISION_MODEL_FILE"
+}
+
 each_target() {
   if [[ "$target" == "all" ]]; then
     printf 'gpu\ncpu\n'
@@ -548,6 +558,13 @@ case "$command" in
       gpu) download_gpu_pulid_models ;;
       cpu) echo "PuLID is used by the GPU Simple Avatar Generation template only." ;;
       all) download_gpu_pulid_models ;;
+    esac
+    ;;
+  download-ipadapter|download-ipadapter-models)
+    case "$target" in
+      gpu) download_gpu_ipadapter_models ;;
+      cpu) echo "IP-Adapter SDXL is used by GPU image workflows only." ;;
+      all) download_gpu_ipadapter_models ;;
     esac
     ;;
   build)
@@ -608,8 +625,8 @@ case "$command" in
     done
     ;;
   *)
-    echo "Usage: $0 [gpu|cpu|all] {prepare|gate|download-controlnets|download-pulid|build|create|start|stop|unload-model|restart|status|logs|ready}" >&2
-    echo "       $0 {prepare|gate|download-controlnets|download-pulid|build|create|start|stop|unload-model|restart|status|logs|ready}  # defaults to gpu" >&2
+    echo "Usage: $0 [gpu|cpu|all] {prepare|gate|download-controlnets|download-pulid|download-ipadapter|build|create|start|stop|unload-model|restart|status|logs|ready}" >&2
+    echo "       $0 {prepare|gate|download-controlnets|download-pulid|download-ipadapter|build|create|start|stop|unload-model|restart|status|logs|ready}  # defaults to gpu" >&2
     exit 2
     ;;
 esac
