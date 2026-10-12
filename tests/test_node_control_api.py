@@ -5834,7 +5834,10 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(angled_body_item["template_variables"]["pose_depth_strength"], angled_pose_config["pose_depth_strength"])
             self.assertEqual(angled_body_item["template_variables"]["pose_depth_end"], angled_pose_config["pose_depth_end"])
             self.assertEqual(angled_body_item["template_variables"]["pose_end"], angled_pose_config["pose_end"])
-            self.assertGreaterEqual(angled_body_item["template_variables"]["pose_strength"], 0.54)
+            self.assertAlmostEqual(
+                angled_body_item["template_variables"]["pose_strength"],
+                angled_pose_config["pose_strength"] - 0.04,
+            )
 
             generated = asyncio.run(
                 state.update_avatar_profile_head_lora_dataset(
