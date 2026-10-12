@@ -3941,6 +3941,40 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(workflow["31"]["inputs"]["weight"], 0.8)
         self.assertEqual(workflow["27"]["inputs"]["strength"], 0.7)
 
+    def test_body_lora_pose_workflow_applies_optional_identity_bootstrap_before_ipadapter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                comfyui_template_catalog_dir="config/comfyui/templates",
+            )
+            template = state.get_comfyui_template_catalog_entry(
+                template_id="template.avatar_body_lora_depth_pose.realvisxl.v1"
+            )["template"]
+            workflow = state._manual_image_workflow_from_template(
+                template=template,
+                payload=ManualImageGenerationRequest(
+                    template_id="template.avatar_body_lora_depth_pose.realvisxl.v1",
+                    mode="txt2img",
+                    prompt="body identity pose test",
+                    seed=1234,
+                    template_variables={
+                        "avatar_name": "Jane_Avatar",
+                        "body_reference_image": "avatar_profiles/Jane_Avatar/refs/upper_torso/last.png",
+                        "pose_depth_reference_image": "system/lora-pose-guides/body/depth-source/three_quarter_left.png",
+                        "pose_reference_image": "system/lora-pose-guides/body/three_quarter_left.png",
+                        "body_bootstrap_lora_name": "avatar_profiles/Jane_Avatar/upper_torso_lora_epochs/bootstrap.safetensors",
+                        "body_bootstrap_lora_strength": 0.72,
+                    },
+                ),
+                input_image="",
+            )
+        self.assertEqual(workflow["26"]["class_type"], "LoraLoader")
+        self.assertEqual(workflow["26"]["inputs"]["strength_model"], 0.72)
+        self.assertEqual(workflow["24"]["inputs"]["model"], ["26", 0])
+        self.assertEqual(workflow["4"]["inputs"]["clip"], ["26", 1])
+
     def test_manual_image_workflow_generates_seed_when_blank(self):
         with tempfile.TemporaryDirectory() as tmp:
             workflow_path = Path(tmp) / "workflow.json"
@@ -5904,6 +5938,69 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(replacement_items), 7)
             self.assertTrue(old_seeds.isdisjoint({item["seed"] for item in replacement_items}))
             self.assertTrue(old_seeds.issubset(set(rerolled_pose["seed_history"])))
+
+    def test_body_identity_bootstrap_manifest_uses_approved_front_candidates_and_anchor(self):
+        class _AvatarProfileServiceManager:
+            def __init__(self, input_dir: str, output_dir: str):
+                self.input_dir = input_dir
+                self.output_dir = output_dir
+
+            def get_status(self):
+                return {
+                    "comfyui_webui": {
+                        "state": "stopped",
+                        "runtime": "gpu",
+                        "manual_paths": {"input_dir": self.input_dir, "output_dir": self.output_dir},
+                    }
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "manual-input"
+            output_dir = Path(tmp) / "manual-output"
+            state = NodeControlState(
+                lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),
+                config_path=str(Path(tmp) / "bootstrap_config.json"),
+                logger=logging.getLogger("node-control-api-test"),
+                service_manager=_AvatarProfileServiceManager(str(input_dir), str(output_dir)),
+            )
+            profile_dir = input_dir / "avatar_profiles" / "Jane_Avatar"
+            reference = profile_dir / "refs" / "upper_torso" / "last.png"
+            reference.parent.mkdir(parents=True, exist_ok=True)
+            reference.write_bytes(b"body-anchor")
+            items = []
+            for index in range(1, 7):
+                candidate = profile_dir / "refs" / "upper_torso" / "lora_dataset" / "front_neutral" / f"candidate-{index}.png"
+                candidate.parent.mkdir(parents=True, exist_ok=True)
+                candidate.write_bytes(f"candidate-{index}".encode())
+                items.append({
+                    "preview_id": f"candidate-{index}",
+                    "input_image": candidate.relative_to(input_dir).as_posix(),
+                    "prompt": "approved curvy adult body identity",
+                    "negative_prompt": "identity drift",
+                    "seed": index,
+                    "status": "completed",
+                    "approved": True,
+                    "rejected": False,
+                })
+            manifest = state._prepare_avatar_body_identity_bootstrap_training_manifest(
+                profile_dir=profile_dir,
+                profile_id="Jane_Avatar",
+                metadata={"name": "Jane Avatar"},
+                poses=[{"pose_id": "front_neutral", "items": items}],
+                body_reference_image=reference.relative_to(input_dir).as_posix(),
+                prompt="approved body identity",
+                negative_prompt="identity drift",
+                now="2026-10-12T12:00:00+00:00",
+            )
+            self.assertEqual(manifest["approved_image_count"], 6)
+            self.assertEqual(manifest["image_count"], 7)
+            self.assertEqual(
+                manifest["training_template"],
+                "config/lora-training/avatar-body-bootstrap-sdxl-kohya.json",
+            )
+            saved = json.loads((profile_dir / manifest["manifest"]).read_text(encoding="utf-8"))
+            self.assertEqual(saved["items"][0]["source"], "approved_body_reference")
+            self.assertEqual(len(saved["items"]), 7)
 
     def test_avatar_lora_dispatch_submits_one_and_waits_for_import(self):
         state = NodeControlState(

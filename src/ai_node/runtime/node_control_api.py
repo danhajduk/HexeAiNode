@@ -255,6 +255,7 @@ IMAGE_STUDIO_FACE_FEATURE_CATALOG_RELATIVE_PATH = "config/image-studio/face-feat
 IMAGE_STUDIO_FACE_REFERENCE_PROMPTS_RELATIVE_PATH = "config/image-studio/face-reference-prompts.json"
 IMAGE_STUDIO_FACE_LORA_PROMPTS_RELATIVE_PATH = "config/image-studio/face-lora-prompts.json"
 IMAGE_STUDIO_BODY_LORA_PROMPTS_RELATIVE_PATH = "config/image-studio/body-lora-prompts.json"
+AVATAR_UPPER_TORSO_BOOTSTRAP_TRAINING_TEMPLATE = "config/lora-training/avatar-body-bootstrap-sdxl-kohya.json"
 AVATAR_UPPER_TORSO_PREVIEW_TEMPLATE_ID = "template.avatar_upper_torso_preview.realvisxl.v1"
 AVATAR_UPPER_TORSO_POSE_GUIDE_RELATIVE_PATH = "system/neutral-a-pose-openpose.png"
 AVATAR_UPPER_TORSO_POSE_GUIDE_SOURCE = Path("config/image-studio/neutral-a-pose-openpose.png")
@@ -289,6 +290,8 @@ AVATAR_HEAD_FACE_LORA_DATASET_LEGACY_POSE_PROMPTS = {
 }
 AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE = 10
 AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE = 6
+AVATAR_UPPER_TORSO_BOOTSTRAP_MIN_APPROVED = 6
+AVATAR_UPPER_TORSO_BOOTSTRAP_STRENGTH = 0.72
 AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_PER_EPOCH = 3
 AVATAR_HEAD_FACE_LORA_DATASET_WIDTH = 512
 AVATAR_HEAD_FACE_LORA_DATASET_HEIGHT = 512
@@ -4523,7 +4526,7 @@ class NodeControlState:
         dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
         action = str(payload.action or "ensure").strip().lower()
         item_id = str(payload.item_id or "").strip()
-        if action not in {"ensure", "generate", "approve", "reject", "next", "reset_pose", "prepare_train_lora", "train_lora", "generate_epoch_review", "select_epoch_review"}:
+        if action not in {"ensure", "generate", "approve", "reject", "next", "reset_pose", "prepare_bootstrap", "train_bootstrap", "prepare_train_lora", "train_lora", "generate_epoch_review", "select_epoch_review"}:
             raise ValueError("avatar_upper_torso_lora_dataset_action_unsupported")
         if action == "generate":
             services = self.service_status_payload().get("services", {})
@@ -4643,6 +4646,49 @@ class NodeControlState:
         body_seed = self._coerce_manual_image_seed(body_anchor.get("seed_text") or body_anchor.get("seed"))
         body_reference_image = f"avatar_profiles/{self._safe_filename_component(profile_dir.name)}/refs/upper_torso/last.png"
         body_reference_path = self._manual_image_input_dir() / body_reference_image
+        identity_bootstrap = dataset.get("identity_bootstrap") if isinstance(dataset.get("identity_bootstrap"), dict) else {}
+        bootstrap_training_job = identity_bootstrap.get("training_job") if isinstance(identity_bootstrap.get("training_job"), dict) else {}
+        if bootstrap_training_job:
+            bootstrap_training_job = self._avatar_head_lora_training_job_status(job=bootstrap_training_job)
+        bootstrap_lora_name = str(defaults.get("body_bootstrap_lora_name") or "sdxl_lightning_4step_lora.safetensors")
+        bootstrap_lora_strength = 0.0
+        if str(bootstrap_training_job.get("status") or "").strip() == "completed" and str(bootstrap_training_job.get("output_model") or "").strip():
+            bootstrap_lora_name = self._ensure_avatar_head_lora_epoch_model_for_comfyui(
+                profile_id=profile_id,
+                source_model=str(bootstrap_training_job.get("output_model") or ""),
+                section="upper_torso",
+            )
+            bootstrap_lora_strength = float(identity_bootstrap.get("lora_strength") or AVATAR_UPPER_TORSO_BOOTSTRAP_STRENGTH)
+        if action in {"prepare_bootstrap", "train_bootstrap"}:
+            bootstrap_manifest = self._prepare_avatar_body_identity_bootstrap_training_manifest(
+                profile_dir=profile_dir,
+                profile_id=profile_id,
+                metadata=metadata,
+                poses=poses,
+                body_reference_image=body_reference_image,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                now=now,
+            )
+            if action == "train_bootstrap":
+                bootstrap_training_job = self._launch_avatar_head_lora_training_job(
+                    profile_dir=profile_dir,
+                    profile_id=profile_id,
+                    training_manifest=bootstrap_manifest,
+                    existing_job=bootstrap_training_job,
+                    now=now,
+                    section="upper_torso",
+                )
+            identity_bootstrap = {
+                **identity_bootstrap,
+                "status": "training" if action == "train_bootstrap" else "ready_to_train",
+                "source_pose_ids": ["front_neutral"],
+                "minimum_approved": AVATAR_UPPER_TORSO_BOOTSTRAP_MIN_APPROVED,
+                "training_manifest": bootstrap_manifest,
+                "training_job": bootstrap_training_job,
+                "lora_strength": float(identity_bootstrap.get("lora_strength") or AVATAR_UPPER_TORSO_BOOTSTRAP_STRENGTH),
+                "updated_at": now,
+            }
         if action == "generate" and active_pose and body_seed is not None and body_reference_path.is_file():
             previous_items = [candidate for candidate in list(active_pose.get("items") or []) if isinstance(candidate, dict)]
             seed_history = {
@@ -4718,6 +4764,8 @@ class NodeControlState:
                             "body_identity_start": float(body_prompt_defaults.get("body_identity_start") or defaults.get("body_identity_start") or 0),
                             "body_identity_end": float(body_prompt_defaults.get("body_identity_end") or defaults.get("body_identity_end") or 0.5),
                             "body_identity_sharpening": float(body_prompt_defaults.get("body_identity_sharpening") or defaults.get("body_identity_sharpening") or 0.15),
+                            "body_bootstrap_lora_name": bootstrap_lora_name,
+                            "body_bootstrap_lora_strength": bootstrap_lora_strength,
                             "body_depth_controlnet": str(defaults.get("body_depth_controlnet") or "controlnet-depth-sdxl-1.0-fp16.safetensors"),
                             "body_depth_strength": float(body_prompt_defaults.get("body_depth_strength") or defaults.get("body_depth_strength") or 0.35),
                             "body_depth_start": float(body_prompt_defaults.get("body_depth_start") or defaults.get("body_depth_start") or 0),
@@ -4841,6 +4889,17 @@ class NodeControlState:
             "anchor_seed": body_seed,
             "pose_catalog": pose_catalog,
             "pose_count": len(pose_catalog),
+            "identity_bootstrap": {
+                **identity_bootstrap,
+                "status": (
+                    "ready"
+                    if bootstrap_lora_strength > 0
+                    else str(bootstrap_training_job.get("status") or identity_bootstrap.get("status") or "waiting")
+                ),
+                "training_job": bootstrap_training_job,
+                "active_lora_name": bootstrap_lora_name if bootstrap_lora_strength > 0 else "",
+                "active_lora_strength": bootstrap_lora_strength,
+            },
             "training_manifest": training_manifest,
             "training_status": training_manifest.get("status") if isinstance(training_manifest, dict) else dataset.get("training_status"),
             "training_job": training_job,
@@ -4866,6 +4925,10 @@ class NodeControlState:
             "status": (
                 "upper_torso_lora_training_started"
                 if action == "train_lora"
+                else "upper_torso_identity_bootstrap_training_started"
+                if action == "train_bootstrap"
+                else "upper_torso_identity_bootstrap_manifest_ready"
+                if action == "prepare_bootstrap"
                 else "upper_torso_lora_training_manifest_ready"
                 if action == "prepare_train_lora"
                 else "upper_torso_lora_epoch_review_queued"
@@ -5327,6 +5390,134 @@ class NodeControlState:
             raise ValueError(too_large_error)
         return data
 
+    def _prepare_avatar_body_identity_bootstrap_training_manifest(
+        self,
+        *,
+        profile_dir: Path,
+        profile_id: str,
+        metadata: dict,
+        poses: list,
+        body_reference_image: str,
+        prompt: str,
+        negative_prompt: str,
+        now: str,
+    ) -> dict:
+        input_dir = self._manual_image_input_dir().resolve()
+        front_pose = next(
+            (
+                pose
+                for pose in poses
+                if isinstance(pose, dict) and str(pose.get("pose_id") or "").strip() == "front_neutral"
+            ),
+            {},
+        )
+        approved_items = [
+            item
+            for item in list(front_pose.get("items") or [])
+            if isinstance(item, dict)
+            and bool(item.get("approved"))
+            and not bool(item.get("rejected"))
+            and str(item.get("status") or "").strip() in {"completed", "completed_with_fallback"}
+        ]
+        prepared_items: list[dict] = []
+        seen_images: set[str] = set()
+
+        def append_item(*, approved_id: str, image: str, caption: str, seed: int | str | None, source: str) -> None:
+            try:
+                safe_relative = self._safe_relative_path(image)
+            except ValueError:
+                return
+            image_path = (input_dir / safe_relative).resolve()
+            safe_relative_text = safe_relative.as_posix()
+            if input_dir not in image_path.parents or not image_path.is_file() or safe_relative_text in seen_images:
+                return
+            seen_images.add(safe_relative_text)
+            prepared_items.append(
+                {
+                    "approved_id": self._safe_filename_component(approved_id),
+                    "pose_id": "front_neutral",
+                    "image": safe_relative_text,
+                    "image_path": image_path.as_posix(),
+                    "caption": caption,
+                    "negative_prompt": negative_prompt,
+                    "seed": seed,
+                    "source": source,
+                    "metadata": image_path.with_suffix(image_path.suffix + ".json").relative_to(input_dir).as_posix()
+                    if image_path.with_suffix(image_path.suffix + ".json").is_file()
+                    else "",
+                    "lora_metadata": "",
+                }
+            )
+
+        append_item(
+            approved_id="approved_body_anchor",
+            image=body_reference_image,
+            caption=prompt,
+            seed=None,
+            source="approved_body_reference",
+        )
+        approved_ready_count = 0
+        for index, item in enumerate(approved_items, start=1):
+            image = str(item.get("input_image") or "").strip()
+            before = len(prepared_items)
+            append_item(
+                approved_id=str(item.get("preview_id") or f"front_neutral_{index:02d}"),
+                image=image,
+                caption=str(item.get("prompt") or prompt or "").strip(),
+                seed=item.get("seed"),
+                source="approved_front_neutral_candidate",
+            )
+            if len(prepared_items) > before:
+                approved_ready_count += 1
+        if approved_ready_count < AVATAR_UPPER_TORSO_BOOTSTRAP_MIN_APPROVED:
+            raise ValueError("avatar_upper_torso_identity_bootstrap_dataset_not_ready")
+
+        manifest_dir = (profile_dir / "refs" / "upper_torso" / "lora_identity_bootstrap").resolve()
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = (manifest_dir / "training_manifest.json").resolve()
+        if profile_dir not in manifest_path.parents:
+            raise ValueError("avatar_upper_torso_identity_bootstrap_path_invalid")
+        manifest = {
+            "schema_version": "avatar_upper_torso_identity_bootstrap_manifest_v1",
+            "status": "ready_to_train",
+            "source": "approved_generated_front_neutral",
+            "profile_id": self._safe_filename_component(profile_id),
+            "profile_name": str(metadata.get("name") or profile_dir.name),
+            "section": "upper_torso",
+            "trigger_word": self._safe_filename_component(metadata.get("name") or profile_dir.name),
+            "created_at": now,
+            "updated_at": now,
+            "minimum_approved": AVATAR_UPPER_TORSO_BOOTSTRAP_MIN_APPROVED,
+            "approved_image_count": approved_ready_count,
+            "image_count": len(prepared_items),
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "training_template": AVATAR_UPPER_TORSO_BOOTSTRAP_TRAINING_TEMPLATE,
+            "items": prepared_items,
+            "poses": [
+                {
+                    "pose_id": "front_neutral",
+                    "label": "Front Neutral Identity Bootstrap",
+                    "ready_count": approved_ready_count,
+                    "required_count": AVATAR_UPPER_TORSO_BOOTSTRAP_MIN_APPROVED,
+                    "items": prepared_items,
+                }
+            ],
+        }
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return {
+            "status": "ready_to_train",
+            "source": manifest["source"],
+            "manifest": manifest_path.relative_to(profile_dir).as_posix(),
+            "manifest_input_image": manifest_path.relative_to(input_dir).as_posix() if input_dir in manifest_path.parents else "",
+            "training_template": AVATAR_UPPER_TORSO_BOOTSTRAP_TRAINING_TEMPLATE,
+            "approved_image_count": approved_ready_count,
+            "image_count": len(prepared_items),
+            "pose_count": 1,
+            "created_at": now,
+            "updated_at": now,
+        }
+
     def _prepare_avatar_head_lora_training_manifest(
         self,
         *,
@@ -5555,26 +5746,62 @@ class NodeControlState:
         for section in ("head_face", "upper_torso"):
             workspace = self._avatar_profile_prompt_workspace(metadata=updated_metadata, section=section)
             dataset = workspace.get("lora_dataset") if isinstance(workspace.get("lora_dataset"), dict) else {}
+            updated_dataset = dataset
+            section_changed = False
             job = dataset.get("training_job") if isinstance(dataset.get("training_job"), dict) else {}
-            if not job:
+            if job:
+                if not str(job.get("profile_output_dir") or job.get("copied_output_dir") or "").strip():
+                    job_id = self._safe_filename_component(
+                        str(job.get("job_id") or f"legacy_completed_{int(time.time())}")
+                    )
+                    profile_output_dir = (profile_dir / "refs" / section / "lora_training" / job_id).resolve()
+                    if profile_dir in profile_output_dir.parents:
+                        job = {
+                            **job,
+                            "job_id": job_id,
+                            "profile_output_dir": profile_output_dir.as_posix(),
+                            "cleanup_job_dir": False,
+                            "storage_policy": str(job.get("storage_policy") or "legacy_job_outputs_copy_to_profile"),
+                        }
+                refreshed = self._avatar_head_lora_training_job_status(job=job)
+                if refreshed != dataset.get("training_job"):
+                    updated_dataset = {**updated_dataset, "training_job": refreshed}
+                    section_changed = True
+
+            identity_bootstrap = (
+                updated_dataset.get("identity_bootstrap")
+                if isinstance(updated_dataset.get("identity_bootstrap"), dict)
+                else {}
+            )
+            bootstrap_job = (
+                identity_bootstrap.get("training_job")
+                if isinstance(identity_bootstrap.get("training_job"), dict)
+                else {}
+            )
+            if section == "upper_torso" and bootstrap_job:
+                refreshed_bootstrap_job = self._avatar_head_lora_training_job_status(job=bootstrap_job)
+                refreshed_bootstrap = {**identity_bootstrap, "training_job": refreshed_bootstrap_job}
+                if str(refreshed_bootstrap_job.get("status") or "").strip() == "completed" and str(refreshed_bootstrap_job.get("output_model") or "").strip():
+                    lora_name = self._ensure_avatar_head_lora_epoch_model_for_comfyui(
+                        profile_id=str(metadata.get("profile_id") or profile_dir.name),
+                        source_model=str(refreshed_bootstrap_job.get("output_model") or ""),
+                        section="upper_torso",
+                    )
+                    refreshed_bootstrap.update(
+                        {
+                            "status": "ready",
+                            "active_lora_name": lora_name,
+                            "active_lora_strength": float(identity_bootstrap.get("lora_strength") or AVATAR_UPPER_TORSO_BOOTSTRAP_STRENGTH),
+                        }
+                    )
+                elif str(refreshed_bootstrap_job.get("status") or "").strip() in {"running", "failed"}:
+                    refreshed_bootstrap["status"] = str(refreshed_bootstrap_job.get("status") or "")
+                if refreshed_bootstrap != identity_bootstrap:
+                    updated_dataset = {**updated_dataset, "identity_bootstrap": refreshed_bootstrap}
+                    section_changed = True
+
+            if not section_changed:
                 continue
-            if not str(job.get("profile_output_dir") or job.get("copied_output_dir") or "").strip():
-                job_id = self._safe_filename_component(
-                    str(job.get("job_id") or f"legacy_completed_{int(time.time())}")
-                )
-                profile_output_dir = (profile_dir / "refs" / section / "lora_training" / job_id).resolve()
-                if profile_dir in profile_output_dir.parents:
-                    job = {
-                        **job,
-                        "job_id": job_id,
-                        "profile_output_dir": profile_output_dir.as_posix(),
-                        "cleanup_job_dir": False,
-                        "storage_policy": str(job.get("storage_policy") or "legacy_job_outputs_copy_to_profile"),
-                    }
-            refreshed = self._avatar_head_lora_training_job_status(job=job)
-            if refreshed == job:
-                continue
-            updated_dataset = {**dataset, "training_job": refreshed}
             updated_workspace = {**workspace, "lora_dataset": updated_dataset}
             updated_metadata = self._avatar_profile_metadata_with_workspace(metadata=updated_metadata, section=section, workspace=updated_workspace)
             changed = True
@@ -5773,6 +6000,16 @@ class NodeControlState:
         prepare_script = (Path.cwd() / "scripts" / "prepare-avatar-head-lora-kohya.py").resolve()
         if not prepare_script.is_file():
             raise ValueError("avatar_head_lora_training_prepare_script_missing")
+        training_template_value = str(training_manifest.get("training_template") or "config/lora-training/avatar-head-sdxl-kohya.json").strip()
+        training_template_path = (Path.cwd() / training_template_value).resolve()
+        training_template_root = (Path.cwd() / "config" / "lora-training").resolve()
+        if training_template_root not in training_template_path.parents or not training_template_path.is_file():
+            raise ValueError("avatar_head_lora_training_template_invalid")
+        queue_snapshot = self._avatar_head_face_seed_batch_queue_snapshot()
+        if int(queue_snapshot.get("running_count") or 0) > 0 or int(queue_snapshot.get("pending_count") or 0) > 0:
+            raise ValueError("avatar_lora_training_comfyui_queue_not_empty")
+        if self._service_manager is not None and hasattr(self._service_manager, "stop"):
+            self._service_manager.stop(target="comfyui_webui")
         job_token = uuid.uuid4().hex[:10]
         job_id = self._safe_filename_component(f"{profile_id}_{section}_{int(time.time())}_{job_token}")
         profile_output_dir = (profile_dir / "refs" / section / "lora_training" / job_id).resolve()
@@ -5780,7 +6017,12 @@ class NodeControlState:
             raise ValueError("avatar_head_lora_training_output_path_invalid")
         try:
             prepared = subprocess.run(
-                [str(prepare_script), "--manifest", str(manifest_path), "--job-id", job_id],
+                [
+                    str(prepare_script),
+                    "--manifest", str(manifest_path),
+                    "--template", str(training_template_path),
+                    "--job-id", job_id,
+                ],
                 cwd=str(Path.cwd()),
                 check=True,
                 capture_output=True,
@@ -5825,6 +6067,7 @@ class NodeControlState:
             "cleanup_job_dir": True,
             "storage_policy": "job_dir_is_temporary_outputs_copy_to_profile",
             "image_count": prepared_payload.get("image_count"),
+            "training_template": training_template_path.as_posix(),
             "text_llm_policy": "left_running",
             "vision_policy": "stop_before_training_when_enabled",
         }
@@ -5899,6 +6142,15 @@ class NodeControlState:
                 if target_path.resolve() == source_path:
                     if target_path.is_file():
                         return (relative_dir / source_path.name).as_posix()
+            except OSError:
+                pass
+            try:
+                if (
+                    target_path.is_file()
+                    and target_path.stat().st_size == source_path.stat().st_size
+                    and target_path.stat().st_mtime >= source_path.stat().st_mtime
+                ):
+                    return (relative_dir / source_path.name).as_posix()
             except OSError:
                 pass
             if target_path.is_file():

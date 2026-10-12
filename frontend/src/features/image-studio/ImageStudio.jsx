@@ -1023,8 +1023,20 @@ export function ImageStudio({
   const faceLoraRequired = Number(faceLoraPose?.required_count || 6);
   const bodyLoraDataset = activeCharacterProfile?.prompt_workspaces?.upper_torso?.lora_dataset || {};
   const bodyLoraPoses = Array.isArray(bodyLoraDataset?.poses) ? bodyLoraDataset.poses : [];
+  const bodyIdentityBootstrap = bodyLoraDataset?.identity_bootstrap || {};
+  const bodyIdentityBootstrapManifest = bodyIdentityBootstrap?.training_manifest || {};
+  const bodyIdentityBootstrapJob = bodyIdentityBootstrap?.training_job || {};
+  const bodyIdentityBootstrapStatus = String(bodyIdentityBootstrap?.status || "waiting");
+  const bodyIdentityBootstrapRunning = bodyIdentityBootstrapStatus === "training" || String(bodyIdentityBootstrapJob?.status || "") === "running";
+  const bodyIdentityBootstrapReady = bodyIdentityBootstrapStatus === "ready" && Boolean(bodyIdentityBootstrap?.active_lora_name);
+  const bodyFrontNeutralPose = bodyLoraPoses.find((pose) => String(pose?.pose_id || "") === "front_neutral") || {};
+  const bodyBootstrapApprovedCount = (Array.isArray(bodyFrontNeutralPose?.items) ? bodyFrontNeutralPose.items : []).filter(
+    (item) => item?.approved && !item?.rejected && ["completed", "completed_with_fallback"].includes(String(item?.status || "").toLowerCase())
+  ).length;
+  const bodyBootstrapMinimum = Number(bodyIdentityBootstrap?.minimum_approved || 6);
   const bodyLoraPoseIndex = Math.max(0, Math.min(Number(bodyLoraDataset?.active_pose_index || 0), Math.max(bodyLoraPoses.length - 1, 0)));
   const bodyLoraPose = bodyLoraPoses[bodyLoraPoseIndex] || {};
+  const bodyPoseRequiresBootstrap = String(bodyLoraPose?.pose_id || "front_neutral") !== "front_neutral";
   const bodyLoraItems = Array.isArray(bodyLoraPose?.items) ? bodyLoraPose.items : [];
   const bodyLoraApproved = Number(bodyLoraPose?.approved_count || 0);
   const bodyLoraRequired = Number(bodyLoraPose?.required_count || 6);
@@ -2270,8 +2282,26 @@ export function ImageStudio({
                   ) : <GenerationPreviewPlaceholder />}
                 </div>
                 <p>OpenPose controls each neck-to-toes view while the saved body prompt and seed preserve the approved proportions. Approve at least {bodyLoraRequired} candidates for each pose.</p>
+                <section className="image-studio-lora-bootstrap" aria-live="polite">
+                  <div>
+                    <span className="image-studio-eyebrow">Body identity bootstrap</span>
+                    <strong>{bodyIdentityBootstrapReady ? "Active for pose generation" : bodyIdentityBootstrapRunning ? "Training with sd-scripts" : `${bodyBootstrapApprovedCount} / ${bodyBootstrapMinimum} front references ready`}</strong>
+                    <small>A preliminary body LoRA learns the approved proportions before stronger depth and pose controls are applied.</small>
+                  </div>
+                  <div className="row">
+                    <button
+                      className="btn btn-primary"
+                      type="button"
+                      disabled={bodyLoraBusy || bodyIdentityBootstrapRunning || bodyBootstrapApprovedCount < bodyBootstrapMinimum}
+                      onClick={() => updateBodyLoraDataset({ action: "train_bootstrap" })}
+                    >
+                      {bodyLoraAction === "train_bootstrap" ? "Starting…" : bodyIdentityBootstrapRunning ? "Training…" : bodyIdentityBootstrapReady ? "Retrain identity bootstrap" : "Train identity bootstrap"}
+                    </button>
+                    <code>{bodyIdentityBootstrapReady ? `${bodyIdentityBootstrap?.active_lora_name} · ${Number(bodyIdentityBootstrap?.active_lora_strength || 0).toFixed(2)}` : bodyIdentityBootstrapJob?.status_detail || bodyIdentityBootstrapManifest?.status || bodyIdentityBootstrapStatus.replaceAll("_", " ")}</code>
+                  </div>
+                </section>
                 <div className="row">
-                  <button className="btn btn-primary" type="button" disabled={bodyLoraBusy} onClick={() => updateBodyLoraDataset({ action: bodyLoraPoses.length ? "generate" : "ensure", pose_id: bodyLoraPose?.pose_id })}>
+                  <button className="btn btn-primary" type="button" disabled={bodyLoraBusy || bodyIdentityBootstrapRunning || (bodyPoseRequiresBootstrap && !bodyIdentityBootstrapReady)} onClick={() => updateBodyLoraDataset({ action: bodyLoraPoses.length ? "generate" : "ensure", pose_id: bodyLoraPose?.pose_id })}>
                     {["generate", "ensure"].includes(bodyLoraAction) ? "Working…" : bodyLoraItems.length ? "Generate / reroll unapproved" : "Generate pose batch"}
                   </button>
                   <button className="btn" type="button" disabled={bodyLoraBusy} onClick={() => { void onRefreshData?.(); }}>Refresh</button>

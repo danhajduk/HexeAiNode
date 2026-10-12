@@ -3288,6 +3288,39 @@
   border: 1px solid rgba(139, 92, 246, 0.55);
 }
 
+.image-studio-lora-bootstrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 18px;
+  padding: 12px 14px;
+  border: 1px solid hsl(var(--sx-accent) / 0.48);
+  border-radius: var(--sx-radius-sm);
+  background: hsl(var(--sx-accent) / 0.08);
+}
+
+.image-studio-lora-bootstrap > div {
+  display: grid;
+  gap: 4px;
+}
+
+.image-studio-lora-bootstrap small,
+.image-studio-lora-bootstrap code {
+  color: hsl(var(--sx-text-muted));
+}
+
+.image-studio-lora-bootstrap code {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .image-studio-lora-bootstrap {
+    grid-template-columns: 1fr;
+  }
+}
+
 .image-studio-seed-review-summary > div {
   display: grid;
   gap: 4px;

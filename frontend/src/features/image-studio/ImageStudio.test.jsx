@@ -790,6 +790,9 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Original approved body");
     expect(markup).toContain("Generation status");
     expect(markup).toContain("Candidate gallery");
+    expect(markup).toContain("Body identity bootstrap");
+    expect(markup).toContain("0 / 6 front references ready");
+    expect(markup).toContain("Train identity bootstrap");
     expect(markup).toContain("Waiting for all 10 candidates");
     expect(markup).toContain("Replacements waiting");
     expect(markup).not.toContain("Candidate 10");
