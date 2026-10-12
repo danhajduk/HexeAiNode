@@ -5886,6 +5886,18 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(timestamp, datetime.fromisoformat("2026-10-11T08:20:34+00:00").timestamp())
 
+    def test_body_lora_template_uses_dedicated_output_folder(self):
+        self.assertEqual(
+            NodeControlState._avatar_upper_torso_preview_output_folder(
+                template_id="template.avatar_body_lora_depth_pose.realvisxl.v1"
+            ),
+            "avatar_body_lora",
+        )
+        self.assertEqual(
+            NodeControlState._avatar_upper_torso_preview_output_folder(template_id="template.avatar_upper_torso.v1"),
+            "avatar_upper_torso_preview",
+        )
+
     def test_avatar_lora_dispatches_next_preview_before_completed_import(self):
         state = NodeControlState(
             lifecycle=NodeLifecycle(logger=logging.getLogger("node-control-api-test")),

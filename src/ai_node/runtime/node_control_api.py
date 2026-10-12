@@ -9803,11 +9803,7 @@ class NodeControlState:
                 return None
             output_avatar_name = self._safe_filename_component(item.get("output_avatar_name") or avatar_name)
             template_id = str(item.get("template_id") or "").strip()
-            output_folder = (
-                "avatar_head_face_preview"
-                if template_id in {AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID, AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID}
-                else "avatar_upper_torso_preview"
-            )
+            output_folder = self._avatar_upper_torso_preview_output_folder(template_id=template_id)
             return self._avatar_head_face_preview_output_for_prefix(
                 output_dir=output_dir,
                 prefix=f"hexe/{output_folder}/{output_avatar_name}_seed{seed}",
@@ -9849,11 +9845,7 @@ class NodeControlState:
             if seed:
                 output_avatar_name = self._safe_filename_component(preview.get("output_avatar_name") or avatar_name)
                 template_id = str(preview.get("template_id") or "").strip()
-                output_folder = (
-                    "avatar_head_face_preview"
-                    if template_id in {AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID, AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID}
-                    else "avatar_upper_torso_preview"
-                )
+                output_folder = self._avatar_upper_torso_preview_output_folder(template_id=template_id)
                 prefix = f"hexe/{output_folder}/{output_avatar_name}_seed{seed}"
                 output_path = self._avatar_head_face_preview_output_for_prefix(
                     output_dir=output_dir,
@@ -10087,6 +10079,17 @@ class NodeControlState:
         updated_metadata["updated_at"] = now
         (profile_dir / "profile.json").write_text(json.dumps(updated_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return updated_metadata
+
+    @staticmethod
+    def _avatar_upper_torso_preview_output_folder(*, template_id: str) -> str:
+        if template_id == AVATAR_UPPER_TORSO_LORA_DEPTH_POSE_TEMPLATE_ID:
+            return "avatar_body_lora"
+        if template_id in {
+            AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID,
+            AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID,
+        }:
+            return "avatar_head_face_preview"
+        return "avatar_upper_torso_preview"
 
     def _publish_avatar_preview_completed_event(
         self,
