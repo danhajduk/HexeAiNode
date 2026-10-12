@@ -1319,6 +1319,7 @@
         {"name": "body_identity_weight_type", "type": "string", "required": false, "description": "IP-Adapter weighting mode."},
         {"name": "body_identity_start", "type": "number", "required": false, "description": "IP-Adapter guidance start."},
         {"name": "body_identity_end", "type": "number", "required": false, "description": "IP-Adapter guidance end."},
+        {"name": "body_identity_sharpening", "type": "number", "required": false, "description": "Sharpening applied before tiled identity encoding."},
         {"name": "body_depth_strength", "type": "number", "required": false, "description": "Body depth guidance strength."},
         {"name": "body_depth_start", "type": "number", "required": false, "description": "Body depth guidance start."},
         {"name": "body_depth_end", "type": "number", "required": false, "description": "Body depth guidance end."},
@@ -1352,10 +1353,11 @@
         "cfg": 1.2,
         "denoise": 1,
         "body_reference_image": "",
-        "body_identity_strength": 0.3,
-        "body_identity_weight_type": "style transfer",
+        "body_identity_strength": 0.55,
+        "body_identity_weight_type": "composition precise",
         "body_identity_start": 0,
-        "body_identity_end": 0.6,
+        "body_identity_end": 0.5,
+        "body_identity_sharpening": 0.15,
         "body_depth_strength": 0.35,
         "body_depth_start": 0,
         "body_depth_end": 0.45,
@@ -1377,7 +1379,7 @@
         "loras": ["sdxl_lightning_4step_lora.safetensors"],
         "vae": null,
         "controlnets": ["controlnet-depth-sdxl-1.0-fp16.safetensors", "controlnet-openpose-sdxl-1.0.safetensors"],
-        "other": {"nodes": ["DepthAnythingV2Preprocessor", "ResizeAndPadImage", "ControlNetLoader", "ControlNetApplyAdvanced", "IPAdapterUnifiedLoader", "IPAdapterAdvanced"], "ipadapter": ["ip-adapter_sdxl_vit-h.safetensors"], "clip_vision": ["CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"], "body_preservation": "approved_body_depth_plus_ipadapter", "view_preservation": "separate_pose_depth_controlnet", "pose_preservation": "openpose_controlnet"}
+        "other": {"nodes": ["DepthAnythingV2Preprocessor", "ResizeAndPadImage", "ControlNetLoader", "ControlNetApplyAdvanced", "IPAdapterUnifiedLoader", "IPAdapterTiled"], "ipadapter": ["ip-adapter_sdxl_vit-h.safetensors"], "clip_vision": ["CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"], "body_preservation": "approved_body_depth_plus_tiled_ipadapter", "view_preservation": "separate_pose_depth_controlnet", "pose_preservation": "openpose_controlnet"}
       },
       "output_scope": "manual",
       "metadata": {"domain": "avatar_profile", "input_mode": "text_body_identity_pose_control", "edit_intent": "avatar_body_lora_pose_dataset", "reference_roles": ["body", "pose"]}

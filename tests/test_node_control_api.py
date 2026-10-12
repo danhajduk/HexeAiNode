@@ -5832,6 +5832,7 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(angled_body_item["template_variables"]["body_identity_strength"], body_defaults["body_identity_strength"])
             self.assertEqual(angled_body_item["template_variables"]["body_identity_weight_type"], body_defaults["body_identity_weight_type"])
             self.assertEqual(angled_body_item["template_variables"]["body_identity_end"], body_defaults["body_identity_end"])
+            self.assertEqual(angled_body_item["template_variables"]["body_identity_sharpening"], body_defaults["body_identity_sharpening"])
             self.assertEqual(angled_body_item["template_variables"]["body_depth_strength"], body_defaults["body_depth_strength"])
             self.assertEqual(angled_body_item["template_variables"]["body_depth_end"], body_defaults["body_depth_end"])
             self.assertEqual(angled_body_item["template_variables"]["pose_depth_strength"], angled_pose_config["pose_depth_strength"])
