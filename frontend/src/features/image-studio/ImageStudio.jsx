@@ -845,6 +845,7 @@ export function ImageStudio({
   initialGenerationProgressOpen = false,
   initialGenerationKind = "face",
   initialGenerationSubmissionStage = "",
+  initialBodyLoraReviewItemId = "",
   initialCharacterBrief = null,
   runtimeStatus = null,
   generationActivity = null,
@@ -931,6 +932,7 @@ export function ImageStudio({
   const [faceLoraGalleryOpen, setFaceLoraGalleryOpen] = useState(false);
   const [bodyLoraStatusOpen, setBodyLoraStatusOpen] = useState(true);
   const [bodyLoraGalleryOpen, setBodyLoraGalleryOpen] = useState(false);
+  const [bodyLoraReviewItemId, setBodyLoraReviewItemId] = useState(initialBodyLoraReviewItemId);
   const [generationProgressOpen, setGenerationProgressOpen] = useState(initialGenerationProgressOpen);
   const [generationKind, setGenerationKind] = useState(initialGenerationKind);
   const [generationRefreshBusy, setGenerationRefreshBusy] = useState(false);
@@ -1070,6 +1072,12 @@ export function ImageStudio({
   const bodyLoraCurrentJob = bodyLoraReplacementCount > 0 ? null : bodyLoraActiveItems.find(
     (item) => !["completed", "completed_with_fallback"].includes(String(item?.status || "").toLowerCase())
   ) || bodyLoraActiveItems[bodyLoraActiveItems.length - 1] || null;
+  const bodyLoraReviewItem = bodyLoraReadyItems.find(
+    (item) => String(item?.preview_id || "") === String(bodyLoraReviewItemId || "")
+  ) || null;
+  const bodyLoraReviewIndex = bodyLoraReviewItem
+    ? bodyLoraReadyItems.findIndex((item) => item === bodyLoraReviewItem)
+    : -1;
   const modelName = facePreviewTemplate?.model_requirements?.checkpoint || comfyResidency.loaded_model || "Image model";
   const modelState = String(comfyResidency.model_state || "unloaded");
   const previewFailed = ["failed", "error", "cancelled"].includes(previewStatus.toLowerCase());
@@ -1166,6 +1174,15 @@ export function ImageStudio({
     window.addEventListener("keydown", handleGenerationShortcut);
     return () => window.removeEventListener("keydown", handleGenerationShortcut);
   }, [generationProgressOpen, generationKind, progressTracking, characterSaveBusy]);
+
+  useEffect(() => {
+    if (!bodyLoraReviewItem) return undefined;
+    const handleBodyCandidateReviewShortcut = (event) => {
+      if (isEscapeKey(event)) setBodyLoraReviewItemId("");
+    };
+    window.addEventListener("keydown", handleBodyCandidateReviewShortcut);
+    return () => window.removeEventListener("keydown", handleBodyCandidateReviewShortcut);
+  }, [bodyLoraReviewItem]);
 
   useEffect(() => {
     if (!["face_lora_dataset", "body_lora_dataset"].includes(activeInterviewStep.id) || !interviewOpen || !onRefreshData) return undefined;
@@ -2284,11 +2301,9 @@ export function ImageStudio({
                   {bodyLoraGalleryReady ? (
                     <div className="image-studio-seed-review-grid">
                       {bodyLoraReadyItems.map((item, index) => {
-                        const revealId = `body-lora-${item.preview_id || index}`;
-                        const revealed = revealedBodyPreviewId === revealId;
                         return (
                           <article className={`image-studio-seed-review-card${item.approved ? " is-selected" : ""}`} key={item.preview_id}>
-                            <button className={`image-studio-sensitive-preview ${revealed ? "is-revealed" : "is-blurred"}`} type="button" onClick={() => setRevealedBodyPreviewId(revealed ? "" : revealId)}><img src={versionedPreviewUrl(apiBase, item)} alt={`${bodyLoraPose?.label || "Body pose"} candidate ${index + 1}`} />{!revealed ? <span>Click to reveal</span> : null}</button>
+                            <button className="image-studio-sensitive-preview is-blurred" type="button" aria-label={`Compare body candidate ${index + 1} with the main reference`} onClick={() => setBodyLoraReviewItemId(String(item.preview_id || ""))}><img src={versionedPreviewUrl(apiBase, item)} alt={`${bodyLoraPose?.label || "Body pose"} candidate ${index + 1}`} /><span>Click to compare</span></button>
                             <span className="image-studio-seed-review-card-meta"><strong>Candidate {index + 1}</strong><code>{item.seed ?? "pending"}</code><small>{item.approved ? "approved" : "manual review"}</small></span>
                             <span className="row"><button className="btn btn-primary" type="button" disabled={bodyLoraBusy || item.approved} onClick={() => updateBodyLoraDataset({ action: "approve", item_id: item.preview_id, pose_id: bodyLoraPose?.pose_id })}>Approve</button><button className="btn" type="button" disabled={bodyLoraBusy} onClick={() => updateBodyLoraDataset({ action: "reject", item_id: item.preview_id, pose_id: bodyLoraPose?.pose_id })}>Reject</button></span>
                           </article>
@@ -2330,6 +2345,44 @@ export function ImageStudio({
               </div>
             </footer>
             {draftSaveMessage ? <p className="image-studio-interview-save-status success">{draftSaveMessage}</p> : null}
+          </section>
+        </div>
+      ) : null}
+      {bodyLoraReviewItem ? (
+        <div className="image-studio-modal-backdrop image-studio-comparison-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setBodyLoraReviewItemId(""); }}>
+          <section className="image-studio-body-comparison-modal" role="dialog" aria-modal="true" aria-labelledby="body-candidate-review-title">
+            <header>
+              <div>
+                <span className="image-studio-eyebrow">Body candidate review</span>
+                <h2 id="body-candidate-review-title">{`Candidate ${bodyLoraReviewIndex + 1} · ${bodyLoraPose?.label || "Body pose"}`}</h2>
+                <p>Compare the generated candidate with the approved proportion reference.</p>
+              </div>
+              <button className="btn" type="button" onClick={() => setBodyLoraReviewItemId("")}>Cancel</button>
+            </header>
+            <div className="image-studio-body-comparison-grid">
+              <figure>
+                <figcaption>Main body reference</figcaption>
+                {bodyPreviewImageUrl ? <img src={bodyPreviewImageUrl} alt={`Approved body reference for ${characterBrief.name || "character"}`} /> : <GenerationPreviewPlaceholder />}
+              </figure>
+              <figure>
+                <figcaption>{`Candidate ${bodyLoraReviewIndex + 1} · seed ${bodyLoraReviewItem.seed ?? "unknown"}`}</figcaption>
+                <img src={versionedPreviewUrl(apiBase, bodyLoraReviewItem)} alt={`${bodyLoraPose?.label || "Body pose"} candidate ${bodyLoraReviewIndex + 1} enlarged`} />
+              </figure>
+            </div>
+            <footer>
+              <button className="btn" type="button" onClick={() => setBodyLoraReviewItemId("")}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={bodyLoraBusy || bodyLoraReviewItem.approved}
+                onClick={async () => {
+                  const result = await updateBodyLoraDataset({ action: "approve", item_id: bodyLoraReviewItem.preview_id, pose_id: bodyLoraPose?.pose_id });
+                  if (result) setBodyLoraReviewItemId("");
+                }}
+              >
+                {bodyLoraReviewItem.approved ? "Approved" : bodyLoraAction === "approve" ? "Approving…" : "Approve candidate"}
+              </button>
+            </footer>
           </section>
         </div>
       ) : null}

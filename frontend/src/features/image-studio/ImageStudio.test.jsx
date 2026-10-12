@@ -796,6 +796,47 @@ describe("ImageStudio", () => {
     expect(markup).toContain("Click to reveal");
   });
 
+  it("opens a side-by-side body candidate review with approval controls", () => {
+    const candidates = Array.from({ length: 10 }, (_, index) => ({
+      preview_id: `body-${index + 1}`,
+      status: "completed",
+      url: `/body-${index + 1}.png`,
+      seed: 1000 + index,
+    }));
+    const markup = renderToStaticMarkup(
+      <ImageStudio
+        initialCreationType="character"
+        initialCharacterPath="create_new"
+        initialInterviewOpen
+        initialInterviewStep={4}
+        initialCharacterProfileId="Nova"
+        initialBodyLoraReviewItemId="body-2"
+        initialCharacterBrief={{ name: "Nova", concept: "pilot", body: "athletic build" }}
+        characterProfiles={[{
+          profile_id: "Nova",
+          prompt_workspaces: {
+            upper_torso: {
+              current_job: { status: "completed", seed: 42, url: "/main-body.png", prompt_id: "body-main" },
+              lora_dataset: {
+                active_pose_index: 0,
+                poses: [{ pose_id: "front_neutral", label: "Front Neutral", items: candidates }],
+              },
+            },
+          },
+        }]}
+      />
+    );
+
+    expect(markup).toContain("Body candidate review");
+    expect(markup).toContain("Candidate 2 · Front Neutral");
+    expect(markup).toContain("Main body reference");
+    expect(markup).toContain("/main-body.png?v=body-main");
+    expect(markup).toContain("/body-2.png?v=body-2");
+    expect(markup).toContain("Approve candidate");
+    expect(markup).toContain("Cancel");
+    expect(markup).toContain("Click to compare");
+  });
+
   it("forces SFW when an adult character is changed to an under-18 age group", () => {
     expect(applyCharacterFoundation(
       { age_group: "adult (18+)", content_rating: "NSFW adult content" },
