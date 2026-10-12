@@ -261,6 +261,7 @@ AVATAR_UPPER_TORSO_POSE_GUIDE_SOURCE = Path("config/image-studio/neutral-a-pose-
 AVATAR_UPPER_TORSO_POSE_CONTROLNET = "controlnet-openpose-sdxl-1.0.safetensors"
 AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID = "template.avatar_head_lora_pose_control.realvisxl.v1"
 AVATAR_HEAD_FACE_LORA_POSE_DEPTH_CONTROL_TEMPLATE_ID = "template.avatar_head_lora_pose_depth_control.realvisxl.v1"
+AVATAR_UPPER_TORSO_LORA_DEPTH_POSE_TEMPLATE_ID = "template.avatar_body_lora_depth_pose.realvisxl.v1"
 AVATAR_HEAD_FACE_LORA_EPOCH_REVIEW_TEMPLATE_ID = "template.avatar_head_lora_epoch_review.realvisxl.v1"
 AVATAR_HEAD_FACE_PREVIEW_HISTORY_LIMIT = 9
 AVATAR_HEAD_FACE_SEED_BATCH_SUBMISSION_LIMIT = 1
@@ -4555,7 +4556,7 @@ class NodeControlState:
         if not prompt:
             prompt = self._avatar_profile_default_upper_torso_prompt(profile=metadata)
         negative_prompt = str(payload.negative_prompt or workspace.get("negative_prompt") or "").strip()
-        template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID)["template"]
+        template = self.get_comfyui_template_catalog_entry(template_id=AVATAR_UPPER_TORSO_LORA_DEPTH_POSE_TEMPLATE_ID)["template"]
         defaults = template.get("defaults") if isinstance(template.get("defaults"), dict) else {}
         width = int(body_prompt_defaults.get("width") or 768)
         height = int(body_prompt_defaults.get("height") or 1536)
@@ -4624,11 +4625,16 @@ class NodeControlState:
         current_job = workspace.get("current_job") if isinstance(workspace.get("current_job"), dict) else {}
         body_anchor = current_job if str(current_job.get("input_image") or "").strip() else (body_previews[-1] if body_previews else {})
         body_seed = self._coerce_manual_image_seed(body_anchor.get("seed_text") or body_anchor.get("seed"))
-        head_workspace = self._avatar_profile_prompt_workspace(metadata=metadata, section="head_face")
-        head_seed_set = head_workspace.get("lora_seed_set") if isinstance(head_workspace.get("lora_seed_set"), dict) else {}
-        identity_control = self._avatar_head_lora_dataset_identity_control(workspace=head_workspace, lora_seed_set=head_seed_set)
-        if action == "generate" and active_pose and body_seed is not None and identity_control:
+        body_reference_image = f"avatar_profiles/{self._safe_filename_component(profile_dir.name)}/refs/upper_torso/last.png"
+        body_reference_path = self._manual_image_input_dir() / body_reference_image
+        if action == "generate" and active_pose and body_seed is not None and body_reference_path.is_file():
             existing_items = [candidate for candidate in list(active_pose.get("items") or []) if isinstance(candidate, dict) and not bool(candidate.get("rejected"))]
+            used_seeds = {
+                seed
+                for seed in (self._coerce_manual_image_seed(candidate.get("seed")) for candidate in existing_items)
+                if seed is not None
+            }
+            used_seeds.add(body_seed)
             pose_id = self._safe_filename_component(active_pose.get("pose_id") or "pose")
             pose_config = next((item for item in body_pose_catalog if str(item.get("pose_id") or "") == pose_id), {})
             pose_reference_image = self._ensure_avatar_lora_pose_guide(relative_image=str(pose_config.get("guide_image") or ""))
@@ -4636,8 +4642,10 @@ class NodeControlState:
             while len(existing_items) < AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE:
                 slot_index = len(existing_items) + 1
                 item_token = uuid.uuid4().hex[:10]
+                seed = self._random_seed_excluding(used_seeds)
+                used_seeds.add(seed)
                 variation = self._avatar_head_lora_dataset_variation(
-                    slot_index=slot_index, cfg=cfg, face_strength=float(identity_control.get("face_strength") or 0.55),
+                    slot_index=slot_index, cfg=cfg, face_strength=0,
                     pose_strength=float(body_prompt_defaults.get("pose_strength") or 0.8), catalog_kind="body"
                 )
                 item_prompt = ", ".join(filter(None, [
@@ -4651,13 +4659,18 @@ class NodeControlState:
                     self._avatar_head_face_seed_batch_local_preview(
                         batch_id=str(dataset.get("dataset_id") or f"upper_torso_lora_dataset_{int(time.time())}"),
                         prompt=item_prompt, prompt_parts=prompt_parts, locked_prompt_parts={},
-                        negative_prompt=negative_prompt, seed=body_seed, width=width, height=height,
+                        negative_prompt=negative_prompt, seed=seed, width=width, height=height,
                         steps=steps, cfg=variation["cfg"], denoise=denoise, now=now, slot_index=slot_index,
                         batch_kind="upper_torso_lora_dataset", anchor_seed=body_seed,
-                        template_id=AVATAR_HEAD_FACE_LORA_POSE_CONTROL_TEMPLATE_ID,
+                        template_id=AVATAR_UPPER_TORSO_LORA_DEPTH_POSE_TEMPLATE_ID,
                         template_variables={
-                            **identity_control,
-                            "face_strength": variation["face_strength"],
+                            "body_reference_image": body_reference_image,
+                            "body_depth_controlnet": str(defaults.get("body_depth_controlnet") or "controlnet-depth-sdxl-1.0-fp16.safetensors"),
+                            "body_depth_strength": float(body_prompt_defaults.get("body_depth_strength") or defaults.get("body_depth_strength") or 0.55),
+                            "body_depth_start": float(body_prompt_defaults.get("body_depth_start") or defaults.get("body_depth_start") or 0),
+                            "body_depth_end": float(body_prompt_defaults.get("body_depth_end") or defaults.get("body_depth_end") or 0.6),
+                            "depth_anything_model": str(defaults.get("depth_anything_model") or "depth_anything_v2_vits.pth"),
+                            "depth_resolution": int(defaults.get("depth_resolution") or 768),
                             "pose_reference_image": pose_reference_image,
                             "pose_controlnet": str(defaults.get("pose_controlnet") or "controlnet-openpose-sdxl-1.0.safetensors"),
                             "pose_strength": variation["pose_strength"],
@@ -4668,6 +4681,7 @@ class NodeControlState:
                         "preview_id": f"body_lora_{pose_id}_{item_token}", "pose_id": pose_id,
                         "output_avatar_name": output_avatar_name, "target_subdir": f"lora_dataset/{pose_id}",
                         "approved": False, "rejected": False, "variation": variation,
+                        "identity_source_seed": body_seed,
                     }
                 )
             active_pose["items"] = existing_items[:AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE]
@@ -4763,8 +4777,8 @@ class NodeControlState:
             "active_pose_index": active_pose_index,
             "batch_size": AVATAR_HEAD_FACE_LORA_DATASET_BATCH_SIZE,
             "required_per_pose": AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE,
-            "seed_strategy": "profile_body_seed",
-            "variation_strategy": "controlled_ten_v1",
+            "seed_strategy": "profile_body_anchor_with_candidate_seeds",
+            "variation_strategy": "controlled_ten_v2_depth_pose",
             "anchor_seed": body_seed,
             "pose_catalog": pose_catalog,
             "pose_count": len(pose_catalog),

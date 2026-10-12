@@ -1201,7 +1201,7 @@ export function ImageStudio({
       activeInterviewStep.id === "body_lora_dataset"
       && interviewOpen
       && characterProfileId
-      && (!bodyLoraPoses.length || String(bodyLoraDataset?.variation_strategy || "") !== "controlled_ten_v1")
+      && (!bodyLoraPoses.length || String(bodyLoraDataset?.variation_strategy || "") !== "controlled_ten_v2_depth_pose")
     ) {
       void updateBodyLoraDataset({ action: "ensure" });
     }

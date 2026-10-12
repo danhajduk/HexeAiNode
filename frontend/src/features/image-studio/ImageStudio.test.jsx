@@ -779,7 +779,7 @@ describe("ImageStudio", () => {
           prompt_workspaces: {
             upper_torso: {
               current_job: { status: "completed", seed: 42, url: "/body.png", prompt_id: "body-1" },
-              lora_dataset: { batch_size: 10, variation_strategy: "controlled_ten_v1", poses: [{ pose_id: "front_neutral", label: "Front Neutral", items: [] }] },
+              lora_dataset: { batch_size: 10, variation_strategy: "controlled_ten_v2_depth_pose", poses: [{ pose_id: "front_neutral", label: "Front Neutral", items: [] }] },
             },
           },
         }]}

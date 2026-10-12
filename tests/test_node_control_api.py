@@ -5744,6 +5744,9 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     "input_image": "avatar_profiles/Jane_Avatar/refs/upper_torso/last.png",
                 },
             })
+            body_reference_path = input_dir / "avatar_profiles/Jane_Avatar/refs/upper_torso/last.png"
+            body_reference_path.parent.mkdir(parents=True, exist_ok=True)
+            body_reference_path.write_bytes(b"body-reference")
             profile_metadata = state._avatar_profile_metadata_with_workspace(
                 metadata=profile_metadata, section="upper_torso", workspace=upper_workspace,
             )
@@ -5770,10 +5773,14 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             )["dataset"]
             body_pose = body_dataset["poses"][body_dataset["active_pose_index"]]
             self.assertEqual(len(body_pose["items"]), 10)
-            self.assertTrue(all(item["seed"] == 24680 for item in body_pose["items"]))
+            self.assertEqual(len({item["seed"] for item in body_pose["items"]}), 10)
+            self.assertTrue(all(item["seed"] != 24680 for item in body_pose["items"]))
+            self.assertTrue(all(item["identity_source_seed"] == 24680 for item in body_pose["items"]))
+            self.assertTrue(all(item["template_id"] == "template.avatar_body_lora_depth_pose.realvisxl.v1" for item in body_pose["items"]))
+            self.assertTrue(all(item["template_variables"]["body_reference_image"].endswith("/upper_torso/last.png") for item in body_pose["items"]))
             self.assertTrue(all(item["width"] == 768 and item["height"] == 1536 for item in body_pose["items"]))
             self.assertTrue(all("neck-to-toes" in item["prompt"] for item in body_pose["items"]))
-            self.assertEqual(body_dataset["seed_strategy"], "profile_body_seed")
+            self.assertEqual(body_dataset["seed_strategy"], "profile_body_anchor_with_candidate_seeds")
             generated = asyncio.run(
                 state.update_avatar_profile_head_lora_dataset(
                     profile_id="Jane_Avatar",

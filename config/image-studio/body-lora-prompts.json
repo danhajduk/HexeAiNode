@@ -7,23 +7,26 @@
     "minimum_approved_per_pose": 6,
     "width": 768,
     "height": 1536,
-    "pose_strength": 0.8,
+    "pose_strength": 0.65,
     "pose_start": 0.0,
     "pose_end": 0.8,
-    "template_id": "template.avatar_head_lora_pose_control.realvisxl.v1"
+    "body_depth_strength": 0.55,
+    "body_depth_start": 0.0,
+    "body_depth_end": 0.6,
+    "template_id": "template.avatar_body_lora_depth_pose.realvisxl.v1"
   },
   "shared_prompt_suffix": "single adult character, complete neck-to-toes framing, entire body visible, consistent anatomy and proportions, body LoRA training reference",
   "variation_recipes": [
-    {"cfg_offset": -0.08, "identity_strength_offset": -0.03, "pose_strength_offset": -0.04, "prompt_suffix": "soft even studio light, neutral relaxed expression, standard portrait framing"},
-    {"cfg_offset": -0.06, "identity_strength_offset": -0.02, "pose_strength_offset": -0.03, "prompt_suffix": "soft light from camera left, relaxed eyelids, slightly wider portrait framing"},
-    {"cfg_offset": -0.04, "identity_strength_offset": -0.01, "pose_strength_offset": -0.02, "prompt_suffix": "soft light from camera right, calm closed-mouth expression, slightly closer framing"},
-    {"cfg_offset": -0.02, "identity_strength_offset": 0.0, "pose_strength_offset": -0.01, "prompt_suffix": "balanced studio light, subtle natural brow variation, standard portrait framing"},
-    {"cfg_offset": 0.0, "identity_strength_offset": 0.01, "pose_strength_offset": 0.0, "prompt_suffix": "neutral studio light, steady neutral gaze, centered portrait framing"},
-    {"cfg_offset": 0.02, "identity_strength_offset": 0.02, "pose_strength_offset": 0.01, "prompt_suffix": "gentle high-key studio light, relaxed facial muscles, slightly wider portrait framing"},
-    {"cfg_offset": 0.04, "identity_strength_offset": 0.03, "pose_strength_offset": 0.02, "prompt_suffix": "gentle low-contrast studio light, faint natural warmth in expression, slightly closer framing"},
-    {"cfg_offset": 0.06, "identity_strength_offset": -0.015, "pose_strength_offset": 0.03, "prompt_suffix": "soft upper-left key light, neutral mouth, standard portrait framing"},
-    {"cfg_offset": 0.08, "identity_strength_offset": 0.015, "pose_strength_offset": 0.04, "prompt_suffix": "soft upper-right key light, calm attentive gaze, slightly wider portrait framing"},
-    {"cfg_offset": 0.1, "identity_strength_offset": 0.0, "pose_strength_offset": 0.0, "prompt_suffix": "flat identity-reference light, fully relaxed neutral expression, slightly closer framing"}
+    {"cfg_offset": -0.08, "identity_strength_offset": 0.0, "pose_strength_offset": -0.04, "prompt_suffix": "soft even studio light, full neck-to-toes framing, clear space below both feet"},
+    {"cfg_offset": -0.06, "identity_strength_offset": 0.0, "pose_strength_offset": -0.03, "prompt_suffix": "soft light from camera left, full body centered vertically, both feet completely visible"},
+    {"cfg_offset": -0.04, "identity_strength_offset": 0.0, "pose_strength_offset": -0.02, "prompt_suffix": "soft light from camera right, distant camera, generous margins around the complete body"},
+    {"cfg_offset": -0.02, "identity_strength_offset": 0.0, "pose_strength_offset": -0.01, "prompt_suffix": "balanced studio light, complete legs and feet, consistent approved body proportions"},
+    {"cfg_offset": 0.0, "identity_strength_offset": 0.0, "pose_strength_offset": 0.0, "prompt_suffix": "neutral studio light, centered full-body reference framing, visible floor below toes"},
+    {"cfg_offset": 0.02, "identity_strength_offset": 0.0, "pose_strength_offset": 0.01, "prompt_suffix": "gentle high-key studio light, uncropped ankles and feet, approved silhouette preserved"},
+    {"cfg_offset": 0.04, "identity_strength_offset": 0.0, "pose_strength_offset": 0.02, "prompt_suffix": "gentle low-contrast studio light, full figure within frame, anatomically coherent proportions"},
+    {"cfg_offset": 0.06, "identity_strength_offset": 0.0, "pose_strength_offset": 0.03, "prompt_suffix": "soft upper-left key light, complete body and extremities visible, neutral reference composition"},
+    {"cfg_offset": 0.08, "identity_strength_offset": 0.0, "pose_strength_offset": 0.04, "prompt_suffix": "soft upper-right key light, distant full-body composition, clear margins at top and bottom"},
+    {"cfg_offset": 0.1, "identity_strength_offset": 0.0, "pose_strength_offset": 0.0, "prompt_suffix": "flat identity-reference light, strict neck-to-toes framing, no crop at knees ankles or feet"}
   ],
   "poses": [
     {"pose_id": "front_neutral", "label": "Front Neutral", "prompt": "front-facing neutral A-pose, even weight, complete neck-to-feet framing", "guide_image": "system/lora-pose-guides/body/front_neutral.png", "negative_remove": [], "negative_add": []},
