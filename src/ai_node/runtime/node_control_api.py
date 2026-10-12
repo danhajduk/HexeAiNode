@@ -6787,6 +6787,7 @@ class NodeControlState:
         records = [item for item in list(pose.get("approved_dataset") or []) if isinstance(item, dict)]
         if not records:
             return pose, False
+        required_count = self._optional_positive_int(pose.get("required_count")) or AVATAR_HEAD_FACE_LORA_DATASET_MIN_APPROVED_PER_POSE
         output_dir = self._manual_image_output_dir()
         input_dir = self._manual_image_input_dir().resolve()
         updated_records = []
