@@ -5822,12 +5822,15 @@ class NodeControlOperationalMqttRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("three-quarter view", [part.strip() for part in angled_body_item["negative_prompt"].split(",")])
             self.assertIn("straight-on frontal body", angled_body_item["negative_prompt"])
             self.assertTrue(
-                angled_body_item["template_variables"]["body_reference_image"].endswith(
+                angled_body_item["template_variables"]["pose_depth_reference_image"].endswith(
                     "/body/depth-source/three_quarter_left.png"
                 )
             )
-            self.assertEqual(angled_body_item["template_variables"]["body_depth_strength"], 0.42)
-            self.assertEqual(angled_body_item["template_variables"]["body_depth_end"], 0.72)
+            self.assertTrue(angled_body_item["template_variables"]["body_reference_image"].endswith("/upper_torso/last.png"))
+            self.assertEqual(angled_body_item["template_variables"]["body_depth_strength"], 0.34)
+            self.assertEqual(angled_body_item["template_variables"]["body_depth_end"], 0.55)
+            self.assertEqual(angled_body_item["template_variables"]["pose_depth_strength"], 0.42)
+            self.assertEqual(angled_body_item["template_variables"]["pose_depth_end"], 0.72)
             self.assertEqual(angled_body_item["template_variables"]["pose_end"], 0.8)
             self.assertGreaterEqual(angled_body_item["template_variables"]["pose_strength"], 0.54)
 

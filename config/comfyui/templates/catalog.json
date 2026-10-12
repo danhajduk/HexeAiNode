@@ -1308,7 +1308,7 @@
     {
       "template_id": "template.avatar_body_lora_depth_pose.realvisxl.v1",
       "template_name": "Avatar Body LoRA Depth and Pose Control",
-      "description": "Body LoRA dataset workflow using the approved body reference for depth/proportion guidance and OpenPose for view control, without face conditioning.",
+      "description": "Body LoRA dataset workflow using separate approved-body depth identity, pose-depth, and OpenPose conditioning paths.",
       "runtime_id": "comfyui_gpu",
       "api_workflow_path": "avatar-body-lora-depth-pose-realvisxl/api_workflow.json",
       "variables": [
@@ -1321,6 +1321,10 @@
         {"name": "body_depth_controlnet", "type": "string", "required": false, "description": "SDXL depth ControlNet."},
         {"name": "depth_anything_model", "type": "string", "required": false, "description": "Depth Anything V2 checkpoint."},
         {"name": "depth_resolution", "type": "integer", "required": false, "description": "Depth preprocessing resolution."},
+        {"name": "pose_depth_reference_image", "type": "image", "required": true, "description": "View-specific mannequin depth source; falls back to the approved body for poses without a separate guide."},
+        {"name": "pose_depth_strength", "type": "number", "required": false, "description": "View-specific depth guidance strength."},
+        {"name": "pose_depth_start", "type": "number", "required": false, "description": "View-specific depth guidance start."},
+        {"name": "pose_depth_end", "type": "number", "required": false, "description": "View-specific depth guidance end."},
         {"name": "pose_reference_image", "type": "image", "required": true, "description": "Body OpenPose guide."},
         {"name": "pose_strength", "type": "number", "required": false, "description": "OpenPose guidance strength."},
         {"name": "pose_start", "type": "number", "required": false, "description": "OpenPose guidance start."},
@@ -1344,12 +1348,16 @@
         "cfg": 1.2,
         "denoise": 1,
         "body_reference_image": "",
-        "body_depth_strength": 0.55,
+        "body_depth_strength": 0.34,
         "body_depth_start": 0,
-        "body_depth_end": 0.6,
+        "body_depth_end": 0.55,
         "body_depth_controlnet": "controlnet-depth-sdxl-1.0-fp16.safetensors",
         "depth_anything_model": "depth_anything_v2_vits.pth",
         "depth_resolution": 768,
+        "pose_depth_reference_image": "",
+        "pose_depth_strength": 0,
+        "pose_depth_start": 0,
+        "pose_depth_end": 0.72,
         "pose_reference_image": "",
         "pose_strength": 0.65,
         "pose_start": 0,
@@ -1361,7 +1369,7 @@
         "loras": ["sdxl_lightning_4step_lora.safetensors"],
         "vae": null,
         "controlnets": ["controlnet-depth-sdxl-1.0-fp16.safetensors", "controlnet-openpose-sdxl-1.0.safetensors"],
-        "other": {"nodes": ["DepthAnythingV2Preprocessor", "ResizeAndPadImage", "ControlNetLoader", "ControlNetApplyAdvanced"], "body_preservation": "approved_body_depth", "pose_preservation": "openpose_controlnet"}
+        "other": {"nodes": ["DepthAnythingV2Preprocessor", "ResizeAndPadImage", "ControlNetLoader", "ControlNetApplyAdvanced"], "body_preservation": "approved_body_depth", "view_preservation": "separate_pose_depth_controlnet", "pose_preservation": "openpose_controlnet"}
       },
       "output_scope": "manual",
       "metadata": {"domain": "avatar_profile", "input_mode": "text_body_identity_pose_control", "edit_intent": "avatar_body_lora_pose_dataset", "reference_roles": ["body", "pose"]}
