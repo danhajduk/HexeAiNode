@@ -1,4 +1,4 @@
-Workflow skill: implementation workflow
+thedo we Workflow skill: implementation workflow
 
 ## Codex Execution Directive
 
@@ -47,11 +47,14 @@ Standards reference:
 
 Do not edit above this line:
 #######################################################################
-
-## Task 1040
-Implement `HEXE-REQ-20261006-ASSISTANT-MIGRATION-AI`: governed Assistant reasoning for HexeInteraction without taking ownership of orchestration, identity, intents, approvals, or action execution.
-
-- Preserve `task.chat` and add the versioned structured reasoning contract described in `docs/task-details.md`.
-- Keep execution subject-bound, Core-governed, budgeted, cancellable, observable, provider-isolated, and limited to the minimum authorized turn and catalog context.
-- Dependency: `HEXE-REQ-20261006-ASSISTANT-MIGRATION-INTERACTION` is complete; `HEXE-REQ-20261006-ASSISTANT-MIGRATION-CORE` remains blocked pending Voice integration evidence.
-- Acceptance: all shared request criteria and focused security, malformed-output, ambiguity, failure, isolation, and Interaction fallback tests pass.
+[TODO] Task 1019: Define the governed web retrieval contract for local text LLM requests.
+[TODO] Task 1020: Add disabled-by-default web search configuration and governance policy.
+[TODO] Task 1021: Implement the search backend interface and first SearXNG adapter.
+[TODO] Task 1022: Add the normalized web evidence model and audit metadata.
+[TODO] Task 1023: Add an optional hardened URL fetcher.
+[TODO] Task 1024: Implement a node-owned local LLM tool loop for web search.
+[TODO] Task 1025: Extend provider selection for search-capable local and cloud routing.
+[TODO] Task 1026: Add local-first verification and one-step cloud escalation for search answers.
+[TODO] Task 1027: Expose web retrieval status in APIs, diagnostics, and UI.
+[TODO] Task 1028: Add tests and documentation for local web retrieval and hybrid routing.
+[TODO] Task 1040: Implement `HEXE-REQ-20261006-ASSISTANT-MIGRATION-AI`: governed Assistant reasoning for HexeInteraction without taking ownership of orchestration, identity, intents, approvals, or action execution.

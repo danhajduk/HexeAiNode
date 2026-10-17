@@ -2584,6 +2584,90 @@ Acceptance:
 - Private-memory retrieval is suppressed for unknown or unauthorized participants.
 - The accepted Core identity and policy contract is linked.
 
+## Task 1019
+Original task details:
+- Treat internet retrieval as a node-owned tool, not arbitrary network access from the llama.cpp container.
+- Define request fields for `required_features`, `freshness_required`, `max_source_age`, `web_search`, and optional `fetch_url`.
+- Document which parts are node-owned versus Core-owned before implementing code.
+
+Acceptance:
+- Execution requirements can represent a request that needs current internet data without implying cloud execution.
+
+## Task 1020
+Original task details:
+- Add provider-neutral config for enabling search, choosing a backend, result limits, safe search, locale, timeouts, and allowed/blocked domains.
+- Add policy checks for requester, prompt, data classification, external query disclosure, and budget.
+
+Acceptance:
+- Web search remains unavailable until explicitly configured and allowed by governance.
+
+## Task 1021
+Original task details:
+- Add a backend abstraction that can later support Brave or another managed API.
+- Implement SearXNG JSON API support with configured base URL, query params, timeout, and result limit.
+- Normalize backend errors into stable Hexe failure codes.
+
+Acceptance:
+- Unit tests cover successful SearXNG results, disabled JSON/API errors, timeout, and no-result cases.
+
+## Task 1022
+Original task details:
+- Normalize results to title, canonical URL, snippet, source backend, rank, retrieval timestamp, and truncation metadata.
+- Persist or emit audit metadata for query text, source URLs, retrieval time, backend, and failures without storing sensitive payloads unnecessarily.
+
+Acceptance:
+- Execution results can expose citations and audit-safe retrieval metadata.
+
+## Task 1023
+Original task details:
+- Keep page fetching disabled by default for the first release unless explicitly enabled.
+- Add DNS/IP validation, redirect limits, content-type and size limits, timeouts, and loopback/private/link-local/metadata blocking.
+- Treat fetched page text as untrusted evidence and strip active content.
+
+Acceptance:
+- Tests cover SSRF protections, redirect handling, size/type limits, and disabled-by-default behavior.
+
+## Task 1024
+Original task details:
+- Enable local text execution to request a `web_search` tool call through a validated structured path.
+- Execute the tool in the AI Node, append bounded tool evidence, and request the final local model answer.
+- Do not depend on llama.cpp's internal Web UI `/tools` endpoint.
+
+Acceptance:
+- Local `task.chat` can answer a freshness-required query with retrieved evidence and source-linked citations.
+
+## Task 1025
+Original task details:
+- Add deterministic eligibility gates for `web_search`, `tool_calling`, freshness, modality, context size, budget, privacy, and `cloud_allowed`.
+- Preserve existing routing modes: `local_only`, `local_preferred`, `cloud_only`, and `cloud_fallback`.
+
+Acceptance:
+- Routing explains whether local llama can complete a search task or whether cloud support is required.
+
+## Task 1026
+Original task details:
+- Verify citations, required fields, source coverage, schema shape, and retrieval freshness before accepting a local answer.
+- Escalate once to an eligible cloud model only when policy allows cloud use and budget remains.
+
+Acceptance:
+- Failed local verification produces either a governed cloud escalation or a clear non-escalated failure reason.
+
+## Task 1027
+Original task details:
+- Show whether search is configured, enabled by governance, backend healthy, and available to local text execution.
+- Surface route decision metadata, search backend, citation count, retrieval failures, latency, and cloud escalation status.
+
+Acceptance:
+- Operators can tell why a local LLM request did or did not get internet access.
+
+## Task 1028
+Original task details:
+- Cover config loading, governance denial, SearXNG success/failure, local tool loop, citation output, routing decisions, verification failure, and cloud fallback.
+- Update runtime/operator docs and link to the research note.
+
+Acceptance:
+- Targeted backend tests pass and docs clearly distinguish implemented behavior from future optional backends.
+
 ## Task 1040
 Coordination request: `HEXE-REQ-20261006-ASSISTANT-MIGRATION-AI`
 
