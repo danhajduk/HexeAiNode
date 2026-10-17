@@ -1,3 +1,4 @@
+#######################################################################
 [FUTURE TODO] Task 1019: Define the governed web retrieval contract for local text LLM requests
 [FUTURE TODO] Task 1020: Add disabled-by-default web search configuration and governance policy
 [FUTURE TODO] Task 1021: Implement the search backend interface and first SearXNG adapter
