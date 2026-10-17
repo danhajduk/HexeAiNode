@@ -1,5 +1,26 @@
 # Task Details
 
+## Task 1042
+Coordination request: `HEXE-REQ-20261008-E49952`
+
+Title: Restore task.chat capacity for mobile Assistant turns.
+
+Requested outcome:
+- Investigate and restore sufficient AI Node runtime capacity for synchronous `task.chat` execution from mobile Assistant turns.
+- Confirm the execution admission gate or Core routing policy does not indefinitely block ordinary Assistant greetings with `503 status=busy`, `reason=swap_pressure_high`.
+
+Dependencies:
+- Core and Interaction continue to authorize and route mobile Assistant turns successfully.
+
+Constraints:
+- Preserve governed execution admission and resource-protection behavior.
+- Do not treat allocated swap alone as active swap pressure.
+
+Acceptance:
+- A live mobile web-app Hello turn completes through Core, Interaction, and `task.chat` without `assistant_temporarily_unavailable`.
+- AI Node accepts direct execution or Core selects an available governed alternative.
+- Runtime evidence shows no persistent `swap_pressure_high` rejection.
+
 ## Task 1041
 Coordination request: `HEXE-REQ-20261008-A7F392`
 
