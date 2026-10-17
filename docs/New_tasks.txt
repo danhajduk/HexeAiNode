@@ -1,60 +1,10 @@
-thedo we Workflow skill: implementation workflow
-
-## Codex Execution Directive
-
-You are acting as the Hexe development agent.
-
-Your job is to implement tasks listed in this file sequentially.
-
-Rules:
-
-1. Work through tasks in numerical order.
-2. Continue executing tasks until ALL tasks are completed.
-3. Do not stop after partial implementation.
-4. Do not return summaries unless every task is finished.
-5. If a task cannot be completed:
-   - document the blocker
-   - implement everything else that is possible
-   - continue to the next task.
-
-Execution behavior:
-
-- Read the repository before modifying code.
-- Follow existing architecture and coding conventions.
-- Update or create files as required.
-- Run tests or validation where possible.
-- Commit after each completed task.
-
-Completion criteria:
-
-A task is considered complete only when:
-- implementation exists in the codebase
-- it compiles or runs without breaking existing features
-- any required documentation is updated
-
-Persistence rule:
-
-Continue working autonomously until all tasks in this document are completed.
-Do not stop early.
-
-if there is missing data for the task check in the @Core-Documents folder.for core documentation
-if it is not present and should be core-owned create a ticket for the req. data in the core dodc
-if it is not present and should be node-owned create a file with the new data in the core docs
-
-Standards reference:
-- Main standard entrypoint: `/home/dan/Projects/Hexe/docs/standards/Node/README.md`
-- Detailed standards folder: `/home/dan/Projects/Hexe/docs/standards/Node/`
-
-Do not edit above this line:
-#######################################################################
-[TODO] Task 1019: Define the governed web retrieval contract for local text LLM requests.
-[TODO] Task 1020: Add disabled-by-default web search configuration and governance policy.
-[TODO] Task 1021: Implement the search backend interface and first SearXNG adapter.
-[TODO] Task 1022: Add the normalized web evidence model and audit metadata.
-[TODO] Task 1023: Add an optional hardened URL fetcher.
-[TODO] Task 1024: Implement a node-owned local LLM tool loop for web search.
-[TODO] Task 1025: Extend provider selection for search-capable local and cloud routing.
-[TODO] Task 1026: Add local-first verification and one-step cloud escalation for search answers.
-[TODO] Task 1027: Expose web retrieval status in APIs, diagnostics, and UI.
-[TODO] Task 1028: Add tests and documentation for local web retrieval and hybrid routing.
-[TODO] Task 1040: Implement `HEXE-REQ-20261006-ASSISTANT-MIGRATION-AI`: governed Assistant reasoning for HexeInteraction without taking ownership of orchestration, identity, intents, approvals, or action execution.
+[FUTURE TODO] Task 1019: Define the governed web retrieval contract for local text LLM requests
+[FUTURE TODO] Task 1020: Add disabled-by-default web search configuration and governance policy
+[FUTURE TODO] Task 1021: Implement the search backend interface and first SearXNG adapter
+[FUTURE TODO] Task 1022: Add the normalized web evidence model and audit metadata
+[FUTURE TODO] Task 1023: Add an optional hardened URL fetcher
+[FUTURE TODO] Task 1024: Implement a node-owned local LLM tool loop for web search
+[FUTURE TODO] Task 1025: Extend provider selection for search-capable local and cloud routing
+[FUTURE TODO] Task 1026: Add local-first verification and one-step cloud escalation for search answers
+[FUTURE TODO] Task 1027: Expose web retrieval status in APIs, diagnostics, and UI
+[FUTURE TODO] Task 1028: Add tests and documentation for local web retrieval and hybrid routing
